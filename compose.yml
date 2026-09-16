@@ -24,6 +24,7 @@ services:
   app:
     build:
       context: ./app
+      target: development
 
     container_name: bixolon-crm-app
     restart: unless-stopped

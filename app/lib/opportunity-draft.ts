@@ -1,0 +1,49 @@
+import type { ForecastCategory, OpportunityPartyRole } from "@prisma/client";
+
+export type ParticipantDraft = { accountId: number; roles: OpportunityPartyRole[] };
+export type LineDraft = { id: number; productId: number; quantity: string; price: string };
+export type OpportunityDraft = {
+  name: string; description: string; ownerId: string; stageId: string; expectedCloseDate: string;
+  probability: string; forecastCategory: ForecastCategory | ""; currencyCode: string;
+  participants: ParticipantDraft[]; lines: LineDraft[];
+};
+type DraftStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+const forecastCategories = ["OMITTED", "PIPELINE", "BEST_CASE", "COMMIT", "CLOSED"];
+const partyRoles = ["END_USER", "VAR_RESELLER", "DISTRIBUTOR", "ISV_PARTNER", "OEM", "OTHER"];
+const isId = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+const isLineId = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
+export function draftKey(id?: number) { return `opportunity-draft:${id ?? "new"}`; }
+export function addParticipant(draft: OpportunityDraft, accountId: number): OpportunityDraft {
+  if (!accountId || draft.participants.some((p) => p.accountId === accountId)) return draft;
+  return { ...draft, participants: [...draft.participants, { accountId, roles: [] }] };
+}
+export function removeParticipant(draft: OpportunityDraft, accountId: number): OpportunityDraft {
+  return { ...draft, participants: draft.participants.filter((p) => p.accountId !== accountId) };
+}
+export function setParticipantRoles(draft: OpportunityDraft, accountId: number, roles: OpportunityPartyRole[]): OpportunityDraft {
+  return { ...draft, participants: draft.participants.map((p) => p.accountId === accountId ? { ...p, roles } : p) };
+}
+export function readDraft(raw: string | null, fallback: OpportunityDraft): OpportunityDraft {
+  if (!raw) return fallback;
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!isRecord(value)) return fallback;
+    const strings = ["name", "description", "ownerId", "stageId", "expectedCloseDate", "probability", "currencyCode"];
+    if (!strings.every((key) => typeof value[key] === "string")) return fallback;
+    if (typeof value.forecastCategory !== "string" || (value.forecastCategory !== "" && !forecastCategories.includes(value.forecastCategory))) return fallback;
+    if (!Array.isArray(value.participants) || !value.participants.every((p: unknown) => isRecord(p) && isId(p.accountId) && Array.isArray(p.roles) && p.roles.every((role: unknown) => typeof role === "string" && partyRoles.includes(role)))) return fallback;
+    if (!Array.isArray(value.lines) || !value.lines.every((line: unknown) => isRecord(line) && isLineId(line.id) && isLineId(line.productId) && typeof line.quantity === "string" && typeof line.price === "string")) return fallback;
+    return value as OpportunityDraft;
+  } catch { return fallback; }
+}
+export function restoreDraft(storage: DraftStorage, key: string, fallback: OpportunityDraft): OpportunityDraft {
+  try { return readDraft(storage.getItem(key), fallback); } catch { return fallback; }
+}
+export function persistDraft(storage: DraftStorage, key: string, draft: OpportunityDraft, hydratedKey: string | null): boolean {
+  if (hydratedKey !== key) return false;
+  try { storage.setItem(key, JSON.stringify(draft)); return true; } catch { return false; }
+}
+export function clearDraft(storage: DraftStorage, key: string): void {
+  try { storage.removeItem(key); } catch { /* Storage can be unavailable in private browsing. */ }
+}
