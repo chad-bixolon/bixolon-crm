@@ -12,7 +12,15 @@ const contacts = require(path.join(root, 'lib/contacts.ts'));
 const opportunities = require(path.join(root, 'lib/opportunities.ts'));
 const drafts = require(path.join(root, 'lib/opportunity-draft.ts'));
 const users = require(path.join(root, 'lib/users.ts'));
+const visibility = require(path.join(root, 'lib/record-visibility.ts'));
 function form(entries) { const f = new FormData(); for (const [key, value] of entries) f.append(key, value); return f; }
+test('shared record visibility and opportunity filters include archived and all views', () => {
+  assert.deepEqual(visibility.archivedWhere(visibility.recordVisibility(undefined)), { archivedAt: null });
+  assert.deepEqual(visibility.archivedWhere(visibility.recordVisibility('archived')), { archivedAt: { not: null } });
+  assert.deepEqual(visibility.archivedWhere(visibility.recordVisibility('all')), {});
+  assert.deepEqual(opportunities.opportunityWhere({ archived: 'yes' }).archivedAt, { not: null });
+  assert.equal('archivedAt' in opportunities.opportunityWhere({ archived: 'all' }), false);
+});
 test('contact validation and lifecycle enforce active primary contacts', async () => {
   const invalid = contacts.parseContact(form([['accountId', '0'], ['firstName', ''], ['lastName', 'Doe'], ['email', 'bad'], ['phone', 'abc'], ['active', 'false'], ['isPrimary', 'on']]));
   assert.deepEqual(Object.keys(invalid.errors).sort(), ['accountId', 'email', 'firstName', 'isPrimary', 'phone']);

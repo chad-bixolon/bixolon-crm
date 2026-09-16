@@ -15,7 +15,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:status": "prisma migrate status",
     "db:seed-stages": "node scripts/seed-sales-stages.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "db:seed-activity-types": "node scripts/seed-activity-types.mjs"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",

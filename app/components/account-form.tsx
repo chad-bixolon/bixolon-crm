@@ -1,4 +1,5 @@
 "use client";
+import { useSubmitGuard } from "@/lib/submit-guard";
 import { useActionState } from "react";
 import Link from "next/link";
 import { AccountBusinessRoleCode, AccountStatus } from "@prisma/client";
@@ -10,8 +11,9 @@ type Owner = { id: number; firstName: string; lastName: string };
 type Initial = { name: string; status: AccountStatus; strategicAccount: boolean; industry: string | null; territory: string | null; ownerId: number | null; website: string | null; phone: string | null; roles: AccountBusinessRoleCode[] };
 export function AccountForm({ id, initial, industries, territories, owners }: { id?: number; initial?: Initial; industries: Option[]; territories: Option[]; owners: Owner[] }) {
   const [state, action, pending] = useActionState(submitAccount.bind(null, id ?? null), { errors: {} } as FormState);
+  const guard = useSubmitGuard(state);
   const error = (key: string) => state.errors[key] && <p id={`${key}-error`} className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
-  return <form action={action} className="panel max-w-4xl p-6 lg:p-8" aria-label={id ? "Edit account" : "Create account"}>
+  return <form action={action} onSubmit={guard} className="panel max-w-4xl p-6 lg:p-8" aria-label={id ? "Edit account" : "Create account"}>
     {state.message && <p role="alert" className="mb-6 rounded-md bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     <div className="grid gap-6 sm:grid-cols-2">
       <div className="sm:col-span-2"><label className="label" htmlFor="name">Account name <span aria-hidden="true">*</span></label><input className="field" id="name" name="name" required maxLength={200} defaultValue={initial?.name} aria-invalid={!!state.errors.name} aria-describedby={state.errors.name ? "name-error" : undefined}/>{error("name")}</div>

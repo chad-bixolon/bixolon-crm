@@ -1,5 +1,6 @@
 import { ForecastCategory, OpportunityPartyRole, Prisma, type PrismaClient } from "@prisma/client";
 import { field, optional, pageNumber, positiveId, required, type Errors } from "./crm-validation";
+import { archivedWhere, recordVisibility } from "./record-visibility";
 export type Participant = { accountId: number; roles: OpportunityPartyRole[] };
 export type Line = { id?: number; productId: number; quantity: number; price: string };
 export type OpportunityInput = { name: string; description: string | null; ownerId: number | null; stageId: number; expectedCloseDate: Date | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: Participant[]; lines: Line[] };
@@ -102,7 +103,7 @@ export async function setOpportunityArchived(client: PrismaClient, id: number, a
 }
 export type OpportunityFilters = { q?: string; stageId?: string; ownerId?: string; forecastCategory?: string; closeFrom?: string; closeTo?: string; accountId?: string; page?: string; archived?: string };
 export function opportunityWhere(filters: OpportunityFilters): Prisma.OpportunityWhereInput {
-  const where: Prisma.OpportunityWhereInput = { archivedAt: filters.archived === "yes" ? { not: null } : null };
+  const where: Prisma.OpportunityWhereInput = { ...archivedWhere(recordVisibility(filters.archived === "yes" ? "archived" : filters.archived === "all" ? "all" : "active")) };
   if (filters.q?.trim()) where.name = { contains: filters.q.trim().slice(0, 100), mode: "insensitive" };
   const stageId = positiveId(filters.stageId ?? ""); if (stageId) where.stageId = stageId;
   const ownerId = positiveId(filters.ownerId ?? ""); if (ownerId) where.ownerId = ownerId;

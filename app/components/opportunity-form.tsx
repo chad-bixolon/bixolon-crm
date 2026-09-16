@@ -1,4 +1,5 @@
 "use client";
+import { useSubmitGuard } from "@/lib/submit-guard";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
@@ -17,6 +18,7 @@ export function OpportunityForm({ id, initial, accounts, owners, stages, currenc
   const router = useRouter();
   const draftKey = opportunityDraftKey(id);
   const [state, action, pending] = useActionState(submitOpportunity.bind(null, id ?? null), { errors: {} } as FormState);
+  const guard = useSubmitGuard(state);
   const original = useRef(initialDraft(initial));
   const [draft, setDraft] = useState(() => initialDraft(initial));
   const [hydratedKey, setHydratedKey] = useState<string | null>(null);
@@ -42,7 +44,7 @@ export function OpportunityForm({ id, initial, accounts, owners, stages, currenc
   const productOptions = [...products]; for (const l of initial?.lines ?? []) if (!productOptions.some((p) => p.id === l.productId)) productOptions.push({ id: l.productId, name: `Product #${l.productId} (inactive)`, sku: "" });
   const availableAccounts = accountOptions.filter((a) => !draft.participants.some((p) => p.accountId === a.id));
   const addAccount = () => { const accountId = Number(selectedAccount); if (!accountId) { setParticipantMessage("Choose an account to add."); return; } setDraft((old) => addParticipant(old, accountId)); setSelectedAccount(""); setParticipantMessage(""); };
-  return <form action={action} className="panel max-w-5xl space-y-7 p-6" aria-label={id ? "Edit opportunity" : "Create opportunity"}>
+  return <form action={action} onSubmit={guard} className="panel max-w-5xl space-y-7 p-6" aria-label={id ? "Edit opportunity" : "Create opportunity"}>
     {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     <div className="grid gap-5 sm:grid-cols-2">
       <div className="sm:col-span-2"><label className="label" htmlFor="name">Opportunity name *</label><input className="field" id="name" name="name" required maxLength={200} value={draft.name} onChange={(e) => update("name", e.target.value)}/>{error("name")}</div>
@@ -62,6 +64,6 @@ export function OpportunityForm({ id, initial, accounts, owners, stages, currenc
     <section><div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-semibold">Opportunity products</h2>{products.length > 0 && <button type="button" className="btn-secondary" onClick={() => update("lines", [...draft.lines, { id: 0, productId: 0, quantity: "1", price: "0.00" }])}>Add product</button>}</div>{error("lines")}
       {products.length === 0 && <p className="mb-3 rounded bg-slate-50 p-4 text-sm text-slate-600">No products are available. <Link className="text-orange-800 underline" href="/products">Add products from Products first.</Link></p>}
       <div className="space-y-3">{draft.lines.map((line, index) => <div key={line.id || `new-${index}`} className="grid gap-2 rounded border border-slate-200 p-3 sm:grid-cols-[2fr_1fr_1fr_1fr_auto]"><input type="hidden" name="lineId" value={line.id || ""}/><select className="field" aria-label={`Product ${index + 1}`} name="productId" value={line.productId || ""} onChange={(e) => update("lines", draft.lines.map((item, i) => i === index ? { ...item, productId: Number(e.target.value) } : item))}><option value="">Choose product</option>{productOptions.map((p) => <option key={p.id} value={p.id}>{p.sku} {p.name}</option>)}</select><input className="field" aria-label={`Quantity ${index + 1}`} name="quantity" type="number" min="1" step="1" value={line.quantity} onChange={(e) => update("lines", draft.lines.map((item, i) => i === index ? { ...item, quantity: e.target.value } : item))}/><input className="field" aria-label={`Estimated unit price ${index + 1}`} name="price" type="number" min="0" step="0.01" value={line.price} onChange={(e) => update("lines", draft.lines.map((item, i) => i === index ? { ...item, price: e.target.value } : item))}/><span className="self-center text-sm tabular-nums">{(Number(line.quantity) * Number(line.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span><button type="button" className="btn-secondary" onClick={() => update("lines", draft.lines.filter((_, i) => i !== index))}>Remove</button></div>)}</div>{draft.lines.length > 0 && <p className="mt-2 text-xs text-slate-500">Removing a saved line archives it. Total uses unarchived lines only.</p>}
-    </section><div className="flex items-center justify-between gap-2">{savedLocally && <span className="text-xs text-slate-500" role="status">Draft saved locally</span>}<div className="ml-auto flex gap-2"><Link className="btn-secondary" href={id ? `/opportunities/${id}` : "/opportunities"} onClick={() => clearDraft(localStorage, draftKey)}>Cancel</Link><button className="btn-primary disabled:opacity-60" disabled={pending}>{pending ? "Saving…" : id ? "Save opportunity" : "Create opportunity"}</button></div></div>
+    </section><div className="flex items-center justify-between gap-2">{savedLocally && <span className="text-xs text-slate-500" role="status">Draft saved locally</span>}<div className="ml-auto flex gap-2"><Link className="btn-secondary" href={id ? `/opportunities/${id}` : "/opportunities"} onClick={() => clearDraft(localStorage, draftKey)}>Cancel</Link><button type="submit" className="btn-primary disabled:opacity-60" disabled={pending}>{pending ? "Saving…" : id ? "Save opportunity" : "Create opportunity"}</button></div></div>
   </form>;
 }

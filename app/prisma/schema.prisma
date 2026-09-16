@@ -349,6 +349,7 @@ model OpportunityProduct {
 
 model Task {
   id            Int                 @id @default(autoincrement())
+  createKey     String?             @unique @db.Uuid
   accountId     Int?
   account       Account?            @relation(fields: [accountId], references: [id], onDelete: Restrict)
   opportunityId Int?

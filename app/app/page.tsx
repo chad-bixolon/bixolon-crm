@@ -1,13 +1,19 @@
-import { prisma } from "@/lib/prisma";
-import { Content, PageHeader } from "@/components/shell";
-export const dynamic = "force-dynamic";
+import Link from 'next/link';
+import { prisma } from '@/lib/prisma';
+import { pipelineTotalsByCurrency } from '@/lib/analytics';
+import { Content, PageHeader } from '@/components/shell';
+import { dayBounds, dashboardOpenTaskWhere } from '@/lib/work';
+export const dynamic = 'force-dynamic';
 export default async function HomePage() {
-  const [active, strategic, opportunities, tasks] = await Promise.all([
-    prisma.account.count({ where: { status: "ACTIVE" } }),
-    prisma.account.count({ where: { status: "ACTIVE", strategicAccount: true } }),
-    prisma.opportunity.count({ where: { archivedAt: null, stage: { isClosed: false } } }),
-    prisma.task.count({ where: { archivedAt: null, status: { in: ["OPEN", "IN_PROGRESS"] } } }),
+  const {start,end}=dayBounds(); const open=dashboardOpenTaskWhere();
+  const [active,strategic,opportunities,openTasks,overdue,dueToday,recentActivities,recentOpportunities]=await Promise.all([
+    prisma.account.count({where:{status:'ACTIVE'}}),prisma.account.count({where:{status:'ACTIVE',strategicAccount:true}}),
+    prisma.opportunity.findMany({where:{archivedAt:null,stage:{isClosed:false}},include:{stage:true,products:{where:{archivedAt:null}}}}),
+    prisma.task.count({where:open}),prisma.task.count({where:{...open,dueDate:{lt:start}}}),prisma.task.count({where:{...open,dueDate:{gte:start,lt:end}}}),
+    prisma.activity.findMany({where:{archivedAt:null},include:{activityType:true},orderBy:[{activityDate:'desc'},{id:'desc'}],take:5}),
+    prisma.opportunity.findMany({where:{archivedAt:null},include:{stage:true},orderBy:[{updatedAt:'desc'},{id:'desc'}],take:5}),
   ]);
-  const metrics = [["Active accounts", active], ["Strategic accounts", strategic], ["Open opportunities", opportunities], ["Open tasks", tasks]] as const;
-  return <Content><PageHeader eyebrow="CRM overview" title="Dashboard" description="A current view of records in the CRM database."/><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{metrics.map(([label, value]) => <div key={label} className="panel p-6"><p className="text-sm font-medium text-slate-600">{label}</p><p className="mt-3 text-3xl font-semibold tabular-nums text-slate-950">{value}</p></div>)}</div></Content>;
+  const pipeline = pipelineTotalsByCurrency(opportunities);
+  const metrics=[['Active accounts',active],['Strategic accounts',strategic],['Open opportunities',opportunities.length],['Open tasks',openTasks],['Overdue tasks',overdue],['Due today',dueToday]] as const;
+  return <Content><PageHeader eyebrow="CRM overview" title="Dashboard" description="Current records from the CRM database."/><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{metrics.map(([label,value])=><div className="panel p-6" key={label}><p className="text-sm text-slate-600">{label}</p><p className="mt-3 text-3xl font-semibold">{value}</p></div>)}</div><div className="mt-5 grid gap-4 sm:grid-cols-2">{pipeline.map(group=><div className="panel p-6" key={group.currency}><h2 className="font-semibold">{group.currency} pipeline</h2><p className="mt-3">Total open: {group.currency} {group.estimated.toFixed(2)}</p><p>Weighted: {group.currency} {group.weighted.toFixed(2)}</p></div>)}</div>{!pipeline.length&&<p className="panel mt-5 p-6 text-sm text-slate-500">No open pipeline.</p>}<div className="mt-5 grid gap-5 lg:grid-cols-2"><section className="panel p-6"><h2 className="mb-3 text-lg font-semibold">Recent activities</h2>{recentActivities.length?<ul className="divide-y">{recentActivities.map(a=><li className="py-3 text-sm" key={a.id}><Link className="text-orange-800" href={`/activities/${a.id}/edit`}>{a.subject}</Link> · {a.activityType.name} · {a.activityDate.toISOString().slice(0,10)}</li>)}</ul>:<p className="text-sm text-slate-500">No activities yet.</p>}</section><section className="panel p-6"><h2 className="mb-3 text-lg font-semibold">Recently updated opportunities</h2>{recentOpportunities.length?<ul className="divide-y">{recentOpportunities.map(o=><li className="py-3 text-sm" key={o.id}><Link className="text-orange-800" href={`/opportunities/${o.id}`}>{o.name}</Link> · {o.stage.name} · {o.updatedAt.toISOString().slice(0,10)}</li>)}</ul>:<p className="text-sm text-slate-500">No opportunities yet.</p>}</section></div></Content>;
 }
