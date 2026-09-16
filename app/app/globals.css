@@ -1,26 +1,12 @@
 @import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+:root { color-scheme: light; }
+body { background: #f7f8fa; color: #172033; font-family: Arial, Helvetica, sans-serif; }
+input, select, button { font: inherit; }
+.field { width: 100%; border: 1px solid #cbd5e1; border-radius: .375rem; background: white; padding: .65rem .75rem; color: #0f172a; }
+.field:focus { outline: 2px solid #ea580c; outline-offset: 1px; }
+.label { display: block; margin-bottom: .4rem; font-size: .875rem; font-weight: 600; color: #334155; }
+.btn-primary { display: inline-flex; align-items: center; justify-content: center; border-radius: .375rem; background: #c2410c; padding: .65rem 1rem; color: white; font-size: .875rem; font-weight: 600; }
+.btn-primary:hover { background: #9a3412; }
+.btn-secondary { display: inline-flex; align-items: center; justify-content: center; border: 1px solid #cbd5e1; border-radius: .375rem; background: white; padding: .65rem 1rem; color: #334155; font-size: .875rem; font-weight: 600; }
+.btn-secondary:hover { background: #f8fafc; }
+.panel { border: 1px solid #e2e8f0; border-radius: .5rem; background: white; }

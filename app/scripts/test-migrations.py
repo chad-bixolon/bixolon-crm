@@ -95,7 +95,7 @@ try:
             prisma("compatibility", "migrate", "resolve", "--applied", INITIAL)
             prisma("compatibility", "migrate", "deploy")
         result = run(["docker", "run", "--rm", "-i", "--network", NETWORK,
-                      "-v", f"{ROOT / 'lib/accounts.ts'}:/app/lib/accounts.ts:ro",
+                      "-v", f"{ROOT / 'prisma/tests/account-compatibility-service.ts'}:/app/lib/accounts.ts:ro",
                       "-e", f"DATABASE_URL=postgresql://postgres@{DB}:5432/compatibility", IMAGE,
                       "sh", "-c", "./node_modules/.bin/tsc lib/accounts.ts --target ES2020 --module commonjs --moduleResolution node --skipLibCheck --esModuleInterop --outDir .test-client && node --input-type=module"],
                      (ROOT / "prisma/tests/account-compatibility.mjs").read_text())

@@ -1,107 +1,24 @@
 import Link from "next/link";
+import { Content, PageHeader } from "@/components/shell";
+import { accountOptions, listAccounts, type AccountFilters } from "@/lib/accounts";
+import { roleLabels, statuses } from "@/lib/account-validation";
 import { prisma } from "@/lib/prisma";
-import { listAccounts } from "@/lib/accounts";
-
 export const dynamic = "force-dynamic";
-
-export default async function AccountsPage() {
-  const accounts = await listAccounts(prisma);
-
-  return (
-    <main className="min-h-screen bg-slate-50 p-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-orange-600">
-              BIXOLON CRM
-            </p>
-
-            <h1 className="text-3xl font-bold text-slate-900">
-              Accounts
-            </h1>
-
-            <p className="mt-1 text-slate-500">
-              Manage customers, partners, distributors, VARs and end users.
-            </p>
-          </div>
-
-          <Link
-            href="/accounts/new"
-            className="rounded-lg bg-orange-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-orange-700"
-          >
-            New Account
-          </Link>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full">
-            <thead className="bg-slate-100 text-left text-sm text-slate-600">
-              <tr>
-                <th className="px-6 py-4">Account</th>
-                <th className="px-6 py-4">Type</th>
-                <th className="px-6 py-4">Territory</th>
-                <th className="px-6 py-4 text-center">Contacts</th>
-                <th className="px-6 py-4 text-center">Opportunities</th>
-                <th className="px-6 py-4">Status</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100">
-              {accounts.map((account) => (
-                <tr
-                  key={account.id}
-                  className="hover:bg-slate-50"
-                >
-                  <td className="px-6 py-4">
-                    <div className="font-semibold text-slate-900">
-                      {account.name}
-                    </div>
-
-                    {account.industry && (
-                      <div className="text-sm text-slate-500">
-                        {account.industry}
-                      </div>
-                    )}
-                  </td>
-
-                  <td className="px-6 py-4 text-slate-600">
-                    {account.accountType || "—"}
-                  </td>
-
-                  <td className="px-6 py-4 text-slate-600">
-                    {account.territory || "—"}
-                  </td>
-
-                  <td className="px-6 py-4 text-center text-slate-600">
-                    {account._count.contacts}
-                  </td>
-
-                  <td className="px-6 py-4 text-center text-slate-600">
-                    {account._count.opportunities}
-                  </td>
-
-                  <td className="px-6 py-4">
-                    <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-                      {account.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-
-              {accounts.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-6 py-16 text-center text-slate-500"
-                  >
-                    No accounts yet. Create the first account to get started.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </main>
-  );
+export default async function AccountsPage({ searchParams }: { searchParams: Promise<AccountFilters> }) {
+  const filters = await searchParams;
+  const [{ accounts, count, page, pages }, options] = await Promise.all([listAccounts(prisma, filters), accountOptions(prisma)]);
+  const linkFor = (target: number) => { const p = new URLSearchParams(); Object.entries(filters).forEach(([k, v]) => { if (v && k !== "page") p.set(k, v); }); p.set("page", String(target)); return `/accounts?${p}`; };
+  return <Content><PageHeader eyebrow="CRM records" title="Accounts" description="Organizations and relationships in the CRM." action={<Link href="/accounts/new" className="btn-primary">New account</Link>}/>
+    <form className="panel mb-5 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6" method="get" aria-label="Filter accounts">
+      <div className="lg:col-span-2"><label className="label" htmlFor="q">Search accounts</label><input className="field" id="q" name="q" defaultValue={filters.q ?? ""} placeholder="Account name"/></div>
+      <div><label className="label" htmlFor="status">Status</label><select className="field" id="status" name="status" defaultValue={filters.status ?? ""}><option value="">All statuses</option>{statuses.map((s) => <option value={s} key={s}>{s}</option>)}</select></div>
+      <div><label className="label" htmlFor="role">Business role</label><select className="field" id="role" name="role" defaultValue={filters.role ?? ""}><option value="">All roles</option>{Object.entries(roleLabels).map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></div>
+      <div><label className="label" htmlFor="territory">Territory</label><select className="field" id="territory" name="territory" defaultValue={filters.territory ?? ""}><option value="">All territories</option>{options.territories.map((o) => <option key={o.code} value={o.code}>{o.name}</option>)}</select></div>
+      <div><label className="label" htmlFor="industry">Industry</label><select className="field" id="industry" name="industry" defaultValue={filters.industry ?? ""}><option value="">All industries</option>{options.industries.map((o) => <option key={o.code} value={o.code}>{o.name}</option>)}</select></div>
+      <div><label className="label" htmlFor="strategic">Strategic account</label><select className="field" id="strategic" name="strategic" defaultValue={filters.strategic ?? ""}><option value="">All accounts</option><option value="yes">Strategic only</option><option value="no">Non-strategic</option></select></div>
+      <div className="flex items-end gap-2"><button className="btn-primary" type="submit">Apply filters</button><Link className="btn-secondary" href="/accounts">Clear</Link></div>
+    </form>
+    <div className="panel overflow-x-auto"><table className="w-full min-w-[800px] text-left text-sm"><thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-4">Account</th><th className="px-5 py-4">Business roles</th><th className="px-5 py-4">Territory</th><th className="px-5 py-4">Owner</th><th className="px-5 py-4">Status</th><th className="px-5 py-4 text-right">Contacts</th></tr></thead><tbody className="divide-y divide-slate-100">{accounts.map((a) => <tr key={a.id} className="hover:bg-slate-50"><td className="px-5 py-4"><Link className="font-semibold text-slate-900 hover:text-orange-700" href={`/accounts/${a.id}`}>{a.name}</Link><div className="mt-1 text-xs text-slate-500">{a.industryCategory?.name ?? "No industry"}{a.strategicAccount ? " · Strategic" : ""}</div></td><td className="px-5 py-4 text-slate-600">{a.businessRoles.map((r) => roleLabels[r.role]).join(", ") || "—"}</td><td className="px-5 py-4 text-slate-600">{a.territoryCategory?.name ?? "—"}</td><td className="px-5 py-4 text-slate-600">{a.owner ? `${a.owner.firstName} ${a.owner.lastName}` : "Unassigned"}</td><td className="px-5 py-4"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{a.status}</span></td><td className="px-5 py-4 text-right tabular-nums text-slate-600">{a._count.contacts}</td></tr>)}</tbody></table>{accounts.length === 0 && <div className="px-5 py-12 text-center text-sm text-slate-500">No accounts match these filters.</div>}</div>
+    <div className="mt-4 flex items-center justify-between text-sm text-slate-600"><span>{count} account{count === 1 ? "" : "s"} · Page {page} of {pages}</span><div className="flex gap-2">{page > 1 && <Link className="btn-secondary" href={linkFor(page - 1)}>Previous</Link>}{page < pages && <Link className="btn-secondary" href={linkFor(page + 1)}>Next</Link>}</div></div>
+  </Content>;
 }

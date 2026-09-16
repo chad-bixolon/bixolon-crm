@@ -1,80 +1,83 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { AccountBusinessRoleCode, AccountStatus, Prisma, type PrismaClient } from "@prisma/client";
+import type { AccountFields } from "./account-validation";
 
-const businessRoles = new Set(["END_USER", "DISTRIBUTOR", "VAR", "ISV", "OEM", "PARTNER"]);
+export const PAGE_SIZE = 20;
+export type AccountFilters = { q?: string; status?: string; role?: string; territory?: string; industry?: string; strategic?: string; page?: string };
 
-async function foundationAvailable(tx: Prisma.TransactionClient) {
-  const [result] = await tx.$queryRaw<{ ready: boolean }[]>`
-    SELECT to_regclass('public."AccountBusinessRole"') IS NOT NULL AS ready
-  `;
-  return result.ready;
+export function accountWhere(filters: AccountFilters): Prisma.AccountWhereInput {
+  const where: Prisma.AccountWhereInput = {};
+  if (filters.q?.trim()) where.name = { contains: filters.q.trim().slice(0, 100), mode: "insensitive" };
+  if (filters.status && Object.values(AccountStatus).includes(filters.status as AccountStatus)) where.status = filters.status as AccountStatus;
+  if (filters.role && Object.values(AccountBusinessRoleCode).includes(filters.role as AccountBusinessRoleCode)) where.businessRoles = { some: { role: filters.role as AccountBusinessRoleCode } };
+  if (filters.territory) where.territory = filters.territory;
+  if (filters.industry) where.industry = filters.industry;
+  if (filters.strategic === "yes") where.strategicAccount = true;
+  if (filters.strategic === "no") where.strategicAccount = false;
+  return where;
 }
 
-// Temporary rollout bridge: the live database stays on the baseline until approval.
-// Explicit projections work with either generated client and either database schema.
-export async function listAccounts(client: PrismaClient) {
+export async function listAccounts(client: PrismaClient, filters: AccountFilters = {}) {
+  const where = accountWhere(filters);
+  const count = await client.account.count({ where });
+  const requested = Number(filters.page) || 1;
+  const pages = Math.max(1, Math.ceil(count / PAGE_SIZE));
+  const page = Number.isSafeInteger(requested) ? Math.max(1, Math.min(requested, pages)) : 1;
+  const accounts = await client.account.findMany({
+    where, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE, orderBy: [{ name: "asc" }, { id: "asc" }],
+    include: { businessRoles: true, industryCategory: true, territoryCategory: true,
+      owner: { select: { id: true, firstName: true, lastName: true } },
+      _count: { select: { contacts: true, opportunityMemberships: true } } },
+  });
+  return { accounts, count, page, pages };
+}
+
+export async function accountOptions(client: PrismaClient) {
+  const [industries, territories, owners] = await Promise.all([
+    client.industry.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    client.territory.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    client.user.findMany({ where: { active: true, archivedAt: null }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
+  ]);
+  return { industries, territories, owners };
+}
+
+export async function checkAccountReferences(client: PrismaClient, input: AccountFields) {
+  const [industry, territory, owner] = await Promise.all([
+    input.industry ? client.industry.findFirst({ where: { code: input.industry, active: true } }) : null,
+    input.territory ? client.territory.findFirst({ where: { code: input.territory, active: true } }) : null,
+    input.ownerId ? client.user.findFirst({ where: { id: input.ownerId, active: true, archivedAt: null } }) : null,
+  ]);
+  const errors: Record<string, string> = {};
+  if (input.industry && !industry) errors.industry = "Choose an active industry.";
+  if (input.territory && !territory) errors.territory = "Choose an active territory.";
+  if (input.ownerId && !owner) errors.ownerId = "Choose an active owner.";
+  return errors;
+}
+
+export async function saveAccount(client: PrismaClient, input: AccountFields, id?: number) {
+  const data = { name: input.name, status: input.status, strategicAccount: input.strategicAccount,
+    industry: input.industry, territory: input.territory, ownerId: input.ownerId,
+    website: input.website, phone: input.phone, accountType: input.roles[0] ?? null };
   return client.$transaction(async (tx) => {
-    const accounts = await tx.account.findMany({
-      orderBy: { name: "asc" },
-      select: {
-        id: true, name: true, accountType: true, industry: true, territory: true, status: true,
-        _count: { select: { contacts: true, opportunities: true } },
-      },
-    });
-    if (!(await foundationAvailable(tx))) return accounts;
-    const roles = await tx.$queryRaw<{ accountId: number; roles: string[] }[]>`
-      SELECT "accountId", array_agg(role::text ORDER BY role::text) AS roles
-      FROM "AccountBusinessRole" GROUP BY "accountId"
-    `;
-    const memberships = await tx.$queryRaw<{ accountId: number; total: bigint }[]>`
-      SELECT "accountId", count(*) AS total FROM "OpportunityAccount" GROUP BY "accountId"
-    `;
-    const roleMap = new Map(roles.map((row) => [row.accountId, row.roles.join(", ")]));
-    const countMap = new Map(memberships.map((row) => [row.accountId, Number(row.total)]));
-    return accounts.map((account) => ({
-      ...account,
-      accountType: roleMap.get(account.id) ?? null,
-      _count: { ...account._count, opportunities: countMap.get(account.id) ?? 0 },
-    }));
+    if (id) {
+      const existing = await tx.account.findUnique({ where: { id }, select: { status: true } });
+      if (!existing) throw new Error("Account not found.");
+      if (existing.status === "ARCHIVED") throw new Error("Reactivate this account before editing it.");
+      await tx.account.update({ where: { id }, data });
+      await tx.accountBusinessRole.deleteMany({ where: { accountId: id } });
+      if (input.roles.length) await tx.accountBusinessRole.createMany({ data: input.roles.map((role) => ({ accountId: id, role })) });
+      return id;
+    }
+    const account = await tx.account.create({ data: { ...data, businessRoles: { create: input.roles.map((role) => ({ role })) } } });
+    return account.id;
   });
 }
 
-type AccountInput = {
-  name: string;
-  accountType: string | null;
-  industry: string | null;
-  territory: string | null;
-  website: string | null;
-  phone: string | null;
-};
-
-export async function createAccountRecord(client: PrismaClient, input: AccountInput) {
-  if (!input.name.trim()) throw new Error("Account name is required.");
-  if (input.accountType && !businessRoles.has(input.accountType)) {
-    throw new Error("Invalid account business role.");
-  }
+export async function setAccountArchived(client: PrismaClient, id: number, archive: boolean) {
   return client.$transaction(async (tx) => {
-    const ready = await foundationAvailable(tx);
-    // Keep the existing free-text form functional during rollout. A future admin
-    // category picker will replace this compatibility behavior; no new UI here.
-    if (ready && input.industry) {
-      await tx.$executeRaw`INSERT INTO "Industry" (code, name, "updatedAt")
-        VALUES (${input.industry}, ${input.industry}, CURRENT_TIMESTAMP) ON CONFLICT (code) DO NOTHING`;
-    }
-    if (ready && input.territory) {
-      await tx.$executeRaw`INSERT INTO "Territory" (code, name, "updatedAt")
-        VALUES (${input.territory}, ${input.territory}, CURRENT_TIMESTAMP) ON CONFLICT (code) DO NOTHING`;
-    }
-    // Raw INSERT avoids a revised client's new schema defaults on the old database.
-    const [account] = await tx.$queryRaw<{ id: number }[]>`
-      INSERT INTO "Account" (name, "accountType", industry, territory, website, phone, "updatedAt")
-      VALUES (${input.name}, ${input.accountType}, ${input.industry}, ${input.territory},
-              ${input.website}, ${input.phone}, CURRENT_TIMESTAMP)
-      RETURNING id
-    `;
-    if (ready && input.accountType) {
-      await tx.$executeRaw`INSERT INTO "AccountBusinessRole" ("accountId", role, "updatedAt")
-        VALUES (${account.id}, ${input.accountType}::"AccountBusinessRoleCode", CURRENT_TIMESTAMP)`;
-    }
-    return account;
+    const account = await tx.account.findUnique({ where: { id }, select: { status: true } });
+    if (!account) throw new Error("Account not found.");
+    if (archive && account.status === "ARCHIVED") throw new Error("Account is already archived.");
+    if (!archive && account.status !== "ARCHIVED") throw new Error("Account is already active.");
+    await tx.account.update({ where: { id }, data: { status: archive ? "ARCHIVED" : "ACTIVE", archivedAt: archive ? new Date() : null } });
   });
 }

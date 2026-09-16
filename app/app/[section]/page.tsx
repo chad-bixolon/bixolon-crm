@@ -1,0 +1,4 @@
+import { notFound } from "next/navigation";
+import { Content, PageHeader } from "@/components/shell";
+const sections: Record<string, string> = { contacts: "Contacts", opportunities: "Opportunities", pipeline: "Pipeline", tasks: "Tasks", products: "Products", administration: "Administration", integrations: "Integrations" };
+export default async function SectionPage({ params }: { params: Promise<{ section: string }> }) { const { section } = await params; const title = sections[section]; if (!title) notFound(); return <Content><PageHeader eyebrow="CRM" title={title} description="This workspace is planned for a later milestone."/><div className="panel p-10 text-center"><h2 className="text-lg font-semibold">{title} workspace</h2><p className="mt-2 text-sm text-slate-500">No records or operational data are displayed here yet.</p></div></Content>; }
