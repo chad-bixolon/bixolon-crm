@@ -1,0 +1,192 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int           @id @default(autoincrement())
+  email         String        @unique
+  firstName     String
+  lastName      String
+  active        Boolean       @default(true)
+
+  ownedAccounts Account[]
+  opportunities Opportunity[]
+  tasks         Task[]
+  activities    Activity[]
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Account {
+  id            Int           @id @default(autoincrement())
+  name          String
+  status        String        @default("ACTIVE")
+  accountType   String?
+  industry      String?
+  territory     String?
+  website       String?
+  phone         String?
+
+  ownerId       Int?
+  owner         User?         @relation(fields: [ownerId], references: [id])
+
+  contacts      Contact[]
+  opportunities Opportunity[]
+  tasks         Task[]
+  activities    Activity[]
+  notes         Note[]
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Contact {
+  id          Int      @id @default(autoincrement())
+  accountId   Int
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  firstName   String
+  lastName    String
+  title       String?
+  email       String?
+  phone       String?
+  mobile      String?
+  isPrimary   Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SalesStage {
+  id            Int           @id @default(autoincrement())
+  name          String        @unique
+  sortOrder     Int
+  probability   Int           @default(0)
+  isClosed      Boolean       @default(false)
+  isWon         Boolean       @default(false)
+
+  opportunities Opportunity[]
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Opportunity {
+  id                Int                  @id @default(autoincrement())
+  accountId         Int
+  account           Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  ownerId           Int?
+  owner             User?                @relation(fields: [ownerId], references: [id])
+
+  stageId           Int
+  stage             SalesStage           @relation(fields: [stageId], references: [id])
+
+  name              String
+  description       String?
+  expectedCloseDate DateTime?
+  probability       Int?
+  forecastCategory  String?
+
+  products          OpportunityProduct[]
+  tasks             Task[]
+  activities        Activity[]
+  notes             Note[]
+
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+}
+
+model Product {
+  id            Int                  @id @default(autoincrement())
+  sku           String               @unique
+  name          String
+  active        Boolean              @default(true)
+
+  opportunities OpportunityProduct[]
+
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+}
+
+model OpportunityProduct {
+  id            Int         @id @default(autoincrement())
+  opportunityId Int
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  productId     Int
+  product       Product     @relation(fields: [productId], references: [id])
+
+  quantity      Int
+  unitPrice     Decimal?    @db.Decimal(12, 2)
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Task {
+  id            Int          @id @default(autoincrement())
+  accountId     Int?
+  account       Account?     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  opportunityId Int?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  assignedToId  Int?
+  assignedTo    User?        @relation(fields: [assignedToId], references: [id])
+
+  subject       String
+  description   String?
+  dueDate       DateTime?
+  status        String       @default("OPEN")
+  priority      String       @default("NORMAL")
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Activity {
+  id            Int          @id @default(autoincrement())
+  accountId     Int?
+  account       Account?     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  opportunityId Int?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  userId        Int?
+  user          User?        @relation(fields: [userId], references: [id])
+
+  type          String
+  subject       String
+  description   String?
+  activityDate  DateTime     @default(now())
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Note {
+  id            Int          @id @default(autoincrement())
+  accountId     Int?
+  account       Account?     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  opportunityId Int?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  body          String
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}

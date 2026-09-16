@@ -1,0 +1,68 @@
+services:
+  db:
+    image: postgres:17
+    container_name: bixolon-crm-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - crm
+
+  app:
+    build:
+      context: ./app
+
+    container_name: bixolon-crm-app
+    restart: unless-stopped
+
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+
+    ports:
+      - "3000:3000"
+
+    volumes:
+      - ./app:/app
+      - /app/node_modules
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    networks:
+      - crm
+
+  adminer:
+    image: adminer:latest
+    container_name: bixolon-crm-adminer
+    restart: unless-stopped
+
+    profiles:
+      - admin
+
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    networks:
+      - crm
+
+networks:
+  crm:
+    driver: bridge

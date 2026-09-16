@@ -1,0 +1,10 @@
+.env
+app/.env
+
+app/node_modules
+app/.next
+
+postgres/data
+
+*.log
+.DS_Store
