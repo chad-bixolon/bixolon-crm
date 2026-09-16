@@ -1,22 +1,11 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { listAccounts } from "@/lib/accounts";
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountsPage() {
-  const accounts = await prisma.account.findMany({
-    orderBy: {
-      name: "asc",
-    },
-    include: {
-      _count: {
-        select: {
-          contacts: true,
-          opportunities: true,
-        },
-      },
-    },
-  });
+  const accounts = await listAccounts(prisma);
 
   return (
     <main className="min-h-screen bg-slate-50 p-8">

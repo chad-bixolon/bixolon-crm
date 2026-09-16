@@ -1,9 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
+// Prisma 6.19.3. SQL-only checks and the primary-contact partial index live in migrations.
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,60 +8,223 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  ADMIN
+  SALES_MANAGER
+  SALES
+  READ_ONLY
+}
+
+enum IdentityProvider {
+  GOOGLE
+}
+
+enum AccountBusinessRoleCode {
+  END_USER
+  DISTRIBUTOR
+  VAR
+  ISV
+  OEM
+  PARTNER
+}
+
+enum OpportunityPartyRole {
+  END_USER
+  VAR_RESELLER
+  DISTRIBUTOR
+  ISV_PARTNER
+  OEM
+  OTHER
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum ForecastCategory {
+  OMITTED
+  PIPELINE
+  BEST_CASE
+  COMMIT
+  CLOSED
+}
+
 model User {
-  id            Int           @id @default(autoincrement())
-  email         String        @unique
-  firstName     String
-  lastName      String
-  active        Boolean       @default(true)
+  id                    Int                @id @default(autoincrement())
+  email                 String             @unique
+  firstName             String
+  lastName              String
+  active                Boolean            @default(true)
+  role                  UserRole           @default(READ_ONLY)
+  archivedAt            DateTime?
+  identities            ExternalIdentity[]
+  ownedAccounts         Account[]          @relation("AccountOwner")
+  opportunities         Opportunity[]      @relation("OpportunityOwner")
+  tasks                 Task[]             @relation("TaskAssignee")
+  activities            Activity[]         @relation("ActivityUser")
+  createdAccounts       Account[]          @relation("AccountCreatedBy")
+  updatedAccounts       Account[]          @relation("AccountUpdatedBy")
+  archivedAccounts      Account[]          @relation("AccountArchivedBy")
+  createdContacts       Contact[]          @relation("ContactCreatedBy")
+  updatedContacts       Contact[]          @relation("ContactUpdatedBy")
+  archivedContacts      Contact[]          @relation("ContactArchivedBy")
+  createdOpportunities  Opportunity[]      @relation("OpportunityCreatedBy")
+  updatedOpportunities  Opportunity[]      @relation("OpportunityUpdatedBy")
+  archivedOpportunities Opportunity[]      @relation("OpportunityArchivedBy")
+  createdTasks          Task[]             @relation("TaskCreatedBy")
+  updatedTasks          Task[]             @relation("TaskUpdatedBy")
+  archivedTasks         Task[]             @relation("TaskArchivedBy")
+  createdActivities     Activity[]         @relation("ActivityCreatedBy")
+  updatedActivities     Activity[]         @relation("ActivityUpdatedBy")
+  archivedActivities    Activity[]         @relation("ActivityArchivedBy")
+  createdNotes          Note[]             @relation("NoteCreatedBy")
+  updatedNotes          Note[]             @relation("NoteUpdatedBy")
+  archivedNotes         Note[]             @relation("NoteArchivedBy")
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+}
 
-  ownedAccounts Account[]
-  opportunities Opportunity[]
-  tasks         Task[]
-  activities    Activity[]
+model ExternalIdentity {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  user      User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  provider  IdentityProvider @default(GOOGLE)
+  issuer    String
+  subject   String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  @@unique([issuer, subject])
+  @@unique([userId, provider])
 }
 
 model Account {
-  id            Int           @id @default(autoincrement())
-  name          String
-  status        String        @default("ACTIVE")
-  accountType   String?
-  industry      String?
-  territory     String?
-  website       String?
-  phone         String?
+  id                     Int                   @id @default(autoincrement())
+  name                   String
+  status                 AccountStatus         @default(ACTIVE)
+  strategicAccount       Boolean               @default(false)
+  /// Deprecated compatibility value; businessRoles is authoritative after migration.
+  accountType            String?
+  /// Existing values become stable lookup codes without normalization or rewriting.
+  industry               String?
+  industryCategory       Industry?             @relation(fields: [industry], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  territory              String?
+  territoryCategory      Territory?            @relation(fields: [territory], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  website                String?
+  phone                  String?
+  ownerId                Int?
+  owner                  User?                 @relation("AccountOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  businessRoles          AccountBusinessRole[]
+  contacts               Contact[]
+  /// Legacy direct opportunity relationships retained for compatibility only.
+  opportunities          Opportunity[]         @relation("LegacyOpportunityAccount")
+  opportunityMemberships OpportunityAccount[]
+  tasks                  Task[]
+  activities             Activity[]
+  notes                  Note[]
+  archivedAt             DateTime?
+  createdById            Int?
+  createdBy              User?                 @relation("AccountCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById            Int?
+  updatedBy              User?                 @relation("AccountUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  archivedById           Int?
+  archivedBy             User?                 @relation("AccountArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
 
-  ownerId       Int?
-  owner         User?         @relation(fields: [ownerId], references: [id])
+  @@index([name])
+  @@index([ownerId, status])
+  @@index([territory, status])
+  @@index([industry])
+  @@index([createdById])
+  @@index([updatedById])
+  @@index([archivedById])
+}
 
-  contacts      Contact[]
-  opportunities Opportunity[]
-  tasks         Task[]
-  activities    Activity[]
-  notes         Note[]
+model AccountBusinessRole {
+  accountId Int
+  account   Account                 @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  role      AccountBusinessRoleCode
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
 
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  @@id([accountId, role])
+  @@index([role, accountId])
+}
+
+model Industry {
+  code      String    @id
+  name      String    @unique
+  active    Boolean   @default(true)
+  sortOrder Int       @default(0)
+  accounts  Account[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Territory {
+  code      String    @id
+  name      String    @unique
+  active    Boolean   @default(true)
+  sortOrder Int       @default(0)
+  accounts  Account[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model ActivityType {
+  code       String     @id
+  name       String     @unique
+  active     Boolean    @default(true)
+  sortOrder  Int        @default(0)
+  activities Activity[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 }
 
 model Contact {
-  id          Int      @id @default(autoincrement())
-  accountId   Int
-  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id           Int       @id @default(autoincrement())
+  accountId    Int
+  account      Account   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  firstName    String
+  lastName     String
+  title        String?
+  email        String?
+  phone        String?
+  mobile       String?
+  active       Boolean   @default(true)
+  /// SQL enforces one primary contact per account, active and unarchived.
+  isPrimary    Boolean   @default(false)
+  archivedAt   DateTime?
+  createdById  Int?
+  createdBy    User?     @relation("ContactCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById  Int?
+  updatedBy    User?     @relation("ContactUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  archivedById Int?
+  archivedBy   User?     @relation("ContactArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  firstName   String
-  lastName    String
-  title       String?
-  email       String?
-  phone       String?
-  mobile      String?
-  isPrimary   Boolean  @default(false)
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  @@index([accountId, active])
+  @@index([createdById])
+  @@index([updatedById])
+  @@index([archivedById])
 }
 
 model SalesStage {
@@ -76,37 +234,90 @@ model SalesStage {
   probability   Int           @default(0)
   isClosed      Boolean       @default(false)
   isWon         Boolean       @default(false)
-
+  active        Boolean       @default(true)
   opportunities Opportunity[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
+  @@index([active, sortOrder])
+}
+
+model Currency {
+  code          String        @id @db.Char(3)
+  name          String
+  active        Boolean       @default(true)
+  opportunities Opportunity[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }
 
 model Opportunity {
   id                Int                  @id @default(autoincrement())
-  accountId         Int
-  account           Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
-
+  /// Original column is retained; participants is the authoritative account relationship.
+  legacyAccountId   Int?                 @map("accountId")
+  legacyAccount     Account?             @relation("LegacyOpportunityAccount", fields: [legacyAccountId], references: [id], onDelete: Restrict, map: "Opportunity_accountId_fkey")
   ownerId           Int?
-  owner             User?                @relation(fields: [ownerId], references: [id])
-
+  owner             User?                @relation("OpportunityOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   stageId           Int
-  stage             SalesStage           @relation(fields: [stageId], references: [id])
-
+  stage             SalesStage           @relation(fields: [stageId], references: [id], onDelete: Restrict)
   name              String
   description       String?
   expectedCloseDate DateTime?
   probability       Int?
-  forecastCategory  String?
-
+  forecastCategory  ForecastCategory?
+  currencyCode      String               @default("USD") @db.Char(3)
+  currency          Currency             @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  participants      OpportunityAccount[]
   products          OpportunityProduct[]
   tasks             Task[]
   activities        Activity[]
   notes             Note[]
-
+  archivedAt        DateTime?
+  createdById       Int?
+  createdBy         User?                @relation("OpportunityCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById       Int?
+  updatedBy         User?                @relation("OpportunityUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  archivedById      Int?
+  archivedBy        User?                @relation("OpportunityArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
+
+  @@index([legacyAccountId])
+  @@index([ownerId, stageId])
+  @@index([stageId, expectedCloseDate])
+  @@index([expectedCloseDate])
+  @@index([currencyCode])
+  @@index([createdById])
+  @@index([updatedById])
+  @@index([archivedById])
+}
+
+model OpportunityAccount {
+  opportunityId Int
+  accountId     Int
+  opportunity   Opportunity              @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  account       Account                  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  roles         OpportunityAccountRole[]
+  tasks         Task[]                   @relation("TaskMembership")
+  activities    Activity[]               @relation("ActivityMembership")
+  notes         Note[]                   @relation("NoteMembership")
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+
+  @@id([opportunityId, accountId])
+  @@index([accountId, opportunityId])
+}
+
+model OpportunityAccountRole {
+  opportunityId Int
+  accountId     Int
+  role          OpportunityPartyRole
+  membership    OpportunityAccount   @relation(fields: [opportunityId, accountId], references: [opportunityId, accountId], onDelete: Restrict, onUpdate: Restrict)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@id([opportunityId, accountId, role])
+  @@index([role, opportunityId])
 }
 
 model Product {
@@ -114,79 +325,121 @@ model Product {
   sku           String               @unique
   name          String
   active        Boolean              @default(true)
-
+  archivedAt    DateTime?
   opportunities OpportunityProduct[]
-
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
 }
 
 model OpportunityProduct {
-  id            Int         @id @default(autoincrement())
-  opportunityId Int
-  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  id                 Int         @id @default(autoincrement())
+  opportunityId      Int
+  opportunity        Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  productId          Int
+  product            Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantity           Int
+  estimatedUnitPrice Decimal     @map("unitPrice") @db.Decimal(12, 2)
+  archivedAt         DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 
-  productId     Int
-  product       Product     @relation(fields: [productId], references: [id])
-
-  quantity      Int
-  unitPrice     Decimal?    @db.Decimal(12, 2)
-
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  @@index([opportunityId, archivedAt])
+  @@index([productId])
 }
 
 model Task {
-  id            Int          @id @default(autoincrement())
+  id            Int                 @id @default(autoincrement())
   accountId     Int?
-  account       Account?     @relation(fields: [accountId], references: [id], onDelete: Cascade)
-
+  account       Account?            @relation(fields: [accountId], references: [id], onDelete: Restrict)
   opportunityId Int?
-  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
-
+  opportunity   Opportunity?        @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  /// MATCH SIMPLE: membership is enforced when both parent IDs are present.
+  membership    OpportunityAccount? @relation("TaskMembership", fields: [opportunityId, accountId], references: [opportunityId, accountId], onDelete: Restrict, onUpdate: Restrict)
   assignedToId  Int?
-  assignedTo    User?        @relation(fields: [assignedToId], references: [id])
-
+  assignedTo    User?               @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: Restrict)
   subject       String
   description   String?
   dueDate       DateTime?
-  status        String       @default("OPEN")
-  priority      String       @default("NORMAL")
+  status        TaskStatus          @default(OPEN)
+  priority      TaskPriority        @default(NORMAL)
+  completedAt   DateTime?
+  archivedAt    DateTime?
+  createdById   Int?
+  createdBy     User?               @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById   Int?
+  updatedBy     User?               @relation("TaskUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  archivedById  Int?
+  archivedBy    User?               @relation("TaskArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  @@index([assignedToId, status, dueDate])
+  @@index([accountId, status])
+  @@index([opportunityId, status])
+  @@index([opportunityId, accountId])
+  @@index([createdById])
+  @@index([updatedById])
+  @@index([archivedById])
 }
 
 model Activity {
-  id            Int          @id @default(autoincrement())
+  id            Int                 @id @default(autoincrement())
   accountId     Int?
-  account       Account?     @relation(fields: [accountId], references: [id], onDelete: Cascade)
-
+  account       Account?            @relation(fields: [accountId], references: [id], onDelete: Restrict)
   opportunityId Int?
-  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
-
+  opportunity   Opportunity?        @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  /// MATCH SIMPLE: membership is enforced when both parent IDs are present.
+  membership    OpportunityAccount? @relation("ActivityMembership", fields: [opportunityId, accountId], references: [opportunityId, accountId], onDelete: Restrict, onUpdate: Restrict)
   userId        Int?
-  user          User?        @relation(fields: [userId], references: [id])
-
+  user          User?               @relation("ActivityUser", fields: [userId], references: [id], onDelete: Restrict)
   type          String
+  activityType  ActivityType        @relation(fields: [type], references: [code], onDelete: Restrict, onUpdate: Restrict)
   subject       String
   description   String?
-  activityDate  DateTime     @default(now())
+  activityDate  DateTime            @default(now())
+  archivedAt    DateTime?
+  createdById   Int?
+  createdBy     User?               @relation("ActivityCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById   Int?
+  updatedBy     User?               @relation("ActivityUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  archivedById  Int?
+  archivedBy    User?               @relation("ActivityArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  @@index([accountId, activityDate])
+  @@index([opportunityId, activityDate])
+  @@index([userId, activityDate])
+  @@index([type])
+  @@index([opportunityId, accountId])
+  @@index([createdById])
+  @@index([updatedById])
+  @@index([archivedById])
 }
 
 model Note {
-  id            Int          @id @default(autoincrement())
+  id            Int                 @id @default(autoincrement())
   accountId     Int?
-  account       Account?     @relation(fields: [accountId], references: [id], onDelete: Cascade)
-
+  account       Account?            @relation(fields: [accountId], references: [id], onDelete: Restrict)
   opportunityId Int?
-  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
-
+  opportunity   Opportunity?        @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  /// MATCH SIMPLE: membership is enforced when both parent IDs are present.
+  membership    OpportunityAccount? @relation("NoteMembership", fields: [opportunityId, accountId], references: [opportunityId, accountId], onDelete: Restrict, onUpdate: Restrict)
   body          String
+  archivedAt    DateTime?
+  createdById   Int?
+  createdBy     User?               @relation("NoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById   Int?
+  updatedBy     User?               @relation("NoteUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  archivedById  Int?
+  archivedBy    User?               @relation("NoteArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  @@index([accountId, createdAt])
+  @@index([opportunityId, createdAt])
+  @@index([opportunityId, accountId])
+  @@index([createdById])
+  @@index([updatedById])
+  @@index([archivedById])
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { createAccountRecord } from "@/lib/accounts";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -16,15 +17,13 @@ export async function createAccount(formData: FormData) {
     throw new Error("Account name is required.");
   }
 
-  await prisma.account.create({
-    data: {
-      name,
-      accountType: accountType || null,
-      industry: industry || null,
-      territory: territory || null,
-      website: website || null,
-      phone: phone || null,
-    },
+  await createAccountRecord(prisma, {
+    name,
+    accountType: accountType || null,
+    industry: industry || null,
+    territory: territory || null,
+    website: website || null,
+    phone: phone || null,
   });
 
   revalidatePath("/accounts");

@@ -6,14 +6,22 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "prisma:generate": "node scripts/prisma-generate.mjs",
+    "postinstall": "npm run prisma:generate",
+    "predev": "npm run prisma:generate",
+    "prebuild": "npm run prisma:generate",
+    "typecheck": "npm run prisma:generate && tsc --noEmit --incremental false",
+    "db:deploy": "prisma migrate deploy",
+    "db:status": "prisma migrate status"
   },
   "dependencies": {
-    "@prisma/client": "^6.19.3",
+    "@prisma/client": "6.19.3",
     "next": "16.3.5",
-    "prisma": "^6.19.3",
+    "prisma": "6.19.3",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "dotenv": "16.6.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
