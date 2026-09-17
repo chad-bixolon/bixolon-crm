@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { field, optional, pageNumber, phone, positiveId, required, type Errors } from "./crm-validation";
-export type ContactInput = { accountId: number; firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null; mobile: string | null; active: boolean; isPrimary: boolean };
+import { parseAddress, type Address } from "./address";
+export type ContactInput = Address & { accountId: number; firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null; mobile: string | null; active: boolean; isPrimary: boolean };
 export function parseContact(form: FormData) {
   const errors: Errors = {};
   const accountId = positiveId(field(form, "accountId"));
@@ -14,8 +15,9 @@ export function parseContact(form: FormData) {
   const mobile = optional(form, "mobile", 50, errors); phone(mobile, "mobile", errors);
   const active = field(form, "active") !== "false";
   const isPrimary = form.has("isPrimary");
+  const address = parseAddress(form, errors);
   if (isPrimary && !active) errors.isPrimary = "A primary contact must be active.";
-  return { errors, value: Object.keys(errors).length ? undefined : { accountId: accountId!, firstName, lastName, title, email, phone: office, mobile, active, isPrimary } satisfies ContactInput };
+  return { errors, value: Object.keys(errors).length ? undefined : { accountId: accountId!, firstName, lastName, title, email, phone: office, mobile, active, isPrimary, ...address } satisfies ContactInput };
 }
 export async function saveContact(client: PrismaClient, input: ContactInput, id?: number) {
   return client.$transaction(async (tx) => {

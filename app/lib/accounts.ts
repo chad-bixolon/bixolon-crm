@@ -40,15 +40,16 @@ export async function accountOptions(client: PrismaClient) {
   return { industries, territories, owners };
 }
 
-export async function checkAccountReferences(client: PrismaClient, input: AccountFields) {
+export async function checkAccountReferences(client: PrismaClient, input: AccountFields, id?: number) {
+  const existing = id ? await client.account.findUnique({ where: { id }, select: { industry: true, territory: true } }) : null;
   const [industry, territory, owner] = await Promise.all([
-    input.industry ? client.industry.findFirst({ where: { code: input.industry, active: true } }) : null,
-    input.territory ? client.territory.findFirst({ where: { code: input.territory, active: true } }) : null,
+    input.industry && input.industry !== existing?.industry ? client.industry.findFirst({ where: { code: input.industry, active: true } }) : null,
+    input.territory && input.territory !== existing?.territory ? client.territory.findFirst({ where: { code: input.territory, active: true } }) : null,
     input.ownerId ? client.user.findFirst({ where: { id: input.ownerId, active: true, archivedAt: null } }) : null,
   ]);
   const errors: Record<string, string> = {};
-  if (input.industry && !industry) errors.industry = "Choose an active industry.";
-  if (input.territory && !territory) errors.territory = "Choose an active territory.";
+  if (input.industry && input.industry !== existing?.industry && !industry) errors.industry = "Choose an active industry.";
+  if (input.territory && input.territory !== existing?.territory && !territory) errors.territory = "Choose an active territory.";
   if (input.ownerId && !owner) errors.ownerId = "Choose an active owner.";
   return errors;
 }
@@ -56,7 +57,9 @@ export async function checkAccountReferences(client: PrismaClient, input: Accoun
 export async function saveAccount(client: PrismaClient, input: AccountFields, id?: number) {
   const data = { name: input.name, status: input.status, strategicAccount: input.strategicAccount,
     industry: input.industry, territory: input.territory, ownerId: input.ownerId,
-    website: input.website, phone: input.phone, accountType: input.roles[0] ?? null };
+    website: input.website, phone: input.phone, addressLine1: input.addressLine1, addressLine2: input.addressLine2,
+    city: input.city, stateProvince: input.stateProvince, postalCode: input.postalCode, country: input.country,
+    accountType: input.roles[0] ?? null };
   return client.$transaction(async (tx) => {
     if (id) {
       const existing = await tx.account.findUnique({ where: { id }, select: { status: true } });

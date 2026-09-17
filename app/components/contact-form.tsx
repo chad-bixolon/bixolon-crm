@@ -3,7 +3,9 @@ import { useSubmitGuard } from "@/lib/submit-guard";
 import Link from "next/link";
 import { useActionState } from "react";
 import { submitContact, type FormState } from "@/app/contacts/actions";
-type Initial = { accountId: number; firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null; mobile: string | null; active: boolean; isPrimary: boolean };
+import { AddressFields } from "@/components/address-fields";
+import type { Address } from "@/lib/address";
+type Initial = Address & { accountId: number; firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null; mobile: string | null; active: boolean; isPrimary: boolean };
 export function ContactForm({ id, initial, accounts, accountId }: { id?: number; initial?: Initial; accounts: { id: number; name: string }[]; accountId?: number }) {
   const [state, action, pending] = useActionState(submitContact.bind(null, id ?? null), { errors: {} } as FormState);
   const guard = useSubmitGuard(state);
@@ -15,6 +17,7 @@ export function ContactForm({ id, initial, accounts, accountId }: { id?: number;
       {([ ["firstName", "First name"], ["lastName", "Last name"], ["title", "Title"], ["email", "Email"], ["phone", "Office phone"], ["mobile", "Mobile phone"] ] as const).map(([key, label]) => <div key={key}><label className="label" htmlFor={key}>{label}{key === "firstName" || key === "lastName" ? " *" : ""}</label><input className="field" id={key} name={key} type={key === "email" ? "email" : key === "phone" || key === "mobile" ? "tel" : "text"} required={key === "firstName" || key === "lastName"} maxLength={key === "email" ? 254 : key === "title" ? 200 : key === "phone" || key === "mobile" ? 50 : 100} defaultValue={initial?.[key] ?? ""}/>{error(key)}</div>)}
       <div><label className="label" htmlFor="active">Status</label><select className="field" id="active" name="active" defaultValue={initial?.active === false ? "false" : "true"}><option value="true">Active</option><option value="false">Inactive</option></select></div>
       <label className="flex items-center gap-2 text-sm font-medium text-slate-700"><input type="checkbox" name="isPrimary" defaultChecked={initial?.isPrimary} className="accent-orange-700"/>Primary contact for this account</label>{error("isPrimary")}
+      <AddressFields initial={initial} errors={state.errors}/>
     </div><div className="mt-7 flex justify-end gap-2"><Link href={id ? `/contacts/${id}` : "/contacts"} className="btn-secondary">Cancel</Link><button type="submit" className="btn-primary disabled:opacity-60" disabled={pending}>{pending ? "Saving…" : id ? "Save contact" : "Create contact"}</button></div>
   </form>;
 }

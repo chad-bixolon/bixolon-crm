@@ -154,6 +154,12 @@ model Account {
   territoryCategory      Territory?            @relation(fields: [territory], references: [code], onDelete: Restrict, onUpdate: Restrict)
   website                String?
   phone                  String?
+  addressLine1           String?
+  addressLine2           String?
+  city                   String?
+  stateProvince          String?
+  postalCode             String?
+  country                String?
   ownerId                Int?
   owner                  User?                 @relation("AccountOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   businessRoles          AccountBusinessRole[]
@@ -236,6 +242,12 @@ model Contact {
   email        String?
   phone        String?
   mobile       String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  stateProvince String?
+  postalCode   String?
+  country      String?
   active       Boolean   @default(true)
   /// SQL enforces one primary contact per account, active and unarchived.
   isPrimary    Boolean   @default(false)

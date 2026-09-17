@@ -1,10 +1,11 @@
 import { AccountBusinessRoleCode, AccountStatus } from "@prisma/client";
+import { parseAddress, type Address } from "./address";
 
 export const roleLabels: Record<AccountBusinessRoleCode, string> = {
-  END_USER: "End user", DISTRIBUTOR: "Distributor", VAR: "VAR", ISV: "ISV", OEM: "OEM", PARTNER: "Partner",
+  END_USER: "End User", DISTRIBUTOR: "Distributor", VAR: "VAR / Reseller", ISV: "ISV", OEM: "OEM", PARTNER: "Service Partner",
 };
 export const statuses = ["ACTIVE", "INACTIVE", "ARCHIVED"] as const;
-export type AccountFields = {
+export type AccountFields = Address & {
   name: string; status: AccountStatus; strategicAccount: boolean; roles: AccountBusinessRoleCode[];
   industry: string | null; territory: string | null; ownerId: number | null;
   website: string | null; phone: string | null;
@@ -39,6 +40,7 @@ export function parseAccountForm(form: FormData): ValidationResult {
   if (phone && !/^[+()\d .-]{5,50}$/.test(phone)) errors.phone = "Enter a valid phone number.";
   const industry = optional("industry", 100);
   const territory = optional("territory", 100);
+  const address = parseAddress(form, errors);
   if (Object.keys(errors).length) return { errors };
-  return { errors, value: { name, status: rawStatus as AccountStatus, strategicAccount: form.has("strategicAccount"), roles, industry, territory, ownerId, website, phone } };
+  return { errors, value: { name, status: rawStatus as AccountStatus, strategicAccount: form.has("strategicAccount"), roles, industry, territory, ownerId, website, phone, ...address } };
 }

@@ -9,7 +9,7 @@ export type FormState = { errors: Record<string, string>; message?: string };
 export async function submitAccount(id: number | null, _state: FormState, form: FormData): Promise<FormState> {
   const result = parseAccountForm(form);
   if (!result.value) return { errors: result.errors, message: "Please correct the highlighted fields." };
-  const references = await checkAccountReferences(prisma, result.value);
+  const references = await checkAccountReferences(prisma, result.value, id ?? undefined);
   if (Object.keys(references).length) return { errors: references, message: "Please correct the highlighted fields." };
   let accountId: number;
   try { accountId = await saveAccount(prisma, result.value, id ?? undefined); }
