@@ -3,13 +3,15 @@ import { field, optional, pageNumber, positiveId, required, type Errors } from "
 import { archivedWhere, recordVisibility } from "./record-visibility";
 export type Participant = { accountId: number; roles: OpportunityPartyRole[] };
 export type Line = { id?: number; productId: number; quantity: number; price: string };
-export type OpportunityInput = { name: string; description: string | null; ownerId: number | null; stageId: number; expectedCloseDate: Date | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: Participant[]; lines: Line[] };
+export type OpportunityInput = { name: string; description: string | null; ownerId: number | null; projectId: number | null; stageId: number; expectedCloseDate: Date | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: Participant[]; lines: Line[] };
 export function parseOpportunity(form: FormData) {
   const errors: Errors = {};
   const name = required(form, "name", "Opportunity name", 200, errors);
   const description = optional(form, "description", 5000, errors);
   const ownerRaw = field(form, "ownerId"), ownerId = ownerRaw ? positiveId(ownerRaw) : null;
   if (ownerRaw && !ownerId) errors.ownerId = "Choose a valid owner.";
+  const projectRaw = field(form, "projectId"), projectId = projectRaw ? positiveId(projectRaw) : null;
+  if (projectRaw && !projectId) errors.projectId = "Choose a valid Project.";
   const stageId = positiveId(field(form, "stageId")); if (!stageId) errors.stageId = "Choose a sales stage.";
   const dateRaw = field(form, "expectedCloseDate");
   const expectedCloseDate = dateRaw && /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? new Date(`${dateRaw}T12:00:00.000Z`) : null;
@@ -44,36 +46,41 @@ export function parseOpportunity(form: FormData) {
     lines.push({ id: id ?? undefined, productId, quantity, price });
   }
   if (new Set(lines.map((line) => line.id).filter(Boolean)).size !== lines.filter((line) => line.id).length) errors.lines = "Duplicate line item.";
-  return { errors, value: Object.keys(errors).length ? undefined : { name, description, ownerId, stageId: stageId!, expectedCloseDate, probability, forecastCategory, currencyCode, participants, lines } satisfies OpportunityInput };
+  return { errors, value: Object.keys(errors).length ? undefined : { name, description, ownerId, projectId, stageId: stageId!, expectedCloseDate, probability, forecastCategory, currencyCode, participants, lines } satisfies OpportunityInput };
 }
 export function lineTotal(line: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number }) { return new Prisma.Decimal(line.estimatedUnitPrice).mul(line.quantity); }
 export function opportunityTotal(lines: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number; archivedAt?: Date | null }[]) { return lines.reduce((sum, line) => line.archivedAt ? sum : sum.add(lineTotal(line)), new Prisma.Decimal(0)); }
 export function weightedValue(total: Prisma.Decimal, probability: number) { return total.mul(probability).div(100); }
 export async function opportunityOptions(client: PrismaClient) {
-  const [accounts, owners, stages, currencies, products] = await Promise.all([
+  const [accounts, owners, stages, currencies, products, projects] = await Promise.all([
     client.account.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     client.user.findMany({ where: { active: true, archivedAt: null }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
     client.salesStage.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
     client.currency.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
     client.product.findMany({ where: { active: true, archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, sku: true, name: true } }),
+    client.project.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
-  return { accounts, owners, stages, currencies, products };
+  return { accounts, owners, stages, currencies, products, projects };
 }
 export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number) {
   return client.$transaction(async (tx) => {
-    const [stage, currency, owner, accounts, products] = await Promise.all([
+    const existing = id ? await tx.opportunity.findUnique({ where: { id } }) : null;
+    if (id && (!existing || existing.archivedAt)) throw new Error('Opportunity not found or archived.');
+    const [stage, currency, owner, accounts, products, project] = await Promise.all([
       tx.salesStage.findUnique({ where: { id: input.stageId } }), tx.currency.findUnique({ where: { code: input.currencyCode } }),
       input.ownerId ? tx.user.findUnique({ where: { id: input.ownerId } }) : null,
       tx.account.findMany({ where: { id: { in: input.participants.map((p) => p.accountId) }, status: "ACTIVE" }, select: { id: true } }),
       tx.product.findMany({ where: { id: { in: input.lines.map((l) => l.productId) }, active: true, archivedAt: null }, select: { id: true } }),
+      input.projectId ? tx.project.findUnique({ where: { id: input.projectId }, select: { id: true, archivedAt: true } }) : null,
     ]);
     if (!stage?.active) throw new Error("Choose an available sales stage.");
     if (!currency?.active) throw new Error("Choose an available currency.");
     if (input.ownerId && (!owner?.active || owner.archivedAt)) throw new Error("Choose an active owner.");
+    if (input.projectId && (!project || (project.archivedAt && existing?.projectId !== input.projectId))) throw new Error("Choose an active Project.");
     if (accounts.length !== input.participants.length) throw new Error("Choose active accounts for all participants.");
     if (products.length !== new Set(input.lines.map((l) => l.productId)).size) throw new Error("Choose active products for all line items.");
-    const data = { name: input.name, description: input.description, ownerId: input.ownerId, stageId: input.stageId, expectedCloseDate: input.expectedCloseDate, probability: input.probability, forecastCategory: input.forecastCategory, currencyCode: input.currencyCode };
-    if (id) { const existing = await tx.opportunity.findUnique({ where: { id } }); if (!existing) throw new Error("Opportunity not found."); if (existing.archivedAt) throw new Error("Reactivate this opportunity before editing it."); await tx.opportunity.update({ where: { id }, data }); }
+    const data = { name: input.name, description: input.description, ownerId: input.ownerId, projectId: input.projectId, stageId: input.stageId, expectedCloseDate: input.expectedCloseDate, probability: input.probability, forecastCategory: input.forecastCategory, currencyCode: input.currencyCode };
+    if (id) { await tx.opportunity.update({ where: { id }, data }); }
     else { const created = await tx.opportunity.create({ data }); id = created.id; }
     const opportunityId = id;
     const existingMemberships = await tx.opportunityAccount.findMany({ where: { opportunityId }, include: { roles: true } });
@@ -101,13 +108,15 @@ export async function setOpportunityArchived(client: PrismaClient, id: number, a
   if (!!row.archivedAt === archived) throw new Error(archived ? "Opportunity is already archived." : "Opportunity is already active.");
   await client.opportunity.update({ where: { id }, data: { archivedAt: archived ? new Date() : null } });
 }
-export type OpportunityFilters = { q?: string; stageId?: string; ownerId?: string; forecastCategory?: string; closeFrom?: string; closeTo?: string; accountId?: string; page?: string; archived?: string };
+export type OpportunityFilters = { q?: string; stageId?: string; ownerId?: string; projectId?: string; forecastCategory?: string; closeFrom?: string; closeTo?: string; accountId?: string; page?: string; archived?: string };
 export function opportunityWhere(filters: OpportunityFilters): Prisma.OpportunityWhereInput {
   const where: Prisma.OpportunityWhereInput = { ...archivedWhere(recordVisibility(filters.archived === "yes" ? "archived" : filters.archived === "all" ? "all" : "active")) };
   if (filters.q?.trim()) where.name = { contains: filters.q.trim().slice(0, 100), mode: "insensitive" };
   const stageId = positiveId(filters.stageId ?? ""); if (stageId) where.stageId = stageId;
   const ownerId = positiveId(filters.ownerId ?? ""); if (ownerId) where.ownerId = ownerId;
   const accountId = positiveId(filters.accountId ?? ""); if (accountId) where.participants = { some: { accountId } };
+  if (filters.projectId === 'none') where.projectId = null;
+  else { const projectId = positiveId(filters.projectId ?? ''); if (projectId) where.projectId = projectId; }
   if (filters.forecastCategory && Object.values(ForecastCategory).includes(filters.forecastCategory as ForecastCategory)) where.forecastCategory = filters.forecastCategory as ForecastCategory;
   const from = filters.closeFrom && /^\d{4}-\d{2}-\d{2}$/.test(filters.closeFrom) ? new Date(`${filters.closeFrom}T00:00:00Z`) : null;
   const to = filters.closeTo && /^\d{4}-\d{2}-\d{2}$/.test(filters.closeTo) ? new Date(`${filters.closeTo}T23:59:59.999Z`) : null;

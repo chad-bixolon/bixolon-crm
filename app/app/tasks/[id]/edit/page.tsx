@@ -35,5 +35,5 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   }
 
   const options = await workOptions();
-  return <Content><PageHeader title={`Edit task: ${row.subject}`} eyebrow="Tasks"/><WorkForm kind="task" id={id} {...options} initial={{ subject: row.subject, description: row.description, accountId: row.accountId, opportunityId: row.opportunityId, assignedToId: row.assignedToId, status: row.status, priority: row.priority, dueDate: row.dueDate?.toISOString().slice(0, 10) ?? '' }}/></Content>;
+  return <Content><PageHeader title={`Edit task: ${row.subject}`} eyebrow="Tasks"/><WorkForm kind="task" id={id} {...options} initial={{ subject: row.subject, description: row.description, accountId: row.accountId, opportunityId: row.opportunityId, projectId: row.projectId, assignedToId: row.assignedToId, status: row.status, priority: row.priority, dueDate: row.dueDate?.toISOString().slice(0, 10) ?? '' }}/></Content>;
 }

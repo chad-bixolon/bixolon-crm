@@ -78,6 +78,49 @@ try:
     print(prisma("upgrade", "migrate", "deploy"), flush=True)
     print(sql("upgrade", (ROOT / "prisma/tests/verify-preservation.sql").read_text()).stdout, flush=True)
     print(sql("upgrade", (ROOT / "prisma/tests/integrity.sql").read_text()).stdout, flush=True)
+    print(sql("upgrade", '''DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM "Project") OR EXISTS (SELECT 1 FROM "ProjectAccount") OR
+         EXISTS (SELECT 1 FROM "ProjectAccountRole") OR
+         EXISTS (SELECT 1 FROM "Opportunity" WHERE "projectId" IS NOT NULL) OR
+         EXISTS (SELECT 1 FROM "Task" WHERE "projectId" IS NOT NULL) OR
+         EXISTS (SELECT 1 FROM "Activity" WHERE "projectId" IS NOT NULL) OR
+         EXISTS (SELECT 1 FROM "Note" WHERE "projectId" IS NOT NULL) THEN
+        RAISE EXCEPTION 'Project migration changed legacy rows';
+      END IF;
+    END $$;
+    INSERT INTO "Account" ("id", "name", "updatedAt") VALUES (1003, 'Additional participant', CURRENT_TIMESTAMP);
+    INSERT INTO "Project" ("id", "name", "primaryAccountId", "primaryAccountRole", "createdById", "updatedAt")
+      VALUES (1000, 'Fixture project', 100, 'PROGRAM_OWNER', 100, CURRENT_TIMESTAMP);
+    INSERT INTO "ProjectAccount" ("projectId", "accountId", "updatedAt") VALUES (1000, 1003, CURRENT_TIMESTAMP);
+    INSERT INTO "ProjectAccountRole" ("projectId", "accountId", "role", "updatedAt") VALUES
+      (1000, 1003, 'SERVICE_PROVIDER', CURRENT_TIMESTAMP),
+      (1000, 1003, 'CONNECTIVITY_PROVIDER', CURRENT_TIMESTAMP);
+    UPDATE "Opportunity" SET "projectId" = 1000 WHERE "id" = 100;
+    INSERT INTO "Activity" ("id", "projectId", "type", "subject", "updatedAt")
+      VALUES (1000, 1000, 'OTHER', 'Project update', CURRENT_TIMESTAMP);
+    INSERT INTO "Note" ("id", "projectId", "body", "updatedAt")
+      VALUES (1000, 1000, 'Project note', CURRENT_TIMESTAMP);
+    SELECT count(*) AS project_roles FROM "ProjectAccountRole" WHERE "projectId" = 1000;''').stdout, flush=True)
+    rejected = {
+        "duplicate participant": '''INSERT INTO "ProjectAccount" ("projectId", "accountId", "updatedAt") VALUES (1000, 1003, CURRENT_TIMESTAMP);''',
+        "duplicate role": '''INSERT INTO "ProjectAccountRole" ("projectId", "accountId", "role", "updatedAt") VALUES (1000, 1003, 'SERVICE_PROVIDER', CURRENT_TIMESTAMP);''',
+        "primary account as participant": '''INSERT INTO "ProjectAccount" ("projectId", "accountId", "updatedAt") VALUES (1000, 100, CURRENT_TIMESTAMP);''',
+        "primary account changed to participant": '''UPDATE "Project" SET "primaryAccountId" = 1003 WHERE "id" = 1000;''',
+        "delete participating account": '''DELETE FROM "Account" WHERE "id" = 1003;''',
+        "reversed project dates": '''UPDATE "Project" SET "startDate" = '2026-09-17', "targetEndDate" = '2026-09-16' WHERE "id" = 1000;''',
+    }
+    for label, statement in rejected.items():
+        if sql("upgrade", statement, check=False).returncode == 0:
+            raise RuntimeError(f"{label}: invalid change unexpectedly succeeded")
+        print(f"PASS: {label} rejected", flush=True)
+    print(sql("upgrade", '''DELETE FROM "ProjectAccountRole" WHERE "projectId" = 1000 AND "accountId" = 1003;
+      DELETE FROM "ProjectAccount" WHERE "projectId" = 1000 AND "accountId" = 1003;
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM "Account" WHERE "id" = 1003) THEN
+          RAISE EXCEPTION 'Removing participant deleted Account';
+        END IF;
+      END $$;''').stdout, flush=True)
+    print("PASS: Project constraints, links, parent checks, and Account preservation", flush=True)
     client = run(["docker", "run", "--rm", "-i", "--network", NETWORK,
                   "-e", f"DATABASE_URL=postgresql://postgres@{DB}:5432/upgrade", IMAGE,
                   "node", "--input-type=module"],

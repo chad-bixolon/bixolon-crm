@@ -21,6 +21,8 @@ Module._load=function(name,parent,isMain){
  if(name==='next/link') return {__esModule:true,default:({href,children,...props})=>React.createElement('a',{href,...props},children)};
  if(name==='@/lib/prisma') return {prisma};
  if(name==='@/lib/work') return work;
+ if(name==='@/lib/current-user') return {currentUser:async()=>({id:7,role:'SALES',active:true,archivedAt:null})};
+ if(name==='@/lib/projects') return {assertProjectWorkEdit:async()=>{}};
  if(name==='@/components/shell') return {Content:({children})=>React.createElement('main',null,children),PageHeader:({title,action})=>React.createElement('header',null,React.createElement('h1',null,title),action)};
  if(name==='@/components/work-form') return {WorkForm:()=>React.createElement('form'),ReactivateTask:()=>React.createElement('button',null,'Reactivate task')};
  if(name==='@/lib/work-options') return {workOptions:async()=>({accounts:[],opportunities:[],users:[]})};

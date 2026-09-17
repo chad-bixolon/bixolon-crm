@@ -5,7 +5,7 @@ import type { UserRole } from "@prisma/client";
 import type { ReactNode } from "react";
 import { signOutAction } from "@/app/sign-out-action";
 
-const nav = ["Dashboard", "Accounts", "Contacts", "Opportunities", "Pipeline", "Tasks", "Products", "Administration", "Integrations"];
+const nav = ["Dashboard", "Accounts", "Contacts", "Projects", "Opportunities", "Pipeline", "Tasks", "Products", "Administration", "Integrations"];
 const hrefFor = (item: string) => item === "Dashboard" ? "/" : `/${item.toLowerCase()}`;
 const roleLabels: Record<UserRole, string> = {
   ADMIN: "Administrator",

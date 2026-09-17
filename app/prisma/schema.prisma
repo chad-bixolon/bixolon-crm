@@ -38,6 +38,28 @@ enum OpportunityPartyRole {
   OTHER
 }
 
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum ProjectPartyRole {
+  PROGRAM_OWNER
+  END_CUSTOMER
+  DISTRIBUTOR
+  VAR_RESELLER
+  INTEGRATOR
+  ISV
+  OEM
+  SERVICE_PROVIDER
+  CONNECTIVITY_PROVIDER
+  IMPLEMENTATION_PARTNER
+  OTHER
+}
+
 enum AccountStatus {
   ACTIVE
   INACTIVE
@@ -97,6 +119,9 @@ model User {
   createdNotes          Note[]             @relation("NoteCreatedBy")
   updatedNotes          Note[]             @relation("NoteUpdatedBy")
   archivedNotes         Note[]             @relation("NoteArchivedBy")
+  ownedProjects         Project[]          @relation("ProjectOwner")
+  createdProjects       Project[]          @relation("ProjectCreatedBy")
+  updatedProjects       Project[]          @relation("ProjectUpdatedBy")
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
 }
@@ -136,6 +161,8 @@ model Account {
   /// Legacy direct opportunity relationships retained for compatibility only.
   opportunities          Opportunity[]         @relation("LegacyOpportunityAccount")
   opportunityMemberships OpportunityAccount[]
+  primaryProjects        Project[]             @relation("ProjectPrimaryAccount")
+  projectMemberships     ProjectAccount[]
   tasks                  Task[]
   activities             Activity[]
   notes                  Note[]
@@ -254,6 +281,8 @@ model Currency {
 
 model Opportunity {
   id                Int                  @id @default(autoincrement())
+  projectId         Int?
+  project           Project?             @relation(fields: [projectId], references: [id], onDelete: Restrict)
   /// Original column is retained; participants is the authoritative account relationship.
   legacyAccountId   Int?                 @map("accountId")
   legacyAccount     Account?             @relation("LegacyOpportunityAccount", fields: [legacyAccountId], references: [id], onDelete: Restrict, map: "Opportunity_accountId_fkey")
@@ -284,6 +313,7 @@ model Opportunity {
   updatedAt         DateTime             @updatedAt
 
   @@index([legacyAccountId])
+  @@index([projectId, archivedAt])
   @@index([ownerId, stageId])
   @@index([stageId, expectedCloseDate])
   @@index([expectedCloseDate])
@@ -350,6 +380,8 @@ model OpportunityProduct {
 
 model Task {
   id            Int                 @id @default(autoincrement())
+  projectId     Int?
+  project       Project?            @relation(fields: [projectId], references: [id], onDelete: Restrict)
   createKey     String?             @unique @db.Uuid
   accountId     Int?
   account       Account?            @relation(fields: [accountId], references: [id], onDelete: Restrict)
@@ -376,6 +408,7 @@ model Task {
   updatedAt     DateTime            @updatedAt
 
   @@index([assignedToId, status, dueDate])
+  @@index([projectId, status])
   @@index([accountId, status])
   @@index([opportunityId, status])
   @@index([opportunityId, accountId])
@@ -386,6 +419,8 @@ model Task {
 
 model Activity {
   id            Int                 @id @default(autoincrement())
+  projectId     Int?
+  project       Project?            @relation(fields: [projectId], references: [id], onDelete: Restrict)
   accountId     Int?
   account       Account?            @relation(fields: [accountId], references: [id], onDelete: Restrict)
   opportunityId Int?
@@ -410,6 +445,7 @@ model Activity {
   updatedAt     DateTime            @updatedAt
 
   @@index([accountId, activityDate])
+  @@index([projectId, activityDate])
   @@index([opportunityId, activityDate])
   @@index([userId, activityDate])
   @@index([type])
@@ -421,6 +457,8 @@ model Activity {
 
 model Note {
   id            Int                 @id @default(autoincrement())
+  projectId     Int?
+  project       Project?            @relation(fields: [projectId], references: [id], onDelete: Restrict)
   accountId     Int?
   account       Account?            @relation(fields: [accountId], references: [id], onDelete: Restrict)
   opportunityId Int?
@@ -439,9 +477,67 @@ model Note {
   updatedAt     DateTime            @updatedAt
 
   @@index([accountId, createdAt])
+  @@index([projectId, createdAt])
   @@index([opportunityId, createdAt])
   @@index([opportunityId, accountId])
   @@index([createdById])
   @@index([updatedById])
   @@index([archivedById])
+}
+
+model Project {
+  id                 Int                  @id @default(autoincrement())
+  name               String
+  primaryAccountId   Int
+  primaryAccount     Account              @relation("ProjectPrimaryAccount", fields: [primaryAccountId], references: [id], onDelete: Restrict)
+  primaryAccountRole ProjectPartyRole
+  ownerId            Int?
+  owner              User?                @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  status             ProjectStatus        @default(PLANNING)
+  description        String?
+  startDate          DateTime?
+  targetEndDate      DateTime?
+  archivedAt         DateTime?
+  createdById        Int
+  createdBy          User                 @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById        Int?
+  updatedBy          User?                @relation("ProjectUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  participants       ProjectAccount[]
+  opportunities      Opportunity[]
+  tasks              Task[]
+  activities         Activity[]
+  notes              Note[]
+
+  @@index([primaryAccountId, archivedAt])
+  @@index([ownerId, status])
+  @@index([status, archivedAt])
+  @@index([createdById])
+  @@index([updatedById])
+}
+
+model ProjectAccount {
+  projectId Int
+  accountId Int
+  project   Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  account   Account              @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  roles     ProjectAccountRole[]
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@id([projectId, accountId])
+  @@index([accountId, projectId])
+}
+
+model ProjectAccountRole {
+  projectId  Int
+  accountId  Int
+  role       ProjectPartyRole
+  membership ProjectAccount   @relation(fields: [projectId, accountId], references: [projectId, accountId], onDelete: Restrict, onUpdate: Restrict)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@id([projectId, accountId, role])
+  @@index([role, projectId])
 }
