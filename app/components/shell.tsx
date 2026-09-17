@@ -6,8 +6,8 @@ import type { ReactNode } from "react";
 import { signOutAction } from "@/app/sign-out-action";
 import type { LabelMap } from "@/lib/configuration";
 
-const nav = ["Dashboard", "Accounts", "Contacts", "Projects", "Opportunities", "Pipeline", "Tasks", "Products", "Administration", "Integrations"];
-const hrefFor = (item: string) => item === "Dashboard" ? "/" : `/${item.toLowerCase()}`;
+const nav = ["Dashboard", "Accounts", "Contacts", "Projects", "Opportunities", "Pipeline", "Tasks", "Engagement", "Products", "Administration", "Integrations"];
+const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Engagement" ? "/reports/engagement" : `/${item.toLowerCase()}`;
 const navLabelKeys: Partial<Record<string, keyof LabelMap>> = { Accounts: "ACCOUNT", Contacts: "CONTACT", Projects: "PROJECT", Opportunities: "OPPORTUNITY", Tasks: "TASK" };
 const roleLabels: Record<UserRole, string> = {
   ADMIN: "Administrator",
@@ -27,7 +27,7 @@ export function Shell({ children, user, labels }: { children: ReactNode; user: S
         <div><div className="text-sm font-bold tracking-wide text-slate-900">BIXOLON America</div><div className="text-xs font-semibold uppercase tracking-widest text-slate-500">CRM</div></div>
       </div>
       <nav aria-label="Primary navigation" className="flex gap-1 overflow-x-auto px-3 pb-3 lg:block lg:space-y-1 lg:py-5">
-        {nav.filter((item) => item !== "Administration" || user?.canManageUsers).map((item) => { const href = hrefFor(item); const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+        {nav.filter((item) => (item !== "Administration" || user?.canManageUsers) && (item !== "Engagement" || ['ADMIN','SALES_MANAGER','SALES'].includes(user?.role ?? ''))).map((item) => { const href = hrefFor(item); const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           const key = navLabelKeys[item];
           const title = labels && key ? `${labels[key]}s` : item;
           return <Link key={item} href={href} aria-current={active ? "page" : undefined} className={`block whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${active ? "bg-orange-50 text-orange-800 border-l-2 border-orange-600" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}>{title}</Link>; })}

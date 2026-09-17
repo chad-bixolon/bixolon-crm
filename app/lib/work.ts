@@ -1,4 +1,4 @@
-import { Prisma, TaskPriority, TaskStatus, type PrismaClient } from '@prisma/client';
+import { ActivityDirection, Prisma, TaskPriority, TaskStatus, type PrismaClient } from '@prisma/client';
 import { field, optional, positiveId, required, type Errors } from './crm-validation';
 import { archivedWhere, recordVisibility } from './record-visibility';
 export const taskStatuses = Object.values(TaskStatus);
@@ -89,20 +89,38 @@ export function taskTiming(task: { status: TaskStatus; dueDate: Date | null }, n
 export function parseActivity(form: FormData) {
   const errors: Errors = {}; const subject = required(form, 'subject', 'Subject', 200, errors), description = optional(form, 'description', 5000, errors);
   const accountId = relation(form, 'accountId', errors), opportunityId = relation(form, 'opportunityId', errors), projectId = relation(form, 'projectId', errors), userId = relation(form, 'userId', errors);
-  if (!accountId && !opportunityId && !projectId) errors.accountId = 'Choose an Account, Opportunity, or Project.';
+  if (!accountId) errors.accountId = 'Choose an Account.';
   const type = required(form, 'type', 'Activity type', 100, errors);
-  const activityDate = dateField(field(form, 'activityDate'), 'activityDate', errors);
-  if (!activityDate) errors.activityDate = 'Choose an activity date.';
-  return { errors, value: Object.keys(errors).length ? undefined : { subject, description, accountId, opportunityId, projectId, userId, type, activityDate: activityDate! } };
+  const rawDate = field(form, 'activityDate');
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(rawDate);
+  const activityDate = dateOnly ? dateField(rawDate, 'activityDate', errors) : /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(rawDate) ? new Date(`${rawDate}:00.000Z`) : null;
+  if (!activityDate || Number.isNaN(activityDate.getTime()) || (!dateOnly && activityDate.toISOString().slice(0,16) !== rawDate)) errors.activityDate = 'Choose a valid date and time (UTC).';
+  const direction = (field(form, 'direction') || 'NA') as ActivityDirection;
+  if (!Object.values(ActivityDirection).includes(direction)) errors.direction = 'Choose a direction.';
+  const outcome = optional(form, 'outcome', 2000, errors), nextStep = optional(form, 'nextStep', 2000, errors);
+  const followUpDate = dateField(field(form, 'followUpDate'), 'followUpDate', errors);
+  const contactIds = [...new Set(form.getAll('contactIds').map(String).filter(Boolean).map(positiveId))];
+  if (contactIds.includes(null)) errors.contactIds = 'Choose valid Contacts.';
+  return { errors, value: Object.keys(errors).length ? undefined : { subject, description, accountId, opportunityId, projectId, userId, type, activityDate: activityDate!, direction, outcome, nextStep, followUpDate, contactIds: contactIds as number[] } };
 }
 export async function saveActivity(client: PrismaClient, value: NonNullable<ReturnType<typeof parseActivity>['value']>, id?: number) {
   return client.$transaction(async tx => {
     await checkRelations(tx, value.accountId, value.opportunityId, value.projectId);
     const existing = id ? await tx.activity.findFirst({ where: { id, archivedAt: null } }) : null;
     if (id && !existing) throw new Error('Activity not found or archived.');
+    if (existing?.accountId != null && existing.accountId !== value.accountId && await tx.activityContact.count({ where: { activityId: id } })) throw new Error('Account cannot change while Contact history is linked.');
     if (!(await tx.activityType.findFirst({ where: { code: value.type, active: true } })) && existing?.type !== value.type) throw new Error('Choose an active activity type.');
     if (value.userId && !(await tx.user.findFirst({ where: { id: value.userId, active: true, archivedAt: null } }))) throw new Error('Choose an active responsible user.');
-    return id ? tx.activity.update({ where: { id }, data: value }) : tx.activity.create({ data: value });
+    const { contactIds: suppliedContactIds, ...data } = value;
+    const contactIds = suppliedContactIds ?? [];
+    if (contactIds.length) {
+      const contacts = await tx.contact.findMany({ where: { id: { in: contactIds }, accountId: value.accountId!, archivedAt: null }, select: { id: true, active: true } });
+      const linked = id ? await tx.activityContact.findMany({ where: { activityId: id }, select: { contactId: true } }) : [];
+      if (contacts.length !== contactIds.length || contacts.some(c => !c.active && !linked.some(l => l.contactId === c.id))) throw new Error('Choose active Contacts from the Activity Account. Previously linked inactive Contacts remain in history.');
+    }
+    const row = id ? await tx.activity.update({ where: { id }, data }) : await tx.activity.create({ data });
+    for (const contactId of contactIds) await tx.activityContact.createMany({ data: [{ activityId: row.id, contactId }], skipDuplicates: true });
+    return row;
   });
 }
 export function parseNote(form: FormData) {

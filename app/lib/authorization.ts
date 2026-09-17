@@ -13,6 +13,7 @@ const grants: Record<UserRole, readonly Permission[]> = {
 export function can(actor: Actor | null | undefined, permission: Permission) { return !!actor?.active && !actor.archivedAt && grants[actor.role]?.includes(permission) === true; }
 export function assertPermission(actor: Actor | null | undefined, permission: Permission) { if (!can(actor,permission)) throw new Error('Access denied'); }
 export function permissionForPath(path: string): Permission | null {
+  if (path.startsWith('/reports/engagement')) return 'sales.read';
   if (path.startsWith('/administration')) return 'users.manage';
   if (path.startsWith('/integrations')) return 'integrations.manage';
   if (path.startsWith('/pipeline') || path.startsWith('/opportunities')) return 'sales.read';

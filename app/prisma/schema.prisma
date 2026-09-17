@@ -80,6 +80,12 @@ enum TaskPriority {
   URGENT
 }
 
+enum ActivityDirection {
+  INBOUND
+  OUTBOUND
+  NA
+}
+
 enum ForecastCategory {
   OMITTED
   PIPELINE
@@ -250,6 +256,7 @@ model Contact {
   id           Int       @id @default(autoincrement())
   accountId    Int
   account      Account   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  activityLinks ActivityContact[]
   firstName    String
   lastName     String
   title        String?
@@ -459,6 +466,11 @@ model Activity {
   activityType  ActivityType        @relation(fields: [type], references: [code], onDelete: Restrict, onUpdate: Restrict)
   subject       String
   description   String?
+  direction     ActivityDirection @default(NA)
+  outcome       String?
+  nextStep      String?
+  followUpDate  DateTime?
+  contacts      ActivityContact[]
   activityDate  DateTime            @default(now())
   archivedAt    DateTime?
   createdById   Int?
@@ -479,6 +491,17 @@ model Activity {
   @@index([createdById])
   @@index([updatedById])
   @@index([archivedById])
+}
+
+model ActivityContact {
+  activityId Int
+  contactId  Int
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  contact    Contact  @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  createdAt  DateTime @default(now())
+
+  @@id([activityId, contactId])
+  @@index([contactId, activityId])
 }
 
 model Note {
