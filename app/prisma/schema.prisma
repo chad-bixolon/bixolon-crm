@@ -232,6 +232,20 @@ model ActivityType {
   updatedAt  DateTime   @updatedAt
 }
 
+model TerminologyLabel {
+  key         String   @id
+  displayLabel String
+  changedById Int?
+  changedAt   DateTime @default(now())
+}
+
+model SystemSetting {
+  key         String   @id
+  value       Int
+  changedById Int?
+  changedAt   DateTime @default(now())
+}
+
 model Contact {
   id           Int       @id @default(autoincrement())
   accountId    Int

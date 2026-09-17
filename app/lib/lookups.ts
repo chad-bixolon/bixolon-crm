@@ -1,12 +1,12 @@
 import type { PrismaClient } from "@prisma/client";
 
-export type LookupKind = "industries" | "territories";
-export function lookupKind(value: string): value is LookupKind { return value === "industries" || value === "territories"; }
-export function lookupTitle(kind: LookupKind) { return kind === "industries" ? "Industry" : "Territory"; }
+export type LookupKind = "industries" | "territories" | "activity-types";
+export function lookupKind(value: string): value is LookupKind { return value === "industries" || value === "territories" || value === "activity-types"; }
+export function lookupTitle(kind: LookupKind) { return kind === "industries" ? "Industry" : kind === "territories" ? "Territory" : "Activity Type"; }
 
 export async function listLookups(client: PrismaClient, kind: LookupKind) {
   const orderBy = [{ sortOrder: "asc" as const }, { name: "asc" as const }];
-  return kind === "industries" ? client.industry.findMany({ orderBy, include: { _count: { select: { accounts: true } } } }) : client.territory.findMany({ orderBy, include: { _count: { select: { accounts: true } } } });
+  return kind === "industries" ? client.industry.findMany({ orderBy, include: { _count: { select: { accounts: true } } } }) : kind === "territories" ? client.territory.findMany({ orderBy, include: { _count: { select: { accounts: true } } } }) : client.activityType.findMany({ orderBy, include: { _count: { select: { activities: true } } } });
 }
 
 export type LookupInput = { code: string; name: string; active: boolean; sortOrder: number };
@@ -27,8 +27,11 @@ export async function saveLookup(client: PrismaClient, kind: LookupKind, input: 
   if (kind === "industries") {
     if (editing) await client.industry.update({ where: { code: input.code }, data: { name: input.name, active: input.active, sortOrder: input.sortOrder } });
     else await client.industry.create({ data: input });
-  } else {
+  } else if (kind === "territories") {
     if (editing) await client.territory.update({ where: { code: input.code }, data: { name: input.name, active: input.active, sortOrder: input.sortOrder } });
     else await client.territory.create({ data: input });
+  } else {
+    if (editing) await client.activityType.update({ where: { code: input.code }, data: { name: input.name, active: input.active, sortOrder: input.sortOrder } });
+    else await client.activityType.create({ data: input });
   }
 }

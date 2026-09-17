@@ -1,4 +1,5 @@
 import { ForecastCategory, OpportunityPartyRole } from "@prisma/client";
+import { defaultLabels, type LabelMap } from "./configuration";
 
 export type Errors = Record<string, string>;
 export function field(form: FormData, key: string) { return String(form.get(key) ?? "").trim(); }
@@ -23,8 +24,9 @@ export function phone(value: string | null, key: string, errors: Errors) {
   if (value && !/^[+()\d .-]{5,50}$/.test(value)) errors[key] = "Enter a valid phone number.";
 }
 export const partyLabels: Record<OpportunityPartyRole, string> = {
-  END_USER: "End User", VAR_RESELLER: "VAR / Reseller", DISTRIBUTOR: "Distributor", ISV_PARTNER: "ISV", OEM: "OEM", OTHER: "Other",
+  END_USER: defaultLabels.END_USER, VAR_RESELLER: defaultLabels.VAR, DISTRIBUTOR: defaultLabels.DISTRIBUTOR, ISV_PARTNER: defaultLabels.ISV, OEM: defaultLabels.OEM, OTHER: "Other",
 };
+export function opportunityPartyLabels(labels: LabelMap): Record<OpportunityPartyRole, string> { return { END_USER: labels.END_USER, VAR_RESELLER: labels.VAR, DISTRIBUTOR: labels.DISTRIBUTOR, ISV_PARTNER: labels.ISV, OEM: labels.OEM, OTHER: "Other" }; }
 export const forecastLabels: Record<ForecastCategory, string> = {
   OMITTED: "Omitted", PIPELINE: "Pipeline", BEST_CASE: "Best case", COMMIT: "Commit", CLOSED: "Closed",
 };

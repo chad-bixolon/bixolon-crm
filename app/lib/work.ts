@@ -98,9 +98,10 @@ export function parseActivity(form: FormData) {
 export async function saveActivity(client: PrismaClient, value: NonNullable<ReturnType<typeof parseActivity>['value']>, id?: number) {
   return client.$transaction(async tx => {
     await checkRelations(tx, value.accountId, value.opportunityId, value.projectId);
-    if (!(await tx.activityType.findFirst({ where: { code: value.type, active: true } }))) throw new Error('Choose an active activity type.');
+    const existing = id ? await tx.activity.findFirst({ where: { id, archivedAt: null } }) : null;
+    if (id && !existing) throw new Error('Activity not found or archived.');
+    if (!(await tx.activityType.findFirst({ where: { code: value.type, active: true } })) && existing?.type !== value.type) throw new Error('Choose an active activity type.');
     if (value.userId && !(await tx.user.findFirst({ where: { id: value.userId, active: true, archivedAt: null } }))) throw new Error('Choose an active responsible user.');
-    if (id && !(await tx.activity.findFirst({ where: { id, archivedAt: null } }))) throw new Error('Activity not found or archived.');
     return id ? tx.activity.update({ where: { id }, data: value }) : tx.activity.create({ data: value });
   });
 }

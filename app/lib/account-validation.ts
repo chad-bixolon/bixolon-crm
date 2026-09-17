@@ -1,8 +1,9 @@
 import { AccountBusinessRoleCode, AccountStatus } from "@prisma/client";
 import { parseAddress, type Address } from "./address";
+import { defaultLabels } from "./configuration";
 
 export const roleLabels: Record<AccountBusinessRoleCode, string> = {
-  END_USER: "End User", DISTRIBUTOR: "Distributor", VAR: "VAR / Reseller", ISV: "ISV", OEM: "OEM", PARTNER: "Service Partner",
+  END_USER: defaultLabels.END_USER, DISTRIBUTOR: defaultLabels.DISTRIBUTOR, VAR: defaultLabels.VAR, ISV: defaultLabels.ISV, OEM: defaultLabels.OEM, PARTNER: defaultLabels.PARTNER,
 };
 export const statuses = ["ACTIVE", "INACTIVE", "ARCHIVED"] as const;
 export type AccountFields = Address & {

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Content, PageHeader } from "@/components/shell";
 import { CrmStateControl } from "@/components/crm-state-control";
-import { forecastLabels, partyLabels } from "@/lib/crm-validation";
+import { forecastLabels, opportunityPartyLabels } from "@/lib/crm-validation";
+import { getLabels } from "@/lib/configuration";
 import { lineTotal, opportunityTotal, weightedValue } from "@/lib/opportunities";
 import { prisma } from "@/lib/prisma";
 import { RelatedWork } from "@/components/related-work";
@@ -12,6 +13,7 @@ export default async function OpportunityPage({ params, searchParams }: { params
   const id = Number((await params).id); if (!Number.isSafeInteger(id) || id <= 0) notFound();
   const workViews = await searchParams;
   const o = await prisma.opportunity.findUnique({ where: { id }, include: { stage: true, owner: true, project: { select: { id: true, name: true } }, participants: { include: { account: true, roles: true } }, products: { include: { product: true }, orderBy: { id: "asc" } } } }); if (!o) notFound();
+  const partyLabels = opportunityPartyLabels(await getLabels(prisma));
   const contacts = await prisma.contact.findMany({ where: { accountId: { in: o.participants.map(p => p.accountId) }, archivedAt: null }, include: { account: true }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }] });
   const total = opportunityTotal(o.products), probability = o.probability ?? o.stage.probability;
   return <Content><PageHeader eyebrow="Opportunities" title={o.name} description={`Opportunity #${id}`} action={<div className="flex gap-2"><Link className="btn-secondary" href="/opportunities">All opportunities</Link>{!o.archivedAt && <Link className="btn-primary" href={`/opportunities/${id}/edit`}>Edit opportunity</Link>}</div>}/>

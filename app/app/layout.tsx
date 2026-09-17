@@ -2,10 +2,13 @@ import type { Metadata } from "next";
 import { auth } from "@/auth";
 import { Shell } from "@/components/shell";
 import { can } from "@/lib/authorization";
+import { getLabels } from "@/lib/configuration";
+import { prisma } from "@/lib/prisma";
 import "./globals.css";
 export const metadata: Metadata = { title: "BIXOLON America CRM", description: "BIXOLON America internal CRM" };
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const session = await auth();
   const user = session?.crmUser;
-  return <html lang="en"><body><Shell user={user ? { name: user.name, role: user.role, canManageUsers: can(user, 'users.manage') } : null}>{children}</Shell></body></html>;
+  const labels = user ? await getLabels(prisma) : undefined;
+  return <html lang="en"><body><Shell user={user ? { name: user.name, role: user.role, canManageUsers: can(user, 'users.manage') } : null} labels={labels}>{children}</Shell></body></html>;
 }

@@ -73,7 +73,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       tx.product.findMany({ where: { id: { in: input.lines.map((l) => l.productId) }, active: true, archivedAt: null }, select: { id: true } }),
       input.projectId ? tx.project.findUnique({ where: { id: input.projectId }, select: { id: true, archivedAt: true } }) : null,
     ]);
-    if (!stage?.active) throw new Error("Choose an available sales stage.");
+    if (!stage || (!stage.active && existing?.stageId !== input.stageId)) throw new Error("Choose an available sales stage.");
     if (!currency?.active) throw new Error("Choose an available currency.");
     if (input.ownerId && (!owner?.active || owner.archivedAt)) throw new Error("Choose an active owner.");
     if (input.projectId && (!project || (project.archivedAt && existing?.projectId !== input.projectId))) throw new Error("Choose an active Project.");
