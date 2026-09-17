@@ -54,6 +54,15 @@ test('participant addition and removal prevent duplicate accounts and preserve s
   assert.deepEqual(drafts.removeParticipant(withRoles, 11).participants, []);
   assert.deepEqual(base.participants, []);
 });
+test('opportunity participant roles start empty and stay independent of account business roles', () => {
+  const account = { id: 11, businessRoles: ['DISTRIBUTOR', 'OEM'] };
+  const base = { participants: [] };
+  const added = drafts.addParticipant(base, account.id);
+  assert.deepEqual(added.participants, [{ accountId: 11, roles: [] }]);
+  const assigned = drafts.setParticipantRoles(added, account.id, ['END_USER', 'VAR_RESELLER']);
+  assert.deepEqual(assigned.participants[0].roles, ['END_USER', 'VAR_RESELLER']);
+  assert.deepEqual(account.businessRoles, ['DISTRIBUTOR', 'OEM']);
+});
 test('opportunity draft restores every editable field after remount without changing the fallback', () => {
   const fallback = { name: '', description: '', ownerId: '', stageId: '', expectedCloseDate: '', probability: '', forecastCategory: '', currencyCode: 'USD', participants: [], lines: [] };
   const saved = { ...fallback, name: 'Fleet rollout', description: 'Call next week', ownerId: '4', stageId: '2', expectedCloseDate: '2026-10-01', probability: '70', forecastCategory: 'COMMIT', participants: [{ accountId: 11, roles: ['END_USER'] }], lines: [{ id: 0, productId: 3, quantity: '2', price: '19.95' }] };
