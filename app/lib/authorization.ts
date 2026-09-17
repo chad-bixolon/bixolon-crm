@@ -1,0 +1,38 @@
+import type { UserRole } from '@prisma/client';
+
+export type Permission = 'accounts.read' | 'accounts.write' | 'contacts.read' | 'contacts.write' | 'sales.read' | 'sales.write' | 'pricing.read' | 'tasks.read' | 'tasks.write' | 'products.read' | 'products.write' | 'users.manage' | 'integrations.manage' | 'marketing.read' | 'marketing.write';
+export type Actor = { id: number; role: UserRole; active: boolean; archivedAt?: Date | null };
+
+const grants: Record<UserRole, readonly Permission[]> = {
+  ADMIN: ['accounts.read','accounts.write','contacts.read','contacts.write','sales.read','sales.write','pricing.read','tasks.read','tasks.write','products.read','products.write','users.manage','integrations.manage','marketing.read','marketing.write'],
+  SALES_MANAGER: ['accounts.read','accounts.write','contacts.read','contacts.write','sales.read','sales.write','pricing.read','tasks.read','tasks.write','products.read','marketing.read'],
+  SALES: ['accounts.read','accounts.write','contacts.read','contacts.write','sales.read','sales.write','pricing.read','tasks.read','tasks.write','products.read'],
+  MARKETING_MANAGER: ['accounts.read','accounts.write','contacts.read','contacts.write','tasks.read','tasks.write','products.read','marketing.read','marketing.write'],
+  READ_ONLY: ['accounts.read','contacts.read','sales.read','tasks.read','products.read','marketing.read'],
+};
+export function can(actor: Actor | null | undefined, permission: Permission) { return !!actor?.active && !actor.archivedAt && grants[actor.role]?.includes(permission) === true; }
+export function assertPermission(actor: Actor | null | undefined, permission: Permission) { if (!can(actor,permission)) throw new Error('Access denied'); }
+export function permissionForPath(path: string): Permission | null {
+  if (path.startsWith('/administration')) return 'users.manage';
+  if (path.startsWith('/integrations')) return 'integrations.manage';
+  if (path.startsWith('/pipeline') || path.startsWith('/opportunities')) return 'sales.read';
+  if (path.startsWith('/accounts')) return 'accounts.read';
+  if (path.startsWith('/contacts')) return 'contacts.read';
+  if (path.startsWith('/tasks') || path.startsWith('/activities') || path.startsWith('/notes')) return 'tasks.read';
+  if (path.startsWith('/products')) return 'products.read';
+  return null;
+}
+export function routeAccess(path: string, actor: Actor | null): 'sign-in' | 'denied' | 'allowed' {
+  if (path === '/sign-in' || path === '/access-denied' || path.startsWith('/api/auth/') || path === '/api/health') return 'allowed';
+  if (!actor) return 'sign-in';
+  if (!actor.active || actor.archivedAt) return 'denied';
+  const read = permissionForPath(path);
+  if (read && !can(actor, read)) return 'denied';
+  if (path.endsWith('/new') || path.endsWith('/edit')) {
+    const write: Permission = path.startsWith('/accounts') ? 'accounts.write' : path.startsWith('/contacts') ? 'contacts.write' : path.startsWith('/opportunities') ? 'sales.write' : path.startsWith('/products') ? 'products.write' : path.startsWith('/administration') ? 'users.manage' : 'tasks.write';
+    if (!can(actor, write)) return 'denied';
+  }
+  return 'allowed';
+}
+export function opportunityScope(actor: Actor) { return actor.role === 'SALES' ? { ownerId: actor.id } : {}; }
+export function taskScope(actor: Actor) { return actor.role === 'SALES' ? { assignedToId: actor.id } : {}; }

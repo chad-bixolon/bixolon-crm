@@ -3,6 +3,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { parseUser, saveUser } from "@/lib/users";
+import { requireMutation } from "@/lib/current-user";
+import { unlinkGoogleIdentity } from "@/lib/identity";
 export type FormState = { errors: Record<string, string>; message?: string };
 export async function submitUser(id: number | null, _state: FormState, form: FormData): Promise<FormState> {
   const parsed = parseUser(form);
@@ -12,4 +14,47 @@ export async function submitUser(id: number | null, _state: FormState, form: For
   catch (error) { return { errors: {}, message: error instanceof Error && /already in use|not found/.test(error.message) ? error.message : "User could not be saved." }; }
   revalidatePath("/administration/users"); revalidatePath("/accounts"); revalidatePath("/opportunities");
   redirect(`/administration/users/${userId}/edit`);
+}
+export async function resetGoogleIdentity(
+  userId: number,
+  identityId: number,
+  _state: FormState,
+  form: FormData,
+): Promise<FormState> {
+  await requireMutation("users.manage");
+
+  const confirmationEmail = String(form.get("confirmEmail") ?? "").trim();
+
+  if (!confirmationEmail) {
+    return {
+      errors: { confirmEmail: "Enter the CRM user's email to confirm." },
+      message: "Confirmation email is required.",
+    };
+  }
+
+  try {
+    await unlinkGoogleIdentity(
+      prisma,
+      userId,
+      identityId,
+      confirmationEmail,
+    );
+  } catch (error) {
+    return {
+      errors: {},
+      message:
+        error instanceof Error
+          ? error.message
+          : "Google identity could not be unlinked.",
+    };
+  }
+
+  revalidatePath("/administration/users");
+  revalidatePath(`/administration/users/${userId}/edit`);
+
+  return {
+    errors: {},
+    message:
+      "Google identity unlinked. The user's next approved Google sign-in can link the account again.",
+  };
 }

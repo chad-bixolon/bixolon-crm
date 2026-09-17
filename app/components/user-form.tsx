@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { UserRole } from "@prisma/client";
 import { submitUser, type FormState } from "@/app/administration/users/actions";
-const roles: Record<UserRole, string> = { ADMIN: "Administrator", SALES_MANAGER: "Sales manager", SALES: "Sales", READ_ONLY: "Read only" };
+const roles: Record<UserRole, string> = { ADMIN: "Administrator", SALES_MANAGER: "Sales manager", SALES: "Sales", MARKETING_MANAGER: "Marketing Manager", READ_ONLY: "Read only" };
 export function UserForm({ id, initial }: { id?: number; initial?: { firstName: string; lastName: string; email: string; role: UserRole; active: boolean } }) {
   const [state, action, pending] = useActionState(submitUser.bind(null, id ?? null), { errors: {} } as FormState);
   const guard = useSubmitGuard(state);

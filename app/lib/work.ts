@@ -27,7 +27,13 @@ export async function checkRelations(client: PrismaClient | Prisma.TransactionCl
   if (opportunityId && !(await client.opportunity.findFirst({ where: { id: opportunityId, archivedAt: null } }))) throw new Error('Opportunity not found or archived.');
   if (accountId && opportunityId && !(await client.opportunityAccount.findUnique({ where: { opportunityId_accountId: { opportunityId, accountId } } }))) throw new Error('Account is not a participant in this opportunity.');
 }
-export async function saveTask(client: PrismaClient, value: TaskInput, id?: number, createKey?: string) {
+export async function saveTask(
+  client: PrismaClient,
+  value: TaskInput,
+  id?: number,
+  createKey?: string,
+  actorId?: number,
+) {
   if (!id && createKey) {
     const existing = await client.task.findUnique({ where: { createKey } });
     if (existing) return existing;
@@ -38,7 +44,17 @@ export async function saveTask(client: PrismaClient, value: TaskInput, id?: numb
     const existing = id ? await tx.task.findUnique({ where: { id } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Task not found or archived.');
     const completedAt = value.status === 'COMPLETED' ? existing?.completedAt ?? new Date() : null;
-    const data = { ...value, completedAt, ...(!id && createKey ? { createKey } : {}) };
+   const data = {
+  ...value,
+  completedAt,
+  ...(!id && createKey ? { createKey } : {}),
+  ...(actorId
+    ? {
+        updatedById: actorId,
+        ...(!id ? { createdById: actorId } : {}),
+      }
+    : {}),
+};
     return id ? tx.task.update({ where: { id }, data }) : tx.task.create({ data });
   }); } catch (error) {
     // A concurrent request may have won the unique-key race.
@@ -90,11 +106,27 @@ export function parseNote(form: FormData) {
   const createdById = relation(form, 'createdById', errors);
   return { errors, value: Object.keys(errors).length ? undefined : { body, accountId, opportunityId, createdById } };
 }
-export async function saveNote(client: PrismaClient, value: NonNullable<ReturnType<typeof parseNote>['value']>, id?: number) {
+export async function saveNote(
+  client: PrismaClient,
+  value: NonNullable<ReturnType<typeof parseNote>['value']>,
+  id?: number,
+  actorId?: number,
+) {
   return client.$transaction(async tx => {
     await checkRelations(tx, value.accountId, value.opportunityId);
-    if (!id && value.createdById && !(await tx.user.findFirst({ where: { id: value.createdById, active: true, archivedAt: null } }))) throw new Error('Choose an active author.');
+    const createdById = actorId ?? value.createdById;
+
+if (!id && !actorId && createdById && !(await tx.user.findFirst({
+  where: { id: createdById, active: true, archivedAt: null }
+}))) {
+  throw new Error('Choose an active author.');
+}
     if (id) { const existing = await tx.note.findFirst({ where: { id, archivedAt: null } }); if (!existing) throw new Error('Note not found or archived.'); return tx.note.update({ where: { id }, data: { body: value.body, accountId: value.accountId, opportunityId: value.opportunityId } }); }
-    return tx.note.create({ data: value });
+    return tx.note.create({
+  data: {
+    ...value,
+    createdById,
+  },
+});
   });
 }

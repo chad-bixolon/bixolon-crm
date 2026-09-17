@@ -12,6 +12,7 @@ enum UserRole {
   ADMIN
   SALES_MANAGER
   SALES
+  MARKETING_MANAGER
   READ_ONLY
 }
 
