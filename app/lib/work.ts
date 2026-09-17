@@ -114,9 +114,12 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
     const { contactIds: suppliedContactIds, ...data } = value;
     const contactIds = suppliedContactIds ?? [];
     if (contactIds.length) {
-      const contacts = await tx.contact.findMany({ where: { id: { in: contactIds }, accountId: value.accountId!, archivedAt: null }, select: { id: true, active: true } });
+      const contacts = await tx.contact.findMany({ where: { id: { in: contactIds }, archivedAt: null }, select: { id: true, accountId: true, active: true } });
       const linked = id ? await tx.activityContact.findMany({ where: { activityId: id }, select: { contactId: true } }) : [];
-      if (contacts.length !== contactIds.length || contacts.some(c => !c.active && !linked.some(l => l.contactId === c.id))) throw new Error('Choose active Contacts from the Activity Account. Previously linked inactive Contacts remain in history.');
+      if (contacts.length !== contactIds.length || contacts.some(c => {
+        const alreadyLinked = linked.some(l => l.contactId === c.id);
+        return !alreadyLinked && (!c.active || (c.accountId !== null && c.accountId !== value.accountId));
+      })) throw new Error('Choose active Contacts assigned to the Activity Account or unassigned Contacts. Previously linked Contacts remain in history.');
     }
     const row = id ? await tx.activity.update({ where: { id }, data }) : await tx.activity.create({ data });
     for (const contactId of contactIds) await tx.activityContact.createMany({ data: [{ activityId: row.id, contactId }], skipDuplicates: true });

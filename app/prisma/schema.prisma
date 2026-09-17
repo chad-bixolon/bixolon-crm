@@ -254,8 +254,8 @@ model SystemSetting {
 
 model Contact {
   id           Int       @id @default(autoincrement())
-  accountId    Int
-  account      Account   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  accountId    Int?
+  account      Account?  @relation(fields: [accountId], references: [id], onDelete: Restrict)
   activityLinks ActivityContact[]
   firstName    String
   lastName     String
@@ -270,7 +270,7 @@ model Contact {
   postalCode   String?
   country      String?
   active       Boolean   @default(true)
-  /// SQL enforces one primary contact per account, active and unarchived.
+  /// SQL enforces one primary contact per account, active, unarchived, and assigned.
   isPrimary    Boolean   @default(false)
   archivedAt   DateTime?
   createdById  Int?

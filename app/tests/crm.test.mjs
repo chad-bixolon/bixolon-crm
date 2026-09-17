@@ -39,6 +39,37 @@ test('setting a new primary clears the previous primary inside the save transact
   assert.equal(await contacts.saveContact(client, input, 8), 8);
   assert.equal(calls[0][0], 'clear'); assert.deepEqual(calls[0][1].where, { accountId: 2, isPrimary: true, id: { not: 8 } }); assert.equal(calls[1][0], 'save');
 });
+test('unassigned Contacts can be created, assigned later, and filtered', async () => {
+  const base = [['firstName', 'Ada'], ['lastName', 'Lovelace']];
+  const unassigned = contacts.parseContact(form(base));
+  assert.deepEqual(unassigned.errors, {});
+  assert.equal(unassigned.value.accountId, null);
+  assert.match(contacts.parseContact(form([...base, ['isPrimary', 'on']])).errors.isPrimary, /account/);
+  assert.deepEqual(contacts.contactWhere({ accountId: 'unassigned', q: 'Ada' }).accountId, null);
+  assert.deepEqual(contacts.contactWhere({ accountId: '2' }).accountId, 2);
+  let row;
+  const calls = [];
+  const client = { $transaction: async fn => fn({
+    account: { findUnique: async ({ where }) => { calls.push(['account', where.id]); return { status: 'ACTIVE' }; } },
+    contact: {
+      findUnique: async () => row,
+      create: async ({ data }) => (row = { id: 9, ...data, archivedAt: null }),
+      update: async ({ data }) => (row = { ...row, ...data }),
+      updateMany: async args => calls.push(['primary', args.where.accountId]),
+    },
+  }) };
+  assert.equal(await contacts.saveContact(client, unassigned.value), 9);
+  assert.equal(row.accountId, null);
+  assert.deepEqual(calls, []);
+  const assigned = contacts.parseContact(form([...base, ['accountId', '2'], ['isPrimary', 'on']]));
+  assert.equal(await contacts.saveContact(client, assigned.value, 9), 9);
+  assert.equal(row.accountId, 2);
+  assert.deepEqual(calls, [['account', 2], ['primary', 2]]);
+  const moved = contacts.parseContact(form([...base, ['accountId', '3']]));
+  assert.equal(await contacts.saveContact(client, moved.value, 9), 9);
+  assert.equal(row.accountId, 3);
+  assert.equal(row.isPrimary, false);
+});
 test('opportunity parser retains multiple accounts and roles', () => {
   const parsed = opportunities.parseOpportunity(form([['name', 'New fleet'], ['stageId', '1'], ['currencyCode', 'USD'], ['accountId', '11'], ['participantRoles', 'END_USER,OEM'], ['accountId', '12'], ['participantRoles', 'DISTRIBUTOR,VAR_RESELLER'], ['productId', '3'], ['quantity', '2'], ['price', '19.95']]));
   assert.deepEqual(parsed.errors, {});

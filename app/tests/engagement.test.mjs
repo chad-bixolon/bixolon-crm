@@ -27,16 +27,36 @@ test('Activity validates date, direction, contacts, and follow-up fields', () =>
   assert.match(parseActivity(form(fields.filter(([k])=>k!=='accountId'))).errors.accountId, /Account/);
 });
 test('Activity contact links append once, reject wrong Account, and retain inactive history', async () => {
-  let row={id:4,type:'MEETING',archivedAt:null}, links=[{contactId:2}], contacts=[{id:2,active:false},{id:3,active:true}];
+  let row={id:4,type:'MEETING',archivedAt:null}, links=[{contactId:2}], contacts=[{id:2,accountId:1,active:false},{id:3,accountId:1,active:true}];
   const tx={account:{findFirst:async()=>({id:1})},activity:{findFirst:async()=>row,update:async({data})=>(row={...row,...data})},activityType:{findFirst:async()=>({code:'MEETING'})},contact:{findMany:async({where})=>contacts.filter(c=>where.id.in.includes(c.id))},activityContact:{findMany:async()=>links,createMany:async({data})=>{if(!links.some(l=>l.contactId===data[0].contactId))links.push({contactId:data[0].contactId});}}};
   const client={$transaction:fn=>fn(tx)};
   const value=parseActivity(form([...fields,['contactIds','3']])).value;
   await saveActivity(client,value,4);
   assert.deepEqual(links.map(l=>l.contactId),[2,3]);
-  contacts=[{id:2,active:false}];
+  contacts=[{id:2,accountId:1,active:false}];
   await assert.rejects(saveActivity(client,{...value,contactIds:[9]},4),/Account/);
   await assert.rejects(saveActivity(client,{...value,contactIds:[2,3]},4),/Account/);
   assert.deepEqual(links.map(l=>l.contactId),[2,3]);
+});
+test('Activity links unassigned Contacts only with an explicit valid Account', async () => {
+  let row = null;
+  const links = [];
+  const contact = { id: 5, accountId: null, active: true };
+  const tx = {
+    account: { findFirst: async ({ where }) => where.id === 1 ? { id: 1 } : null },
+    activityType: { findFirst: async () => ({ code: 'MEETING' }) },
+    contact: { findMany: async () => [contact] },
+    activityContact: { createMany: async ({ data }) => links.push(data[0]) },
+    activity: { create: async ({ data }) => (row = { id: 12, ...data }) },
+  };
+  const client = { $transaction: fn => fn(tx) };
+  const value = parseActivity(form([...fields.filter(([key]) => key !== 'contactIds'), ['contactIds', '5']])).value;
+  assert.equal((await saveActivity(client, value)).accountId, 1);
+  assert.deepEqual(links, [{ activityId: 12, contactId: 5 }]);
+  await assert.rejects(saveActivity(client, { ...value, accountId: 99 }), /Account not found/);
+  contact.accountId = 2;
+  await assert.rejects(saveActivity(client, value), /Activity Account/);
+  assert.equal(row.accountId, 1);
 });
 test('stale and no-activity states use configured thresholds', () => {
   const now=new Date('2026-09-17T12:00:00Z'), last=new Date('2026-08-18T12:00:00Z');
