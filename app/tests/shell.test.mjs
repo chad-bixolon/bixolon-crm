@@ -15,8 +15,10 @@ Module._load = function(request, parent, isMain) {
   if (request === 'next/link') return function MockLink({ href, children, ...props }) { return React.createElement('a', { href, ...props }, children); };
   if (request === 'next/navigation') return { usePathname: () => pathname };
   if (request === '@/app/sign-out-action') return { signOutAction: async () => {} };
+  if (request === '@/lib/role-labels') return require(path.join(root, 'lib/role-labels.ts'));
   return originalLoad.call(this, request, parent, isMain);
 };
+Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText, filename);
 Module._extensions['.tsx'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText, filename);
 const require = Module.createRequire(fileURLToPath(import.meta.url));
 const { Shell } = require(path.join(root, 'components/shell.tsx'));

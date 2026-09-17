@@ -10,4 +10,4 @@ export default auth((request) => {
   if (decision === 'denied') return NextResponse.redirect(new URL(user ? '/access-denied' : '/access-denied?reason=inactive', request.url));
   return NextResponse.next();
 });
-export const config = { matcher: ['/((?!api/auth/|_next/static|_next/image|favicon.ico).*)'] };
+export const config = { matcher: ['/((?!api/auth/|_next/static|_next/image|brand/|favicon.ico).*)'] };

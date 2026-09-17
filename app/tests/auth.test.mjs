@@ -141,6 +141,7 @@ test('protected routes allow only authenticated authorized users', () => {
   assert.equal(routeAccess('/accounts', null), 'sign-in');
   assert.equal(routeAccess('/api/health', null), 'allowed');
   assert.equal(routeAccess('/sign-in', null), 'allowed');
+  assert.equal(routeAccess('/brand/bixolon-logo.png', null), 'allowed');
   assert.equal(routeAccess('/accounts/new', actor('READ_ONLY')), 'denied');
   assert.equal(routeAccess('/administration/users', actor('SALES_MANAGER')), 'denied');
   assert.equal(routeAccess('/pipeline', actor('MARKETING_MANAGER')), 'denied');

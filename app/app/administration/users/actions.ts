@@ -5,15 +5,17 @@ import { prisma } from "@/lib/prisma";
 import { parseUser, saveUser } from "@/lib/users";
 import { requireMutation } from "@/lib/current-user";
 import { unlinkGoogleIdentity } from "@/lib/identity";
-export type FormState = { errors: Record<string, string>; message?: string };
+export type FormState = { errors: Record<string, string>; message?: string; success?: boolean; values?: Record<string, string> };
+const submittedValues = (form: FormData) => Object.fromEntries(["firstName", "lastName", "email", "role", "active"].map(key => [key, String(form.get(key) ?? "")]));
 export async function submitUser(id: number | null, _state: FormState, form: FormData): Promise<FormState> {
   const parsed = parseUser(form);
-  if (!parsed.value) return { errors: parsed.errors, message: "Please correct the highlighted fields." };
+  if (!parsed.value) return { errors: parsed.errors, message: "Please correct the highlighted fields.", values: submittedValues(form) };
   let userId: number;
   try { userId = await saveUser(prisma, parsed.value, id ?? undefined); }
-  catch (error) { return { errors: {}, message: error instanceof Error && /already in use|not found/.test(error.message) ? error.message : "User could not be saved." }; }
+  catch (error) { return { errors: {}, message: error instanceof Error && /already in use|not found/.test(error.message) ? error.message : "User could not be saved.", values: submittedValues(form) }; }
   revalidatePath("/administration/users"); revalidatePath("/accounts"); revalidatePath("/opportunities");
-  redirect(`/administration/users/${userId}/edit`);
+  if (id) return { errors: {}, message: "User updated successfully.", success: true, values: submittedValues(form) };
+  redirect(`/administration/users/${userId}/edit?saved=created`);
 }
 export async function resetGoogleIdentity(
   userId: number,
