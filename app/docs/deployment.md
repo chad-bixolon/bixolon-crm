@@ -34,6 +34,17 @@ does not query PostgreSQL; database health and migration status need separate mo
 | `DATABASE_URL` | Required at runtime for CRM data access and migration deployment. Use an external PostgreSQL connection string with credentials and TLS settings appropriate to the provider. |
 | `PORT` | Set to the App Platform service's HTTP port; defaults to `3000` in the image. |
 
+For the single App Platform container on a 22-connection DigitalOcean database,
+the runtime Prisma client defaults to `connection_limit=4` when the URL has no
+explicit limit. This leaves connections for migrations, administration, and
+database maintenance. The app does not rewrite the `DATABASE_URL` secret, and
+local Docker development keeps its existing pool behavior. If the production
+secret already contains `connection_limit`, its value takes precedence; set it
+to `4` if it is higher than the database can safely support. For example, add
+`&connection_limit=4` to a URL that already has `?sslmode=require` (or use
+`?connection_limit=4` when it has no query string). Count every additional app
+container against the same 22-connection database limit.
+
 Set `DATABASE_URL` as an encrypted runtime secret in the hosting platform. Do not pass it
 as a Docker build argument or commit it to Git. Root and app `.env` files and `.env.*`
 variants are Git-ignored; the Docker build context excludes them too. Local Compose
