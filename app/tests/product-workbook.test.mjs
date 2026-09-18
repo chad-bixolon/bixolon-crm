@@ -80,8 +80,31 @@ test('obsolete Mobile SKU cannot be silently selected if its replacement is miss
   const rows=[[],['MODEL NAME','DESCRIPTION','','MSRP','STANDARD'],[],['SPP-R200IIIiK','Bluetooth V3.0 +EDR','','368.5','218.9']];
   assert.match(mapProductWorkbookSheet('Mobile printers',rows,'USD').error,/expected later Bluetooth 4\.1/);
 });
-test('workbook mapping requires explicit currency and rejects history tab',()=>{
-  assert.match(mapProductWorkbookSheet('POS printers',[],'').error,/currency/);
+const posRows=[[],['MODEL NAME','DESCRIPTION','','MSRP','STANDARD'],['SRP-TEST','Test printer','','20','10']];
+const mappedPos=(override)=>parseImportCsv(mapProductWorkbookSheet('POS printers',posRows,override).rows.map(row=>row.join(',')).join('\n'),productImportHeaders).rows[0].values;
+
+test('missing worksheet currency defaults to USD',async()=>{
+  const values=mappedPos('');
+  assert.equal(values.currency,'USD');
+  const plan=await planProductImport(emptyDb,mapProductWorkbookSheet('POS printers',posRows,'').rows.map(row=>row.join(',')).join('\n'));
+  assert.equal(plan.counts.errors,0);
+});
+test('explicit workbook currency wins over the default',()=>{
+  const rows=[['','PART NUMBER','','','','','','','CURRENCY','','','MSRP PER CASE'],['','BR-TEST','Ribbon','','','','','','CAD','Ribbon','','20']];
+  const mapped=mapProductWorkbookSheet('TT ribbon  (2)',rows,'USD');
+  assert.equal(mapped.rows[1][7],'CAD');
+  assert.deepEqual(mapProductWorkbookSheet('Catalog',[['model','part_number','currency'],['X','Y','EUR']],'USD').rows,[['model','part_number','currency'],['X','Y','EUR']]);
+});
+test('Admin currency override applies to worksheets without currency',()=>{
+  assert.equal(mappedPos('CAD').currency,'CAD');
+});
+test('invalid currency override is rejected by preview validation',async()=>{
+  const mapped=mapProductWorkbookSheet('POS printers',posRows,'ZZZ');
+  const plan=await planProductImport(emptyDb,mapped.rows.map(row=>row.join(',')).join('\n'));
+  assert.equal(plan.counts.errors,1);
+  assert.match(plan.items[0].messages.join(' '),/valid ISO 4217 code/);
+});
+test('workbook mapping rejects history tab',()=>{
   assert.match(mapProductWorkbookSheet('Cover',[],'USD').error,/change history/);
   assert.deepEqual(mapProductWorkbookSheet('Catalog',[['model','part_number'],['X','Y']],'').rows,[['model','part_number'],['X','Y']]);
 });

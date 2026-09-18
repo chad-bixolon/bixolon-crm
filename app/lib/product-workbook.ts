@@ -19,9 +19,7 @@ export const mapProductWorkbookSheet=(sheet:string,rows:string[][],currencyOverr
   const name=sheet.trim();
   if (name==='Cover') return {error:'Cover is change history, not a product price list. Choose a catalog worksheet.'};
   if (name==='TT ribbon') return {error:'Use TT ribbon  (2). The older TT ribbon tab is excluded because its overlapping SKUs have different prices.'};
-  const fixedCurrency=currencyOverride.trim().toUpperCase();
-  const needsCurrency=!['TT ribbon  (2)','Linerless paper'].includes(name);
-  if (needsCurrency && !fixedCurrency) return {error:`${sheet} has no currency column. Enter its currency code before previewing.`};
+  const fixedCurrency=currencyOverride.trim().toUpperCase() || 'USD';
   let priceColumn:number;
   let start:number;
   let kind:'printer'|'ribbon'|'accessory'|'warranty'|'paper';

@@ -9,6 +9,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 Module._extensions['.ts']=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,filename);
 const require=Module.createRequire(fileURLToPath(import.meta.url));
 const work=require(path.join(root,'lib/work.ts'));
+const activityRelations=require(path.join(root,'lib/activity-relations.ts'));
 const analytics=require(path.join(root,'lib/analytics.ts'));
 const { submitGate }=require(path.join(root,'lib/submit-gate.ts'));
 function form(entries){const f=new FormData();for(const [k,v] of entries)f.append(k,v);return f;}
@@ -55,6 +56,46 @@ test('activity and note require linked membership and valid references',async()=
  tx.opportunityAccount.findUnique=async()=>({accountId:1});
  assert.equal((await work.saveActivity({$transaction:fn=>fn(tx)},activity.value)).type,'DEMO');
  assert.equal((await work.saveNote({$transaction:fn=>fn(tx)},note.value)).body,'Follow up');
+});
+test('Activity choices follow Account opportunity, Project, and Contact relationships',()=>{
+ const opportunities=[{id:10,name:'A',accountIds:[1,2]},{id:11,name:'B',accountIds:[2]}];
+ const projects=[{id:20,name:'Primary',accountIds:[1]},{id:21,name:'Participant',accountIds:[2,1]},{id:22,name:'Other',accountIds:[2]}];
+ const contacts=[{id:30,name:'Assigned',accountId:1,active:true},{id:31,name:'Other',accountId:2,active:true},{id:32,name:'Unassigned',accountId:null,active:true},{id:33,name:'Inactive',accountId:1,active:false}];
+ const history={contactIds:[]};
+ const choices=activityRelations.activityChoices(1,0,opportunities,projects,contacts,history);
+ assert.deepEqual(choices.opportunities.map(x=>x.id),[10]);
+ assert.deepEqual(choices.projects.map(x=>x.id),[20,21]);
+ assert.deepEqual(choices.contacts.map(x=>x.id),[30,32]);
+ const kept=activityRelations.retainedActivitySelections(2,0,opportunities,projects,contacts,history,{opportunityId:10,projectId:20,contactIds:[30,32]});
+ assert.deepEqual(kept,{opportunityId:10,projectId:0,contactIds:[32]});
+ const historical=activityRelations.activityChoices(1,1,[...opportunities,{id:12,name:'Archived',accountIds:[]}],[...projects,{id:23,name:'Archived',accountIds:[]}],contacts,{opportunityId:12,projectId:23,contactIds:[33]});
+ assert.ok(historical.opportunities.some(x=>x.id===12));
+ assert.ok(historical.projects.some(x=>x.id===23));
+ assert.ok(historical.contacts.some(x=>x.id===33));
+ assert.ok(!activityRelations.activityChoices(2,1,opportunities,projects,contacts,{contactIds:[33]}).contacts.some(x=>x.id===33));
+});
+test('Activity validation state retains every submitted field',()=>{
+ const entries=[['subject','Call'],['description','Detailed notes'],['activityDate','2026-09-18T14:30'],['type','CALL'],['direction','OUTBOUND'],['accountId','1'],['opportunityId','10'],['projectId','20'],['contactIds','30'],['contactIds','32'],['outcome','Interested'],['nextStep','Send quote'],['followUpDate','2026-09-25'],['userId','4']];
+ const submitted=form(entries);
+ const state=work.activityFailureState(submitted,{projectId:'This Project does not include the selected Account.'});
+ assert.deepEqual(state.values,Object.assign(Object.fromEntries(entries),{contactIds:'30,32'}));
+ assert.equal(state.errors.projectId,'This Project does not include the selected Account.');
+ assert.equal(work.activityErrorField('This Project does not include the selected Account.'),'projectId');
+ assert.equal(work.activityErrorField('Account is not a participant in this opportunity.'),'opportunityId');
+});
+test('manually submitted unrelated Activity Project and Contact are rejected',async()=>{
+ const input=work.parseActivity(form([['subject','Call'],['type','CALL'],['accountId','1'],['projectId','20'],['activityDate','2026-09-18T14:30'],['contactIds','30']]));
+ const tx={account:{findFirst:async()=>({id:1})},project:{findFirst:async()=>({id:20}),findUnique:async()=>({primaryAccountId:2,participants:[]})},activityType:{findFirst:async()=>({code:'CALL'})},contact:{findMany:async()=>[{id:30,accountId:2,active:true}]},activity:{create:async({data})=>({id:7,...data})}};
+ await assert.rejects(work.saveActivity({$transaction:fn=>fn(tx)},input.value),/Project does not include/);
+ tx.project.findUnique=async()=>({primaryAccountId:2,participants:[{accountId:1}]});
+ await assert.rejects(work.saveActivity({$transaction:fn=>fn(tx)},input.value),/Choose active Contacts/);
+});
+test('Activity accepts eligible unassigned Contacts and existing inactive Contact history',async()=>{
+ const value=work.parseActivity(form([['subject','Call'],['type','CALL'],['accountId','1'],['activityDate','2026-09-18T14:30'],['contactIds','30'],['contactIds','31']])).value;
+ const tx={account:{findFirst:async()=>({id:1})},activity:{findFirst:async()=>({id:7,accountId:1,type:'CALL'}),update:async({data})=>({id:7,...data})},activityType:{findFirst:async()=>({code:'CALL'})},activityContact:{count:async()=>2,findMany:async()=>[{contactId:31}],createMany:async()=>({})},contact:{findMany:async()=>[{id:30,accountId:null,active:true},{id:31,accountId:2,active:false}]}};
+ const saved=await work.saveActivity({$transaction:fn=>fn(tx)},value,7);
+ assert.equal(saved.accountId,1);
+ assert.equal(saved.contactIds,undefined);
 });
 test('pipeline totals use only active product lines and stage or override probability',()=>{
  const rows=[{id:1,currencyCode:'USD',probability:null,expectedCloseDate:new Date('2026-09-15'),forecastCategory:'PIPELINE',stage:{id:1,name:'Qualified',probability:25},products:[{quantity:2,estimatedUnitPrice:'10.00',archivedAt:null},{quantity:1,estimatedUnitPrice:'999.00',archivedAt:new Date()}]},{id:2,currencyCode:'USD',probability:50,expectedCloseDate:new Date('2026-09-30'),forecastCategory:'COMMIT',stage:{id:1,name:'Qualified',probability:25},products:[{quantity:1,estimatedUnitPrice:'30.00',archivedAt:null}]}];
