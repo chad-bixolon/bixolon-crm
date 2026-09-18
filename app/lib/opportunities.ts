@@ -53,15 +53,16 @@ export function lineTotal(line: { quantity: number; estimatedUnitPrice: Prisma.D
 export function opportunityTotal(lines: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number; archivedAt?: Date | null }[]) { return lines.reduce((sum, line) => line.archivedAt ? sum : sum.add(lineTotal(line)), new Prisma.Decimal(0)); }
 export function weightedValue(total: Prisma.Decimal, probability: number) { return total.mul(probability).div(100); }
 export async function opportunityOptions(client: PrismaClient) {
-  const [accounts, owners, stages, currencies, productCount, projects] = await Promise.all([
+  const [accounts, owners, stages, currencies, productCount, projects, productCategories] = await Promise.all([
     client.account.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     client.user.findMany({ where: { active: true, archivedAt: null }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
     client.salesStage.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
     client.currency.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
     client.product.count({ where: { active: true, archivedAt: null } }),
     client.project.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    client.productCategory.findMany({ where: { OR: [{ active: true }, { products: { some: {} } }] }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
   ]);
-  return { accounts, owners, stages, currencies, productCount, projects };
+  return { accounts, owners, stages, currencies, productCount, projects, productCategories };
 }
 export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number) {
   return client.$transaction(async (tx) => {

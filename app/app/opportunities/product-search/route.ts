@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { requirePermission } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
+import { searchCatalog } from "@/lib/catalog-search";
 
 const selection = { id: true, productId: true, partNumber: true, description: true, active: true,
-  product: { select: { name: true, active: true, archivedAt: true } },
+  product: { select: { name: true, categoryId: true } },
   prices: { select: { tier: true, currencyCode: true, amount: true } },
 } as const;
-function serialize(sku: { id: number; productId: number; partNumber: string; description: string | null; prices: { tier: string; currencyCode: string; amount: Prisma.Decimal }[]; product: { name: string } }) {
-  return { id: sku.id, productId: sku.productId, productName: sku.product.name, partNumber: sku.partNumber, description: sku.description,
+function serialize(sku: { id: number; productId: number; partNumber: string; description: string | null; prices: { tier: string; currencyCode: string; amount: Prisma.Decimal }[]; product: { name: string; categoryId: number | null } }) {
+  return { id: sku.id, productId: sku.productId, productName: sku.product.name, categoryId: sku.product.categoryId, partNumber: sku.partNumber, description: sku.description,
     prices: sku.prices.map(price => ({ tier: price.tier, currencyCode: price.currencyCode, amount: price.amount.toFixed(2) })) };
 }
 
@@ -22,20 +23,14 @@ export async function GET(request: NextRequest) {
   }
   const id = Number(request.nextUrl.searchParams.get("id"));
   if (Number.isSafeInteger(id) && id > 0) {
-    const product = await prisma.product.findUnique({ where: { id }, select: { id: true, name: true, sku: true } });
+    const product = await prisma.product.findUnique({ where: { id }, select: { id: true, name: true, sku: true, categoryId: true } });
     if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
     return NextResponse.json({ product });
   }
   const q = (request.nextUrl.searchParams.get("q") ?? "").trim().slice(0, 100);
   const currencyCode = (request.nextUrl.searchParams.get("currencyCode") ?? "").trim().toUpperCase().slice(0, 3);
-  const where: Prisma.ProductSkuWhereInput = { active: true, product: { active: true, archivedAt: null } };
-  if (q) where.OR = [
-    { product: { name: { contains: q, mode: "insensitive" } } },
-    { product: { sku: { contains: q, mode: "insensitive" } } },
-    { partNumber: { contains: q, mode: "insensitive" } },
-    { description: { contains: q, mode: "insensitive" } },
-  ];
-  const skus = await prisma.productSku.findMany({ where, orderBy: [{ product: { name: "asc" } }, { partNumber: "asc" }], take: 25,
-    select: { ...selection, prices: { where: { currencyCode }, select: { tier: true, currencyCode: true, amount: true } } } });
-  return NextResponse.json({ items: skus.map(serialize) });
+  const rawCategory = request.nextUrl.searchParams.get("categoryId");
+  const categoryId = rawCategory ? Number(rawCategory) : null;
+  if (categoryId !== null && (!Number.isSafeInteger(categoryId) || categoryId <= 0)) return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+  return NextResponse.json({ items: await searchCatalog(prisma, q, categoryId, currencyCode) });
 }

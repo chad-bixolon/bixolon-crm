@@ -1,11 +1,12 @@
-import { AccountBusinessRoleCode, AccountStatus, Prisma, type PrismaClient } from "@prisma/client";
+import { AccountBusinessRoleCode, AccountStatus, Prisma, type PrismaClient, type UserRole } from "@prisma/client";
 import type { AccountFields } from "./account-validation";
 
 export const PAGE_SIZE = 20;
 export type AccountFilters = { q?: string; status?: string; role?: string; territory?: string; industry?: string; strategic?: string; page?: string; view?: string };
 
-export function accountView(filters: AccountFilters): "all" | "my" {
-  return filters.view === "my" ? "my" : "all";
+export function accountView(filters: AccountFilters, role?: UserRole): "all" | "my" {
+  if (filters.view === "my" || filters.view === "all") return filters.view;
+  return role === "SALES" || role === "SALES_MANAGER" ? "my" : "all";
 }
 
 export function accountHref(filters: AccountFilters, changes: Partial<AccountFilters> = {}) {

@@ -61,8 +61,19 @@ test('All Accounts keeps the existing unscoped query for every role', async () =
     assert.equal(result.accounts.length, 1);
     assert.deepEqual(calls.splice(0).map(({ where }) => where), [{}, {}]);
   }
-  for (const role of ['SALES', 'SALES_MANAGER', 'ADMIN', 'READ_ONLY']) {
+  for (const role of ['SALES', 'SALES_MANAGER', 'ADMIN', 'MARKETING_MANAGER', 'READ_ONLY']) {
     assert.equal(routeAccess('/accounts?view=all', { id: 7, role, active: true, archivedAt: null }), 'allowed');
+  }
+});
+test('Accounts defaults by role and honors explicit URL views', () => {
+  for (const role of ['SALES', 'SALES_MANAGER']) {
+    assert.equal(accountView({}, role), 'my');
+    assert.equal(accountView({ q: 'Acme', page: '2' }, role), 'my');
+    assert.equal(accountView({ view: 'all' }, role), 'all');
+  }
+  for (const role of ['ADMIN', 'MARKETING_MANAGER', 'READ_ONLY']) {
+    assert.equal(accountView({}, role), 'all');
+    assert.equal(accountView({ view: 'my' }, role), 'my');
   }
 });
 test('My Accounts scopes count and rows to the authenticated CRM user', async () => {
@@ -84,17 +95,20 @@ test('My Accounts combines ownership with every existing filter', () => {
   });
 });
 test('pagination uses the count within the selected view', async () => {
-  let query;
+  const queries = [];
   const client = { account: {
     count: async () => PAGE_SIZE + 1,
-    findMany: async (args) => { query = args; return []; },
+    findMany: async (args) => { queries.push(args); return []; },
   } };
-  const result = await listAccounts(client, { view: 'my', page: '2' }, 7);
-  assert.equal(result.page, 2);
-  assert.equal(result.pages, 2);
-  assert.equal(query.skip, PAGE_SIZE);
-  assert.equal(query.take, PAGE_SIZE);
-  assert.deepEqual(query.where, { ownerId: 7 });
+  for (const view of ['my', 'all']) {
+    const result = await listAccounts(client, { view, page: '2', q: 'Acme', status: 'ACTIVE' }, 7);
+    assert.equal(result.page, 2);
+    assert.equal(result.pages, 2);
+    const query = queries.at(-1);
+    assert.equal(query.skip, PAGE_SIZE);
+    assert.equal(query.take, PAGE_SIZE);
+    assert.deepEqual(query.where, { ...(view === 'my' ? { ownerId: 7 } : {}), name: { contains: 'Acme', mode: 'insensitive' }, status: 'ACTIVE' });
+  }
 });
 test('view links retain filters and pagination links retain the view', () => {
   const filters = { view: 'my', q: 'Acme & Co', status: 'ACTIVE', role: 'VAR', territory: 'WEST', industry: 'RETAIL', strategic: 'no', page: '3' };
