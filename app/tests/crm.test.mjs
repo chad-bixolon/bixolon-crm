@@ -191,3 +191,14 @@ test('saving an edited opportunity removes a participant and its roles', async (
     ['membership', { where: { opportunityId_accountId: { opportunityId: 5, accountId: 12 } } }],
   ]);
 });
+
+test('opportunity SKU is parsed and must belong to the selected product', async () => {
+  const parsed = opportunities.parseOpportunity(form([['name', 'SKU deal'], ['stageId', '1'], ['currencyCode', 'USD'], ['accountId', '11'], ['participantRoles', 'END_USER'], ['productId', '3'], ['skuId', '9'], ['quantity', '2'], ['price', '19.95']]));
+  assert.equal(parsed.value.lines[0].skuId, 9);
+  const tx = {
+    salesStage: { findUnique: async () => ({ active: true }) }, currency: { findUnique: async () => ({ active: true }) },
+    account: { findMany: async () => [{ id: 11 }] }, product: { findMany: async () => [{ id: 3 }] },
+    productSku: { findMany: async () => [{ id: 9, productId: 4, active: true }] },
+  };
+  await assert.rejects(() => opportunities.saveOpportunity({ $transaction: async fn => fn(tx) }, parsed.value), /SKU belonging/);
+});

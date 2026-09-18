@@ -391,8 +391,53 @@ model Product {
   active        Boolean              @default(true)
   archivedAt    DateTime?
   opportunities OpportunityProduct[]
+  skus          ProductSku[]
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
+}
+
+model ProductSku {
+  id                   Int                    @id @default(autoincrement())
+  productId            Int
+  product              Product                @relation(fields: [productId], references: [id], onDelete: Restrict)
+  partNumber           String
+  normalizedPartNumber String                 @unique
+  description          String?
+  priceUnit            ProductPriceUnit       @default(EACH)
+  active               Boolean                @default(true)
+  prices               ProductPrice[]
+  opportunityProducts  OpportunityProduct[]
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  @@index([productId])
+}
+
+enum ProductPriceUnit {
+  EACH
+  CASE
+  BOX
+  ROLL
+}
+
+enum ProductPriceTier {
+  STANDARD
+  MSRP
+  RESELLER
+  DISTRIBUTOR
+}
+
+model ProductPrice {
+  id           Int        @id @default(autoincrement())
+  skuId        Int
+  sku          ProductSku @relation(fields: [skuId], references: [id], onDelete: Restrict)
+  tier         ProductPriceTier
+  currencyCode String     @db.VarChar(3)
+  amount       Decimal    @db.Decimal(12, 2)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([skuId, currencyCode, tier])
 }
 
 model OpportunityProduct {
@@ -401,6 +446,8 @@ model OpportunityProduct {
   opportunity        Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
   productId          Int
   product            Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  skuId              Int?
+  sku                ProductSku? @relation(fields: [skuId], references: [id], onDelete: Restrict)
   quantity           Int
   estimatedUnitPrice Decimal     @map("unitPrice") @db.Decimal(12, 2)
   archivedAt         DateTime?
@@ -409,6 +456,7 @@ model OpportunityProduct {
 
   @@index([opportunityId, archivedAt])
   @@index([productId])
+  @@index([skuId])
 }
 
 model Task {

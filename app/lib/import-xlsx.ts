@@ -8,6 +8,7 @@ const maxEntries = 100;
 const maxColumns = 50;
 
 export type XlsxResult = { csv?: string; sheets: string[]; selectedSheet?: string; error?: string };
+export type XlsxTransform = (sheet:string, rows:string[][]) => { rows?:string[][]; error?:string };
 
 function inspectZip(buffer: Buffer): string | undefined {
   if (buffer.subarray(0, 8).equals(Buffer.from('d0cf11e0a1b11ae1', 'hex'))) return 'Password-protected or encrypted Office workbooks are not supported. Save an unencrypted .xlsx copy.';
@@ -42,17 +43,17 @@ function inspectZip(buffer: Buffer): string | undefined {
   return undefined;
 }
 
-function cellString(value: unknown): string {
+function cellString(value: unknown, preserveNewlines=false): string {
   if (value === null || value === undefined) return '';
   if (value instanceof Date) return Number.isNaN(value.valueOf()) ? '' : value.toISOString().slice(0, 10);
-  if (typeof value === 'string') return value.trim().replace(/\r\n|\r|\n/g, ' ');
+  if (typeof value === 'string') return preserveNewlines ? value.trim() : value.trim().replace(/\r\n|\r|\n/g, ' ');
   if (typeof value === 'boolean') return String(value);
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   throw new Error('Workbook contains an unsupported cell value.');
 }
 function csvCell(value: string): string { return /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value; }
 
-export async function parseImportXlsx(buffer: Buffer, requestedSheet?: string): Promise<XlsxResult> {
+export async function parseImportXlsx(buffer: Buffer, requestedSheet?: string, transform?:XlsxTransform): Promise<XlsxResult> {
   if (!buffer.length || buffer.length > maxXlsxBytes) return {sheets:[],error:'Choose an .xlsx file smaller than 4 MB.'};
   const zipError = inspectZip(buffer);
   if (zipError) return {sheets:[],error:zipError};
@@ -68,7 +69,10 @@ export async function parseImportXlsx(buffer: Buffer, requestedSheet?: string): 
     const selected = sheets.find(sheet => sheet.sheet === (requestedSheet ?? names[0]))!;
     if (selected.data.length - 1 > maxXlsxRows) return {sheets:names,error:'Worksheet exceeds 5,000 data rows.'};
     if (selected.data.some(row => row.length > maxColumns)) return {sheets:names,error:`Worksheet exceeds ${maxColumns} columns.`};
-    const csv = selected.data.map(row => row.map(value => csvCell(cellString(value))).join(',')).join('\n') + '\n';
+    const sourceRows=selected.data.map(row=>row.map(value=>cellString(value,!!transform)));
+    const transformed=transform ? transform(selected.sheet,sourceRows) : {rows:sourceRows};
+    if (transformed.error || !transformed.rows) return {sheets:names,selectedSheet:selected.sheet,error:transformed.error ?? 'Worksheet could not be mapped.'};
+    const csv = transformed.rows.map(row => row.map(csvCell).join(',')).join('\n') + '\n';
     if (csv.length > 2_000_000) return {sheets:names,error:'Worksheet values exceed the 2 MB import limit.'};
     return {csv,sheets:names,selectedSheet:selected.sheet};
   } catch {

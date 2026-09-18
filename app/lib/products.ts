@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { field, pageNumber, required, type Errors } from "./crm-validation";
+import { normalizePartNumber } from "./product-import";
 export function parseProduct(form: FormData) {
   const errors: Errors = {};
   const sku = required(form, "sku", "SKU", 100, errors);
@@ -8,8 +9,23 @@ export function parseProduct(form: FormData) {
   return { errors, value: Object.keys(errors).length ? undefined : { sku, name, active } };
 }
 export async function saveProduct(client: PrismaClient, input: { sku: string; name: string; active: boolean }, id?: number) {
-  if (id) { const row = await client.product.findUnique({ where: { id } }); if (!row) throw new Error("Product not found."); if (row.archivedAt) throw new Error("Reactivate this product before editing it."); }
-  const row = id ? await client.product.update({ where: { id }, data: input }) : await client.product.create({ data: input }); return row.id;
+  return client.$transaction(async tx => {
+    const old = id ? await tx.product.findUnique({ where: { id } }) : null;
+    if (id && !old) throw new Error("Product not found.");
+    if (old?.archivedAt) throw new Error("Reactivate this product before editing it.");
+    const key = normalizePartNumber(input.sku);
+    const conflict = await tx.productSku.findUnique({where:{normalizedPartNumber:key}});
+    if (conflict && conflict.productId !== id) throw new Error("SKU already belongs to another Product.");
+    if (old && normalizePartNumber(old.sku) !== key && conflict) throw new Error("SKU already exists on this Product.");
+    const row = id ? await tx.product.update({ where: { id }, data: input }) : await tx.product.create({ data: input });
+    if (old && normalizePartNumber(old.sku) !== key) {
+      const primary = await tx.productSku.findUnique({where:{normalizedPartNumber:normalizePartNumber(old.sku)}});
+      if (primary?.productId === row.id) await tx.productSku.update({where:{id:primary.id},data:{partNumber:input.sku,normalizedPartNumber:key,active:input.active}});
+      else await tx.productSku.create({data:{productId:row.id,partNumber:input.sku,normalizedPartNumber:key,active:input.active}});
+    } else if (conflict?.productId === row.id) await tx.productSku.update({where:{id:conflict.id},data:{partNumber:input.sku,active:input.active}});
+    else await tx.productSku.create({data:{productId:row.id,partNumber:input.sku,normalizedPartNumber:key,active:input.active}});
+    return row.id;
+  });
 }
 export async function setProductState(client: PrismaClient, id: number, state: "active" | "inactive" | "archived") {
   const row = await client.product.findUnique({ where: { id } }); if (!row) throw new Error("Product not found.");

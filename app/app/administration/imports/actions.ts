@@ -2,10 +2,10 @@
 import { prisma } from '@/lib/prisma';
 import { requireMutation } from '@/lib/current-user';
 import { applyImport, planImport } from '@/lib/import-plan';
-import { parseImportXlsx, maxXlsxBytes } from '@/lib/import-xlsx';
+import { parseImportXlsx, maxXlsxBytes, type XlsxTransform } from '@/lib/import-xlsx';
 import { revalidatePath } from 'next/cache';
 
-async function readUpload(form: FormData) {
+export async function readUpload(form: FormData, transform?:XlsxTransform) {
   const upload = form.get('file');
   if (!upload || typeof upload === 'string' || typeof upload.arrayBuffer !== 'function') return {error:'Choose a CSV or XLSX file.'};
   const file = upload as File;
@@ -17,7 +17,7 @@ async function readUpload(form: FormData) {
   }
   if (name.endsWith('.xlsx')) {
     if (file.size > maxXlsxBytes) return {error:'Choose an .xlsx file smaller than 4 MB.'};
-    return parseImportXlsx(Buffer.from(await file.arrayBuffer()), String(form.get('sheet') ?? '') || undefined);
+    return parseImportXlsx(Buffer.from(await file.arrayBuffer()), String(form.get('sheet') ?? '') || undefined, transform);
   }
   return {error:'Choose a .csv or .xlsx file.'};
 }

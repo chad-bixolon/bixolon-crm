@@ -12,6 +12,7 @@ const {zipSync,strToU8}=require('fflate');
 const {parseImportXlsx}=require(path.join(root,'lib/import-xlsx.ts'));
 const {parseImportCsv}=require(path.join(root,'lib/import-csv.ts'));
 const {planImport}=require(path.join(root,'lib/import-plan.ts'));
+const {planProductImport}=require(path.join(root,'lib/product-import.ts'));
 const esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
 function workbook(sheets) {
   const entries={
@@ -74,4 +75,10 @@ test('XLSX file and row limits are enforced before import',async()=>{
   assert.match((await parseImportXlsx(Buffer.alloc(4_000_001))).error,/smaller than 4 MB/);
   const rows=[['record_type','account_name'],...Array.from({length:5001},(_,i)=>['account',`Account ${i}`])];
   assert.match((await parseImportXlsx(workbook([{name:'Import',rows}]))).error,/5,000 data rows/);
+});
+test('product XLSX and CSV yield the same catalog preview',async()=>{
+  const result=await parseImportXlsx(workbook([{name:'Catalog',rows:[['model','part_number','description','standard_price','currency','active'],['SLP-DX220','DX220-STD','Printer',12.5,'USD',true]]}]));
+  const catalogDb={product:{findMany:async()=>[]}};
+  assert.equal(result.error,undefined);
+  assert.deepEqual(await planProductImport(catalogDb,result.csv),await planProductImport(catalogDb,'model,part_number,description,standard_price,currency,active\nSLP-DX220,DX220-STD,Printer,12.5,USD,true\n'));
 });

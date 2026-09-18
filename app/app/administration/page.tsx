@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Content, PageHeader } from "@/components/shell";
 import { requirePermission } from "@/lib/current-user";
 const sections = [
-  ["Imports", "/administration/imports", "Preview and confirm Accounts & Contacts CSV imports."],
+  ["Imports", "/administration/imports", "Preview and confirm Accounts & Contacts or Products & Pricing imports."],
   ["Users", "/administration/users", "Manage access and record owners."],
   ["Industries", "/administration/lookups/industries", "Manage account industry choices."],
   ["Territories", "/administration/lookups/territories", "Manage account territory choices."],

@@ -7,7 +7,7 @@ export type ImportHeader = typeof importHeaders[number];
 export type CsvRow = { line: number; values: Partial<Record<ImportHeader,string>> };
 export const template = importHeaders.join(',') + '\n';
 
-export function parseImportCsv(input: string): { rows: CsvRow[]; errors: string[] } {
+export function parseImportCsv(input: string, catalogHeaders?: readonly string[]): { rows: CsvRow[]; errors: string[] } {
   const errors: string[] = [];
   if (!input || input.length > 2_000_000) return { rows: [], errors: ['Choose a UTF-8 CSV file smaller than 2 MB.'] };
   const source = input.replace(/^\uFEFF/, '');
@@ -35,11 +35,15 @@ export function parseImportCsv(input: string): { rows: CsvRow[]; errors: string[
   const headers = records[0].cells.map(x => x.toLowerCase());
   const duplicates = headers.filter((h,i) => headers.indexOf(h) !== i);
   if (duplicates.length) errors.push(`Duplicate column header: ${[...new Set(duplicates)].join(', ')}.`);
-  const unknown = headers.filter(h => !importHeaders.includes(h as ImportHeader));
+  const unknown = headers.filter(h => !(catalogHeaders ?? importHeaders).includes(h));
   if (unknown.length) errors.push(`Unsupported column: ${unknown.join(', ')}.${unknown.some(x => x.includes('external') || x.includes('source')) ? ' Source IDs require a schema migration.' : ''}`);
-  if (!headers.includes('record_type')) errors.push('Missing required header: record_type.');
-  if (!headers.includes('account_name') && !headers.includes('contact_first_name')) errors.push('Include account_name or contact_first_name and contact_last_name headers.');
-  if (headers.includes('contact_first_name') !== headers.includes('contact_last_name')) errors.push('Contact first and last name headers must appear together.');
+  if (catalogHeaders) {
+    for (const required of ['model','part_number']) if (!headers.includes(required)) errors.push(`Missing required header: ${required}.`);
+  } else {
+    if (!headers.includes('record_type')) errors.push('Missing required header: record_type.');
+    if (!headers.includes('account_name') && !headers.includes('contact_first_name')) errors.push('Include account_name or contact_first_name and contact_last_name headers.');
+    if (headers.includes('contact_first_name') !== headers.includes('contact_last_name')) errors.push('Contact first and last name headers must appear together.');
+  }
   if (errors.length) return {rows:[], errors};
   const rows: CsvRow[] = [];
   for (const record of records.slice(1)) {

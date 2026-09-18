@@ -1,7 +1,7 @@
 import type { ForecastCategory, OpportunityPartyRole } from "@prisma/client";
 
 export type ParticipantDraft = { accountId: number; roles: OpportunityPartyRole[] };
-export type LineDraft = { id: number; productId: number; quantity: string; price: string };
+export type LineDraft = { id: number; productId: number; skuId?: number | null; quantity: string; price: string };
 export type OpportunityDraft = {
   name: string; description: string; ownerId: string; stageId: string; expectedCloseDate: string;
   probability: string; forecastCategory: ForecastCategory | ""; currencyCode: string; projectId?: string;
@@ -34,7 +34,7 @@ export function readDraft(raw: string | null, fallback: OpportunityDraft): Oppor
     if (typeof value.forecastCategory !== "string" || (value.forecastCategory !== "" && !forecastCategories.includes(value.forecastCategory))) return fallback;
     if (value.projectId !== undefined && (typeof value.projectId !== 'string' || (value.projectId !== '' && !/^[1-9]\d*$/.test(value.projectId)))) return fallback;
     if (!Array.isArray(value.participants) || !value.participants.every((p: unknown) => isRecord(p) && isId(p.accountId) && Array.isArray(p.roles) && p.roles.every((role: unknown) => typeof role === "string" && partyRoles.includes(role)))) return fallback;
-    if (!Array.isArray(value.lines) || !value.lines.every((line: unknown) => isRecord(line) && isLineId(line.id) && isLineId(line.productId) && typeof line.quantity === "string" && typeof line.price === "string")) return fallback;
+    if (!Array.isArray(value.lines) || !value.lines.every((line: unknown) => isRecord(line) && isLineId(line.id) && isLineId(line.productId) && (line.skuId === undefined || line.skuId === null || isLineId(line.skuId)) && typeof line.quantity === "string" && typeof line.price === "string")) return fallback;
     return value as OpportunityDraft;
   } catch { return fallback; }
 }

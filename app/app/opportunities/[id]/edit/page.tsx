@@ -13,6 +13,6 @@ export default async function EditOpportunityPage({ params }: { params: Promise<
     const currentStage = await prisma.salesStage.findUnique({ where: { id: opportunity.stageId } });
     if (currentStage) options.stages.push(currentStage);
   }
-  const initial = { ...opportunity, participants: opportunity.participants.map((p) => ({ accountId: p.accountId, roles: p.roles.map((r) => r.role) })), lines: opportunity.products.map((line) => ({ id: line.id, productId: line.productId, quantity: line.quantity, price: line.estimatedUnitPrice.toFixed(2) })) };
+  const initial = { ...opportunity, participants: opportunity.participants.map((p) => ({ accountId: p.accountId, roles: p.roles.map((r) => r.role) })), lines: opportunity.products.map((line) => ({ id: line.id, productId: line.productId, skuId: line.skuId, quantity: line.quantity, price: line.estimatedUnitPrice.toFixed(2) })) };
   return <Content><PageHeader eyebrow="Opportunities" title={`Edit ${opportunity.name}`}/>{opportunity.archivedAt ? <div className="panel p-6">Reactivate this opportunity before editing it.</div> : <OpportunityForm key={id} id={id} initial={initial} {...options} labels={labels}/>}</Content>;
 }
