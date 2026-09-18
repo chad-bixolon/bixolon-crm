@@ -195,6 +195,10 @@ test('saving an edited opportunity removes a participant and its roles', async (
 test('opportunity SKU is parsed and must belong to the selected product', async () => {
   const parsed = opportunities.parseOpportunity(form([['name', 'SKU deal'], ['stageId', '1'], ['currencyCode', 'USD'], ['accountId', '11'], ['participantRoles', 'END_USER'], ['productId', '3'], ['skuId', '9'], ['quantity', '2'], ['price', '19.95']]));
   assert.equal(parsed.value.lines[0].skuId, 9);
+  const legacy = opportunities.parseOpportunity(form([['name', 'Legacy deal'], ['stageId', '1'], ['currencyCode', 'USD'], ['accountId', '11'], ['participantRoles', 'END_USER'], ['lineId', '7'], ['productId', '3'], ['skuId', ''], ['quantity', '2'], ['price', '18.50']]));
+  assert.equal(legacy.value.lines[0].id, 7);
+  assert.equal(legacy.value.lines[0].skuId, undefined);
+  assert.equal(legacy.value.lines[0].price, '18.50');
   const tx = {
     salesStage: { findUnique: async () => ({ active: true }) }, currency: { findUnique: async () => ({ active: true }) },
     account: { findMany: async () => [{ id: 11 }] }, product: { findMany: async () => [{ id: 3 }] },

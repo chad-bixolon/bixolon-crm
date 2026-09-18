@@ -47,14 +47,14 @@ try {
     return response;
   };
   for (const q of [marker.slice(0, 15), `${part}-A`, 'Picker smoke description']) {
-    const data = await (await get(`/opportunities/product-search?q=${encodeURIComponent(q)}`)).json();
-    assert.ok(data.products.length <= 25);
-    assert.ok(data.products.some(item => item.id === productId), `search did not find Product for ${q}`);
+    const data = await (await get(`/opportunities/product-search?q=${encodeURIComponent(q)}&currencyCode=${currency.code}`)).json();
+    assert.ok(data.items.length <= 25);
+    assert.ok(data.items.some(item => item.id === sku.id && item.productId === productId && item.productName === marker && item.prices.some(price => price.tier === 'STANDARD' && price.amount === '12.34')), `search did not find priced catalog item for ${q}`);
   }
-  const detail = (await (await get(`/opportunities/product-search?id=${productId}`)).json()).product;
-  assert.equal(detail.skus.length, 2);
-  const chosen = detail.skus.find(item => item.id === sku.id);
-  assert.equal(chosen.prices.find(price => price.currencyCode === currency.code)?.amount, '12.34');
+  const chosen = (await (await get(`/opportunities/product-search?skuId=${sku.id}`)).json()).item;
+  assert.equal(chosen.productId, productId);
+  assert.equal(chosen.partNumber, sku.partNumber);
+  assert.equal(chosen.prices.find(price => price.currencyCode === currency.code && price.tier === 'STANDARD')?.amount, '12.34');
   const newPage = await (await get('/opportunities/new')).text();
   assert.match(newPage, /Opportunity products/);
   assert.match(newPage, /Add product/);
@@ -84,7 +84,7 @@ try {
   assert.ok(reopened.includes(sku.partNumber));
   const reopenedEdit = await (await get(`/opportunities/${opportunityId}/edit`)).text();
   assert.ok(reopenedEdit.includes(`name="skuId" value="${sku.id}"`), `reopened edit SKU input: ${reopenedEdit.match(/name="skuId"[^>]*>/)?.[0] ?? 'absent'}`);
-  console.log('PASS: authenticated Product search by name, part number and description; 25-result cap; two-SKU detail and matching-currency STANDARD suggestion.');
+  console.log('PASS: authenticated Product search by name, part number and description; 25-result cap; SKU detail and matching-currency STANDARD suggestion.');
   console.log('PASS: Opportunity create/edit, SKU persistence after reopen, quantity, estimated price and totals.');
 } finally {
   if (opportunityId) await prisma.$transaction(async tx => {
