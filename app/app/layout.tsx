@@ -5,7 +5,7 @@ import { can } from "@/lib/authorization";
 import { getLabels } from "@/lib/configuration";
 import { prisma } from "@/lib/prisma";
 import "./globals.css";
-export const metadata: Metadata = { title: "BIXOLON America CRM", description: "BIXOLON America internal CRM" };
+export const metadata: Metadata = { title: "BIXOLON SalesHub", description: "BIXOLON America internal CRM" };
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const session = await auth();
   const user = session?.crmUser;
