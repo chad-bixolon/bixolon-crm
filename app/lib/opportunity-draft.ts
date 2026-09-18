@@ -4,7 +4,7 @@ export type ParticipantDraft = { accountId: number; roles: OpportunityPartyRole[
 export type LineDraft = { id: number; productId: number; skuId?: number | null; quantity: string; price: string };
 export type OpportunityDraft = {
   name: string; description: string; ownerId: string; stageId: string; expectedCloseDate: string;
-  probability: string; forecastCategory: ForecastCategory | ""; currencyCode: string; projectId?: string;
+  probability: string; forecastCategory: ForecastCategory | ""; currencyCode: string; projectIds: number[];
   participants: ParticipantDraft[]; lines: LineDraft[];
 };
 type DraftStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -32,7 +32,12 @@ export function readDraft(raw: string | null, fallback: OpportunityDraft): Oppor
     const strings = ["name", "description", "ownerId", "stageId", "expectedCloseDate", "probability", "currencyCode"];
     if (!strings.every((key) => typeof value[key] === "string")) return fallback;
     if (typeof value.forecastCategory !== "string" || (value.forecastCategory !== "" && !forecastCategories.includes(value.forecastCategory))) return fallback;
-    if (value.projectId !== undefined && (typeof value.projectId !== 'string' || (value.projectId !== '' && !/^[1-9]\d*$/.test(value.projectId)))) return fallback;
+    if (value.projectIds === undefined && typeof value.projectId === "string") {
+      if (value.projectId !== "" && !/^[1-9]\d*$/.test(value.projectId)) return fallback;
+      value.projectIds = value.projectId ? [Number(value.projectId)] : [];
+      delete value.projectId;
+    }
+    if (!Array.isArray(value.projectIds) || !value.projectIds.every(isId) || new Set(value.projectIds).size !== value.projectIds.length) return fallback;
     if (!Array.isArray(value.participants) || !value.participants.every((p: unknown) => isRecord(p) && isId(p.accountId) && Array.isArray(p.roles) && p.roles.every((role: unknown) => typeof role === "string" && partyRoles.includes(role)))) return fallback;
     if (!Array.isArray(value.lines) || !value.lines.every((line: unknown) => isRecord(line) && isLineId(line.id) && isLineId(line.productId) && (line.skuId === undefined || line.skuId === null || isLineId(line.skuId)) && typeof line.quantity === "string" && typeof line.price === "string")) return fallback;
     return value as OpportunityDraft;

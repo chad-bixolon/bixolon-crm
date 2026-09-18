@@ -18,7 +18,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
       ...(status ? { status } : {}), ...(ownerId ? { ownerId } : {}),
       ...(accountId ? { OR: [{ primaryAccountId: accountId }, { participants: { some: { accountId } } }] } : {}) } ] };
   const [projects, accounts, owners] = await Promise.all([
-    prisma.project.findMany({ where, include: { primaryAccount: true, owner: true, _count: { select: { participants: true, opportunities: { where: { archivedAt: null } } } } }, orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }] }),
+    prisma.project.findMany({ where, include: { primaryAccount: true, owner: true, _count: { select: { participants: true, opportunities: { where: { opportunity: { archivedAt: null } } } } } }, orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }] }),
     prisma.account.findMany({ where: { archivedAt: null }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
     prisma.user.findMany({ where: { active: true, archivedAt: null }, select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }),
   ]);

@@ -66,9 +66,12 @@ export function accountProjectRelationship(project: { primaryAccountId: number; 
     `Additional Participant · ${project.participants.find(p => p.accountId === accountId)?.roles.map(r => projectRoleLabels[r.role]).join(', ') || 'No role'}`;
 }
 export function pipelineProjectFilter(raw?: string): Prisma.OpportunityWhereInput {
-  if (raw === 'none') return { projectId: null };
+  if (raw === 'none') return { projects: { none: {} } };
   const id = positiveId(raw ?? '');
-  return id ? { projectId: id } : {};
+  return id ? { projects: { some: { projectId: id } } } : {};
+}
+export function projectOpportunitiesWhere(projectId: number, activeOnly = false): Prisma.OpportunityWhereInput {
+  return { projects: { some: { projectId } }, ...(activeOnly ? { archivedAt: null } : {}) };
 }
 export async function assertProjectWorkEdit(client: PrismaClient, actor: Actor, projectId: number | null | undefined) {
   if (!projectId) return;

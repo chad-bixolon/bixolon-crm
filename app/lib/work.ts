@@ -28,8 +28,8 @@ export async function checkRelations(client: PrismaClient | Prisma.TransactionCl
   if (accountId && opportunityId && !(await client.opportunityAccount.findUnique({ where: { opportunityId_accountId: { opportunityId, accountId } } }))) throw new Error('Account is not a participant in this opportunity.');
   if (projectId && !(await client.project.findFirst({ where: { id: projectId, archivedAt: null } }))) throw new Error('Project not found or archived.');
   if (projectId && opportunityId) {
-    const opportunity = await client.opportunity.findUnique({ where: { id: opportunityId }, select: { projectId: true } });
-    if (opportunity?.projectId !== projectId) throw new Error('Opportunity belongs to a different Project.');
+    const link = await client.opportunityProject.findUnique({ where: { opportunityId_projectId: { opportunityId, projectId } } });
+    if (!link) throw new Error('Opportunity is not linked to this Project.');
   }
 }
 export async function saveTask(
@@ -112,7 +112,7 @@ export function activityFailureState(form: FormData, errors: Errors, message = '
 }
 export function activityErrorField(message: string) {
   if (message.includes('Account cannot change')) return 'accountId';
-  if (message.includes('Project does not include') || message.includes('Project not found') || message.includes('different Project')) return 'projectId';
+  if (message.includes('Project') || message.includes('project')) return 'projectId';
   if (message.includes('opportunity') || message.includes('Opportunity')) return 'opportunityId';
   if (message.includes('Contact')) return 'contactIds';
   if (message.includes('Account')) return 'accountId';
@@ -122,13 +122,26 @@ export function activityErrorField(message: string) {
 }
 export async function saveActivity(client: PrismaClient, value: NonNullable<ReturnType<typeof parseActivity>['value']>, id?: number) {
   return client.$transaction(async tx => {
-    await checkRelations(tx, value.accountId, value.opportunityId, value.projectId);
-    if (value.projectId && value.accountId) {
-      const project = await tx.project.findUnique({ where: { id: value.projectId }, select: { primaryAccountId: true, participants: { where: { accountId: value.accountId }, select: { accountId: true } } } });
-      if (project?.primaryAccountId !== value.accountId && !project?.participants.length) throw new Error('This Project does not include the selected Account.');
-    }
     const existing = id ? await tx.activity.findFirst({ where: { id, archivedAt: null } }) : null;
     if (id && !existing) throw new Error('Activity not found or archived.');
+    if (!value.accountId) throw new Error('Choose an Account.');
+    const accountChanged = !existing || existing.accountId !== value.accountId;
+    const opportunityChanged = !existing || existing.opportunityId !== value.opportunityId;
+    const projectChanged = !existing || existing.projectId !== value.projectId;
+    if (accountChanged && !(await tx.account.findFirst({ where: { id: value.accountId, archivedAt: null } }))) throw new Error('Account not found or archived.');
+    if (value.opportunityId && (accountChanged || opportunityChanged || projectChanged)) {
+      if (!(await tx.opportunity.findFirst({ where: { id: value.opportunityId, archivedAt: null } }))) throw new Error('Opportunity not found or archived.');
+      if (!(await tx.opportunityAccount.findUnique({ where: { opportunityId_accountId: { opportunityId: value.opportunityId, accountId: value.accountId } } }))) throw new Error('This Opportunity is not associated with the selected Account.');
+    }
+    if (value.projectId && (accountChanged || opportunityChanged || projectChanged)) {
+      if (!(await tx.project.findFirst({ where: { id: value.projectId, archivedAt: null } }))) throw new Error('Project not found or archived.');
+      const project = await tx.project.findUnique({ where: { id: value.projectId }, select: { primaryAccountId: true, participants: { where: { accountId: value.accountId }, select: { accountId: true } } } });
+      if (project?.primaryAccountId !== value.accountId && !project?.participants.length) throw new Error('This Project is not associated with the selected Account.');
+    }
+    if (value.opportunityId && value.projectId && (accountChanged || opportunityChanged || projectChanged)) {
+      const link = await tx.opportunityProject.findUnique({ where: { opportunityId_projectId: { opportunityId: value.opportunityId, projectId: value.projectId } } });
+      if (!link) throw new Error('This Project is not linked to the selected Opportunity.');
+    }
     if (existing?.accountId != null && existing.accountId !== value.accountId && await tx.activityContact.count({ where: { activityId: id } })) throw new Error('Account cannot change while Contact history is linked.');
     if (!(await tx.activityType.findFirst({ where: { code: value.type, active: true } })) && existing?.type !== value.type) throw new Error('Choose an active activity type.');
     if (value.userId && !(await tx.user.findFirst({ where: { id: value.userId, active: true, archivedAt: null } }))) throw new Error('Choose an active responsible user.');
@@ -139,8 +152,8 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
       const linked = id ? await tx.activityContact.findMany({ where: { activityId: id }, select: { contactId: true } }) : [];
       if (contacts.length !== contactIds.length || contacts.some(c => {
         const alreadyLinked = linked.some(l => l.contactId === c.id);
-        return !alreadyLinked && (!c.active || (c.accountId !== null && c.accountId !== value.accountId));
-      })) throw new Error('Choose active Contacts assigned to the Activity Account or unassigned Contacts. Previously linked Contacts remain in history.');
+        return (!alreadyLinked || accountChanged) && (!c.active || (c.accountId !== null && c.accountId !== value.accountId));
+      })) throw new Error('This Contact is not associated with the selected Account. Choose an active Contact at this Account or an unassigned Contact.');
     }
     const row = id ? await tx.activity.update({ where: { id }, data }) : await tx.activity.create({ data });
     for (const contactId of contactIds) await tx.activityContact.createMany({ data: [{ activityId: row.id, contactId }], skipDuplicates: true });

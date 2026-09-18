@@ -325,8 +325,7 @@ model Currency {
 
 model Opportunity {
   id                Int                  @id @default(autoincrement())
-  projectId         Int?
-  project           Project?             @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  projects          OpportunityProject[]
   /// Original column is retained; participants is the authoritative account relationship.
   legacyAccountId   Int?                 @map("accountId")
   legacyAccount     Account?             @relation("LegacyOpportunityAccount", fields: [legacyAccountId], references: [id], onDelete: Restrict, map: "Opportunity_accountId_fkey")
@@ -357,7 +356,6 @@ model Opportunity {
   updatedAt         DateTime             @updatedAt
 
   @@index([legacyAccountId])
-  @@index([projectId, archivedAt])
   @@index([ownerId, stageId])
   @@index([stageId, expectedCloseDate])
   @@index([expectedCloseDate])
@@ -374,7 +372,6 @@ model OpportunityAccount {
   account       Account                  @relation(fields: [accountId], references: [id], onDelete: Restrict)
   roles         OpportunityAccountRole[]
   tasks         Task[]                   @relation("TaskMembership")
-  activities    Activity[]               @relation("ActivityMembership")
   notes         Note[]                   @relation("NoteMembership")
   createdAt     DateTime                 @default(now())
   updatedAt     DateTime                 @updatedAt
@@ -529,8 +526,6 @@ model Activity {
   account       Account?            @relation(fields: [accountId], references: [id], onDelete: Restrict)
   opportunityId Int?
   opportunity   Opportunity?        @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
-  /// MATCH SIMPLE: membership is enforced when both parent IDs are present.
-  membership    OpportunityAccount? @relation("ActivityMembership", fields: [opportunityId, accountId], references: [opportunityId, accountId], onDelete: Restrict, onUpdate: Restrict)
   userId        Int?
   user          User?               @relation("ActivityUser", fields: [userId], references: [id], onDelete: Restrict)
   type          String
@@ -625,7 +620,7 @@ model Project {
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   participants       ProjectAccount[]
-  opportunities      Opportunity[]
+  opportunities      OpportunityProject[]
   tasks              Task[]
   activities         Activity[]
   notes              Note[]
@@ -635,6 +630,17 @@ model Project {
   @@index([status, archivedAt])
   @@index([createdById])
   @@index([updatedById])
+}
+
+model OpportunityProject {
+  opportunityId Int
+  projectId     Int
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  project       Project     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  createdAt     DateTime    @default(now())
+
+  @@id([opportunityId, projectId])
+  @@index([projectId, opportunityId])
 }
 
 model ProjectAccount {

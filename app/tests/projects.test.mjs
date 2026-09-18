@@ -89,32 +89,39 @@ test('Account Projects query includes primary and participant relationships once
   assert.match(projects.accountProjectRelationship(rows[1], 1), /Additional Participant · Service Provider/);
 });
 
-test('Opportunity remains valid without a Project and can link one without changing participants', async () => {
+test('Opportunity supports zero, one, and many Projects without changing participants', async () => {
   const input = [['name', 'J.Crew RFID Deployment'], ['stageId', '3'], ['currencyCode', 'USD'], ['accountId', '4'], ['participantRoles', 'END_USER']];
   const without = opportunities.parseOpportunity(form(input));
-  const withProject = opportunities.parseOpportunity(form([...input, ['projectId', '10']]));
-  assert.equal(without.value.projectId, null);
-  assert.equal(withProject.value.projectId, 10);
-  assert.deepEqual(without.value.participants, withProject.value.participants);
-  const saved = [];
+  const withProjects = opportunities.parseOpportunity(form([...input, ['projectIds', '10'], ['projectIds', '11']]));
+  assert.deepEqual(without.value.projectIds, []);
+  assert.deepEqual(withProjects.value.projectIds, [10, 11]);
+  assert.deepEqual(without.value.participants, withProjects.value.participants);
+  assert.match(opportunities.parseOpportunity(form([...input, ['projectIds', '10'], ['projectIds', '10']])).errors.projectIds, /only once/);
+  const links = [];
   const tx = {
     salesStage: { findUnique: async () => ({ active: true }) }, currency: { findUnique: async () => ({ active: true }) },
     account: { findMany: async () => [{ id: 4 }] }, product: { findMany: async () => [] },
-    project: { findUnique: async () => ({ id: 10, archivedAt: null }) },
-    opportunity: { create: async ({ data }) => { saved.push(data); return { id: saved.length }; } },
-    opportunityAccount: { findMany: async () => [], upsert: async () => {} },
+    project: { findMany: async ({ where }) => where.id.in.map(id => ({ id, archivedAt: null, primaryAccountId: 4, participants: [] })) },
+    opportunity: { create: async () => ({ id: 5 }), findUnique: async () => ({ id: 5, archivedAt: null, projects: links.map(link => ({ ...link })) }), update: async () => {} },
+    opportunityProject: { create: async ({ data }) => links.push(data), delete: async ({ where }) => { const i = links.findIndex(link => link.projectId === where.opportunityId_projectId.projectId); links.splice(i, 1); } },
+    opportunityAccount: { findMany: async () => [{ accountId: 4, roles: [{ role: 'END_USER' }] }], upsert: async () => {} },
     opportunityAccountRole: { create: async () => {} }, opportunityProduct: { findMany: async () => [] },
   };
   const client = { $transaction: async fn => fn(tx) };
   await opportunities.saveOpportunity(client, without.value);
-  await opportunities.saveOpportunity(client, withProject.value);
-  assert.deepEqual(saved.map(row => row.projectId), [null, 10]);
-  assert.deepEqual(opportunities.opportunityWhere({ projectId: '10' }).projectId, 10);
-  assert.equal(opportunities.opportunityWhere({ projectId: 'none' }).projectId, null);
+  assert.deepEqual(links, []);
+  await opportunities.saveOpportunity(client, withProjects.value);
+  assert.deepEqual(links.map(link => link.projectId), [10, 11]);
+  await opportunities.saveOpportunity(client, opportunities.parseOpportunity(form([...input, ['projectIds', '11']])).value, 5);
+  assert.deepEqual(links.map(link => link.projectId), [11]);
+  assert.deepEqual(opportunities.opportunityWhere({ projectId: '10' }).projects, { some: { projectId: 10 } });
+  assert.deepEqual(opportunities.opportunityWhere({ projectId: 'none' }).projects, { none: {} });
 });
 
-test('Pipeline Project filter supports one Project, no Project, and all Projects', () => {
-  assert.deepEqual(projects.pipelineProjectFilter('10'), { projectId: 10 });
-  assert.deepEqual(projects.pipelineProjectFilter('none'), { projectId: null });
+test('Pipeline Project filter supports linked and unlinked Opportunities', () => {
+  assert.deepEqual(projects.pipelineProjectFilter('10'), { projects: { some: { projectId: 10 } } });
+  assert.deepEqual(projects.pipelineProjectFilter('none'), { projects: { none: {} } });
   assert.deepEqual(projects.pipelineProjectFilter(''), {});
+  assert.deepEqual(projects.projectOpportunitiesWhere(10), { projects: { some: { projectId: 10 } } });
+  assert.deepEqual(projects.projectOpportunitiesWhere(10, true), { projects: { some: { projectId: 10 } }, archivedAt: null });
 });

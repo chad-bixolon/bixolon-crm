@@ -1,4 +1,4 @@
--- Run only against the isolated test database after legacy-fixture.sql and both migrations.
+-- Run only against the isolated test database after legacy-fixture.sql and migrations.
 BEGIN;
 \o /dev/null
 CREATE TEMP TABLE test_results (name text PRIMARY KEY);
@@ -35,7 +35,13 @@ SELECT pg_temp.assert_true('multiple participating accounts',(SELECT count(*)=2 
 SELECT pg_temp.assert_true('multiple participant roles',(SELECT count(*)=2 FROM "OpportunityAccountRole" WHERE "opportunityId"=100 AND "accountId"=101));
 SELECT pg_temp.expect_failure('duplicate participant role',$q$INSERT INTO "OpportunityAccountRole" ("opportunityId","accountId",role,"updatedAt") VALUES(100,101,'END_USER',now())$q$,'23505');
 SELECT pg_temp.expect_failure('task inconsistent membership',$q$UPDATE "Task" SET "accountId"=102 WHERE id=101$q$,'23503');
-SELECT pg_temp.expect_failure('activity inconsistent membership',$q$UPDATE "Activity" SET "accountId"=102 WHERE id=100$q$,'23503');
+UPDATE "Activity" SET "accountId"=102 WHERE id=100;
+SELECT pg_temp.assert_true('historical activity permits former participant',(SELECT "accountId"=102 AND "opportunityId"=100 FROM "Activity" WHERE id=100));
+UPDATE "Activity" SET "accountId"=100 WHERE id=100;
+INSERT INTO "OpportunityAccount" ("opportunityId","accountId","updatedAt") VALUES(100,102,now());
+INSERT INTO "Activity" (id,"accountId","opportunityId",type,subject,"updatedAt") SELECT 102,102,100,type,'Former participant',now() FROM "Activity" WHERE id=100;
+DELETE FROM "OpportunityAccount" WHERE "opportunityId"=100 AND "accountId"=102;
+SELECT pg_temp.assert_true('activity retained after participant removal',(SELECT "accountId"=102 AND "opportunityId"=100 FROM "Activity" WHERE id=102));
 SELECT pg_temp.expect_failure('note inconsistent membership',$q$UPDATE "Note" SET "accountId"=102 WHERE id=101$q$,'23503');
 UPDATE "Task" SET "accountId"=101 WHERE id=101;
 SELECT pg_temp.assert_true('task may use another participating account',(SELECT "accountId"=101 FROM "Task" WHERE id=101));
@@ -93,7 +99,7 @@ SELECT pg_temp.expect_failure('opportunity deletion restricted',$q$DELETE FROM "
 SELECT pg_temp.expect_failure('user deletion restricted',$q$DELETE FROM "User" WHERE id=100$q$,'23503');
 UPDATE "Account" SET status='ARCHIVED',"archivedAt"=now(),"archivedById"=100 WHERE id=100;
 UPDATE "Opportunity" SET "archivedAt"=now(),"archivedById"=100 WHERE id=100;
-SELECT pg_temp.assert_true('archival preserves history',(SELECT count(*)=2 FROM "Activity") AND (SELECT count(*)=2 FROM "Note"));
+SELECT pg_temp.assert_true('archival preserves history',(SELECT count(*)=3 FROM "Activity") AND (SELECT count(*)=2 FROM "Note"));
 SELECT pg_temp.assert_true('archival does not rewrite children',NOT EXISTS (SELECT 1 FROM "Activity" WHERE "archivedAt" IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM "Note" WHERE "archivedAt" IS NOT NULL));
 SELECT pg_temp.assert_true('history FKs never cascade delete',NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_namespace n ON n.oid=c.connamespace WHERE n.nspname='public' AND c.contype='f' AND c.confdeltype='c'));
 \o

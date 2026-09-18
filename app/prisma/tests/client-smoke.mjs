@@ -47,7 +47,7 @@ try {
     assert.equal(total.toFixed(2), "0.70");
     const membership = { opportunityId_accountId: { opportunityId: opportunity.id, accountId: account.id } };
     const task = await tx.task.create({ data: { subject: "Client task", membership: { connect: membership } } });
-    const activity = await tx.activity.create({ data: { subject: "Client activity", activityType: { connect: { code: "CALL" } }, membership: { connect: membership } } });
+    const activity = await tx.activity.create({ data: { subject: "Client activity", activityType: { connect: { code: "CALL" } }, account: { connect: { id: account.id } }, opportunity: { connect: { id: opportunity.id } } } });
     const note = await tx.note.create({ data: { body: "Client note", membership: { connect: membership }, createdBy: { connect: { id: 100 } } } });
     for (const row of [task, activity, note]) {
       assert.equal(row.accountId, account.id);

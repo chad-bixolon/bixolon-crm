@@ -51,7 +51,7 @@ test('activity and note require linked membership and valid references',async()=
  const activity=work.parseActivity(form([['subject','Demo'],['type','DEMO'],['accountId','1'],['opportunityId','2'],['activityDate','2026-09-16']]));assert.deepEqual(activity.errors,{});
  const note=work.parseNote(form([['body','Follow up'],['accountId','1'],['opportunityId','2']]));assert.deepEqual(note.errors,{});
  const tx={account:{findFirst:async()=>({id:1})},opportunity:{findFirst:async()=>({id:2})},opportunityAccount:{findUnique:async()=>null},activityType:{findFirst:async()=>({code:'DEMO'})},activity:{create:async({data})=>data},note:{create:async({data})=>data}};
- await assert.rejects(work.saveActivity({$transaction:fn=>fn(tx)},activity.value),/participant/);
+ await assert.rejects(work.saveActivity({$transaction:fn=>fn(tx)},activity.value),/Opportunity is not associated/);
  await assert.rejects(work.saveNote({$transaction:fn=>fn(tx)},note.value),/participant/);
  tx.opportunityAccount.findUnique=async()=>({accountId:1});
  assert.equal((await work.saveActivity({$transaction:fn=>fn(tx)},activity.value)).type,'DEMO');
@@ -74,6 +74,45 @@ test('Activity choices follow Account opportunity, Project, and Contact relation
  assert.ok(historical.contacts.some(x=>x.id===33));
  assert.ok(!activityRelations.activityChoices(2,1,opportunities,projects,contacts,{contactIds:[33]}).contacts.some(x=>x.id===33));
 });
+test('Activity choices narrow in both directions and keep only compatible selections',()=>{
+ const opportunities=[{id:10,name:'One',accountIds:[1,2],projectIds:[20]},{id:11,name:'Two',accountIds:[1],projectIds:[21]},{id:12,name:'Other account',accountIds:[2],projectIds:[20]}];
+ const projects=[{id:20,name:'First',accountIds:[1,2],opportunityIds:[10,12]},{id:21,name:'Second',accountIds:[1],opportunityIds:[11]}];
+ const contacts=[{id:30,name:'Assigned',accountId:1,active:true},{id:31,name:'Unassigned',accountId:null,active:true},{id:32,name:'Wrong',accountId:2,active:true}];
+ const history={contactIds:[]};
+ assert.deepEqual(activityRelations.activityChoices(1,0,opportunities,projects,contacts,history,{opportunityId:10}).projects.map(x=>x.id),[20]);
+ assert.deepEqual(activityRelations.activityChoices(1,0,opportunities,projects,contacts,history,{projectId:20}).opportunities.map(x=>x.id),[10]);
+ const former={opportunityId:10,projectId:20,contactIds:[]};
+ const unlinkedOpportunities=opportunities.map(item=>item.id===10?{...item,projectIds:[]}:item);
+ const unlinkedProjects=projects.map(item=>item.id===20?{...item,opportunityIds:[12]}:item);
+ assert.deepEqual(activityRelations.activityChoices(1,1,unlinkedOpportunities,unlinkedProjects,contacts,former,former).projects.map(x=>x.id),[20]);
+ assert.deepEqual(activityRelations.activityChoices(1,0,opportunities,projects,contacts,history).contacts.map(x=>x.id),[30,31]);
+ const selected={opportunityId:10,projectId:20,contactIds:[30,31]};
+ assert.deepEqual(activityRelations.retainedActivitySelections(1,0,opportunities,projects,contacts,history,{...selected,opportunityId:11},'opportunity'),{opportunityId:11,projectId:0,contactIds:[30,31]});
+ assert.deepEqual(activityRelations.retainedActivitySelections(1,0,opportunities,projects,contacts,history,{...selected,projectId:21},'project'),{opportunityId:0,projectId:21,contactIds:[30,31]});
+ assert.deepEqual(activityRelations.retainedActivitySelections(1,0,opportunities,projects,contacts,history,selected,'project'),selected);
+ assert.deepEqual(activityRelations.retainedActivitySelections(2,0,opportunities,projects,contacts,history,selected),{opportunityId:10,projectId:20,contactIds:[31]});
+});
+test('Activity server validates Account, Opportunity, Project, and their link',async()=>{
+ const value=work.parseActivity(form([['subject','Call'],['type','CALL'],['accountId','1'],['opportunityId','10'],['projectId','20'],['activityDate','2026-09-18T14:30']])).value;
+ let opportunityAccount=true, projectAccount=true, linked=true, created=0;
+ const tx={account:{findFirst:async()=>({id:1})},opportunity:{findFirst:async()=>({id:10})},opportunityAccount:{findUnique:async()=>opportunityAccount?{}:null},project:{findFirst:async()=>({id:20}),findUnique:async()=>({primaryAccountId:projectAccount?1:2,participants:[]})},opportunityProject:{findUnique:async()=>linked?{}:null},activityType:{findFirst:async()=>({code:'CALL'})},activity:{create:async({data})=>{created++;return {id:7,...data};}}};
+ const client={$transaction:fn=>fn(tx)};
+ assert.equal((await work.saveActivity(client,value)).id,7);
+ opportunityAccount=false; await assert.rejects(work.saveActivity(client,value),/Opportunity is not associated/);
+ opportunityAccount=true; projectAccount=false; await assert.rejects(work.saveActivity(client,value),/Project is not associated/);
+ projectAccount=true; linked=false; await assert.rejects(work.saveActivity(client,value),/Project is not linked/);
+ assert.equal(created,1);
+ assert.equal(work.activityErrorField('This Project is not linked to the selected Opportunity.'),'projectId');
+});
+test('unchanged historical Activity relationships survive unlink and archive; changed links are checked',async()=>{
+ const value=work.parseActivity(form([['subject','Updated'],['type','CALL'],['accountId','1'],['opportunityId','10'],['projectId','20'],['activityDate','2026-09-18T14:30']])).value;
+ let row={id:7,accountId:1,opportunityId:10,projectId:20,type:'CALL',archivedAt:null};
+ const tx={activity:{findFirst:async()=>row,update:async({data})=>(row={...row,...data})},activityType:{findFirst:async()=>({code:'CALL'})},account:{findFirst:async()=>null},opportunity:{findFirst:async()=>null},opportunityAccount:{findUnique:async()=>null},project:{findFirst:async()=>null},opportunityProject:{findUnique:async()=>null}};
+ const client={$transaction:fn=>fn(tx)};
+ assert.equal((await work.saveActivity(client,value,7)).subject,'Updated');
+ await assert.rejects(work.saveActivity(client,{...value,projectId:21},7),/Opportunity not found/);
+ await assert.rejects(work.saveActivity(client,{...value,opportunityId:11},7),/Opportunity not found/);
+});
 test('Activity validation state retains every submitted field',()=>{
  const entries=[['subject','Call'],['description','Detailed notes'],['activityDate','2026-09-18T14:30'],['type','CALL'],['direction','OUTBOUND'],['accountId','1'],['opportunityId','10'],['projectId','20'],['contactIds','30'],['contactIds','32'],['outcome','Interested'],['nextStep','Send quote'],['followUpDate','2026-09-25'],['userId','4']];
  const submitted=form(entries);
@@ -86,9 +125,9 @@ test('Activity validation state retains every submitted field',()=>{
 test('manually submitted unrelated Activity Project and Contact are rejected',async()=>{
  const input=work.parseActivity(form([['subject','Call'],['type','CALL'],['accountId','1'],['projectId','20'],['activityDate','2026-09-18T14:30'],['contactIds','30']]));
  const tx={account:{findFirst:async()=>({id:1})},project:{findFirst:async()=>({id:20}),findUnique:async()=>({primaryAccountId:2,participants:[]})},activityType:{findFirst:async()=>({code:'CALL'})},contact:{findMany:async()=>[{id:30,accountId:2,active:true}]},activity:{create:async({data})=>({id:7,...data})}};
- await assert.rejects(work.saveActivity({$transaction:fn=>fn(tx)},input.value),/Project does not include/);
+ await assert.rejects(work.saveActivity({$transaction:fn=>fn(tx)},input.value),/Project is not associated/);
  tx.project.findUnique=async()=>({primaryAccountId:2,participants:[{accountId:1}]});
- await assert.rejects(work.saveActivity({$transaction:fn=>fn(tx)},input.value),/Choose active Contacts/);
+ await assert.rejects(work.saveActivity({$transaction:fn=>fn(tx)},input.value),/Contact is not associated/);
 });
 test('Activity accepts eligible unassigned Contacts and existing inactive Contact history',async()=>{
  const value=work.parseActivity(form([['subject','Call'],['type','CALL'],['accountId','1'],['activityDate','2026-09-18T14:30'],['contactIds','30'],['contactIds','31']])).value;

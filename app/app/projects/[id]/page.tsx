@@ -6,7 +6,9 @@ import { RelatedWork } from '@/components/related-work';
 import { prisma } from '@/lib/prisma';
 import { currentUser } from '@/lib/current-user';
 import { can } from '@/lib/authorization';
-import { canEditProject, projectReadWhere, projectRoleLabels, projectStatusLabels } from '@/lib/projects';
+import { canEditProject, projectOpportunitiesWhere, projectReadWhere, projectRoleLabels, projectStatusLabels } from '@/lib/projects';
+import { ProjectOpportunityLinks } from '@/components/project-opportunity-links';
+import { changeProjectOpportunity } from './opportunity-actions';
 export const dynamic = 'force-dynamic';
 const tabs = ['Overview', 'Participants', 'Opportunities', 'Tasks', 'Activities', 'Notes', 'Products'] as const;
 export default async function ProjectPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; tasksView?: string; activitiesView?: string; notesView?: string }> }) {
@@ -20,9 +22,10 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   const canSeeSales = can(actor, 'sales.read'), canSeeWork = can(actor, 'tasks.read');
   const tab = tabs.find(t => t.toLowerCase() === query.tab?.toLowerCase()) ?? 'Overview';
   const opportunities = canSeeSales && (tab === 'Opportunities' || tab === 'Products') ? await prisma.opportunity.findMany({
-    where: { projectId: id, archivedAt: null }, include: { stage: true, products: { where: { archivedAt: null }, include: { product: true } } },
+    where: projectOpportunitiesWhere(id, tab === 'Products'), include: { stage: true, products: { where: { archivedAt: null }, include: { product: true } } },
     orderBy: [{ expectedCloseDate: 'asc' }, { id: 'desc' }],
   }) : [];
+  const linkOptions = canSeeSales && can(actor, 'sales.write') && tab === 'Opportunities' ? await prisma.opportunity.findMany({ where: { archivedAt: null, projects: { none: { projectId: id } } }, select: { id: true, name: true }, orderBy: { name: 'asc' } }) : [];
   const productRows = opportunities.flatMap(o => o.products.map(line => ({ opportunity: o, line })));
   const editable = canEditProject(actor, project);
   const visibleTabs = tabs.filter(t => !(['Opportunities', 'Products'].includes(t) && !canSeeSales) && !(['Tasks', 'Activities', 'Notes'].includes(t) && !canSeeWork));
@@ -39,7 +42,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       <div className="sm:col-span-2"><dt className="label">Description</dt><dd className="whitespace-pre-wrap">{project.description || '—'}</dd></div>
     </dl></div>}
     {tab === 'Participants' && <div className="space-y-5"><section className="panel p-6"><h2 className="mb-3 text-lg font-semibold">Primary Account</h2><Link className="text-orange-800" href={`/accounts/${project.primaryAccountId}`}>{project.primaryAccount.name}</Link><span className="ml-3 text-sm text-slate-600">{projectRoleLabels[project.primaryAccountRole]}</span></section><section className="panel p-6"><h2 className="mb-3 text-lg font-semibold">Additional Participants ({project.participants.length})</h2>{project.participants.length ? <ul className="divide-y">{project.participants.map(p => <li key={p.accountId} className="flex flex-wrap justify-between gap-2 py-3"><Link className="text-orange-800" href={`/accounts/${p.accountId}`}>{p.account.name}</Link><span className="text-sm text-slate-600">{p.roles.map(r => projectRoleLabels[r.role]).join(', ')}</span></li>)}</ul> : <p className="text-sm text-slate-500">No additional participating Accounts.</p>}</section></div>}
-    {tab === 'Opportunities' && canSeeSales && <section className="panel p-6"><h2 className="mb-4 text-lg font-semibold">Opportunities ({opportunities.length})</h2>{opportunities.length ? <ul className="divide-y">{opportunities.map(o => <li key={o.id} className="flex justify-between gap-3 py-3 text-sm"><Link className="font-medium text-orange-800" href={`/opportunities/${o.id}`}>{o.name}</Link><span>{o.stage.name}</span></li>)}</ul> : <p className="text-sm text-slate-500">No Opportunities linked to this Project.</p>}</section>}
+    {tab === 'Opportunities' && canSeeSales && <section className="panel p-6"><h2 className="mb-4 text-lg font-semibold">Linked Opportunities ({opportunities.length})</h2>{opportunities.length ? <ul className="divide-y">{opportunities.map(o => <li key={o.id} className="flex justify-between gap-3 py-3 text-sm"><Link className="font-medium text-orange-800" href={`/opportunities/${o.id}`}>{o.name}</Link><span>{o.stage.name}{o.archivedAt ? ' · Archived' : ''}</span>{editable && can(actor, 'sales.write') && !project.archivedAt && <form action={async () => { 'use server'; const form = new FormData(); form.set('opportunityId', String(o.id)); form.set('operation', 'unlink'); await changeProjectOpportunity(id, {}, form); }}><button className="btn-secondary">Unlink</button></form>}</li>)}</ul> : <p className="text-sm text-slate-500">No Opportunities linked to this Project.</p>}{editable && can(actor, 'sales.write') && !project.archivedAt && <ProjectOpportunityLinks projectId={id} linkedIds={opportunities.map(o => o.id)} options={linkOptions}/>}</section>}
     {tab === 'Products' && canSeeSales && <section className="panel p-6"><h2 className="mb-3 text-lg font-semibold">Products via Opportunities</h2>{productRows.length ? <ul className="divide-y">{productRows.map(({ opportunity, line }) => <li key={line.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm"><span>{line.product.sku} · {line.product.name}</span><Link className="text-orange-800" href={`/opportunities/${opportunity.id}`}>{opportunity.name}</Link></li>)}</ul> : <p className="text-sm text-slate-500">No products on linked Opportunities.</p>}</section>}
     {tab === 'Tasks' && canSeeWork && <RelatedWork projectId={id} kind="tasks" visibility={query.tasksView} allowCreate={editable && !project.archivedAt}/>}
     {tab === 'Activities' && canSeeWork && <RelatedWork projectId={id} kind="activities" visibility={query.activitiesView} allowCreate={editable && !project.archivedAt}/>}

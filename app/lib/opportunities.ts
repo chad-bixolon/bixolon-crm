@@ -3,15 +3,15 @@ import { field, optional, pageNumber, positiveId, required, type Errors } from "
 import { archivedWhere, recordVisibility } from "./record-visibility";
 export type Participant = { accountId: number; roles: OpportunityPartyRole[] };
 export type Line = { id?: number; productId: number; skuId?: number | null; quantity: number; price: string };
-export type OpportunityInput = { name: string; description: string | null; ownerId: number | null; projectId: number | null; stageId: number; expectedCloseDate: Date | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: Participant[]; lines: Line[] };
+export type OpportunityInput = { name: string; description: string | null; ownerId: number | null; projectIds: number[]; stageId: number; expectedCloseDate: Date | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: Participant[]; lines: Line[] };
 export function parseOpportunity(form: FormData) {
   const errors: Errors = {};
   const name = required(form, "name", "Opportunity name", 200, errors);
   const description = optional(form, "description", 5000, errors);
   const ownerRaw = field(form, "ownerId"), ownerId = ownerRaw ? positiveId(ownerRaw) : null;
   if (ownerRaw && !ownerId) errors.ownerId = "Choose a valid owner.";
-  const projectRaw = field(form, "projectId"), projectId = projectRaw ? positiveId(projectRaw) : null;
-  if (projectRaw && !projectId) errors.projectId = "Choose a valid Project.";
+  const projectRaw = form.getAll("projectIds").map(String), projectIds = projectRaw.map(positiveId);
+  if (projectIds.some(id => !id) || new Set(projectIds).size !== projectIds.length) errors.projectIds = "Choose each valid Project only once.";
   const stageId = positiveId(field(form, "stageId")); if (!stageId) errors.stageId = "Choose a sales stage.";
   const dateRaw = field(form, "expectedCloseDate");
   const expectedCloseDate = dateRaw && /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? new Date(`${dateRaw}T12:00:00.000Z`) : null;
@@ -47,7 +47,7 @@ export function parseOpportunity(form: FormData) {
     lines.push({ id: id ?? undefined, productId, ...(skuId ? { skuId } : {}), quantity, price });
   }
   if (new Set(lines.map((line) => line.id).filter(Boolean)).size !== lines.filter((line) => line.id).length) errors.lines = "Duplicate line item.";
-  return { errors, value: Object.keys(errors).length ? undefined : { name, description, ownerId, projectId, stageId: stageId!, expectedCloseDate, probability, forecastCategory, currencyCode, participants, lines } satisfies OpportunityInput };
+  return { errors, value: Object.keys(errors).length ? undefined : { name, description, ownerId, projectIds: projectIds as number[], stageId: stageId!, expectedCloseDate, probability, forecastCategory, currencyCode, participants, lines } satisfies OpportunityInput };
 }
 export function lineTotal(line: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number }) { return new Prisma.Decimal(line.estimatedUnitPrice).mul(line.quantity); }
 export function opportunityTotal(lines: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number; archivedAt?: Date | null }[]) { return lines.reduce((sum, line) => line.archivedAt ? sum : sum.add(lineTotal(line)), new Prisma.Decimal(0)); }
@@ -66,28 +66,30 @@ export async function opportunityOptions(client: PrismaClient) {
 }
 export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number) {
   return client.$transaction(async (tx) => {
-    const existing = id ? await tx.opportunity.findUnique({ where: { id } }) : null;
+    const existing = id ? await tx.opportunity.findUnique({ where: { id }, include: { projects: true } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Opportunity not found or archived.');
     const existingLines = id ? await tx.opportunityProduct.findMany({ where: { opportunityId: id, archivedAt: null } }) : [];
-    const [stage, currency, owner, accounts, products, project, skus] = await Promise.all([
+    const [stage, currency, owner, accounts, products, projects, skus] = await Promise.all([
       tx.salesStage.findUnique({ where: { id: input.stageId } }), tx.currency.findUnique({ where: { code: input.currencyCode } }),
       input.ownerId ? tx.user.findUnique({ where: { id: input.ownerId } }) : null,
       tx.account.findMany({ where: { id: { in: input.participants.map((p) => p.accountId) }, status: "ACTIVE" }, select: { id: true } }),
       tx.product.findMany({ where: { id: { in: input.lines.map((l) => l.productId) }, active: true, archivedAt: null }, select: { id: true } }),
-      input.projectId ? tx.project.findUnique({ where: { id: input.projectId }, select: { id: true, archivedAt: true } }) : null,
+      tx.project.findMany({ where: { id: { in: input.projectIds } }, select: { id: true, archivedAt: true } }),
       input.lines.some(line => line.skuId) ? tx.productSku.findMany({ where: { id: { in: input.lines.flatMap(line => line.skuId ? [line.skuId] : []) } }, select: { id: true, productId: true, active: true } }) : Promise.resolve([]),
     ]);
     if (!stage || (!stage.active && existing?.stageId !== input.stageId)) throw new Error("Choose an available sales stage.");
     if (!currency?.active) throw new Error("Choose an available currency.");
     if (input.ownerId && (!owner?.active || owner.archivedAt)) throw new Error("Choose an active owner.");
-    if (input.projectId && (!project || (project.archivedAt && existing?.projectId !== input.projectId))) throw new Error("Choose an active Project.");
+    if (new Set(input.projectIds).size !== input.projectIds.length || projects.length !== input.projectIds.length || projects.some(project => project.archivedAt && !existing?.projects.some(link => link.projectId === project.id))) throw new Error("Choose each active Project only once.");
     if (accounts.length !== input.participants.length) throw new Error("Choose active accounts for all participants.");
     if (products.length !== new Set(input.lines.map((l) => l.productId)).size) throw new Error("Choose active products for all line items.");
     for (const line of input.lines) if (line.skuId && !skus.some(sku => sku.id === line.skuId && sku.productId === line.productId && (sku.active || existingLines.some(old => old.id === line.id && old.productId === line.productId && old.skuId === line.skuId)))) throw new Error("Choose an active SKU belonging to the selected product.");
-    const data = { name: input.name, description: input.description, ownerId: input.ownerId, projectId: input.projectId, stageId: input.stageId, expectedCloseDate: input.expectedCloseDate, probability: input.probability, forecastCategory: input.forecastCategory, currencyCode: input.currencyCode };
+    const data = { name: input.name, description: input.description, ownerId: input.ownerId, stageId: input.stageId, expectedCloseDate: input.expectedCloseDate, probability: input.probability, forecastCategory: input.forecastCategory, currencyCode: input.currencyCode };
     if (id) { await tx.opportunity.update({ where: { id }, data }); }
     else { const created = await tx.opportunity.create({ data }); id = created.id; }
     const opportunityId = id;
+    for (const link of existing?.projects ?? []) if (!input.projectIds.includes(link.projectId)) await tx.opportunityProject.delete({ where: { opportunityId_projectId: { opportunityId, projectId: link.projectId } } });
+    for (const projectId of input.projectIds) if (!existing?.projects.some(link => link.projectId === projectId)) await tx.opportunityProject.create({ data: { opportunityId, projectId } });
     const existingMemberships = await tx.opportunityAccount.findMany({ where: { opportunityId }, include: { roles: true } });
     for (const membership of existingMemberships) {
       const desired = input.participants.find((p) => p.accountId === membership.accountId);
@@ -119,8 +121,8 @@ export function opportunityWhere(filters: OpportunityFilters): Prisma.Opportunit
   const stageId = positiveId(filters.stageId ?? ""); if (stageId) where.stageId = stageId;
   const ownerId = positiveId(filters.ownerId ?? ""); if (ownerId) where.ownerId = ownerId;
   const accountId = positiveId(filters.accountId ?? ""); if (accountId) where.participants = { some: { accountId } };
-  if (filters.projectId === 'none') where.projectId = null;
-  else { const projectId = positiveId(filters.projectId ?? ''); if (projectId) where.projectId = projectId; }
+  if (filters.projectId === 'none') where.projects = { none: {} };
+  else { const projectId = positiveId(filters.projectId ?? ''); if (projectId) where.projects = { some: { projectId } }; }
   if (filters.forecastCategory && Object.values(ForecastCategory).includes(filters.forecastCategory as ForecastCategory)) where.forecastCategory = filters.forecastCategory as ForecastCategory;
   const from = filters.closeFrom && /^\d{4}-\d{2}-\d{2}$/.test(filters.closeFrom) ? new Date(`${filters.closeFrom}T00:00:00Z`) : null;
   const to = filters.closeTo && /^\d{4}-\d{2}-\d{2}$/.test(filters.closeTo) ? new Date(`${filters.closeTo}T23:59:59.999Z`) : null;

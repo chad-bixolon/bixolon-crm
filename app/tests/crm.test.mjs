@@ -77,7 +77,7 @@ test('opportunity parser retains multiple accounts and roles', () => {
   assert.deepEqual(parsed.value.lines, [{ id: undefined, productId: 3, quantity: 2, price: '19.95' }]);
 });
 test('participant addition and removal prevent duplicate accounts and preserve selected roles', () => {
-  const base = { name: 'Working draft', description: '', ownerId: '', stageId: '1', expectedCloseDate: '', probability: '', forecastCategory: '', currencyCode: 'USD', participants: [], lines: [] };
+  const base = { name: 'Working draft', description: '', ownerId: '', stageId: '1', expectedCloseDate: '', probability: '', forecastCategory: '', currencyCode: 'USD', projectIds: [], participants: [], lines: [] };
   const added = drafts.addParticipant(base, 11);
   assert.equal(drafts.addParticipant(added, 11), added);
   const withRoles = drafts.setParticipantRoles(added, 11, ['END_USER', 'OEM']);
@@ -95,9 +95,11 @@ test('opportunity participant roles start empty and stay independent of account 
   assert.deepEqual(account.businessRoles, ['DISTRIBUTOR', 'OEM']);
 });
 test('opportunity draft restores every editable field after remount without changing the fallback', () => {
-  const fallback = { name: '', description: '', ownerId: '', stageId: '', expectedCloseDate: '', probability: '', forecastCategory: '', currencyCode: 'USD', participants: [], lines: [] };
+  const fallback = { name: '', description: '', ownerId: '', stageId: '', expectedCloseDate: '', probability: '', forecastCategory: '', currencyCode: 'USD', projectIds: [], participants: [], lines: [] };
   const saved = { ...fallback, name: 'Fleet rollout', description: 'Call next week', ownerId: '4', stageId: '2', expectedCloseDate: '2026-10-01', probability: '70', forecastCategory: 'COMMIT', participants: [{ accountId: 11, roles: ['END_USER'] }], lines: [{ id: 0, productId: 3, quantity: '2', price: '19.95' }] };
   assert.deepEqual(drafts.readDraft(JSON.stringify(saved), fallback), saved);
+  const legacy = { ...saved }; delete legacy.projectIds;
+  assert.deepEqual(drafts.readDraft(JSON.stringify({ ...legacy, projectId: '9' }), fallback), { ...saved, projectIds: [9] });
   assert.equal(drafts.readDraft('{broken', fallback), fallback);
   assert.deepEqual(fallback.participants, []);
 });
@@ -107,7 +109,7 @@ test('local opportunity draft survives blank remount defaults and waits for hydr
   const key = drafts.draftKey();
   assert.equal(key, 'opportunity-draft:new');
   assert.equal(drafts.draftKey(42), 'opportunity-draft:42');
-  const blank = { name: '', description: '', ownerId: '', stageId: '', expectedCloseDate: '', probability: '', forecastCategory: '', currencyCode: 'USD', participants: [], lines: [] };
+  const blank = { name: '', description: '', ownerId: '', stageId: '', expectedCloseDate: '', probability: '', forecastCategory: '', currencyCode: 'USD', projectIds: [], participants: [], lines: [] };
   const saved = { ...blank, name: 'Fleet rollout', description: 'Call next week', ownerId: '4', stageId: '2', expectedCloseDate: '2026-10-01', probability: '70', forecastCategory: 'COMMIT', currencyCode: 'EUR', participants: [{ accountId: 11, roles: ['END_USER', 'OEM'] }], lines: [{ id: 0, productId: 3, quantity: '2', price: '19.95' }] };
   storage.set(key, JSON.stringify(saved));
   const storedBeforeHydration = storage.get(key);
@@ -128,7 +130,7 @@ test('local opportunity draft survives blank remount defaults and waits for hydr
   assert.equal(storage.has(key), false);
 });
 test('opportunity draft rejects malformed scalar, participant, and line fields', () => {
-  const fallback = { name: '', description: '', ownerId: '', stageId: '', expectedCloseDate: '', probability: '', forecastCategory: '', currencyCode: 'USD', participants: [], lines: [] };
+  const fallback = { name: '', description: '', ownerId: '', stageId: '', expectedCloseDate: '', probability: '', forecastCategory: '', currencyCode: 'USD', projectIds: [], participants: [], lines: [] };
   const valid = { ...fallback, participants: [{ accountId: 11, roles: ['END_USER'] }], lines: [{ id: 0, productId: 3, quantity: '2', price: '19.95' }] };
   for (const field of ['name', 'description', 'ownerId', 'stageId', 'expectedCloseDate', 'probability', 'currencyCode']) {
     assert.equal(drafts.readDraft(JSON.stringify({ ...valid, [field]: null }), fallback), fallback, field);
@@ -160,14 +162,14 @@ test('saving an opportunity persists each account and each selected role', async
   const memberships = [], roles = [], productLines = [];
   const tx = {
     salesStage: { findUnique: async () => ({ active: true }) }, currency: { findUnique: async () => ({ active: true }) },
-    account: { findMany: async () => [{ id: 11 }, { id: 12 }] }, product: { findMany: async () => [{ id: 3 }] },
+    account: { findMany: async () => [{ id: 11 }, { id: 12 }] }, product: { findMany: async () => [{ id: 3 }] }, project: { findMany: async () => [] },
     opportunity: { create: async () => ({ id: 5 }) },
     opportunityAccount: { findMany: async () => [], upsert: async ({ create }) => memberships.push(create) },
     opportunityAccountRole: { create: async ({ data }) => roles.push(data) },
     opportunityProduct: { findMany: async () => [], create: async ({ data }) => productLines.push(data) },
   };
   const client = { $transaction: async (fn) => fn(tx) };
-  const input = { name: 'New fleet', description: null, ownerId: null, stageId: 1, expectedCloseDate: null, probability: null, forecastCategory: null, currencyCode: 'USD', participants: [{ accountId: 11, roles: ['END_USER', 'OEM'] }, { accountId: 12, roles: ['DISTRIBUTOR'] }], lines: [{ productId: 3, quantity: 2, price: '19.95' }] };
+  const input = { name: 'New fleet', description: null, ownerId: null, stageId: 1, expectedCloseDate: null, probability: null, forecastCategory: null, currencyCode: 'USD', projectIds: [], participants: [{ accountId: 11, roles: ['END_USER', 'OEM'] }, { accountId: 12, roles: ['DISTRIBUTOR'] }], lines: [{ productId: 3, quantity: 2, price: '19.95' }] };
   assert.equal(await opportunities.saveOpportunity(client, input), 5);
   assert.deepEqual(memberships.map((m) => m.accountId), [11, 12]);
   assert.deepEqual(roles.map((r) => [r.accountId, r.role]), [[11, 'END_USER'], [11, 'OEM'], [12, 'DISTRIBUTOR']]);
@@ -177,14 +179,14 @@ test('saving an edited opportunity removes a participant and its roles', async (
   const calls = [];
   const tx = {
     salesStage: { findUnique: async () => ({ active: true }) }, currency: { findUnique: async () => ({ active: true }) },
-    account: { findMany: async () => [{ id: 11 }] }, product: { findMany: async () => [] },
+    account: { findMany: async () => [{ id: 11 }] }, product: { findMany: async () => [] }, project: { findMany: async () => [] },
     opportunity: { findUnique: async () => ({ id: 5, archivedAt: null }), update: async () => {} },
     opportunityAccount: { findMany: async () => [{ accountId: 11, roles: [{ role: 'END_USER' }] }, { accountId: 12, roles: [{ role: 'DISTRIBUTOR' }] }], delete: async (args) => calls.push(['membership', args]), upsert: async () => {} },
     opportunityAccountRole: { deleteMany: async (args) => calls.push(['roles', args]) },
     opportunityProduct: { findMany: async () => [] },
   };
   const client = { $transaction: async (fn) => fn(tx) };
-  const input = { name: 'Edited', description: null, ownerId: null, stageId: 1, expectedCloseDate: null, probability: null, forecastCategory: null, currencyCode: 'USD', participants: [{ accountId: 11, roles: ['END_USER'] }], lines: [] };
+  const input = { name: 'Edited', description: null, ownerId: null, stageId: 1, expectedCloseDate: null, probability: null, forecastCategory: null, currencyCode: 'USD', projectIds: [], participants: [{ accountId: 11, roles: ['END_USER'] }], lines: [] };
   assert.equal(await opportunities.saveOpportunity(client, input, 5), 5);
   assert.deepEqual(calls, [
     ['roles', { where: { opportunityId: 5, accountId: 12 } }],
@@ -201,8 +203,8 @@ test('opportunity SKU is parsed and must belong to the selected product', async 
   assert.equal(legacy.value.lines[0].price, '18.50');
   const tx = {
     salesStage: { findUnique: async () => ({ active: true }) }, currency: { findUnique: async () => ({ active: true }) },
-    account: { findMany: async () => [{ id: 11 }] }, product: { findMany: async () => [{ id: 3 }] },
-    productSku: { findMany: async () => [{ id: 9, productId: 4, active: true }] },
+    account: { findMany: async () => [{ id: 11 }] }, product: { findMany: async () => [{ id: 3 }] }, project: { findMany: async () => [] },
+    productSku: { findMany: async () => [{ id: 9, productId: 4, active: true }] }, project: { findMany: async () => [] },
   };
   await assert.rejects(() => opportunities.saveOpportunity({ $transaction: async fn => fn(tx) }, parsed.value), /SKU belonging/);
 });
