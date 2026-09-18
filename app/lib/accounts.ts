@@ -2,10 +2,27 @@ import { AccountBusinessRoleCode, AccountStatus, Prisma, type PrismaClient } fro
 import type { AccountFields } from "./account-validation";
 
 export const PAGE_SIZE = 20;
-export type AccountFilters = { q?: string; status?: string; role?: string; territory?: string; industry?: string; strategic?: string; page?: string };
+export type AccountFilters = { q?: string; status?: string; role?: string; territory?: string; industry?: string; strategic?: string; page?: string; view?: string };
 
-export function accountWhere(filters: AccountFilters): Prisma.AccountWhereInput {
+export function accountView(filters: AccountFilters): "all" | "my" {
+  return filters.view === "my" ? "my" : "all";
+}
+
+export function accountHref(filters: AccountFilters, changes: Partial<AccountFilters> = {}) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries({ ...filters, ...changes })) {
+    if (value && key !== "page") params.set(key, value);
+  }
+  if (changes.page) params.set("page", changes.page);
+  return `/accounts?${params}`;
+}
+
+export function accountWhere(filters: AccountFilters, currentUserId?: number): Prisma.AccountWhereInput {
   const where: Prisma.AccountWhereInput = {};
+  if (accountView(filters) === "my") {
+    if (!currentUserId) throw new Error("A CRM user is required for My Accounts.");
+    where.ownerId = currentUserId;
+  }
   if (filters.q?.trim()) where.name = { contains: filters.q.trim().slice(0, 100), mode: "insensitive" };
   if (filters.status && Object.values(AccountStatus).includes(filters.status as AccountStatus)) where.status = filters.status as AccountStatus;
   if (filters.role && Object.values(AccountBusinessRoleCode).includes(filters.role as AccountBusinessRoleCode)) where.businessRoles = { some: { role: filters.role as AccountBusinessRoleCode } };
@@ -16,8 +33,8 @@ export function accountWhere(filters: AccountFilters): Prisma.AccountWhereInput 
   return where;
 }
 
-export async function listAccounts(client: PrismaClient, filters: AccountFilters = {}) {
-  const where = accountWhere(filters);
+export async function listAccounts(client: PrismaClient, filters: AccountFilters = {}, currentUserId?: number) {
+  const where = accountWhere(filters, currentUserId);
   const count = await client.account.count({ where });
   const requested = Number(filters.page) || 1;
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE));

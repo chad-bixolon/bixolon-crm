@@ -18,7 +18,7 @@ try {
     salt: cookieName,
     maxAge: 60,
   });
-  for (const [kind, label] of [['industries', 'Industry'], ['territories', 'Territory']]) {
+  for (const [kind, label] of [['industries', 'Industry'], ['territories', 'Territory'], ['product-categories', 'Product Category']]) {
     const response = await fetch(new URL(`/administration/lookups/${kind}`, base), {
       headers: { Cookie: `${cookieName}=${token}` }, redirect: 'manual',
     });
@@ -27,6 +27,13 @@ try {
     assert.ok(body.includes(`${label} values`), `${kind} title missing`);
     assert.ok(body.includes('name="code"') && body.includes('name="sortOrder"'), `${kind} form missing`);
     console.log(`PASS: ${kind} Administration page returned HTTP 200 with list and create form.`);
+  }
+  for (const route of ['/products', '/products?category=POS&catalogSource=PRICE_LIST', '/products?category=LABEL&catalogSource=PE_LIST']) {
+    const response = await fetch(new URL(route, base), { headers: { Cookie: `${cookieName}=${token}` }, redirect: 'manual' });
+    const body = await response.text();
+    assert.equal(response.status, 200, `${route} returned HTTP ${response.status}`);
+    assert.ok(body.includes('name="category"') && body.includes('name="catalogSource"'), `${route} lacks classification filters`);
+    console.log(`PASS: ${route} returned HTTP 200 with Category and Catalog Source filters.`);
   }
   const [industry, territory, account] = await Promise.all([
     client.industry.findFirst({ where: { active: true }, select: { code: true } }),

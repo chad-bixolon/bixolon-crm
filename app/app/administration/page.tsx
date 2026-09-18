@@ -6,6 +6,7 @@ const sections = [
   ["Users", "/administration/users", "Manage access and record owners."],
   ["Industries", "/administration/lookups/industries", "Manage account industry choices."],
   ["Territories", "/administration/lookups/territories", "Manage account territory choices."],
+  ["Product Categories", "/administration/lookups/product-categories", "Manage Product category choices and order."],
   ["Activity Types", "/administration/lookups/activity-types", "Manage activity choices and order."],
   ["Sales Stages", "/administration/sales-stages", "Manage stage names and properties."],
   ["Labels & Terminology", "/administration/labels", "Edit business-facing display labels."],

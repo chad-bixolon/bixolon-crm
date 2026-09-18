@@ -78,7 +78,7 @@ test('XLSX file and row limits are enforced before import',async()=>{
 });
 test('product XLSX and CSV yield the same catalog preview',async()=>{
   const result=await parseImportXlsx(workbook([{name:'Catalog',rows:[['model','part_number','description','standard_price','currency','active'],['SLP-DX220','DX220-STD','Printer',12.5,'USD',true]]}]));
-  const catalogDb={product:{findMany:async()=>[]}};
+  const catalogDb={product:{findMany:async()=>[]},productCategory:{findMany:async()=>[]}};
   assert.equal(result.error,undefined);
   assert.deepEqual(await planProductImport(catalogDb,result.csv),await planProductImport(catalogDb,'model,part_number,description,standard_price,currency,active\nSLP-DX220,DX220-STD,Printer,12.5,USD,true\n'));
 });

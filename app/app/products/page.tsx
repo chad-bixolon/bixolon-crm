@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Content, PageHeader } from "@/components/shell";
-import { listProducts, type ProductFilters } from "@/lib/products";
+import { catalogSourceLabels, listProducts, productCategoryChoices, productHref, type ProductFilters } from "@/lib/products";
 import { CrmStateControl } from "@/components/crm-state-control";
 import { prisma } from "@/lib/prisma";
 import { ProductTableRow } from "./product-table-row";
@@ -10,19 +10,16 @@ export const dynamic = "force-dynamic";
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<ProductFilters> }) {
   const filters = await searchParams;
-  const { products, count, page, pages } = await listProducts(prisma, filters);
-  const linkFor = (target: number) => {
-    const p = new URLSearchParams();
-    Object.entries(filters).forEach(([key, value]) => { if (value && key !== "page") p.set(key, value); });
-    p.set("page", String(target));
-    return `/products?${p}`;
-  };
+  const [{ products, count, page, pages }, categories] = await Promise.all([listProducts(prisma, filters), productCategoryChoices(prisma)]);
+  const linkFor = (target: number) => productHref(filters, target);
 
   return <Content>
     <PageHeader eyebrow="CRM records" title="Products" description="Products available for opportunity estimates." action={<Link className="btn-primary" href="/products/new">New product</Link>}/>
     <form method="get" className={`panel ${styles.toolbar}`} aria-label="Filter products">
       <div className={styles.filterField}><label className={styles.filterLabel} htmlFor="q">Search</label><input className={`field ${styles.control}`} name="q" id="q" placeholder="SKU or name" defaultValue={filters.q ?? ""}/></div>
       <div className={`${styles.filterField} ${styles.statusField}`}><label className={styles.filterLabel} htmlFor="active">Status</label><select className={`field ${styles.control}`} name="active" id="active" defaultValue={filters.active ?? ""}><option value="">All</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="archived">Archived</option></select></div>
+      <div className={styles.filterField}><label className={styles.filterLabel} htmlFor="category">Category</label><select className={`field ${styles.control}`} name="category" id="category" defaultValue={filters.category ?? ""}><option value="">All</option>{categories.map(category=><option key={category.id} value={category.code}>{category.name}{category.active ? "" : " (inactive)"}</option>)}</select></div>
+      <div className={styles.filterField}><label className={styles.filterLabel} htmlFor="catalogSource">Catalog Source</label><select className={`field ${styles.control}`} name="catalogSource" id="catalogSource" defaultValue={filters.catalogSource ?? ""}><option value="">All</option>{Object.entries(catalogSourceLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div>
       <button className={`btn-primary ${styles.action}`}>Apply</button>
       <Link className={`btn-secondary ${styles.action}`} href="/products">Clear</Link>
     </form>

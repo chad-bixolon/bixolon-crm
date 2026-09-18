@@ -44,6 +44,19 @@ test('activity type management keeps code stable and can deactivate without dele
   assert.equal(calls[1].data.code, 'CALL');
   assert.equal(lookups.lookupKind('activity-types'), true);
 });
+test('Product Category lookup can be created, deactivated, and reactivated without deletion', async () => {
+  assert.equal(lookups.lookupKind('product-categories'), true);
+  assert.equal(lookups.lookupTitle('product-categories'), 'Product Category');
+  const calls = [];
+  const client = { productCategory: { create: async args => calls.push(['create',args]), update: async args => calls.push(['update',args]) } };
+  const input = { code: 'POS', name: 'POS', active: true, sortOrder: 0 };
+  await lookups.saveLookup(client, 'product-categories', input, false);
+  await lookups.saveLookup(client, 'product-categories', { ...input, active: false }, true);
+  await lookups.saveLookup(client, 'product-categories', input, true);
+  assert.deepEqual(calls.map(([operation]) => operation), ['create','update','update']);
+  assert.deepEqual(calls[1][1], { where: { code: 'POS' }, data: { name: 'POS', active: false, sortOrder: 0 } });
+  assert.equal(calls[2][1].data.active, true);
+});
 
 test('inactive activity type remains valid only when unchanged on an existing activity', async () => {
   const value = { subject: 'Demo', description: null, accountId: 1, opportunityId: null, projectId: null, userId: null, type: 'DEMO', activityDate: new Date() };
@@ -71,7 +84,7 @@ test('settings reject unknown keys and unsafe ranges', () => {
 });
 
 test('non-admin and inactive users cannot enter any administration section', () => {
-  for (const pathname of ['/administration', '/administration/labels', '/administration/settings', '/administration/sales-stages', '/administration/lookups/activity-types']) {
+  for (const pathname of ['/administration', '/administration/labels', '/administration/settings', '/administration/sales-stages', '/administration/lookups/activity-types', '/administration/lookups/product-categories']) {
     assert.equal(routeAccess(pathname, { id: 1, role: 'SALES', active: true }), 'denied');
     assert.equal(routeAccess(pathname, { id: 1, role: 'ADMIN', active: false }), 'denied');
     assert.equal(routeAccess(pathname, { id: 1, role: 'ADMIN', active: true }), 'allowed');

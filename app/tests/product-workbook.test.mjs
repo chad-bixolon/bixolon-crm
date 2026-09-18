@@ -13,7 +13,7 @@ const {parseImportCsv}=require(path.join(root,'lib/import-csv.ts'));
 const {planProductImport,productImportHeaders}=require(path.join(root,'lib/product-import.ts'));
 const {mapProductWorkbookSheet}=require(path.join(root,'lib/product-workbook.ts'));
 const workbookPath=path.resolve(root,'../reference-data/BIXOLON_Price_List.xlsx');
-const emptyDb={product:{findMany:async()=>[]}};
+const emptyDb={product:{findMany:async()=>[]},productCategory:{findMany:async()=>['POS','LABEL','MOBILE','LASER','RIBBON','ACCESSORIES','PAPER','WARRANTY'].map(code=>({code,active:true}))}};
 
 test('real workbook maps STANDARD, MSRP, and channel tiers separately', {skip:!fs.existsSync(workbookPath)}, async()=>{
   const file=fs.readFileSync(workbookPath);
@@ -25,7 +25,7 @@ test('real workbook maps STANDARD, MSRP, and channel tiers separately', {skip:!f
   assert.equal(pos.error,undefined);
   const rows=parseImportCsv(pos.csv,productImportHeaders).rows;
   assert.equal(rows.length,132);
-  assert.deepEqual(rows[0].values,{model:'SRP-275IIIAOSG',part_number:'SRP-275IIIAOSG',description:rows[0].values.description,standard_price:'144.10',msrp_price:'299.20',reseller_price:'',distributor_price:'',currency:'USD',price_unit:'EACH',active:''});
+  assert.deepEqual(rows[0].values,{model:'SRP-275IIIAOSG',part_number:'SRP-275IIIAOSG',description:rows[0].values.description,standard_price:'144.10',msrp_price:'299.20',reseller_price:'',distributor_price:'',currency:'USD',price_unit:'EACH',active:'',category:'POS',catalog_source:'PRICE_LIST'});
   assert.match((await parseImportXlsx(file,'TT ribbon ',adapter)).error,/older TT ribbon/);
   const ribbon=await parseImportXlsx(file,'TT ribbon  (2)',adapter);
   const ribbonRows=parseImportCsv(ribbon.csv,productImportHeaders).rows;
@@ -36,17 +36,28 @@ test('real workbook maps STANDARD, MSRP, and channel tiers separately', {skip:!f
   assert.equal(ribbonRows[0].values.msrp_price,'159.91');
   assert.equal(ribbonRows[0].values.distributor_price,'79.95');
   assert.equal(ribbonRows[0].values.price_unit,'CASE');
+  assert.equal(ribbonRows[0].values.category,'RIBBON');
+  assert.equal(ribbonRows[0].values.catalog_source,'PRICE_LIST');
   const label=await parseImportXlsx(file,'Label printers',adapter);
   const labelRow=parseImportCsv(label.csv,productImportHeaders).rows[0].values;
   assert.equal(labelRow.standard_price,'');
   assert.equal(labelRow.msrp_price,'646.80');
   assert.equal(labelRow.reseller_price,'317.00');
   assert.equal(labelRow.distributor_price,'266.00');
+  assert.equal(labelRow.category,'LABEL');
   const paper=await parseImportXlsx(file,'Linerless paper',adapter);
   const paperRows=parseImportCsv(paper.csv,productImportHeaders).rows;
   assert.equal(paperRows.length,7);
   assert.equal(paperRows[0].values.price_unit,'BOX');
   assert.equal(paperRows[6].values.price_unit,'ROLL');
+  assert.equal(paperRows[0].values.category,'PAPER');
+  for (const [sheet,category] of [['Laser printers','LASER'],[' Mobile Printer Accessories','ACCESSORIES'],['Warranty Options','WARRANTY']]) {
+    const mapped=await parseImportXlsx(file,sheet,adapter);
+    assert.equal(mapped.error,undefined);
+    const first=parseImportCsv(mapped.csv,productImportHeaders).rows[0].values;
+    assert.equal(first.category,category);
+    assert.equal(first.catalog_source,'PRICE_LIST');
+  }
 });
 test('Mobile printers keeps only the later Bluetooth 4.1 + BLE SKU row', {skip:!fs.existsSync(workbookPath)}, async()=>{
   const file=fs.readFileSync(workbookPath);
@@ -58,6 +69,7 @@ test('Mobile printers keeps only the later Bluetooth 4.1 + BLE SKU row', {skip:!
   assert.match(matches[0].values.description,/Bluetooth V4\.1.*BLE/);
   assert.equal(matches[0].values.standard_price,'218.90');
   assert.equal(matches[0].values.msrp_price,'368.50');
+  assert.equal(matches[0].values.category,'MOBILE');
   assert.doesNotMatch(matches[0].values.description,/Bluetooth V3\.0/);
   assert.ok(!parsed.rows.some(row=>row.values.part_number==='SPP-R200IIIplusiK'));
   const plan=await planProductImport(emptyDb,mobile.csv);

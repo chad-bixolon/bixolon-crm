@@ -15,5 +15,6 @@ export async function submitLookup(kind: string, editing: boolean, _state: Looku
   revalidatePath(`/administration/lookups/${kind}`);
   revalidatePath("/accounts");
   revalidatePath("/accounts/new");
+  if (kind === "product-categories") revalidatePath("/products");
   return { errors: {}, message: editing ? "Value updated." : "Value created.", success: true };
 }

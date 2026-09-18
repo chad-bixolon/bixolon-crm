@@ -3,10 +3,12 @@
 Administration → Imports → Products & Pricing accepts UTF-8 CSV or one selected XLSX worksheet. The downloadable header is:
 
 ```csv
-model,part_number,description,standard_price,msrp_price,reseller_price,distributor_price,currency,price_unit,active
+model,part_number,description,standard_price,msrp_price,reseller_price,distributor_price,currency,price_unit,active,category,catalog_source
 ```
 
 `model` and `part_number` are required on every row. `description` is SKU-specific. Each price tier is a nonnegative decimal with at most two fractional digits and ten whole digits. `currency` is a valid ISO 4217 code and is required when any tier price is supplied. `price_unit` is `EACH`, `CASE`, `BOX`, or `ROLL`. `active` accepts true, false, yes, no, 1, or 0. Blank optional fields preserve existing data. There is one row per normalized part number per import; import a different currency for the same SKU in a later file. Existing prices in other currencies and tiers remain intact. No conversion is performed. Customer prices are outside this import.
+
+`category` classifies the Product/model using an active Product Category code managed in Administration. The initial codes are `POS`, `LABEL`, `MOBILE`, `LASER`, `RIBBON`, `ACCESSORIES`, `PAPER`, and `WARRANTY`; Admins can add, rename, reorder, deactivate, and reactivate values. Unknown or inactive codes are import errors. `catalog_source` identifies the list supplying the SKU: `PRICE_LIST`, `PE_LIST`, or `SPECIAL_SKU_LIST`. Both columns are optional for existing template files and existing database rows. A blank value preserves an existing classification or leaves a new row unclassified. For PE List and Special SKU List template uploads, select the matching Catalog Source once in the upload form or set `catalog_source` on each row. A conflicting selection and row value is rejected; no unsupported workbook layout or description is used to guess provenance.
 
 ## Mapping the BIXOLON 2026 workbook
 
@@ -21,6 +23,10 @@ The source workbook at `reference-data/BIXOLON_Price_List.xlsx` has ten populate
 | Mobile Printer Accessories | `Part Code` for both; `Part Spec` | — | `MSRP` | — | `Disti Cost` | Admin-entered; EACH |
 | Warranty Options | `SERVICE SKU` for both; `DESCRIPTION` | — | `MSRP` | — | `Distributor price` | Admin-entered; EACH |
 | Linerless paper | `Model`, or SKU when blank; `New Part number from Japan (box)` SKU | — | `MSRP (USD)/box` | — | `Disty (USD)/box` | USD; BOX, except one ROLL row |
+
+Every supported worksheet sets `catalog_source=PRICE_LIST`. The worksheet supplies Product category: POS printers → `POS`, Mobile printers → `MOBILE`, Label printers → `LABEL`, Laser printers → `LASER`, TT ribbon (2) → `RIBBON`, Mobile Printer Accessories → `ACCESSORIES`, Warranty Options → `WARRANTY`, and Linerless paper → `PAPER`. The repository currently contains no PE List or Special SKU List workbook mapping; those lists can be imported through the explicit template columns.
+
+The pending `20260918120000_product_classification` migration inserts these initial categories once. Later Admin edits are not overwritten by imports or by a recurring seed job. Products with no category keep a null `categoryId`; inactive categories remain linked to existing Products and can be reactivated.
 
 The printer sheets do not have a separate base model or part-number column. The complete `MODEL NAME` is used for both fields; the importer does not guess that different variants share a base Product. The accessories and warranty tabs likewise provide a sellable code but no separate model. This preserves their distinct SKUs. The linerless sheet's old part-number column and its later container-quantity table are not imported as current priced SKUs.
 

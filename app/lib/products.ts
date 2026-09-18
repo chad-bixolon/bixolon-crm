@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, ProductCatalogSource, type PrismaClient } from "@prisma/client";
 import { field, pageNumber, required, type Errors } from "./crm-validation";
 import { normalizePartNumber } from "./product-import";
 export function parseProduct(form: FormData) {
@@ -31,13 +31,29 @@ export async function setProductState(client: PrismaClient, id: number, state: "
   const row = await client.product.findUnique({ where: { id } }); if (!row) throw new Error("Product not found.");
   await client.product.update({ where: { id }, data: { active: state === "active", archivedAt: state === "archived" ? new Date() : null } });
 }
-export type ProductFilters = { q?: string; active?: string; page?: string };
-export async function listProducts(client: PrismaClient, filters: ProductFilters) {
+export const catalogSourceLabels: Record<ProductCatalogSource,string> = { PRICE_LIST: "Price List", PE_LIST: "PE List", SPECIAL_SKU_LIST: "Special SKU List" };
+export function productCategoryChoices(client: PrismaClient) {
+  return client.productCategory.findMany({ where: { OR: [{ active: true }, { products: { some: {} } }] }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] });
+}
+export type ProductFilters = { q?: string; active?: string; category?: string; catalogSource?: string; page?: string };
+export function productHref(filters: ProductFilters, page?: number) {
+  const params = new URLSearchParams();
+  for (const [key,value] of Object.entries(filters)) if (value && key !== "page") params.set(key,value);
+  if (page !== undefined) params.set("page",String(page));
+  return `/products?${params}`;
+}
+export function productWhere(filters: ProductFilters): Prisma.ProductWhereInput {
   const where: Prisma.ProductWhereInput = {};
   if (filters.q?.trim()) { const q = filters.q.trim().slice(0, 100); where.OR = [{ name: { contains: q, mode: "insensitive" } }, { sku: { contains: q, mode: "insensitive" } }]; }
   if (filters.active === "active") { where.active = true; where.archivedAt = null; }
   if (filters.active === "inactive") { where.active = false; where.archivedAt = null; }
   if (filters.active === "archived") where.archivedAt = { not: null };
+  if (filters.category) where.category = { code: filters.category };
+  if (Object.values(ProductCatalogSource).includes(filters.catalogSource as ProductCatalogSource)) where.skus = { some: { catalogSource: filters.catalogSource as ProductCatalogSource } };
+  return where;
+}
+export async function listProducts(client: PrismaClient, filters: ProductFilters) {
+  const where = productWhere(filters);
   const count = await client.product.count({ where }); const { page, pages } = pageNumber(filters.page, count);
   const products = await client.product.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (page - 1) * 20, take: 20 });
   return { products, count, page, pages };

@@ -1,12 +1,12 @@
 import type { PrismaClient } from "@prisma/client";
 
-export type LookupKind = "industries" | "territories" | "activity-types";
-export function lookupKind(value: string): value is LookupKind { return value === "industries" || value === "territories" || value === "activity-types"; }
-export function lookupTitle(kind: LookupKind) { return kind === "industries" ? "Industry" : kind === "territories" ? "Territory" : "Activity Type"; }
+export type LookupKind = "industries" | "territories" | "activity-types" | "product-categories";
+export function lookupKind(value: string): value is LookupKind { return value === "industries" || value === "territories" || value === "activity-types" || value === "product-categories"; }
+export function lookupTitle(kind: LookupKind) { return kind === "industries" ? "Industry" : kind === "territories" ? "Territory" : kind === "product-categories" ? "Product Category" : "Activity Type"; }
 
 export async function listLookups(client: PrismaClient, kind: LookupKind) {
   const orderBy = [{ sortOrder: "asc" as const }, { name: "asc" as const }];
-  return kind === "industries" ? client.industry.findMany({ orderBy, include: { _count: { select: { accounts: true } } } }) : kind === "territories" ? client.territory.findMany({ orderBy, include: { _count: { select: { accounts: true } } } }) : client.activityType.findMany({ orderBy, include: { _count: { select: { activities: true } } } });
+  return kind === "industries" ? client.industry.findMany({ orderBy, include: { _count: { select: { accounts: true } } } }) : kind === "territories" ? client.territory.findMany({ orderBy, include: { _count: { select: { accounts: true } } } }) : kind === "product-categories" ? client.productCategory.findMany({ orderBy, include: { _count: { select: { products: true } } } }) : client.activityType.findMany({ orderBy, include: { _count: { select: { activities: true } } } });
 }
 
 export type LookupInput = { code: string; name: string; active: boolean; sortOrder: number };
@@ -30,6 +30,9 @@ export async function saveLookup(client: PrismaClient, kind: LookupKind, input: 
   } else if (kind === "territories") {
     if (editing) await client.territory.update({ where: { code: input.code }, data: { name: input.name, active: input.active, sortOrder: input.sortOrder } });
     else await client.territory.create({ data: input });
+  } else if (kind === "product-categories") {
+    if (editing) await client.productCategory.update({ where: { code: input.code }, data: { name: input.name, active: input.active, sortOrder: input.sortOrder } });
+    else await client.productCategory.create({ data: input });
   } else {
     if (editing) await client.activityType.update({ where: { code: input.code }, data: { name: input.name, active: input.active, sortOrder: input.sortOrder } });
     else await client.activityType.create({ data: input });

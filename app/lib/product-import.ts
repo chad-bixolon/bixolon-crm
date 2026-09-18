@@ -1,14 +1,14 @@
-import { Prisma, ProductPriceTier, ProductPriceUnit, type PrismaClient } from '@prisma/client';
+import { Prisma, ProductCatalogSource, ProductPriceTier, ProductPriceUnit, type PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { parseImportCsv } from './import-csv';
 
-export const productImportHeaders = ['model','part_number','description','standard_price','msrp_price','reseller_price','distributor_price','currency','price_unit','active'] as const;
+export const productImportHeaders = ['model','part_number','description','standard_price','msrp_price','reseller_price','distributor_price','currency','price_unit','active','category','catalog_source'] as const;
 export const productImportTemplate = productImportHeaders.join(',') + '\n';
 export const normalizePartNumber = (value:string) => value.trim().replace(/\s+/g,' ').toUpperCase();
 const normalizeModel = (value:string) => value.trim().replace(/\s+/g,' ').toLowerCase();
 const currencies = new Set(Intl.supportedValuesOf('currency'));
 type Db = PrismaClient | Prisma.TransactionClient;
-type Values = {model:string;partNumber:string;description?:string;standardPrice?:string;msrpPrice?:string;resellerPrice?:string;distributorPrice?:string;currency?:string;priceUnit?:ProductPriceUnit;active?:boolean};
+type Values = {model:string;partNumber:string;description?:string;standardPrice?:string;msrpPrice?:string;resellerPrice?:string;distributorPrice?:string;currency?:string;priceUnit?:ProductPriceUnit;active?:boolean;category?:string;catalogSource?:ProductCatalogSource};
 const tierFields = [
   {header:'standard_price',field:'standardPrice',tier:ProductPriceTier.STANDARD},
   {header:'msrp_price',field:'msrpPrice',tier:ProductPriceTier.MSRP},
@@ -23,25 +23,36 @@ const digestOf = (items:ProductImportItem[]) => createHash('sha256').update(JSON
 const validPrice = (value:string) => /^(?:0|[1-9]\d{0,9})(?:\.\d{1,2})?$/.test(value);
 const bool = (value:string) => /^(true|yes|1)$/i.test(value) ? true : /^(false|no|0)$/i.test(value) ? false : undefined;
 
-export async function planProductImport(db:Db,csv:string):Promise<ProductImportPlan> {
+export async function planProductImport(db:Db,csv:string,selectedSource?:ProductCatalogSource):Promise<ProductImportPlan> {
   const parsed = parseImportCsv(csv,productImportHeaders);
   const counts = blankCounts();
   if (parsed.errors.length) return {items:[],errors:parsed.errors,counts:{...counts,errors:parsed.errors.length},digest:''};
-  const products = await db.product.findMany({include:{skus:{include:{prices:true}}}});
+  const products = await db.product.findMany({include:{category:true,skus:{include:{prices:true}}}});
+  const categoryRows = await db.productCategory.findMany({select:{code:true,active:true}});
+  const activeCategories = new Set(categoryRows.filter(category=>category.active).map(category=>category.code));
   const allSkus = products.flatMap(product => product.skus.map(sku => ({product,sku})));
   const seen = new Map<string,ProductImportItem>();
   const proposedModels = new Set<string>();
+  const modelCategories = new Map<string,string>();
   const items:ProductImportItem[] = [];
   for (const row of parsed.rows) {
     const get = (key:string) => (row.values as Record<string,string>)[key]?.trim() ?? '';
     const model=get('model'), partNumber=get('part_number'), key=normalizePartNumber(partNumber), modelKey=normalizeModel(model);
     const currencyText=get('currency'), activeText=get('active'), unitText=get('price_unit').toUpperCase();
+    const categoryText=get('category'), sourceText=(get('catalog_source') || selectedSource || '').toUpperCase();
+    const category=activeCategories.has(categoryText) ? categoryText : undefined;
+    const catalogSource=Object.values(ProductCatalogSource).includes(sourceText as ProductCatalogSource) ? sourceText as ProductCatalogSource : undefined;
     const messages:string[]=[];
     if (!model) messages.push('Product/model is required.');
     if (!partNumber) messages.push('Part number is required.');
     if (model.length>200) messages.push('Model exceeds 200 characters.');
     if (partNumber.length>100) messages.push('Part number exceeds 100 characters.');
     if (get('description').length>2000) messages.push('Description exceeds 2000 characters.');
+    if (categoryText && !category) messages.push('Category must be an active Product Category code.');
+    if (sourceText && !catalogSource) messages.push('Catalog source must be PRICE_LIST, PE_LIST, or SPECIAL_SKU_LIST.');
+    if (selectedSource && get('catalog_source') && get('catalog_source').toUpperCase()!==selectedSource) messages.push('Catalog source differs from the selected upload source.');
+    if (category && modelCategories.has(modelKey) && modelCategories.get(modelKey)!==category) messages.push('Conflicting categories for the same Product/model in this import.');
+    if (category && modelKey) modelCategories.set(modelKey,category);
     for (const spec of tierFields) if (get(spec.header) && !validPrice(get(spec.header))) messages.push(`${spec.header} must be a nonnegative number with up to two decimal places and at most ten whole digits.`);
     const currency=currencyText.toUpperCase();
     if (currencyText && (!/^[A-Z]{3}$/.test(currency) || !currencies.has(currency))) messages.push('Currency must be a valid ISO 4217 code.');
@@ -70,8 +81,8 @@ export async function planProductImport(db:Db,csv:string):Promise<ProductImportP
     const sku=skuMatch?.sku;
     const existingCurrency=currency || (sku && new Set(sku.prices.map(p=>p.currencyCode)).size===1 ? sku.prices[0]?.currencyCode : undefined);
     const oldPrices=sku?.prices.filter(p=>p.currencyCode===existingCurrency) ?? [];
-    const before:Values|null=sku ? {model:skuMatch!.product.name,partNumber:sku.partNumber,description:sku.description ?? undefined,currency:existingCurrency,priceUnit:sku.priceUnit,active:sku.active} : null;
-    const after:Values={model,partNumber,description:get('description') || before?.description,currency:currency || before?.currency,priceUnit:unitText && Object.values(ProductPriceUnit).includes(unitText as ProductPriceUnit) ? unitText as ProductPriceUnit : before?.priceUnit ?? ProductPriceUnit.EACH,active:active ?? before?.active ?? true};
+    const before:Values|null=sku ? {model:skuMatch!.product.name,partNumber:sku.partNumber,description:sku.description ?? undefined,currency:existingCurrency,priceUnit:sku.priceUnit,active:sku.active,category:skuMatch!.product.category?.code,catalogSource:sku.catalogSource ?? undefined} : null;
+    const after:Values={model,partNumber,description:get('description') || before?.description,currency:currency || before?.currency,priceUnit:unitText && Object.values(ProductPriceUnit).includes(unitText as ProductPriceUnit) ? unitText as ProductPriceUnit : before?.priceUnit ?? ProductPriceUnit.EACH,active:active ?? before?.active ?? true,category:category ?? product?.category?.code,catalogSource:catalogSource ?? before?.catalogSource};
     for (const spec of tierFields) {
       const old=oldPrices.find(price=>price.tier===spec.tier);
       if (before) before[spec.field]=old?.amount.toFixed(2);
@@ -81,8 +92,8 @@ export async function planProductImport(db:Db,csv:string):Promise<ProductImportP
     const classes:string[]=[];
     if (!product && !proposedModels.has(modelKey)) classes.push('NEW PRODUCT');
     if (!sku) classes.push('NEW SKU');
-    if (product && product.name!==model) classes.push('UPDATE PRODUCT');
-    if (sku && (sku.partNumber!==partNumber || (get('description') && sku.description!==get('description')) || (active!==undefined && sku.active!==active) || (unitText && sku.priceUnit!==unitText))) classes.push('UPDATE SKU');
+    if (product && (product.name!==model || (category && product.category?.code!==category))) classes.push('UPDATE PRODUCT');
+    if (sku && (sku.partNumber!==partNumber || (get('description') && sku.description!==get('description')) || (active!==undefined && sku.active!==active) || (unitText && sku.priceUnit!==unitText) || (catalogSource && sku.catalogSource!==catalogSource))) classes.push('UPDATE SKU');
     if (tierFields.some(spec=>get(spec.header) && validPrice(get(spec.header)) && !oldPrices.find(price=>price.tier===spec.tier)?.amount.equals(get(spec.header)))) classes.push('PRICE CHANGE');
     if (!classes.length) classes.push('UNCHANGED');
     const hasError=messages.length>0;
@@ -108,9 +119,9 @@ export async function planProductImport(db:Db,csv:string):Promise<ProductImportP
   return {items,errors:[],counts,digest:digestOf(items)};
 }
 
-export async function applyProductImport(db:PrismaClient,csv:string,expectedDigest:string) {
+export async function applyProductImport(db:PrismaClient,csv:string,expectedDigest:string,selectedSource?:ProductCatalogSource) {
   return db.$transaction(async tx=>{
-    const plan=await planProductImport(tx,csv);
+    const plan=await planProductImport(tx,csv,selectedSource);
     if (!expectedDigest || plan.digest!==expectedDigest || plan.errors.length || plan.counts.errors) throw new Error('Preview changed or contains errors. Preview the file again before confirming.');
     const created=new Map<string,number>();
     for (const item of plan.items) {
@@ -118,14 +129,14 @@ export async function applyProductImport(db:PrismaClient,csv:string,expectedDige
       const modelKey=normalizeModel(value.model);
       let productId=item.productId ?? created.get(modelKey);
       if (!productId) {
-        const product=await tx.product.create({data:{name:value.model,sku:value.partNumber,active:value.active ?? true}});
+        const product=await tx.product.create({data:{name:value.model,sku:value.partNumber,active:value.active ?? true,category:value.category ? {connect:{code:value.category}} : undefined}});
         productId=product.id;created.set(modelKey,productId);
-      } else if (item.classes.includes('UPDATE PRODUCT')) await tx.product.update({where:{id:productId},data:{name:value.model}});
+      } else if (item.classes.includes('UPDATE PRODUCT') || (created.has(modelKey) && value.category)) await tx.product.update({where:{id:productId},data:{name:value.model,category:value.category ? {connect:{code:value.category}} : undefined}});
       let skuId=item.skuId;
       if (!skuId) {
-        const sku=await tx.productSku.create({data:{productId,partNumber:value.partNumber,normalizedPartNumber:normalizePartNumber(value.partNumber),description:value.description,priceUnit:value.priceUnit ?? ProductPriceUnit.EACH,active:value.active ?? true}});
+        const sku=await tx.productSku.create({data:{productId,partNumber:value.partNumber,normalizedPartNumber:normalizePartNumber(value.partNumber),description:value.description,priceUnit:value.priceUnit ?? ProductPriceUnit.EACH,active:value.active ?? true,catalogSource:value.catalogSource}});
         skuId=sku.id;
-      } else if (item.classes.includes('UPDATE SKU')) await tx.productSku.update({where:{id:skuId},data:{partNumber:value.partNumber,description:value.description,priceUnit:value.priceUnit,active:value.active}});
+      } else if (item.classes.includes('UPDATE SKU')) await tx.productSku.update({where:{id:skuId},data:{partNumber:value.partNumber,description:value.description,priceUnit:value.priceUnit,active:value.active,catalogSource:value.catalogSource}});
       if (value.currency) for (const spec of tierFields) {
         const amount=value[spec.field];
         if (amount && amount!==item.before?.[spec.field]) await tx.productPrice.upsert({where:{skuId_currencyCode_tier:{skuId,currencyCode:value.currency,tier:spec.tier}},create:{skuId,currencyCode:value.currency,tier:spec.tier,amount},update:{amount}});

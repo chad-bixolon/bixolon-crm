@@ -228,6 +228,17 @@ model Territory {
   updatedAt DateTime  @updatedAt
 }
 
+model ProductCategory {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique
+  name      String    @unique
+  active    Boolean   @default(true)
+  sortOrder Int       @default(0)
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
 model ActivityType {
   code       String     @id
   name       String     @unique
@@ -388,12 +399,16 @@ model Product {
   id            Int                  @id @default(autoincrement())
   sku           String               @unique
   name          String
+  categoryId    Int?
+  category      ProductCategory?     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   active        Boolean              @default(true)
   archivedAt    DateTime?
   opportunities OpportunityProduct[]
   skus          ProductSku[]
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
+
+  @@index([categoryId])
 }
 
 model ProductSku {
@@ -403,6 +418,7 @@ model ProductSku {
   partNumber           String
   normalizedPartNumber String                 @unique
   description          String?
+  catalogSource        ProductCatalogSource?
   priceUnit            ProductPriceUnit       @default(EACH)
   active               Boolean                @default(true)
   prices               ProductPrice[]
@@ -411,6 +427,13 @@ model ProductSku {
   updatedAt            DateTime               @updatedAt
 
   @@index([productId])
+  @@index([catalogSource, productId])
+}
+
+enum ProductCatalogSource {
+  PRICE_LIST
+  PE_LIST
+  SPECIAL_SKU_LIST
 }
 
 enum ProductPriceUnit {

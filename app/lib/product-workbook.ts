@@ -11,7 +11,7 @@ const money=(value:string)=>{
   try { return new Prisma.Decimal(text).toDecimalPlaces(2,Prisma.Decimal.ROUND_HALF_UP).toFixed(2); }
   catch { return text; } // Keep invalid source values visible to normal row validation.
 };
-const mapped=(model:string,part:string,description:string,prices:{standard?:string;msrp?:string;reseller?:string;distributor?:string},currency:string,unit='EACH')=>[model,part,description,money(prices.standard ?? ''),money(prices.msrp ?? ''),money(prices.reseller ?? ''),money(prices.distributor ?? ''),currency,unit,''];
+const mapped=(model:string,part:string,description:string,prices:{standard?:string;msrp?:string;reseller?:string;distributor?:string},currency:string,category:string,unit='EACH')=>[model,part,description,money(prices.standard ?? ''),money(prices.msrp ?? ''),money(prices.reseller ?? ''),money(prices.distributor ?? ''),currency,unit,'',category,'PRICE_LIST'];
 
 /** Adapts a selected 2026 BIXOLON price-list tab to the normal catalog CSV columns. */
 export const mapProductWorkbookSheet=(sheet:string,rows:string[][],currencyOverride:string):ReturnType<XlsxTransform>=>{
@@ -41,6 +41,8 @@ export const mapProductWorkbookSheet=(sheet:string,rows:string[][],currencyOverr
     kind='paper';start=3;priceColumn=8;
     if (cell(rows[2] ?? [],3).toUpperCase()!=='NEW PART NUMBER FROM JAPAN (BOX)' || cell(rows[2] ?? [],8).toUpperCase()!=='MSRP (USD)/BOX') return {error:'Linerless paper headers differ from the supported layout.'};
   } else return {error:`${sheet} is not a supported BIXOLON product worksheet. Choose a catalog worksheet or use the CSV template.`};
+  const categoryBySheet:Record<string,string>={'POS printers':'POS','Mobile printers':'MOBILE','Label printers':'LABEL','Laser printers':'LASER','TT ribbon  (2)':'RIBBON','Mobile Printer Accessories':'ACCESSORIES','Warranty Options':'WARRANTY','Linerless paper':'PAPER'};
+  const category=categoryBySheet[name];
 
   const obsoleteMobileRows=new Set<number>();
   if (name==='Mobile printers') {
@@ -64,23 +66,23 @@ export const mapProductWorkbookSheet=(sheet:string,rows:string[][],currencyOverr
         msrp:row[priceColumn],
         reseller:name==='Label printers' ? row[4] : name==='Laser printers' ? row[5] : undefined,
         distributor:name==='Label printers' ? row[6] : name==='Laser printers' ? row[7] : undefined,
-      },fixedCurrency);
+      },fixedCurrency,category);
     } else if (kind==='ribbon') {
       const part=cell(row,1);
-      if (part && (cell(row,9) || cell(row,priceColumn))) data=mapped(cell(row,2),part,cell(row,9),{msrp:row[11],distributor:row[12]},cell(row,8),'CASE');
+      if (part && (cell(row,9) || cell(row,priceColumn))) data=mapped(cell(row,2),part,cell(row,9),{msrp:row[11],distributor:row[12]},cell(row,8),category,'CASE');
     } else if (kind==='accessory') {
       const part=cell(row,1);
-      if (part && (cell(row,2) || cell(row,priceColumn))) data=mapped(part,part,cell(row,2),{msrp:row[4],distributor:row[3]},fixedCurrency);
+      if (part && (cell(row,2) || cell(row,priceColumn))) data=mapped(part,part,cell(row,2),{msrp:row[4],distributor:row[3]},fixedCurrency,category);
     } else if (kind==='warranty') {
       const part=cell(row,0);
-      if (part && (cell(row,2) || cell(row,priceColumn))) data=mapped(part,part,cell(row,2),{msrp:row[4],distributor:row[5]},fixedCurrency);
+      if (part && (cell(row,2) || cell(row,priceColumn))) data=mapped(part,part,cell(row,2),{msrp:row[4],distributor:row[5]},fixedCurrency,category);
     } else {
       const part=cell(row,3);
       // The table beginning at row 16 describes container quantities, not prices.
       if (index<=9 && part && (cell(row,4) || cell(row,priceColumn))) {
         const model=cell(row,1) || part;
         const description=[cell(row,5),cell(row,4),'linerless paper',cell(row,6) ? `compatible with ${cell(row,6)}` : '',index===9?'price per roll':'price per box'].filter(Boolean).join('; ');
-        data=mapped(model,part,description,{msrp:row[priceColumn],distributor:row[9]},'USD',index===9?'ROLL':'BOX');
+        data=mapped(model,part,description,{msrp:row[priceColumn],distributor:row[9]},'USD',category,index===9?'ROLL':'BOX');
       }
     }
     output.push(data);
