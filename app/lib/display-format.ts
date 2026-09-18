@@ -1,10 +1,11 @@
 type Money = number | { toNumber(): number };
 
-export function formatCurrency(value: Money, currency: string): string {
+export function formatCurrency(value: Money, currency: string, showCode = false): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
-  }).format(typeof value === "number" ? value : value.toNumber());
+    currencyDisplay: currency === "USD" && !showCode ? "symbol" : "code",
+  }).format(typeof value === "number" ? value : value.toNumber()).replace(/\u00a0/g, " ");
 }
 
 export function formatCloseMonth(month: string): string {

@@ -13,6 +13,7 @@ let pathname = '/';
 const originalLoad = Module._load;
 Module._load = function(request, parent, isMain) {
   if (request === 'next/link') return function MockLink({ href, children, ...props }) { return React.createElement('a', { href, ...props }, children); };
+  if (request === 'next/image') return function MockImage({ src, alt, width, height, className }) { return React.createElement('img', { src, alt, width, height, className }); };
   if (request === 'next/navigation') return { usePathname: () => pathname };
   if (request === '@/app/sign-out-action') return { signOutAction: async () => {} };
   if (request === '@/lib/role-labels') return require(path.join(root, 'lib/role-labels.ts'));
@@ -29,11 +30,14 @@ function render(user, route = '/') {
   return renderToStaticMarkup(React.createElement(Shell, { user }, React.createElement('div', null, 'Page content')));
 }
 
-test('authenticated shell displays CRM name and friendly role for every role', () => {
+test('authenticated shell shows only the logo in its brand area and keeps user controls', () => {
   const roles = { ADMIN: 'Administrator', SALES_MANAGER: 'Sales Manager', SALES: 'Sales', MARKETING_MANAGER: 'Marketing Manager', READ_ONLY: 'Read Only' };
   for (const [role, label] of Object.entries(roles)) {
     const html = render({ name: 'Chad Guenther', role, canManageUsers: role === 'ADMIN' });
     assert.match(html, /Chad Guenther/);
+    assert.match(html, /src="\/brand\/bixolon-logo\.png" alt="BIXOLON"/);
+    assert.doesNotMatch(html, />CRM</);
+    assert.doesNotMatch(html, /BIXOLON America CRM|bg-orange-600/);
     assert.ok(html.includes(`>${label}</div>`));
     assert.match(html, /Sign out/);
     assert.equal(html.includes('href="/administration"'), role === 'ADMIN');

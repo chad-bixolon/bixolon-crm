@@ -16,9 +16,10 @@ test('pipeline and Dashboard USD values use grouped currency formatting', () => 
   assert.equal(formatCurrency({ toNumber: () => 1234.5 }, 'USD'), '$1,234.50');
 });
 
-test('non-USD currencies keep their currency symbols and decimal rules', () => {
-  assert.equal(formatCurrency(45000, 'EUR'), '€45,000.00');
-  assert.equal(formatCurrency(45000, 'JPY'), '¥45,000');
+test('non-USD and mixed currency values show codes without converting amounts', () => {
+  assert.equal(formatCurrency(45000, 'EUR'), 'EUR 45,000.00');
+  assert.equal(formatCurrency(45000, 'JPY'), 'JPY 45,000');
+  assert.equal(formatCurrency(218.9, 'USD', true), 'USD 218.90');
 });
 
 test('close month labels are friendly without changing group keys', () => {

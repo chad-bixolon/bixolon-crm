@@ -9,4 +9,8 @@ input, select, button { font: inherit; }
 .btn-primary:hover { background: #9a3412; }
 .btn-secondary { display: inline-flex; align-items: center; justify-content: center; border: 1px solid #cbd5e1; border-radius: .375rem; background: white; padding: .65rem 1rem; color: #334155; font-size: .875rem; font-weight: 600; }
 .btn-secondary:hover { background: #f8fafc; }
+.accounts-filter-field { flex: 0 0 9.25rem; max-width: 100%; }
+.accounts-filter-control, .accounts-filter-action { height: 2.25rem; padding-block: .375rem; }
+.accounts-filter-action { padding-inline: .75rem; }
+.account-clickable-row:hover, .account-clickable-row:focus, .account-clickable-row:focus-within { background: #fff0df; box-shadow: inset 3px 0 #ea580c; }
 .panel { border: 1px solid #e2e8f0; border-radius: .5rem; background: white; }
