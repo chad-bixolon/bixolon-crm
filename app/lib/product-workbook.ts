@@ -13,6 +13,14 @@ const money=(value:string)=>{
 };
 const mapped=(model:string,part:string,description:string,prices:{standard?:string;msrp?:string;reseller?:string;distributor?:string},currency:string,category:string,unit='EACH')=>[model,part,description,money(prices.standard ?? ''),money(prices.msrp ?? ''),money(prices.reseller ?? ''),money(prices.distributor ?? ''),currency,unit,'',category,'PRICE_LIST'];
 
+// Sales-facing printer families override worksheet placement. Match the complete
+// family token before the hyphen, never descriptions or compatibility mentions.
+const printerCategoryByFamily:Readonly<Record<string,string>>={XM7:'MOBILE',SPP:'MOBILE'};
+const printerCategory=(model:string,fallback:string)=>{
+  const family=/^([A-Z0-9]+)-[A-Z0-9]/.exec(model.trim().toUpperCase())?.[1];
+  return family && Object.hasOwn(printerCategoryByFamily,family) ? printerCategoryByFamily[family] : fallback;
+};
+
 /** Adapts a selected 2026 BIXOLON price-list tab to the normal catalog CSV columns. */
 export const mapProductWorkbookSheet=(sheet:string,rows:string[][],currencyOverride:string):ReturnType<XlsxTransform>=>{
   if (flat(rows[0]?.[0]).toLowerCase()==='model' && flat(rows[0]?.[1]).toLowerCase()==='part_number') return {rows};
@@ -64,7 +72,7 @@ export const mapProductWorkbookSheet=(sheet:string,rows:string[][],currencyOverr
         msrp:row[priceColumn],
         reseller:name==='Label printers' ? row[4] : name==='Laser printers' ? row[5] : undefined,
         distributor:name==='Label printers' ? row[6] : name==='Laser printers' ? row[7] : undefined,
-      },fixedCurrency,category);
+      },fixedCurrency,printerCategory(part,category));
     } else if (kind==='ribbon') {
       const part=cell(row,1);
       if (part && (cell(row,9) || cell(row,priceColumn))) data=mapped(cell(row,2),part,cell(row,9),{msrp:row[11],distributor:row[12]},cell(row,8),category,'CASE');
