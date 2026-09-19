@@ -208,3 +208,34 @@ test('opportunity SKU is parsed and must belong to the selected product', async 
   };
   await assert.rejects(() => opportunities.saveOpportunity({ $transaction: async fn => fn(tx) }, parsed.value), /SKU belonging/);
 });
+
+test('saving and reopening SKU lines preserves IDs, quantity, tier prices and manual prices', async () => {
+  const stored = [];
+  const tx = {
+    salesStage: { findUnique: async () => ({ active: true }) }, currency: { findUnique: async () => ({ active: true }) },
+    account: { findMany: async () => [{ id: 11 }] }, product: { findMany: async () => [{ id: 3 }] }, project: { findMany: async () => [] },
+    productSku: { findMany: async () => [{ id: 9, productId: 3, active: true }] },
+    opportunity: { create: async () => ({ id: 5 }), findUnique: async () => ({ id: 5, projects: [], archivedAt: null }), update: async () => {} },
+    opportunityAccount: { findMany: async () => [], upsert: async () => {} }, opportunityAccountRole: { create: async () => {} },
+    opportunityProduct: {
+      findMany: async () => stored.map(line => ({ ...line })),
+      create: async ({ data }) => stored.push({ id: stored.length + 1, archivedAt: null, ...data }),
+      update: async ({ where, data }) => Object.assign(stored.find(line => line.id === where.id), data),
+    },
+  };
+  const client = { $transaction: async fn => fn(tx) };
+  const input = { name: 'SKU pricing', description: null, ownerId: null, stageId: 1, expectedCloseDate: null, probability: null, forecastCategory: null, currencyCode: 'USD', projectIds: [], participants: [{ accountId: 11, roles: ['END_USER'] }], lines: [
+    { productId: 3, skuId: 9, quantity: 1000, price: '990.22' },
+    { productId: 3, skuId: 9, quantity: 2, price: '800.00' },
+    { productId: 3, quantity: 3, price: '18.50' },
+  ] };
+  await opportunities.saveOpportunity(client, input);
+  const reopen = () => stored.map(line => ({ id: line.id, productId: line.productId, skuId: line.skuId, quantity: line.quantity, price: line.estimatedUnitPrice }));
+  assert.deepEqual(reopen(), input.lines.map((line, i) => ({ ...line, id: i + 1, skuId: line.skuId ?? null })));
+  assert.equal(opportunities.opportunityTotal(stored).toFixed(2), '991875.50');
+  const edited = reopen();
+  edited[1] = { ...edited[1], quantity: 4, price: '777.00' };
+  await opportunities.saveOpportunity(client, { ...input, lines: edited }, 5);
+  assert.deepEqual(reopen(), edited);
+  assert.equal(opportunities.opportunityTotal(stored).toFixed(2), '993383.50');
+});
