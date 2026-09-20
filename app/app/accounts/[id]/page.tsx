@@ -10,7 +10,7 @@ import { can } from "@/lib/authorization";
 import { daysSince } from "@/lib/engagement";
 import { dayBounds } from "@/lib/work";
 import { accountProjectRelationship, listAccountProjects, projectStatusLabels } from "@/lib/projects";
-import { accountPriceExceptionRoles } from "@/lib/price-exceptions";
+import { accountPriceExceptionRoles, accountPriceExceptionWhere } from "@/lib/price-exceptions";
 export const dynamic = "force-dynamic";
 const tabs = ["Overview", "Contacts", "Opportunities", "Projects", "Activity", "Tasks", "Notes", "Orders", "Inventory"] as const;
 export default async function AccountPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; tasksView?: string; activitiesView?: string; notesView?: string }> }) {
@@ -21,7 +21,7 @@ export default async function AccountPage({ params, searchParams }: { params: Pr
     _count: { select: { contacts: true, opportunityMemberships: true, activities: { where: { archivedAt: null } }, tasks: { where: { archivedAt: null } }, notes: { where: { archivedAt: null } } } } } });
   if (!account) notFound();
   const actor = await currentUser();
-  const [projects, labels, lastActivity, openTasks, priceExceptions] = await Promise.all([listAccountProjects(prisma, id, actor), getLabels(prisma), prisma.activity.findFirst({where:{accountId:id,archivedAt:null},orderBy:[{activityDate:'desc'},{id:'desc'}],select:{activityDate:true,subject:true}}), prisma.task.findMany({where:{accountId:id,archivedAt:null,status:{in:['OPEN','IN_PROGRESS']}},select:{dueDate:true}}), prisma.priceException.findMany({where:{OR:[{distributorAccountId:id},{varAccountId:id},{endUserAccountId:id}]},orderBy:[{expirationDate:'desc'},{id:'desc'}],select:{id:true,peCode:true,status:true,expirationDate:true,distributorAccountId:true,varAccountId:true,endUserAccountId:true,_count:{select:{lines:true}}}})]);
+  const [projects, labels, lastActivity, openTasks, priceExceptions] = await Promise.all([listAccountProjects(prisma, id, actor), getLabels(prisma), prisma.activity.findFirst({where:{accountId:id,archivedAt:null},orderBy:[{activityDate:'desc'},{id:'desc'}],select:{activityDate:true,subject:true}}), prisma.task.findMany({where:{accountId:id,archivedAt:null,status:{in:['OPEN','IN_PROGRESS']}},select:{dueDate:true}}), prisma.priceException.findMany({where:accountPriceExceptionWhere(id),orderBy:[{expirationDate:'desc'},{id:'desc'}],select:{id:true,peCode:true,status:true,expirationDate:true,distributorAccountId:true,varAccountId:true,endUserAccountId:true,_count:{select:{lines:true}}}})]);
   const overdueTasks = openTasks.filter(task => task.dueDate && task.dueDate < dayBounds().start).length;
   const openOpportunities = account.opportunityMemberships.filter(m => !m.opportunity.stage.isClosed).length;
   const workViews = await searchParams;
