@@ -36,7 +36,9 @@ try {
     await tx.opportunityAccount.create({ data: { opportunityId: opportunity.id, accountId: account.id } });
     await tx.opportunityAccount.create({ data: { opportunityId: otherOpportunity.id, accountId: account.id } });
     const project = await tx.project.create({ data: { name: 'Stage 3 smoke Project', primaryAccountId: account.id, primaryAccountRole: 'PROGRAM_OWNER', createdById: user.id } });
+    const accountlessProject = await tx.project.create({ data: { name: 'Account-less smoke Project', primaryAccountRole: 'PROGRAM_OWNER', createdById: user.id } });
     await tx.opportunityProject.create({ data: { opportunityId: opportunity.id, projectId: project.id } });
+    await tx.opportunityProject.create({ data: { opportunityId: opportunity.id, projectId: accountlessProject.id } });
     const contact = await tx.contact.create({ data: { accountId: account.id, firstName: 'Valid', lastName: 'Contact' } });
     const otherContact = await tx.contact.create({ data: { accountId: otherAccount.id, firstName: 'Unrelated', lastName: 'Contact' } });
     const adapter = { $transaction: fn => fn(tx) };
@@ -46,6 +48,7 @@ try {
     assert.equal((await tx.activityContact.count({ where: { activityId: created.id, contactId: contact.id } })), 1);
     await assert.rejects(saveActivity(adapter, parse([...base, ['accountId', otherAccount.id], ['opportunityId', opportunity.id]])), /Opportunity is not associated/);
     await assert.rejects(saveActivity(adapter, parse([...base, ['accountId', otherAccount.id], ['projectId', project.id]])), /Project is not associated/);
+    await assert.rejects(saveActivity(adapter, parse([...base, ['accountId', account.id], ['projectId', accountlessProject.id]])), /Project is not associated/);
     await assert.rejects(saveActivity(adapter, parse([...base, ['accountId', account.id], ['opportunityId', otherOpportunity.id], ['projectId', project.id]])), /Project is not linked/);
     await assert.rejects(saveActivity(adapter, parse([...base, ['accountId', account.id], ['contactIds', otherContact.id]])), /Contact is not associated/);
     await tx.opportunityAccount.delete({ where: { opportunityId_accountId: { opportunityId: opportunity.id, accountId: account.id } } });
@@ -66,7 +69,7 @@ try {
     assert.equal(edited.accountId, account.id);
     assert.equal(edited.opportunityId, opportunity.id);
     assert.equal(edited.projectId, project.id);
-    console.log('PASS: valid Activity saved; four invalid relationships rejected; participant removed; historical Activity loaded and edited without changing relationships');
+    console.log('PASS: valid Activity saved; five invalid relationships rejected; participant removed; historical Activity loaded and edited without changing relationships');
     throw rollback;
   }, { timeout: 60000 }), error => error === rollback);
   console.log('PASS: smoke transaction rolled back all synthetic records');

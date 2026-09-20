@@ -100,6 +100,9 @@ test('Activity server validates Account, Opportunity, Project, and their link',a
  assert.equal((await work.saveActivity(client,value)).id,7);
  opportunityAccount=false; await assert.rejects(work.saveActivity(client,value),/Opportunity is not associated/);
  opportunityAccount=true; projectAccount=false; await assert.rejects(work.saveActivity(client,value),/Project is not associated/);
+ tx.project.findUnique=async()=>({primaryAccountId:null,participants:[]});
+ await assert.rejects(work.saveActivity(client,value),/Project is not associated/);
+ tx.project.findUnique=async()=>({primaryAccountId:1,participants:[]});
  projectAccount=true; linked=false; await assert.rejects(work.saveActivity(client,value),/Project is not linked/);
  assert.equal(created,1);
  assert.equal(work.activityErrorField('This Project is not linked to the selected Opportunity.'),'projectId');
@@ -112,6 +115,11 @@ test('unchanged historical Activity relationships survive unlink and archive; ch
  assert.equal((await work.saveActivity(client,value,7)).subject,'Updated');
  await assert.rejects(work.saveActivity(client,{...value,projectId:21},7),/Opportunity not found/);
  await assert.rejects(work.saveActivity(client,{...value,opportunityId:11},7),/Opportunity not found/);
+});
+test('account-less Projects are excluded from Activity choices unless retained as history',()=>{
+ const project={id:20,name:'Internal',accountIds:[],opportunityIds:[]};
+ assert.deepEqual(activityRelations.activityChoices(1,0,[],[project],[],{contactIds:[]}).projects,[]);
+ assert.deepEqual(activityRelations.activityChoices(1,1,[],[project],[],{projectId:20,contactIds:[]},{projectId:20}).projects.map(item=>item.id),[20]);
 });
 test('Activity validation state retains every submitted field',()=>{
  const entries=[['subject','Call'],['description','Detailed notes'],['activityDate','2026-09-18T14:30'],['type','CALL'],['direction','OUTBOUND'],['accountId','1'],['opportunityId','10'],['projectId','20'],['contactIds','30'],['contactIds','32'],['outcome','Interested'],['nextStep','Send quote'],['followUpDate','2026-09-25'],['userId','4']];

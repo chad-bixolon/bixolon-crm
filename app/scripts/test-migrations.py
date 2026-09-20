@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 IMAGE = "bixolon-crm-foundation-test:local"
 INITIAL = "20260916005259_initial_crm"
 FORWARD = "20260916020000_crm_foundation"
+OPTIONAL_PROJECT_ACCOUNT = "20260920090000_optional_project_primary_account"
 PREFIX = "bixolon-foundation-test-" + uuid.uuid4().hex[:10]
 NETWORK = PREFIX
 DB = PREFIX + "-db"
@@ -76,9 +77,12 @@ def foreign_keys(database):
 
 initial = (ROOT / "prisma/migrations" / INITIAL / "migration.sql").read_text()
 forward = (ROOT / "prisma/migrations" / FORWARD / "migration.sql").read_text()
+optional_project_account = (ROOT / "prisma/migrations" / OPTIONAL_PROJECT_ACCOUNT / "migration.sql").read_text()
 fixture = (ROOT / "prisma/tests/legacy-fixture.sql").read_text()
 assert hashlib.sha256(initial.encode()).hexdigest() == "33f9a5f4ece57a83789738d3289f3d30917af01d750ef13d63c3badece658b29"
 assert "DROP COLUMN" not in forward and "DROP TABLE" not in forward and "TRUNCATE" not in forward
+assert 'ALTER TABLE "Project" ALTER COLUMN "primaryAccountId" DROP NOT NULL' in optional_project_account
+assert all(token not in optional_project_account.upper() for token in ("DELETE FROM", "UPDATE ", "INSERT INTO", "TRUNCATE", "DROP COLUMN", "DROP TABLE"))
 network_created = db_created = False
 try:
     run(["docker", "network", "create", "--internal", NETWORK])
@@ -230,7 +234,27 @@ try:
     print(history_client.stdout, flush=True)
     for directory in sorted(migration_root.iterdir()):
         if directory.is_dir() and directory.name > "20260918020000_activity_relationship_history":
-            sql("backfill", (directory / "migration.sql").read_text())
+            if directory.name == OPTIONAL_PROJECT_ACCOUNT:
+                optional_before = all_table_fingerprints("backfill")
+                primary_before = sql_values("backfill", '''SELECT id || ':' || "primaryAccountId" FROM "Project" ORDER BY id;''')
+                sql("backfill", (directory / "migration.sql").read_text())
+                optional_after = all_table_fingerprints("backfill")
+                primary_after = sql_values("backfill", '''SELECT id || ':' || "primaryAccountId" FROM "Project" ORDER BY id;''')
+                if optional_before != optional_after:
+                    raise RuntimeError(f"Optional Project Primary Account migration changed data in {[table for table in optional_before if optional_before[table] != optional_after.get(table)]}")
+                if primary_before != primary_after:
+                    raise RuntimeError("Existing Project primaryAccountId values changed")
+                nullable = sql_values("backfill", '''SELECT is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='Project' AND column_name='primaryAccountId';''')
+                fk = sql_values("backfill", '''SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='"Project"'::regclass AND conname='Project_primaryAccountId_fkey';''')
+                if nullable != ["YES"] or len(fk) != 1 or 'ON UPDATE CASCADE ON DELETE RESTRICT' not in fk[0]:
+                    raise RuntimeError(f"Optional Project Primary Account schema invalid: nullable={nullable}, fk={fk}")
+                sql("backfill", '''INSERT INTO "Project" ("id","name","primaryAccountId","primaryAccountRole","createdById","updatedAt") VALUES (1001,'Account-less Project',NULL,'PROGRAM_OWNER',100,now());
+                  INSERT INTO "ProjectAccount" ("projectId","accountId","updatedAt") VALUES (1001,101,now());
+                  INSERT INTO "ProjectAccountRole" ("projectId","accountId","role","updatedAt") VALUES (1001,101,'ISV',now());
+                  INSERT INTO "OpportunityProject" ("opportunityId","projectId") VALUES (102,1001);''')
+                print(f"PASS: Optional Project Primary Account migration preserved {len(optional_before)} table fingerprints and {len(primary_before)} existing primaryAccountId values; nullable FK retained; account-less, participant-only, and Opportunity-linked Project accepted", flush=True)
+            else:
+                sql("backfill", (directory / "migration.sql").read_text())
     for directory in sorted(migration_root.iterdir()):
         if directory.is_dir() and directory.name >= INITIAL:
             prisma("backfill", "migrate", "resolve", "--applied", directory.name)

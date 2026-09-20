@@ -29,10 +29,28 @@ test('Project parser accepts multiple roles and rejects duplicate or Primary Acc
   assert.match(noRole.errors.participants, /at least one/);
 });
 
+test('Project parser accepts no Primary Account with zero or more participants and retains submitted values', () => {
+  const noAccounts = projects.parseProject(form([['name', 'Internal roadmap'], ['status', 'PLANNING']]));
+  assert.deepEqual(noAccounts.errors, {});
+  assert.equal(noAccounts.value.primaryAccountId, null);
+  assert.equal(noAccounts.value.primaryAccountRole, 'PROGRAM_OWNER');
+  assert.deepEqual(noAccounts.value.participants, []);
+  const participantOnly = projects.parseProject(form([['name', 'Partner program'], ['status', 'ACTIVE'], ['accountId', '2'], ['participantRoles', 'ISV']]));
+  assert.equal(participantOnly.value.primaryAccountId, null);
+  assert.deepEqual(participantOnly.value.participants, [{ accountId: 2, roles: ['ISV'] }]);
+  const submitted = form([['name', 'Keep me'], ['primaryAccountId', ''], ['status', 'ACTIVE'], ['accountId', '2'], ['participantRoles', '']]);
+  const failed = projects.projectFailureState(submitted, projects.parseProject(submitted).errors);
+  assert.equal(failed.values.name, 'Keep me');
+  assert.equal(failed.values.primaryAccountId, '');
+  assert.equal(failed.values.accountId, '2');
+  assert.equal(failed.values.participantRoles, '');
+});
+
 test('SALES can read active Projects and edit only owned Project or Primary Account', () => {
   assert.deepEqual(projects.projectReadWhere(actor('SALES')).OR[0], { archivedAt: null });
   assert.equal(projects.canEditProject(actor('SALES'), { ownerId: 7, primaryAccount: { ownerId: 8 } }), true);
   assert.equal(projects.canEditProject(actor('SALES'), { ownerId: 8, primaryAccount: { ownerId: 7 } }), true);
+  assert.equal(projects.canEditProject(actor('SALES'), { ownerId: 8, primaryAccount: null }), false);
   assert.equal(projects.canEditProject(actor('SALES'), { ownerId: 8, primaryAccount: { ownerId: 9 }, participants: [{ account: { ownerId: 7 } }] }), false);
   for (const role of ['ADMIN', 'SALES_MANAGER']) assert.equal(projects.canEditProject(actor(role), { ownerId: 8, primaryAccount: { ownerId: 9 } }), true);
   for (const role of ['MARKETING_MANAGER', 'READ_ONLY']) {
@@ -55,7 +73,7 @@ test('Project create and edit save participants transactionally; changing Primar
     account: { findMany: async ({ where }) => where.id.in.map(id => ({ id })) },
     user: { findFirst: async () => ({ id: 7 }) },
     projectAccount: {
-      upsert: async ({ create }) => { calls.push(`add ${create.accountId}`); memberships.push({ accountId: create.accountId, roles: [] }); },
+      upsert: async ({ create }) => { calls.push(`add ${create.accountId}`); if (!memberships.some(p => p.accountId === create.accountId)) memberships.push({ accountId: create.accountId, roles: [] }); },
       delete: async ({ where }) => { calls.push(`remove ${where.projectId_accountId.accountId}`); memberships = memberships.filter(p => p.accountId !== where.projectId_accountId.accountId); },
     },
     projectAccountRole: {
@@ -66,7 +84,14 @@ test('Project create and edit save participants transactionally; changing Primar
   const client = { $transaction: async fn => fn(tx) };
   const first = projects.parseProject(form([...base, ['ownerId', '7'], ['accountId', '2'], ['participantRoles', 'ISV,OEM']])).value;
   assert.equal(await projects.saveProject(client, first, actor('SALES')), 10);
+  assert.equal(stored.primaryAccountId, 1);
   assert.deepEqual(memberships[0].roles.map(r => r.role), ['ISV', 'OEM']);
+  calls.length = 0;
+  const withoutPrimary = { ...first, primaryAccountId: null };
+  assert.equal(await projects.saveProject(client, withoutPrimary, actor('SALES'), 10), 10);
+  assert.equal(stored.primaryAccountId, null);
+  assert.deepEqual(memberships.map(p => p.accountId), [2]);
+  assert.ok(!calls.some(call => call.startsWith('remove')));
   calls.length = 0;
   const edited = { ...first, primaryAccountId: 2, participants: [{ accountId: 1, roles: ['END_CUSTOMER'] }] };
   assert.equal(await projects.saveProject(client, edited, actor('SALES'), 10), 10);
@@ -76,17 +101,35 @@ test('Project create and edit save participants transactionally; changing Primar
   await assert.rejects(projects.saveProject(client, edited, actor('MARKETING_MANAGER'), 10), /Access denied/);
 });
 
+test('Project can be created without Primary or participant Accounts', async () => {
+  let created;
+  const tx = {
+    project: { create: async ({ data }) => (created = { id: 20, ...data }) },
+    account: { findMany: async () => [] }, user: { findFirst: async () => null },
+    projectAccount: { upsert: async () => assert.fail('participant should not be created') },
+    projectAccountRole: { create: async () => assert.fail('role should not be created') },
+  };
+  const value = projects.parseProject(form([['name', 'Internal strategy'], ['status', 'PLANNING']])).value;
+  assert.equal(await projects.saveProject({ $transaction: fn => fn(tx) }, value, actor('SALES')), 20);
+  assert.equal(created.primaryAccountId, null);
+});
+
 test('Account Projects query includes primary and participant relationships once each', async () => {
   const rows = [
     { id: 10, primaryAccountId: 1, primaryAccountRole: 'PROGRAM_OWNER', participants: [] },
     { id: 11, primaryAccountId: 2, primaryAccountRole: 'PROGRAM_OWNER', participants: [{ accountId: 1, roles: [{ role: 'SERVICE_PROVIDER' }] }] },
+    { id: 12, primaryAccountId: null, primaryAccountRole: 'PROGRAM_OWNER', participants: [{ accountId: 1, roles: [{ role: 'ISV' }] }] },
+    { id: 13, primaryAccountId: null, primaryAccountRole: 'PROGRAM_OWNER', participants: [] },
   ];
   let where;
-  const client = { project: { findMany: async args => { where = args.where; return rows; } } };
-  assert.equal((await projects.listAccountProjects(client, 1, actor('SALES'))).length, 2);
+  const client = { project: { findMany: async args => { where = args.where; const accountId = args.where.AND[1].OR[0].primaryAccountId; return rows.filter(row => row.primaryAccountId === accountId || row.participants.some(p => p.accountId === accountId)); } } };
+  const linked = await projects.listAccountProjects(client, 1, actor('SALES'));
+  assert.deepEqual(linked.map(row => row.id), [10, 11, 12]);
   assert.deepEqual(where.AND[1].OR, [{ primaryAccountId: 1 }, { participants: { some: { accountId: 1 } } }]);
+  assert.deepEqual(await projects.listAccountProjects(client, 3, actor('SALES')), []);
   assert.match(projects.accountProjectRelationship(rows[0], 1), /Primary Account/);
   assert.match(projects.accountProjectRelationship(rows[1], 1), /Additional Participant · Service Provider/);
+  assert.match(projects.accountProjectRelationship(rows[2], 1), /Additional Participant · ISV/);
 });
 
 test('Opportunity supports zero, one, and many Projects without changing participants', async () => {
@@ -101,7 +144,7 @@ test('Opportunity supports zero, one, and many Projects without changing partici
   const tx = {
     salesStage: { findUnique: async () => ({ active: true }) }, currency: { findUnique: async () => ({ active: true }) },
     account: { findMany: async () => [{ id: 4 }] }, product: { findMany: async () => [] },
-    project: { findMany: async ({ where }) => where.id.in.map(id => ({ id, archivedAt: null, primaryAccountId: 4, participants: [] })) },
+    project: { findMany: async ({ where }) => where.id.in.map(id => ({ id, archivedAt: null, primaryAccountId: null, participants: [] })) },
     opportunity: { create: async () => ({ id: 5 }), findUnique: async () => ({ id: 5, archivedAt: null, projects: links.map(link => ({ ...link })) }), update: async () => {} },
     opportunityProject: { create: async ({ data }) => links.push(data), delete: async ({ where }) => { const i = links.findIndex(link => link.projectId === where.opportunityId_projectId.projectId); links.splice(i, 1); } },
     opportunityAccount: { findMany: async () => [{ accountId: 4, roles: [{ role: 'END_USER' }] }], upsert: async () => {} },

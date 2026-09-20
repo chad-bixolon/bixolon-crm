@@ -6,18 +6,20 @@ import { projectRoleLabels } from './project-labels';
 export { projectRoleLabels, projectStatusLabels } from './project-labels';
 export type ProjectParticipant = { accountId: number; roles: ProjectPartyRole[] };
 export type ProjectInput = {
-  name: string; primaryAccountId: number; primaryAccountRole: ProjectPartyRole; ownerId: number | null;
+  name: string; primaryAccountId: number | null; primaryAccountRole: ProjectPartyRole; ownerId: number | null;
   status: ProjectStatus; startDate: Date | null; targetEndDate: Date | null; description: string | null;
   participants: ProjectParticipant[];
 };
 export function parseProject(form: FormData) {
   const errors: Errors = {};
   const name = required(form, 'name', 'Project name', 200, errors);
-  const primaryAccountId = positiveId(field(form, 'primaryAccountId'));
-  if (!primaryAccountId) errors.primaryAccountId = 'Choose a Primary Account.';
+  const rawPrimaryAccountId = field(form, 'primaryAccountId');
+  const primaryAccountId = rawPrimaryAccountId ? positiveId(rawPrimaryAccountId) : null;
+  if (rawPrimaryAccountId && !primaryAccountId) errors.primaryAccountId = 'Choose a valid Primary Account.';
   const rawRole = field(form, 'primaryAccountRole');
-  const primaryAccountRole = Object.values(ProjectPartyRole).includes(rawRole as ProjectPartyRole) ? rawRole as ProjectPartyRole : null;
-  if (!primaryAccountRole) errors.primaryAccountRole = 'Choose a Primary Account Role.';
+  const selectedRole = Object.values(ProjectPartyRole).includes(rawRole as ProjectPartyRole) ? rawRole as ProjectPartyRole : null;
+  if (primaryAccountId && !selectedRole) errors.primaryAccountRole = 'Choose a Primary Account Role.';
+  const primaryAccountRole = selectedRole ?? ProjectPartyRole.PROGRAM_OWNER;
   const rawOwner = field(form, 'ownerId'), ownerId = rawOwner ? positiveId(rawOwner) : null;
   if (rawOwner && !ownerId) errors.ownerId = 'Choose a valid owner.';
   const rawStatus = field(form, 'status');
@@ -41,17 +43,26 @@ export function parseProject(form: FormData) {
     participants.push({ accountId, roles: [...new Set(roles)] as ProjectPartyRole[] });
   }
   return { errors, value: Object.keys(errors).length ? undefined : {
-    name, primaryAccountId: primaryAccountId!, primaryAccountRole: primaryAccountRole!, ownerId,
+    name, primaryAccountId, primaryAccountRole, ownerId,
     status: status!, startDate, targetEndDate, description, participants,
   } satisfies ProjectInput };
+}
+export function projectSubmittedValues(form: FormData) {
+  const values = Object.fromEntries([...form.entries()].map(([key, value]) => [key, String(value)]));
+  values.accountId = form.getAll('accountId').map(String).join(',');
+  values.participantRoles = form.getAll('participantRoles').map(String).join(';');
+  return values;
+}
+export function projectFailureState(form: FormData, errors: Errors, message = 'Correct the highlighted fields.') {
+  return { errors, message, values: projectSubmittedValues(form) };
 }
 export function projectReadWhere(actor: Actor): Prisma.ProjectWhereInput {
   if (!can(actor, 'projects.read')) return { id: -1 };
   return actor.role === 'SALES' ? { OR: [{ archivedAt: null }, { ownerId: actor.id }, { primaryAccount: { ownerId: actor.id } }] } : {};
 }
-export function canEditProject(actor: Actor, project: { ownerId: number | null; primaryAccount: { ownerId: number | null } }) {
+export function canEditProject(actor: Actor, project: { ownerId: number | null; primaryAccount: { ownerId: number | null } | null }) {
   if (!can(actor, 'projects.write')) return false;
-  return actor.role !== 'SALES' || project.ownerId === actor.id || project.primaryAccount.ownerId === actor.id;
+  return actor.role !== 'SALES' || project.ownerId === actor.id || project.primaryAccount?.ownerId === actor.id;
 }
 export function accountProjectsWhere(accountId: number, actor: Actor): Prisma.ProjectWhereInput {
   return { AND: [projectReadWhere(actor), { OR: [{ primaryAccountId: accountId }, { participants: { some: { accountId } } }] }] };
@@ -61,7 +72,7 @@ export async function listAccountProjects(client: PrismaClient, accountId: numbe
     include: { primaryAccount: { select: { name: true } }, participants: { where: { accountId }, include: { roles: true } } },
     orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }] });
 }
-export function accountProjectRelationship(project: { primaryAccountId: number; primaryAccountRole: ProjectPartyRole; participants: { accountId: number; roles: { role: ProjectPartyRole }[] }[] }, accountId: number) {
+export function accountProjectRelationship(project: { primaryAccountId: number | null; primaryAccountRole: ProjectPartyRole; participants: { accountId: number; roles: { role: ProjectPartyRole }[] }[] }, accountId: number) {
   return project.primaryAccountId === accountId ? `Primary Account · ${projectRoleLabels[project.primaryAccountRole]}` :
     `Additional Participant · ${project.participants.find(p => p.accountId === accountId)?.roles.map(r => projectRoleLabels[r.role]).join(', ') || 'No role'}`;
 }
@@ -80,13 +91,13 @@ export async function assertProjectWorkEdit(client: PrismaClient, actor: Actor, 
 }
 export async function saveProject(client: PrismaClient, input: ProjectInput, actor: Actor, id?: number) {
   if (!can(actor, 'projects.write')) throw new Error('Access denied');
-  if (input.participants.some(p => p.accountId === input.primaryAccountId || !p.roles.length) ||
+  if (input.participants.some(p => (input.primaryAccountId !== null && p.accountId === input.primaryAccountId) || !p.roles.length) ||
       new Set(input.participants.map(p => p.accountId)).size !== input.participants.length) throw new Error('Invalid Project participants.');
   return client.$transaction(async tx => {
     const existing = id ? await tx.project.findUnique({ where: { id }, include: { primaryAccount: { select: { ownerId: true } }, participants: { include: { roles: true } } } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Project not found or archived.');
     if (existing && !canEditProject(actor, existing)) throw new Error('Access denied');
-    const ids = [input.primaryAccountId, ...input.participants.map(p => p.accountId)];
+    const ids = [...(input.primaryAccountId ? [input.primaryAccountId] : []), ...input.participants.map(p => p.accountId)];
     const [accounts, owner] = await Promise.all([
       tx.account.findMany({ where: { id: { in: ids }, status: 'ACTIVE', archivedAt: null }, select: { id: true } }),
       input.ownerId ? tx.user.findFirst({ where: { id: input.ownerId, active: true, archivedAt: null } }) : null,

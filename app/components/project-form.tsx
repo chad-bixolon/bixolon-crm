@@ -9,7 +9,7 @@ import { useSubmitGuard } from '@/lib/submit-guard';
 
 type AccountOption = { id: number; name: string };
 type OwnerOption = { id: number; firstName: string; lastName: string };
-type Initial = { name: string; primaryAccountId: number; primaryAccountRole: ProjectPartyRole; ownerId: number | null;
+type Initial = { name: string; primaryAccountId: number | null; primaryAccountRole: ProjectPartyRole; ownerId: number | null;
   status: ProjectStatus; startDate: Date | null; targetEndDate: Date | null; description: string | null;
   participants: { accountId: number; roles: ProjectPartyRole[] }[] };
 export function ProjectForm({ id, initial, accounts, owners, primaryAccountId: preselected }: {
@@ -18,7 +18,9 @@ export function ProjectForm({ id, initial, accounts, owners, primaryAccountId: p
   const router = useRouter();
   const [state, action, pending] = useActionState(submitProject.bind(null, id ?? null), { errors: {} } as ProjectFormState);
   const guard = useSubmitGuard(state);
+  const val = (key: string, fallback: string | number = '') => String(state.values?.[key] ?? fallback);
   const [primaryId, setPrimaryId] = useState(initial?.primaryAccountId ?? preselected ?? 0);
+  const [primaryRole, setPrimaryRole] = useState(initial?.primaryAccountRole ?? ProjectPartyRole.PROGRAM_OWNER);
   const [participants, setParticipants] = useState(initial?.participants ?? []);
   const [selectedAccount, setSelectedAccount] = useState('');
   const [participantMessage, setParticipantMessage] = useState('');
@@ -32,19 +34,19 @@ export function ProjectForm({ id, initial, accounts, owners, primaryAccountId: p
   const available = accountOptions.filter(a => a.id !== primaryId && !participants.some(p => p.accountId === a.id));
   const add = () => { const accountId = Number(selectedAccount); if (!available.some(a => a.id === accountId)) { setParticipantMessage('Choose an available Account.'); return; }
     setParticipants(old => [...old, { accountId, roles: [] }]); setSelectedAccount(''); setParticipantMessage(''); };
-  return <form action={action} onSubmit={guard} className="panel max-w-5xl space-y-7 p-6" aria-label={id ? 'Edit project' : 'Create project'}>
+  return <form key={JSON.stringify(state.values ?? {})} action={action} onSubmit={guard} className="panel max-w-5xl space-y-7 p-6" aria-label={id ? 'Edit project' : 'Create project'}>
     {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     <section className="grid gap-4 sm:grid-cols-2"><h2 className="sm:col-span-2 text-lg font-semibold">Overview</h2>
-      <div className="sm:col-span-2"><label className="label" htmlFor="name">Project name *</label><input className="field" id="name" name="name" required maxLength={200} defaultValue={initial?.name ?? ''}/>{error('name')}</div>
-      <div><label className="label" htmlFor="ownerId">Owner</label><select className="field" id="ownerId" name="ownerId" defaultValue={initial?.ownerId ?? ''}><option value="">Unassigned</option>{ownerOptions.map(o => <option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select>{error('ownerId')}</div>
-      <div><label className="label" htmlFor="status">Status *</label><select className="field" id="status" name="status" defaultValue={initial?.status ?? 'PLANNING'}>{Object.entries(projectStatusLabels).map(([code,label]) => <option key={code} value={code}>{label}</option>)}</select>{error('status')}</div>
-      <div><label className="label" htmlFor="startDate">Start date</label><input className="field" type="date" id="startDate" name="startDate" defaultValue={initial?.startDate?.toISOString().slice(0,10) ?? ''}/>{error('startDate')}</div>
-      <div><label className="label" htmlFor="targetEndDate">Target end date</label><input className="field" type="date" id="targetEndDate" name="targetEndDate" defaultValue={initial?.targetEndDate?.toISOString().slice(0,10) ?? ''}/>{error('targetEndDate')}</div>
-      <div className="sm:col-span-2"><label className="label" htmlFor="description">Description</label><textarea className="field min-h-28" id="description" name="description" maxLength={5000} defaultValue={initial?.description ?? ''}/>{error('description')}</div>
+      <div className="sm:col-span-2"><label className="label" htmlFor="name">Project name *</label><input className="field" id="name" name="name" required maxLength={200} defaultValue={val('name', initial?.name ?? '')}/>{error('name')}</div>
+      <div><label className="label" htmlFor="ownerId">Owner</label><select className="field" id="ownerId" name="ownerId" defaultValue={val('ownerId', initial?.ownerId ?? '')}><option value="">Unassigned</option>{ownerOptions.map(o => <option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select>{error('ownerId')}</div>
+      <div><label className="label" htmlFor="status">Status *</label><select className="field" id="status" name="status" defaultValue={val('status', initial?.status ?? 'PLANNING')}>{Object.entries(projectStatusLabels).map(([code,label]) => <option key={code} value={code}>{label}</option>)}</select>{error('status')}</div>
+      <div><label className="label" htmlFor="startDate">Start date</label><input className="field" type="date" id="startDate" name="startDate" defaultValue={val('startDate', initial?.startDate?.toISOString().slice(0,10) ?? '')}/>{error('startDate')}</div>
+      <div><label className="label" htmlFor="targetEndDate">Target end date</label><input className="field" type="date" id="targetEndDate" name="targetEndDate" defaultValue={val('targetEndDate', initial?.targetEndDate?.toISOString().slice(0,10) ?? '')}/>{error('targetEndDate')}</div>
+      <div className="sm:col-span-2"><label className="label" htmlFor="description">Description</label><textarea className="field min-h-28" id="description" name="description" maxLength={5000} defaultValue={val('description', initial?.description ?? '')}/>{error('description')}</div>
     </section>
-    <section className="grid gap-4 rounded border border-orange-200 bg-orange-50/40 p-4 sm:grid-cols-2"><div className="sm:col-span-2"><h2 className="text-lg font-semibold">Primary Account</h2><p className="text-sm text-slate-600">The company primarily responsible for this Project. It is listed once, separately from additional participants.</p></div>
-      <div><label className="label" htmlFor="primaryAccountId">Primary Account *</label><select className="field" id="primaryAccountId" name="primaryAccountId" required value={primaryId || ''} onChange={e => { const value = Number(e.target.value); setPrimaryId(value); setParticipants(old => old.filter(p => p.accountId !== value)); }}><option value="">Choose Account</option>{accountOptions.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>{error('primaryAccountId')}</div>
-      <div><label className="label" htmlFor="primaryAccountRole">Primary Account Role *</label><select className="field" id="primaryAccountRole" name="primaryAccountRole" required defaultValue={initial?.primaryAccountRole ?? ''}><option value="">Choose role</option>{Object.entries(projectRoleLabels).map(([code,label]) => <option key={code} value={code}>{label}</option>)}</select>{error('primaryAccountRole')}</div>
+    <section className="grid gap-4 rounded border border-orange-200 bg-orange-50/40 p-4 sm:grid-cols-2"><div className="sm:col-span-2"><h2 className="text-lg font-semibold">Primary Account <span className="text-sm font-normal text-slate-500">(optional)</span></h2><p className="text-sm text-slate-600">Choose one company when it is primarily responsible for this Project. Participant Accounts can be added independently below.</p></div>
+      <div><label className="label" htmlFor="primaryAccountId">Primary Account (optional)</label><select className="field" id="primaryAccountId" name="primaryAccountId" value={primaryId || ''} onChange={e => { const value = Number(e.target.value); setPrimaryId(value); setParticipants(old => old.filter(p => p.accountId !== value)); }}><option value="">No primary account</option>{accountOptions.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>{error('primaryAccountId')}</div>
+      {primaryId ? <div><label className="label" htmlFor="primaryAccountRole">Primary Account Role *</label><select className="field" id="primaryAccountRole" name="primaryAccountRole" required value={primaryRole} onChange={e => setPrimaryRole(e.target.value as ProjectPartyRole)}><option value="">Choose role</option>{Object.entries(projectRoleLabels).map(([code,label]) => <option key={code} value={code}>{label}</option>)}</select>{error('primaryAccountRole')}</div> : <input type="hidden" name="primaryAccountRole" value={primaryRole}/>}
     </section>
     <section><h2 className="text-lg font-semibold">Additional Participants</h2><p className="mb-4 text-sm text-slate-600">Optional participating Accounts. Give each one or more roles specific to this Project.</p>{error('participants')}
       <div className="mb-4 flex flex-wrap items-end gap-2"><div className="min-w-60 flex-1"><label className="label" htmlFor="addAccount">Account</label><select className="field" id="addAccount" value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}><option value="">Choose Account</option>{available.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div><button type="button" className="btn-secondary" onClick={add}>Add Account</button></div>

@@ -603,8 +603,8 @@ model Note {
 model Project {
   id                 Int                  @id @default(autoincrement())
   name               String
-  primaryAccountId   Int
-  primaryAccount     Account              @relation("ProjectPrimaryAccount", fields: [primaryAccountId], references: [id], onDelete: Restrict)
+  primaryAccountId   Int?
+  primaryAccount     Account?             @relation("ProjectPrimaryAccount", fields: [primaryAccountId], references: [id], onDelete: Restrict)
   primaryAccountRole ProjectPartyRole
   ownerId            Int?
   owner              User?                @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Restrict)
