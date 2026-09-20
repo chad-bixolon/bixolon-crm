@@ -8,8 +8,8 @@ import type { ReactNode } from "react";
 import { signOutAction } from "@/app/sign-out-action";
 import type { LabelMap } from "@/lib/configuration";
 
-const nav = ["Dashboard", "Accounts", "Contacts", "Projects", "Opportunities", "Pipeline", "Tasks", "Engagement", "Products", "Administration", "Integrations"];
-const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Engagement" ? "/reports/engagement" : `/${item.toLowerCase()}`;
+const nav = ["Dashboard", "Accounts", "Contacts", "Projects", "Opportunities", "Pipeline", "Tasks", "Engagement", "Products", "Price Exceptions", "Administration", "Integrations"];
+const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Engagement" ? "/reports/engagement" : item === "Price Exceptions" ? "/price-exceptions" : `/${item.toLowerCase()}`;
 const navLabelKeys: Partial<Record<string, keyof LabelMap>> = { Accounts: "ACCOUNT", Contacts: "CONTACT", Projects: "PROJECT", Opportunities: "OPPORTUNITY", Tasks: "TASK" };
 type ShellUser = { name: string; role: UserRole; canManageUsers: boolean };
 export function Shell({ children, user, labels }: { children: ReactNode; user: ShellUser | null; labels?: LabelMap }) {

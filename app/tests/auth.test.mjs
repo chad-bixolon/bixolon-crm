@@ -128,11 +128,12 @@ test('unique user/provider collision cannot relink an already linked CRM user', 
   assert.equal((await resolveGoogleIdentity(client, googleProfile, 'bixolon.example')).reason, 'unapproved');
   assert.equal(state.identity, null);
 });
-test('roles deny read-only mutations and marketing pricing/admin access', () => {
+test('roles deny read-only mutations while all active roles can read finalized pricing records', () => {
   for (const role of ['ADMIN','SALES_MANAGER','SALES','MARKETING_MANAGER','READ_ONLY']) assert.equal(can(actor(role),'accounts.read'), true);
   assert.equal(can(actor('READ_ONLY'),'accounts.write'), false);
   assert.equal(can(actor('READ_ONLY'),'tasks.write'), false);
-  assert.equal(can(actor('MARKETING_MANAGER'),'pricing.read'), false);
+  assert.equal(can(actor('MARKETING_MANAGER'),'pricing.read'), true);
+  assert.equal(can(actor('READ_ONLY'),'pricing.read'), true);
   assert.equal(can(actor('MARKETING_MANAGER'),'users.manage'), false);
   assert.equal(can(actor('ADMIN'),'users.manage'), true);
   assert.equal(can({ ...actor('ADMIN'), active: false },'users.manage'), false);

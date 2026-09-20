@@ -13,6 +13,11 @@ const workflows = [
     href: '/administration/imports/products',
     description: 'Upload and review Products, part numbers, and prices before applying changes.',
   },
+  {
+    title: 'Price Exceptions',
+    href: '/administration/imports/price-exceptions',
+    description: 'Preview and import finalized legacy Price Exception records without changing Accounts or Products.',
+  },
 ] as const;
 
 export default async function ImportsPage() {

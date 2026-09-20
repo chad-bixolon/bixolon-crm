@@ -10,7 +10,7 @@ const maxColumns = 50;
 export type XlsxResult = { csv?: string; sheets: string[]; selectedSheet?: string; error?: string };
 export type XlsxTransform = (sheet:string, rows:string[][]) => { rows?:string[][]; error?:string };
 
-function inspectZip(buffer: Buffer): string | undefined {
+export function inspectZip(buffer: Buffer): string | undefined {
   if (buffer.subarray(0, 8).equals(Buffer.from('d0cf11e0a1b11ae1', 'hex'))) return 'Password-protected or encrypted Office workbooks are not supported. Save an unencrypted .xlsx copy.';
   if (buffer.length < 22 || buffer.readUInt32LE(0) !== 0x04034b50) return 'Unsupported workbook. Upload a valid .xlsx file.';
   let end = -1;

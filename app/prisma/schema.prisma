@@ -94,42 +94,55 @@ enum ForecastCategory {
   CLOSED
 }
 
+enum PriceExceptionStatus {
+  ACTIVE
+  EXPIRED
+  ARCHIVED
+}
+
+enum PriceExceptionSourceType {
+  LEGACY_WORKBOOK
+  EXTERNAL_EXPORT
+}
+
 model User {
-  id                    Int                @id @default(autoincrement())
-  email                 String             @unique
-  firstName             String
-  lastName              String
-  active                Boolean            @default(true)
-  role                  UserRole           @default(READ_ONLY)
-  archivedAt            DateTime?
-  identities            ExternalIdentity[]
-  ownedAccounts         Account[]          @relation("AccountOwner")
-  opportunities         Opportunity[]      @relation("OpportunityOwner")
-  tasks                 Task[]             @relation("TaskAssignee")
-  activities            Activity[]         @relation("ActivityUser")
-  createdAccounts       Account[]          @relation("AccountCreatedBy")
-  updatedAccounts       Account[]          @relation("AccountUpdatedBy")
-  archivedAccounts      Account[]          @relation("AccountArchivedBy")
-  createdContacts       Contact[]          @relation("ContactCreatedBy")
-  updatedContacts       Contact[]          @relation("ContactUpdatedBy")
-  archivedContacts      Contact[]          @relation("ContactArchivedBy")
-  createdOpportunities  Opportunity[]      @relation("OpportunityCreatedBy")
-  updatedOpportunities  Opportunity[]      @relation("OpportunityUpdatedBy")
-  archivedOpportunities Opportunity[]      @relation("OpportunityArchivedBy")
-  createdTasks          Task[]             @relation("TaskCreatedBy")
-  updatedTasks          Task[]             @relation("TaskUpdatedBy")
-  archivedTasks         Task[]             @relation("TaskArchivedBy")
-  createdActivities     Activity[]         @relation("ActivityCreatedBy")
-  updatedActivities     Activity[]         @relation("ActivityUpdatedBy")
-  archivedActivities    Activity[]         @relation("ActivityArchivedBy")
-  createdNotes          Note[]             @relation("NoteCreatedBy")
-  updatedNotes          Note[]             @relation("NoteUpdatedBy")
-  archivedNotes         Note[]             @relation("NoteArchivedBy")
-  ownedProjects         Project[]          @relation("ProjectOwner")
-  createdProjects       Project[]          @relation("ProjectCreatedBy")
-  updatedProjects       Project[]          @relation("ProjectUpdatedBy")
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
+  id                     Int                @id @default(autoincrement())
+  email                  String             @unique
+  firstName              String
+  lastName               String
+  active                 Boolean            @default(true)
+  role                   UserRole           @default(READ_ONLY)
+  archivedAt             DateTime?
+  identities             ExternalIdentity[]
+  ownedAccounts          Account[]          @relation("AccountOwner")
+  opportunities          Opportunity[]      @relation("OpportunityOwner")
+  tasks                  Task[]             @relation("TaskAssignee")
+  activities             Activity[]         @relation("ActivityUser")
+  createdAccounts        Account[]          @relation("AccountCreatedBy")
+  updatedAccounts        Account[]          @relation("AccountUpdatedBy")
+  archivedAccounts       Account[]          @relation("AccountArchivedBy")
+  createdContacts        Contact[]          @relation("ContactCreatedBy")
+  updatedContacts        Contact[]          @relation("ContactUpdatedBy")
+  archivedContacts       Contact[]          @relation("ContactArchivedBy")
+  createdOpportunities   Opportunity[]      @relation("OpportunityCreatedBy")
+  updatedOpportunities   Opportunity[]      @relation("OpportunityUpdatedBy")
+  archivedOpportunities  Opportunity[]      @relation("OpportunityArchivedBy")
+  createdTasks           Task[]             @relation("TaskCreatedBy")
+  updatedTasks           Task[]             @relation("TaskUpdatedBy")
+  archivedTasks          Task[]             @relation("TaskArchivedBy")
+  createdActivities      Activity[]         @relation("ActivityCreatedBy")
+  updatedActivities      Activity[]         @relation("ActivityUpdatedBy")
+  archivedActivities     Activity[]         @relation("ActivityArchivedBy")
+  createdNotes           Note[]             @relation("NoteCreatedBy")
+  updatedNotes           Note[]             @relation("NoteUpdatedBy")
+  archivedNotes          Note[]             @relation("NoteArchivedBy")
+  ownedProjects          Project[]          @relation("ProjectOwner")
+  createdProjects        Project[]          @relation("ProjectCreatedBy")
+  updatedProjects        Project[]          @relation("ProjectUpdatedBy")
+  createdPriceExceptions PriceException[]   @relation("PriceExceptionCreatedBy")
+  updatedPriceExceptions PriceException[]   @relation("PriceExceptionUpdatedBy")
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
 }
 
 model ExternalIdentity {
@@ -147,46 +160,49 @@ model ExternalIdentity {
 }
 
 model Account {
-  id                     Int                   @id @default(autoincrement())
-  name                   String
-  status                 AccountStatus         @default(ACTIVE)
-  strategicAccount       Boolean               @default(false)
+  id                         Int                   @id @default(autoincrement())
+  name                       String
+  status                     AccountStatus         @default(ACTIVE)
+  strategicAccount           Boolean               @default(false)
   /// Deprecated compatibility value; businessRoles is authoritative after migration.
-  accountType            String?
+  accountType                String?
   /// Existing values become stable lookup codes without normalization or rewriting.
-  industry               String?
-  industryCategory       Industry?             @relation(fields: [industry], references: [code], onDelete: Restrict, onUpdate: Restrict)
-  territory              String?
-  territoryCategory      Territory?            @relation(fields: [territory], references: [code], onDelete: Restrict, onUpdate: Restrict)
-  website                String?
-  phone                  String?
-  addressLine1           String?
-  addressLine2           String?
-  city                   String?
-  stateProvince          String?
-  postalCode             String?
-  country                String?
-  ownerId                Int?
-  owner                  User?                 @relation("AccountOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  businessRoles          AccountBusinessRole[]
-  contacts               Contact[]
+  industry                   String?
+  industryCategory           Industry?             @relation(fields: [industry], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  territory                  String?
+  territoryCategory          Territory?            @relation(fields: [territory], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  website                    String?
+  phone                      String?
+  addressLine1               String?
+  addressLine2               String?
+  city                       String?
+  stateProvince              String?
+  postalCode                 String?
+  country                    String?
+  ownerId                    Int?
+  owner                      User?                 @relation("AccountOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  businessRoles              AccountBusinessRole[]
+  contacts                   Contact[]
   /// Legacy direct opportunity relationships retained for compatibility only.
-  opportunities          Opportunity[]         @relation("LegacyOpportunityAccount")
-  opportunityMemberships OpportunityAccount[]
-  primaryProjects        Project[]             @relation("ProjectPrimaryAccount")
-  projectMemberships     ProjectAccount[]
-  tasks                  Task[]
-  activities             Activity[]
-  notes                  Note[]
-  archivedAt             DateTime?
-  createdById            Int?
-  createdBy              User?                 @relation("AccountCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  updatedById            Int?
-  updatedBy              User?                 @relation("AccountUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
-  archivedById           Int?
-  archivedBy             User?                 @relation("AccountArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
-  createdAt              DateTime              @default(now())
-  updatedAt              DateTime              @updatedAt
+  opportunities              Opportunity[]         @relation("LegacyOpportunityAccount")
+  opportunityMemberships     OpportunityAccount[]
+  primaryProjects            Project[]             @relation("ProjectPrimaryAccount")
+  projectMemberships         ProjectAccount[]
+  tasks                      Task[]
+  activities                 Activity[]
+  notes                      Note[]
+  distributorPriceExceptions PriceException[]      @relation("PriceExceptionDistributor")
+  varPriceExceptions         PriceException[]      @relation("PriceExceptionVar")
+  endUserPriceExceptions     PriceException[]      @relation("PriceExceptionEndUser")
+  archivedAt                 DateTime?
+  createdById                Int?
+  createdBy                  User?                 @relation("AccountCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById                Int?
+  updatedBy                  User?                 @relation("AccountUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  archivedById               Int?
+  archivedBy                 User?                 @relation("AccountArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
+  createdAt                  DateTime              @default(now())
+  updatedAt                  DateTime              @updatedAt
 
   @@index([name])
   @@index([ownerId, status])
@@ -250,10 +266,10 @@ model ActivityType {
 }
 
 model TerminologyLabel {
-  key         String   @id
+  key          String   @id
   displayLabel String
-  changedById Int?
-  changedAt   DateTime @default(now())
+  changedById  Int?
+  changedAt    DateTime @default(now())
 }
 
 model SystemSetting {
@@ -264,34 +280,34 @@ model SystemSetting {
 }
 
 model Contact {
-  id           Int       @id @default(autoincrement())
-  accountId    Int?
-  account      Account?  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  id            Int               @id @default(autoincrement())
+  accountId     Int?
+  account       Account?          @relation(fields: [accountId], references: [id], onDelete: Restrict)
   activityLinks ActivityContact[]
-  firstName    String
-  lastName     String
-  title        String?
-  email        String?
-  phone        String?
-  mobile       String?
-  addressLine1 String?
-  addressLine2 String?
-  city         String?
+  firstName     String
+  lastName      String
+  title         String?
+  email         String?
+  phone         String?
+  mobile        String?
+  addressLine1  String?
+  addressLine2  String?
+  city          String?
   stateProvince String?
-  postalCode   String?
-  country      String?
-  active       Boolean   @default(true)
+  postalCode    String?
+  country       String?
+  active        Boolean           @default(true)
   /// SQL enforces one primary contact per account, active, unarchived, and assigned.
-  isPrimary    Boolean   @default(false)
-  archivedAt   DateTime?
-  createdById  Int?
-  createdBy    User?     @relation("ContactCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  updatedById  Int?
-  updatedBy    User?     @relation("ContactUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
-  archivedById Int?
-  archivedBy   User?     @relation("ContactArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  isPrimary     Boolean           @default(false)
+  archivedAt    DateTime?
+  createdById   Int?
+  createdBy     User?             @relation("ContactCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById   Int?
+  updatedBy     User?             @relation("ContactUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  archivedById  Int?
+  archivedBy    User?             @relation("ContactArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
   @@index([accountId, active])
   @@index([createdById])
@@ -409,22 +425,92 @@ model Product {
 }
 
 model ProductSku {
-  id                   Int                    @id @default(autoincrement())
+  id                   Int                   @id @default(autoincrement())
   productId            Int
-  product              Product                @relation(fields: [productId], references: [id], onDelete: Restrict)
+  product              Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
   partNumber           String
-  normalizedPartNumber String                 @unique
+  normalizedPartNumber String                @unique
   description          String?
   catalogSource        ProductCatalogSource?
-  priceUnit            ProductPriceUnit       @default(EACH)
-  active               Boolean                @default(true)
+  priceUnit            ProductPriceUnit      @default(EACH)
+  active               Boolean               @default(true)
   prices               ProductPrice[]
   opportunityProducts  OpportunityProduct[]
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
+  priceExceptionLines  PriceExceptionLine[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 
   @@index([productId])
   @@index([catalogSource, productId])
+}
+
+/// A finalized commercial price exception imported from an operational source.
+/// sourceKey, not peCode, is the stable import identity because legacy codes are reused.
+model PriceException {
+  id                    Int                      @id @default(autoincrement())
+  peCode                String?
+  predecessorPeCode     String?
+  status                PriceExceptionStatus
+  sourceType            PriceExceptionSourceType
+  sourceKey             String
+  distributorAccountId  Int?
+  distributorAccount    Account?                 @relation("PriceExceptionDistributor", fields: [distributorAccountId], references: [id], onDelete: Restrict)
+  varAccountId          Int?
+  varAccount            Account?                 @relation("PriceExceptionVar", fields: [varAccountId], references: [id], onDelete: Restrict)
+  endUserAccountId      Int?
+  endUserAccount        Account?                 @relation("PriceExceptionEndUser", fields: [endUserAccountId], references: [id], onDelete: Restrict)
+  distributorSourceName String?
+  varSourceName         String?
+  endUserSourceName     String?
+  distributorSalesRep   String?
+  effectiveDate         DateTime?                @db.Date
+  expirationDate        DateTime?                @db.Date
+  sourceDescription     String?
+  competitor            String?
+  sourceFileName        String?
+  sourceSheet           String?
+  sourceMetadata        Json?
+  lines                 PriceExceptionLine[]
+  archivedAt            DateTime?
+  createdById           Int?
+  createdBy             User?                    @relation("PriceExceptionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById           Int?
+  updatedBy             User?                    @relation("PriceExceptionUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  @@unique([sourceType, sourceKey])
+  @@index([peCode])
+  @@index([status, expirationDate])
+  @@index([distributorAccountId])
+  @@index([varAccountId])
+  @@index([endUserAccountId])
+  @@index([archivedAt])
+}
+
+model PriceExceptionLine {
+  id                Int            @id @default(autoincrement())
+  priceExceptionId  Int
+  priceException    PriceException @relation(fields: [priceExceptionId], references: [id], onDelete: Restrict)
+  sourceLineKey     String
+  productSkuId      Int?
+  productSku        ProductSku?    @relation(fields: [productSkuId], references: [id], onDelete: Restrict)
+  sourceSku         String?
+  approvedUnitPrice Decimal?       @db.Decimal(12, 2)
+  currencyCode      String         @default("USD") @db.VarChar(3)
+  sourceQuantity    Decimal?       @db.Decimal(14, 3)
+  sourceQuantityRaw String?
+  sourceUnit        String?
+  comments          String?
+  competitor        String?
+  sortOrder         Int            @default(0)
+  sourceMetadata    Json?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@unique([priceExceptionId, sourceLineKey])
+  @@index([productSkuId, priceExceptionId])
+  @@index([priceExceptionId, sortOrder])
 }
 
 enum ProductCatalogSource {
@@ -448,14 +534,14 @@ enum ProductPriceTier {
 }
 
 model ProductPrice {
-  id           Int        @id @default(autoincrement())
+  id           Int              @id @default(autoincrement())
   skuId        Int
-  sku          ProductSku @relation(fields: [skuId], references: [id], onDelete: Restrict)
+  sku          ProductSku       @relation(fields: [skuId], references: [id], onDelete: Restrict)
   tier         ProductPriceTier
-  currencyCode String     @db.VarChar(3)
-  amount       Decimal    @db.Decimal(12, 2)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  currencyCode String           @db.VarChar(3)
+  amount       Decimal          @db.Decimal(12, 2)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
   @@unique([skuId, currencyCode, tier])
 }
@@ -519,17 +605,17 @@ model Task {
 }
 
 model Activity {
-  id            Int                 @id @default(autoincrement())
+  id            Int               @id @default(autoincrement())
   projectId     Int?
-  project       Project?            @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  project       Project?          @relation(fields: [projectId], references: [id], onDelete: Restrict)
   accountId     Int?
-  account       Account?            @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  account       Account?          @relation(fields: [accountId], references: [id], onDelete: Restrict)
   opportunityId Int?
-  opportunity   Opportunity?        @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  opportunity   Opportunity?      @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
   userId        Int?
-  user          User?               @relation("ActivityUser", fields: [userId], references: [id], onDelete: Restrict)
+  user          User?             @relation("ActivityUser", fields: [userId], references: [id], onDelete: Restrict)
   type          String
-  activityType  ActivityType        @relation(fields: [type], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  activityType  ActivityType      @relation(fields: [type], references: [code], onDelete: Restrict, onUpdate: Restrict)
   subject       String
   description   String?
   direction     ActivityDirection @default(NA)
@@ -537,16 +623,16 @@ model Activity {
   nextStep      String?
   followUpDate  DateTime?
   contacts      ActivityContact[]
-  activityDate  DateTime            @default(now())
+  activityDate  DateTime          @default(now())
   archivedAt    DateTime?
   createdById   Int?
-  createdBy     User?               @relation("ActivityCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy     User?             @relation("ActivityCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   updatedById   Int?
-  updatedBy     User?               @relation("ActivityUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  updatedBy     User?             @relation("ActivityUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
   archivedById  Int?
-  archivedBy    User?               @relation("ActivityArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  archivedBy    User?             @relation("ActivityArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
   @@index([accountId, activityDate])
   @@index([projectId, activityDate])
