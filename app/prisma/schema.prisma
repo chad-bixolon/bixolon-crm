@@ -105,6 +105,12 @@ enum PriceExceptionSourceType {
   EXTERNAL_EXPORT
 }
 
+enum OpportunityProductPriceSource {
+  MANUAL
+  CATALOG
+  PRICE_EXCEPTION
+}
+
 model User {
   id                     Int                @id @default(autoincrement())
   email                  String             @unique
@@ -489,24 +495,25 @@ model PriceException {
 }
 
 model PriceExceptionLine {
-  id                Int            @id @default(autoincrement())
-  priceExceptionId  Int
-  priceException    PriceException @relation(fields: [priceExceptionId], references: [id], onDelete: Restrict)
-  sourceLineKey     String
-  productSkuId      Int?
-  productSku        ProductSku?    @relation(fields: [productSkuId], references: [id], onDelete: Restrict)
-  sourceSku         String?
-  approvedUnitPrice Decimal?       @db.Decimal(12, 2)
-  currencyCode      String         @default("USD") @db.VarChar(3)
-  sourceQuantity    Decimal?       @db.Decimal(14, 3)
-  sourceQuantityRaw String?
-  sourceUnit        String?
-  comments          String?
-  competitor        String?
-  sortOrder         Int            @default(0)
-  sourceMetadata    Json?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  id                  Int                  @id @default(autoincrement())
+  priceExceptionId    Int
+  priceException      PriceException       @relation(fields: [priceExceptionId], references: [id], onDelete: Restrict)
+  sourceLineKey       String
+  productSkuId        Int?
+  productSku          ProductSku?          @relation(fields: [productSkuId], references: [id], onDelete: Restrict)
+  opportunityProducts OpportunityProduct[]
+  sourceSku           String?
+  approvedUnitPrice   Decimal?             @db.Decimal(12, 2)
+  currencyCode        String               @default("USD") @db.VarChar(3)
+  sourceQuantity      Decimal?             @db.Decimal(14, 3)
+  sourceQuantityRaw   String?
+  sourceUnit          String?
+  comments            String?
+  competitor          String?
+  sortOrder           Int                  @default(0)
+  sourceMetadata      Json?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   @@unique([priceExceptionId, sourceLineKey])
   @@index([productSkuId, priceExceptionId])
@@ -547,22 +554,32 @@ model ProductPrice {
 }
 
 model OpportunityProduct {
-  id                 Int         @id @default(autoincrement())
-  opportunityId      Int
-  opportunity        Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
-  productId          Int
-  product            Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
-  skuId              Int?
-  sku                ProductSku? @relation(fields: [skuId], references: [id], onDelete: Restrict)
-  quantity           Int
-  estimatedUnitPrice Decimal     @map("unitPrice") @db.Decimal(12, 2)
-  archivedAt         DateTime?
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  id                         Int                           @id @default(autoincrement())
+  opportunityId              Int
+  opportunity                Opportunity                   @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  productId                  Int
+  product                    Product                       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  skuId                      Int?
+  sku                        ProductSku?                   @relation(fields: [skuId], references: [id], onDelete: Restrict)
+  quantity                   Int
+  estimatedUnitPrice         Decimal                       @map("unitPrice") @db.Decimal(12, 2)
+  priceSource                OpportunityProductPriceSource @default(MANUAL)
+  catalogPriceTier           ProductPriceTier?
+  priceExceptionLineId       Int?
+  priceExceptionLine         PriceExceptionLine?           @relation(fields: [priceExceptionLineId], references: [id], onDelete: Restrict)
+  priceExceptionCode         String?
+  priceExceptionUnitPrice    Decimal?                      @db.Decimal(12, 2)
+  priceExceptionCurrencyCode String?                       @db.VarChar(3)
+  priceExceptionSourceQty    String?
+  archivedAt                 DateTime?
+  createdAt                  DateTime                      @default(now())
+  updatedAt                  DateTime                      @updatedAt
 
   @@index([opportunityId, archivedAt])
   @@index([productId])
   @@index([skuId])
+  @@index([priceSource])
+  @@index([priceExceptionLineId])
 }
 
 model Task {
