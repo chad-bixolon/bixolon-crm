@@ -125,6 +125,27 @@ test('target participation separates Sales requirements from manager visibility'
   assert.ok(!missing.reps.some(rep => rep.userId === 10));
 });
 
+test('SalesTarget lookup accepts only period and eligible IDs for Mark, Gary, and Ryan', async () => {
+  const users = [
+    { id: 11, firstName: 'Ryan', role: 'SALES' },
+    { id: 12, firstName: 'Mark', role: 'SALES_MANAGER' },
+    { id: 13, firstName: 'Gary', role: 'SALES_MANAGER' },
+  ];
+  const client = {
+    salesTarget: { findMany: async ({ where }) => {
+      assert.deepEqual(where, { userId: { in: [11, 12, 13] }, year: 2026, quarter: 'Q3', currencyCode: 'USD', archivedAt: null });
+      return [{ userId: 12, targetAmount: new Prisma.Decimal('100') }];
+    } },
+    opportunity: { findMany: async () => [] },
+  };
+  const result = await forecastForTeam(client, actor('ADMIN'), { users, year: 2026, quarter: 'Q3', currencyCode: 'USD' });
+  assert.deepEqual(result.reps.map(rep => [rep.userId, rep.targetStatus]), [[11, 'MISSING_TARGET'], [12, 'SET']]);
+  assert.equal(result.reps.some(rep => rep.userId === 13), false);
+  assert.equal(result.target, '100.00');
+  assert.equal(result.targetStatus, 'PARTIAL_TARGET');
+  assert.equal(result.pipelineCoverage, null);
+});
+
 test('dashboard report links retain quarter, currency, grouping and explicit Commit filter', async () => {
   const href = dashboard.pipelineReportHref({ currency: 'EUR', groupBy: 'owner', commit: true, team: true });
   const params = Object.fromEntries(new URL(href, 'http://localhost').searchParams);

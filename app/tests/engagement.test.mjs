@@ -9,7 +9,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText, filename);
 const require = Module.createRequire(fileURLToPath(import.meta.url));
 const { parseActivity, saveActivity } = require(path.join(root, 'lib/work.ts'));
-const { engagementState, lookbackStart, repAccountSummary, reportAccountScope, taskRollup } = require(path.join(root, 'lib/engagement.ts'));
+const { engagementAccountWhere, engagementState, hasNoActivityInDays, latestAccountActivityOrder, lookbackStart, repAccountSummary, reportAccountScope, taskRollup } = require(path.join(root, 'lib/engagement.ts'));
 const { routeAccess } = require(path.join(root, 'lib/authorization.ts'));
 const form = entries => { const value = new FormData(); for (const [key, item] of entries) value.append(key, item); return value; };
 const fields = [['subject','Meeting'],['type','MEETING'],['accountId','1'],['activityDate','2026-09-16T14:30'],['direction','OUTBOUND'],['contactIds','2'],['nextStep','Send proposal'],['followUpDate','2026-09-20']];
@@ -63,6 +63,9 @@ test('stale and no-activity states use configured thresholds', () => {
   assert.equal(engagementState(null,90,now),'No activity ever');
   assert.equal(engagementState(last,90,now),'Active / recent');
   assert.equal(engagementState(last,30,now),'Stale');
+  assert.equal(hasNoActivityInDays(null,30,now),true);
+  assert.equal(hasNoActivityInDays(last,30,now),true);
+  assert.equal(hasNoActivityInDays(last,31,now),false);
 });
 test('rep summary and activity lookback respond to settings', () => {
   const now=new Date('2026-09-17T12:00:00Z');
@@ -78,6 +81,8 @@ test('report scope and task rollup enforce role and open overdue logic', () => {
   assert.deepEqual(reportAccountScope(actor('SALES')),{ownerId:7});
   assert.deepEqual(reportAccountScope(actor('SALES_MANAGER')),{});
   assert.deepEqual(reportAccountScope(actor('ADMIN')),{});
+  assert.deepEqual(engagementAccountWhere(actor('SALES')),{ownerId:7,archivedAt:null,status:'ACTIVE'});
+  assert.deepEqual(latestAccountActivityOrder(),[{activityDate:'desc'},{id:'desc'}]);
   assert.throws(()=>reportAccountScope(actor('MARKETING_MANAGER')));
   for (const role of ['ADMIN','SALES_MANAGER','SALES']) assert.equal(routeAccess('/reports/engagement',actor(role)),'allowed');
   for (const role of ['MARKETING_MANAGER','READ_ONLY']) assert.equal(routeAccess('/reports/engagement',actor(role)),'denied');

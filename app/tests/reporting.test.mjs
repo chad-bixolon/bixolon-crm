@@ -21,8 +21,8 @@ test('report discovery follows runnable type and built-in authorization',()=>{
  const salesBuiltIns=['MY_OPEN_PIPELINE','PIPELINE_THIS_QUARTER','PIPELINE_BY_SALES_REP','ACCOUNT_ENGAGEMENT'];
  for(const role of ['ADMIN','SALES_MANAGER','SALES']){
   assert.deepEqual(reporting.getVisibleBuiltInReports(actor(role)),salesBuiltIns);
-  assert.deepEqual(reporting.getVisibleReportTypes(actor(role)),['PIPELINE']);
-  assert.deepEqual(reporting.getCreatableReportTypes(actor(role)),['PIPELINE']);
+  assert.deepEqual(reporting.getVisibleReportTypes(actor(role)),['PIPELINE','ACCOUNT_ACTIVITY']);
+  assert.deepEqual(reporting.getCreatableReportTypes(actor(role)),['PIPELINE','ACCOUNT_ACTIVITY']);
   assert.equal(reporting.canAccessReports(actor(role)),true);
  }
  assert.deepEqual(reporting.getVisibleBuiltInReports(actor('MARKETING_MANAGER')),[]);
@@ -33,7 +33,7 @@ test('report discovery follows runnable type and built-in authorization',()=>{
  assert.deepEqual(reporting.getVisibleReportTypes(actor('READ_ONLY')),['PIPELINE']);
  assert.deepEqual(reporting.getCreatableReportTypes(actor('READ_ONLY')),[]);
  assert.equal(reporting.canAccessReports(actor('READ_ONLY')),true);
- for(const reportType of reporting.reportTypes.filter(type=>type!=='PIPELINE'))assert.equal(reporting.canRunReportType(actor('ADMIN'),reportType),false);
+ for(const reportType of reporting.reportTypes.filter(type=>!['PIPELINE','ACCOUNT_ACTIVITY'].includes(type)))assert.equal(reporting.canRunReportType(actor('ADMIN'),reportType),false);
 });
 test('Channel / Partner foundation distinguishes every partner business role and Media Partner deal role',()=>{
  assert.deepEqual(reporting.channelPartnerAccountRoles,['DISTRIBUTOR','VAR','ISV','OEM','PARTNER','MEDIA_PARTNER']);
@@ -84,7 +84,7 @@ test('Sales scope is always applied even when a shared report requests another o
  assert.equal(reporting.canViewReportDefinition(actor('SALES',7),{ownerId:99,visibility:'SHARED',reportType:'PIPELINE',archivedAt:null}),true);
  let where;const config={...base(),filters:[...base().filters,{field:'ownerId',operator:'eq',value:99}]};await reporting.executePipelineReport({opportunity:{findMany:async args=>{where=args.where;return[];}}},actor('SALES',7),config);
  assert.ok(where.AND.some(clause=>clause.ownerId===7));assert.ok(where.AND.some(clause=>clause.ownerId===99));
- assert.deepEqual(reporting.savedReportWhere(actor('SALES',7)),{archivedAt:null,reportType:{in:['PIPELINE']},OR:[{ownerId:7},{visibility:'SHARED'}]});
+ assert.deepEqual(reporting.savedReportWhere(actor('SALES',7)),{archivedAt:null,reportType:{in:['PIPELINE','ACCOUNT_ACTIVITY']},OR:[{ownerId:7},{visibility:'SHARED'}]});
 });
 
 test('shared saved reports remain subject to report-type authorization',async()=>{

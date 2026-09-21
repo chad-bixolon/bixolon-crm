@@ -1,6 +1,8 @@
 import { ForecastCategory, Prisma, type PrismaClient } from '@prisma/client';
 import { can, opportunityScope, type Actor } from './authorization';
 import { opportunityTotal, weightedValue } from './opportunities';
+import { daysSince, engagementAccountWhere, hasNoActivityInDays, latestAccountActivityOrder } from './engagement';
+import { getSettings } from './configuration';
 
 export const reportTypes = ['PIPELINE','ACCOUNT_ACTIVITY','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE'] as const;
 export type CuratedReportType = typeof reportTypes[number];
@@ -38,6 +40,15 @@ const pipelineDefinition: ReportTypeDefinition = {
   metrics: { pipeline: 'Pipeline', weightedPipeline: 'Weighted Pipeline', opportunityCount: 'Opportunity Count', averageOpportunityValue: 'Average Opportunity Value' },
   sorts: { opportunity: 'Opportunity', account: 'Account', owner: 'Owner', stage: 'Stage', closeDate: 'Close Date', value: 'Value' },
 };
+const accountActivityDefinition: ReportTypeDefinition = {
+  label: 'Account Activity', description: 'Account activity, follow-up, and stale Accounts', grain: 'Account', implemented: true,
+  semanticNote: 'Each active, unarchived Account appears once. Activity Count includes all non-archived Activities recorded for that Account.',
+  filters: { ownerId:{label:'Sales Rep',operators:['eq']},accountId:{label:'Account',operators:['eq']},industry:{label:'Industry',operators:['eq']},territory:{label:'Territory',operators:['eq']},strategicAccount:{label:'Strategic Account',operators:['eq']},businessRole:{label:'Business Role',operators:['eq']},activityType:{label:'Latest Activity Type',operators:['eq']},minDays:{label:'No activity in at least N days',operators:['gte']},hasActivity:{label:'Has Activity',operators:['eq']} },
+  columns: {account:'Account',owner:'Owner',industry:'Industry',territory:'Territory',businessRoles:'Business Roles',strategicAccount:'Strategic Account',lastActivity:'Last Activity',daysSinceLastActivity:'Days Since Last Activity',activityStatus:'Activity Status',latestActivityType:'Latest Activity Type',latestActivityBy:'Latest Activity By',activityCount:'Activity Count'},
+  groupings: {owner:'Sales Rep',industry:'Industry',territory:'Territory',latestActivityType:'Latest Activity Type',activityStatus:'Activity Status'},
+  metrics: {accountCount:'Account Count',noActivityCount:'Accounts With No Activity',staleAccountCount:'Stale Account Count',activityCount:'Activity Count',averageDaysSinceLastActivity:'Average Days Since Last Activity'},
+  sorts: {account:'Account',owner:'Owner',lastActivity:'Last Activity',daysSinceLastActivity:'Days Since Last Activity',activityCount:'Activity Count'},
+};
 
 function foundation(label: string, description: string, grain: string, note: string): ReportTypeDefinition {
   return { label, description, grain, implemented: false, semanticNote: note, filters: {}, columns: {}, groupings: {}, metrics: {}, sorts: {} };
@@ -45,7 +56,7 @@ function foundation(label: string, description: string, grain: string, note: str
 
 export const reportRegistry: Record<CuratedReportType, ReportTypeDefinition> = {
   PIPELINE: pipelineDefinition,
-  ACCOUNT_ACTIVITY: foundation('Account Activity', 'Account activity, follow-up, and stale Accounts', 'Account', 'Activities remain Account-anchored. No-activity Accounts require an Account-grain execution path.'),
+  ACCOUNT_ACTIVITY: accountActivityDefinition,
   PRODUCT_PERFORMANCE: foundation('Product Performance', 'Product and category sales performance', 'OpportunityProduct', 'Line value is quantity × actual OpportunityProduct price; it is not Opportunity-level pipeline.'),
   CHANNEL_PARTNER: { ...foundation('Channel / Partner', 'Distributor, reseller, and partner performance', 'Opportunity', 'Participant roles describe each deal; Account business roles describe the company generally. Organization totals must deduplicate Opportunities across partners.'),
     filters: { participantRole: { label: 'Opportunity participant role', operators: ['eq'] }, accountBusinessRole: { label: 'Account business role', operators: ['eq'] } },
@@ -58,12 +69,12 @@ export const builtInReportTypes = ['MY_OPEN_PIPELINE','PIPELINE_THIS_QUARTER','P
 export type BuiltInReportType = typeof builtInReportTypes[number];
 
 export function canRunReportType(actor: Actor, reportType: unknown) {
-  return reportTypes.includes(reportType as CuratedReportType) && reportRegistry[reportType as CuratedReportType].implemented && can(actor,'sales.read');
+  return reportTypes.includes(reportType as CuratedReportType) && reportRegistry[reportType as CuratedReportType].implemented && can(actor,reportType === 'ACCOUNT_ACTIVITY' ? 'sales.write' : 'sales.read');
 }
 export function getVisibleReportTypes(actor: Actor) { return reportTypes.filter(reportType=>canRunReportType(actor,reportType)); }
 export function getCreatableReportTypes(actor: Actor) { return can(actor,'sales.write') ? getVisibleReportTypes(actor) : []; }
 export function canViewBuiltInReport(actor: Actor, reportType: BuiltInReportType) {
-  return reportType === 'ACCOUNT_ENGAGEMENT' ? can(actor,'sales.write') : getCreatableReportTypes(actor).includes('PIPELINE');
+  return reportType === 'ACCOUNT_ENGAGEMENT' ? canRunReportType(actor,'ACCOUNT_ACTIVITY') : getCreatableReportTypes(actor).includes('PIPELINE');
 }
 export function getVisibleBuiltInReports(actor: Actor) { return builtInReportTypes.filter(reportType=>canViewBuiltInReport(actor,reportType)); }
 export function canAccessReports(actor: Actor) { return getVisibleReportTypes(actor).length > 0 || getVisibleBuiltInReports(actor).length > 0; }
@@ -80,7 +91,10 @@ export const channelPartnerAccountRoles = ['DISTRIBUTOR','VAR','ISV','OEM','PART
 export const channelPartnerParticipantRoles = ['DISTRIBUTOR','VAR_RESELLER','ISV_PARTNER','OEM','MEDIA_PARTNER'] as const;
 
 function validFilterValue(filter: ReportFilter) {
-  if (['ownerId','stageId','accountId','accountOwnerId','productCategoryId','productId','skuId','projectId'].includes(filter.field)) return positiveInteger(filter.value);
+  if (['ownerId','stageId','accountId','accountOwnerId','productCategoryId','productId','skuId','projectId','minDays'].includes(filter.field)) return positiveInteger(filter.value);
+  if (filter.field === 'hasActivity') return typeof filter.value === 'boolean';
+  if (filter.field === 'businessRole') return ['END_USER','DISTRIBUTOR','VAR','ISV','OEM','PARTNER','MEDIA_PARTNER'].includes(String(filter.value));
+  if (filter.field === 'activityType') return typeof filter.value === 'string' && filter.value.length > 0 && filter.value.length <= 100;
   if (filter.field === 'strategicAccount') return typeof filter.value === 'boolean';
   if (filter.field === 'activeSalesRep') return filter.value === true;
   if (filter.field === 'status') return statuses.includes(filter.value as typeof statuses[number]);
@@ -95,6 +109,7 @@ function validFilterValue(filter: ReportFilter) {
 }
 
 export function defaultReportConfiguration(reportType: CuratedReportType): ReportConfiguration {
+  if (reportType === 'ACCOUNT_ACTIVITY') return {filters:[],groupBy:null,sort:[{field:'lastActivity',direction:'asc'}],columns:['account','owner','industry','territory','businessRoles','strategicAccount','lastActivity','daysSinceLastActivity','activityStatus','latestActivityType','latestActivityBy','activityCount'],metrics:['accountCount','noActivityCount','staleAccountCount','activityCount','averageDaysSinceLastActivity']};
   if (reportType !== 'PIPELINE') return { filters: [], groupBy: null, sort: [], columns: [], metrics: [] };
   return { filters: [{ field: 'status', operator: 'eq', value: 'OPEN' }], groupBy: null, sort: [{ field: 'closeDate', direction: 'asc' }], columns: ['opportunity','account','owner','stage','closeDate','value','weightedValue','currency'], metrics: ['pipeline','weightedPipeline','opportunityCount','averageOpportunityValue'] };
 }
@@ -204,8 +219,48 @@ export async function executePipelineReport(client: PrismaClient, actor: Actor, 
   return { reportType:'PIPELINE', summary:metrics(rows), groups:[...groups.values()].sort((a,b)=>a.label.localeCompare(b.label)).map(group=>({key:group.key,label:group.label,metrics:metrics(group.rows),opportunityIds:group.rows.map(row=>row.id)})), rows:rows.map(row=>{const value=opportunityTotal(row.products),probability=row.probability??row.stage.probability; return {id:row.id,opportunity:row.name,accounts:row.participants.map(x=>x.account.name).sort().join(', ')||'—',owner:row.owner?`${row.owner.firstName} ${row.owner.lastName}`:'Unassigned',stage:row.stage.name,forecastCategory:row.forecastCategory,closeDate:row.expectedCloseDate?.toISOString().slice(0,10)??null,value:value.toFixed(2),weightedValue:weightedValue(value,probability).toFixed(2),probability,currency:row.currencyCode,groupKeys:groupValues(row,config.groupBy).map(x=>x.key)};}), currencies:[...new Set(rows.map(row=>row.currencyCode))].sort(), filterCount:config.filters.length, semanticNote:pipelineDefinition.semanticNote };
 }
 
+type AccountDbRow = Prisma.AccountGetPayload<{include:{owner:true,industryCategory:true,territoryCategory:true,businessRoles:true,activities:{include:{activityType:true,user:true}}}}>;
+export type AccountActivityMetrics = {accountCount:number;noActivityCount:number;staleAccountCount:number;activityCount:number;averageDaysSinceLastActivity:number|null};
+export type AccountActivityDetailRow = {id:number;account:string;owner:string;industry:string;territory:string;businessRoles:string;strategicAccount:boolean;lastActivity:string|null;daysSinceLastActivity:number|null;activityStatus:string;latestActivityType:string;latestActivityBy:string;activityCount:number;groupKeys:string[]};
+export type AccountActivityReportResult = {reportType:'ACCOUNT_ACTIVITY';summary:AccountActivityMetrics;groups:{key:string;label:string;metrics:AccountActivityMetrics;accountIds:number[]}[];rows:AccountActivityDetailRow[];filterCount:number;semanticNote:string;staleThresholdDays:number};
+
+function activityStatus(days:number|null) {return days===null?'Never contacted':days<=30?'0–30 days':days<=60?'31–60 days':days<=90?'61–90 days':'91+ days';}
+function accountGroup(row:AccountDbRow, latest:AccountDbRow['activities'][number]|undefined, days:number|null, groupBy:string|null) {
+  if(groupBy==='owner') return {key:String(row.ownerId??'none'),label:row.owner?`${row.owner.firstName} ${row.owner.lastName}`:'Unassigned'};
+  if(groupBy==='industry') return {key:row.industry??'none',label:row.industryCategory?.name??row.industry??'No Industry'};
+  if(groupBy==='territory') return {key:row.territory??'none',label:row.territoryCategory?.name??row.territory??'No Territory'};
+  if(groupBy==='latestActivityType') return {key:latest?.type??'none',label:latest?.activityType.name??'No activity'};
+  if(groupBy==='activityStatus') {const label=activityStatus(days);return {key:label,label};}
+  return null;
+}
+export async function executeAccountActivityReport(client:PrismaClient, actor:Actor, rawConfig:unknown, now=new Date()):Promise<AccountActivityReportResult> {
+  if(!canRunReportType(actor,'ACCOUNT_ACTIVITY')) throw new Error('Access denied');
+  const config=validateReportConfiguration('ACCOUNT_ACTIVITY',rawConfig);
+  const clauses:Prisma.AccountWhereInput[]=[engagementAccountWhere(actor)];
+  for(const filter of config.filters) {
+    const value=filter.value;
+    if(filter.field==='ownerId')clauses.push({ownerId:value as number});
+    else if(filter.field==='accountId')clauses.push({id:value as number});
+    else if(filter.field==='industry')clauses.push({industry:value as string});
+    else if(filter.field==='territory')clauses.push({territory:value as string});
+    else if(filter.field==='strategicAccount')clauses.push({strategicAccount:value as boolean});
+    else if(filter.field==='businessRole')clauses.push({businessRoles:{some:{role:value as never}}});
+  }
+  const [accounts,settings]=await Promise.all([client.account.findMany({where:{AND:clauses},include:{owner:true,industryCategory:true,territoryCategory:true,businessRoles:true,activities:{where:{archivedAt:null},include:{activityType:true,user:true},orderBy:latestAccountActivityOrder()}}}),getSettings(client)]);
+  const staleThresholdDays=settings.STALE_ACCOUNT_WARNING_DAYS;
+  const filtered=accounts.filter(row=>{const latest=row.activities[0], date=latest?.activityDate??null;return config.filters.every(filter=>filter.field==='minDays'?hasNoActivityInDays(date,filter.value as number,now):filter.field==='hasActivity'?Boolean(latest)===filter.value:filter.field==='activityType'?latest?.type===filter.value:true);});
+  const enriched=filtered.map(row=>({row,latest:row.activities[0],days:daysSince(row.activities[0]?.activityDate??null,now)}));
+  const sort=config.sort.length?config.sort:[{field:'lastActivity',direction:'asc' as const}];
+  enriched.sort((a,b)=>{for(const spec of sort){const read=(item:typeof a):string|number=>spec.field==='account'?item.row.name:spec.field==='owner'?(item.row.owner?`${item.row.owner.lastName} ${item.row.owner.firstName}`:''):spec.field==='activityCount'?item.row.activities.length:spec.field==='daysSinceLastActivity'?(item.days??Number.MAX_SAFE_INTEGER):(item.latest?.activityDate.getTime()??Number.MIN_SAFE_INTEGER);const x=read(a),y=read(b),cmp=x<y?-1:x>y?1:0;if(cmp)return spec.direction==='asc'?cmp:-cmp;}return a.row.id-b.row.id;});
+  const summarize=(items:typeof enriched):AccountActivityMetrics=>{const active=items.filter(x=>x.days!==null);return {accountCount:items.length,noActivityCount:items.length-active.length,staleAccountCount:items.filter(x=>hasNoActivityInDays(x.latest?.activityDate??null,staleThresholdDays,now)).length,activityCount:items.reduce((n,x)=>n+x.row.activities.length,0),averageDaysSinceLastActivity:active.length?Math.round(active.reduce((n,x)=>n+(x.days??0),0)/active.length*10)/10:null};};
+  const groups=new Map<string,{key:string;label:string;items:typeof enriched}>();
+  for(const item of enriched){const group=accountGroup(item.row,item.latest,item.days,config.groupBy);if(group){const found=groups.get(group.key)??{...group,items:[]};found.items.push(item);groups.set(group.key,found);}}
+  return {reportType:'ACCOUNT_ACTIVITY',summary:summarize(enriched),groups:[...groups.values()].sort((a,b)=>a.label.localeCompare(b.label)).map(group=>({key:group.key,label:group.label,metrics:summarize(group.items),accountIds:group.items.map(x=>x.row.id)})),rows:enriched.map(({row,latest,days})=>({id:row.id,account:row.name,owner:row.owner?`${row.owner.firstName} ${row.owner.lastName}`:'Unassigned',industry:row.industryCategory?.name??row.industry??'—',territory:row.territoryCategory?.name??row.territory??'—',businessRoles:row.businessRoles.map(x=>x.role.replaceAll('_',' ')).join(', ')||'—',strategicAccount:row.strategicAccount,lastActivity:latest?.activityDate.toISOString().slice(0,16).replace('T',' ')??null,daysSinceLastActivity:days,activityStatus:activityStatus(days),latestActivityType:latest?.activityType.name??'—',latestActivityBy:latest?.user?`${latest.user.firstName} ${latest.user.lastName}`:'—',activityCount:row.activities.length,groupKeys:[accountGroup(row,latest,days,config.groupBy)?.key].filter((x):x is string=>!!x)})),filterCount:config.filters.length,semanticNote:accountActivityDefinition.semanticNote,staleThresholdDays};
+}
+
 export async function executeReport(client: PrismaClient, actor: Actor, reportType: unknown, rawConfig: unknown, now = new Date()) {
   if (!canRunReportType(actor,reportType)) throw new Error('Access denied');
+  if (reportType === 'ACCOUNT_ACTIVITY') return executeAccountActivityReport(client,actor,rawConfig,now);
   if (reportType !== 'PIPELINE') { validateReportConfiguration(reportType,rawConfig); throw new Error('Report execution is not implemented.'); }
   return executePipelineReport(client,actor,rawConfig,now);
 }

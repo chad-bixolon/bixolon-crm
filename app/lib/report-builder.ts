@@ -18,3 +18,13 @@ export function pipelineConfigFromParams(params: Params, fallback?: unknown): Re
   return validateReportConfiguration('PIPELINE',{filters,groupBy:one(params.groupBy)||null,sort:[{field:one(params.sortField)||'closeDate',direction:one(params.sortDirection)||'asc'}],metrics:metrics.length?metrics:['pipeline','opportunityCount'],columns:columns.length?columns:['opportunity','account','owner','stage','closeDate','value','weightedValue','currency']});
 }
 export function filterValue(config:ReportConfiguration,field:string){return config.filters.find(filter=>filter.field===field)?.value;}
+export function accountActivityConfigFromParams(params:Params, fallback?:unknown):ReportConfiguration {
+  if(one(params.configured)!=='1')return validateReportConfiguration('ACCOUNT_ACTIVITY',fallback??defaultReportConfiguration('ACCOUNT_ACTIVITY'));
+  const filters:ReportConfiguration['filters']=[];
+  for(const field of ['ownerId','accountId','minDays'] as const){const value=number(one(params[field]));if(value)filters.push({field,operator:field==='minDays'?'gte':'eq',value});}
+  for(const field of ['industry','territory','businessRole','activityType'] as const){const value=one(params[field]);if(value)filters.push({field,operator:'eq',value});}
+  if(['true','false'].includes(one(params.strategicAccount)??''))filters.push({field:'strategicAccount',operator:'eq',value:one(params.strategicAccount)==='true'});
+  if(['true','false'].includes(one(params.hasActivity)??''))filters.push({field:'hasActivity',operator:'eq',value:one(params.hasActivity)==='true'});
+  const defaults=defaultReportConfiguration('ACCOUNT_ACTIVITY'),metrics=many(params.metrics),columns=many(params.columns);
+  return validateReportConfiguration('ACCOUNT_ACTIVITY',{filters,groupBy:one(params.groupBy)||null,sort:[{field:one(params.sortField)||'lastActivity',direction:one(params.sortDirection)||'asc'}],metrics:metrics.length?metrics:defaults.metrics,columns:columns.length?columns:defaults.columns});
+}

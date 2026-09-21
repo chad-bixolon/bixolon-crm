@@ -3,7 +3,7 @@ import { Content, PageHeader } from '@/components/shell';
 import { currentUser } from '@/lib/current-user';
 import { getLabels, getSettings } from '@/lib/configuration';
 import { prisma } from '@/lib/prisma';
-import { daysSince, engagementState, lookbackStart, repAccountSummary, reportAccountScope, taskRollup } from '@/lib/engagement';
+import { daysSince, engagementAccountWhere, engagementState, hasNoActivityInDays, latestAccountActivityOrder, lookbackStart, repAccountSummary, taskRollup } from '@/lib/engagement';
 import { dayBounds } from '@/lib/work';
 import { notFound } from 'next/navigation';
 import type { Prisma } from '@prisma/client';
@@ -14,7 +14,7 @@ export default async function EngagementReport({ searchParams }: { searchParams:
   const actor = await currentUser();
   if (!canViewBuiltInReport(actor,'ACCOUNT_ENGAGEMENT')) notFound();
   const f = await searchParams, [settings, labels] = await Promise.all([getSettings(prisma), getLabels(prisma)]), now = new Date(), today = dayBounds(now).start;
-  const where: Prisma.AccountWhereInput = { ...reportAccountScope(actor), archivedAt: null, status: 'ACTIVE' };
+  const where: Prisma.AccountWhereInput = engagementAccountWhere(actor);
   if (actor.role !== 'SALES' && f.ownerId && Number.isSafeInteger(Number(f.ownerId))) where.ownerId = Number(f.ownerId);
   if (f.territory) where.territory = f.territory;
   if (f.industry) where.industry = f.industry;
@@ -22,13 +22,13 @@ export default async function EngagementReport({ searchParams }: { searchParams:
   if (f.strategic === 'yes' || f.strategic === 'no') where.strategicAccount = f.strategic === 'yes';
   const lookbackFrom = lookbackStart(settings.ACTIVITY_LOOKBACK_DAYS, now);
   const [accounts, reps, territories, industries, owners] = await Promise.all([
-    prisma.account.findMany({ where, include: { owner: true, activities: { where: { archivedAt: null }, include: { activityType: true, user: true }, orderBy: [{ activityDate: 'desc' }, { id: 'desc' }], take: 1 }, tasks: { where: { archivedAt: null, status: { in: ['OPEN','IN_PROGRESS'] } }, select: { status: true, dueDate: true, archivedAt: true } }, opportunityMemberships: { where: { opportunity: { archivedAt: null, stage: { isClosed: false } } }, select: { opportunityId: true } } }, orderBy: { name: 'asc' } }),
+    prisma.account.findMany({ where, include: { owner: true, activities: { where: { archivedAt: null }, include: { activityType: true, user: true }, orderBy: latestAccountActivityOrder(), take: 1 }, tasks: { where: { archivedAt: null, status: { in: ['OPEN','IN_PROGRESS'] } }, select: { status: true, dueDate: true, archivedAt: true } }, opportunityMemberships: { where: { opportunity: { archivedAt: null, stage: { isClosed: false } } }, select: { opportunityId: true } } }, orderBy: { name: 'asc' } }),
     prisma.user.findMany({ where: { active: true, archivedAt: null, role: { in: ['SALES','SALES_MANAGER'] }, ...(actor.role === 'SALES' ? { id: actor.id } : {}) }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
     prisma.territory.findMany({ orderBy: { name: 'asc' } }), prisma.industry.findMany({ orderBy: { name: 'asc' } }), prisma.user.findMany({ where: { active: true, archivedAt: null, ...(actor.role === 'SALES' ? { id: actor.id } : {}) }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
   ]);
   const rows = accounts.map(a => { const last = a.activities[0] ?? null, days = daysSince(last?.activityDate ?? null, now), tasks = taskRollup(a.tasks, today); return { account: a, last, days, tasks, openOpportunity: a.opportunityMemberships.length > 0, state: engagementState(last?.activityDate ?? null, settings.STALE_ACCOUNT_WARNING_DAYS, now) }; }).filter(row => {
     const min = f.minDays ? Number(f.minDays) : null;
-    return (min === null || (Number.isSafeInteger(min) && min >= 0 && (row.days === null || row.days >= min))) && (f.hasOpenTask !== 'yes' || row.tasks.open > 0) && (f.hasOpenTask !== 'no' || row.tasks.open === 0) && (f.hasOverdueTask !== 'yes' || row.tasks.overdue > 0) && (f.hasOverdueTask !== 'no' || row.tasks.overdue === 0) && (f.hasOpenOpportunity !== 'yes' || row.openOpportunity) && (f.hasOpenOpportunity !== 'no' || !row.openOpportunity);
+    return (min === null || (Number.isSafeInteger(min) && min >= 0 && hasNoActivityInDays(row.last?.activityDate ?? null,min,now))) && (f.hasOpenTask !== 'yes' || row.tasks.open > 0) && (f.hasOpenTask !== 'no' || row.tasks.open === 0) && (f.hasOverdueTask !== 'yes' || row.tasks.overdue > 0) && (f.hasOverdueTask !== 'no' || row.tasks.overdue === 0) && (f.hasOpenOpportunity !== 'yes' || row.openOpportunity) && (f.hasOpenOpportunity !== 'no' || !row.openOpportunity);
   });
   const repIds = reps.map(r => r.id);
   const [overdueTasks, recentActivities] = await Promise.all([

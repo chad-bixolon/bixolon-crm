@@ -1,7 +1,7 @@
 import type { Prisma, UserRole } from '@prisma/client';
 import { can, taskScope, type Actor } from './authorization';
 import { canRunReportType, canViewBuiltInReport } from './reporting';
-import { reportAccountScope } from './engagement';
+import { engagementAccountWhere } from './engagement';
 import { dashboardOpenTaskWhere } from './work';
 
 export type DashboardSection = 'forecast' | 'reps' | 'closing' | 'stage' | 'category' | 'stale' | 'tasks' | 'activities' | 'admin' | 'marketing';
@@ -38,7 +38,7 @@ export function dashboardPeriod(now = new Date()) {
 
 export function dashboardAccountWhere(actor: Actor): Prisma.AccountWhereInput {
   if (!canViewBuiltInReport(actor, 'ACCOUNT_ENGAGEMENT')) throw new Error('Access denied');
-  return { ...reportAccountScope(actor), archivedAt: null, status: 'ACTIVE' };
+  return engagementAccountWhere(actor);
 }
 
 export function dashboardTaskWhere(actor: Actor, today: Date, repIds: number[]): Prisma.TaskWhereInput {

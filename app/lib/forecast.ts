@@ -35,7 +35,7 @@ export async function getQuotaParticipants(client: PrismaClient, users: TeamUser
   if (!/^[A-Z]{3}$/.test(period.currencyCode)) throw new Error('Choose a currency.');
   const eligible = users.filter(user => user.role === 'SALES' || user.role === 'SALES_MANAGER');
   const targets = eligible.length ? await client.salesTarget.findMany({
-    where: { userId: { in: eligible.map(user => user.id) }, ...period, archivedAt: null },
+    where: { userId: { in: eligible.map(user => user.id) }, year: period.year, quarter: period.quarter, currencyCode: period.currencyCode, archivedAt: null },
     select: { userId: true, targetAmount: true },
   }) : [];
   const byUser = new Map(targets.map(target => [target.userId, target]));
@@ -78,7 +78,7 @@ export async function forecastForRep(client: PrismaClient, actor: Actor, input: 
 export async function forecastForTeam(client: PrismaClient, actor: Actor, input: { users: TeamUser[]; year: number; quarter: SalesQuarter; currencyCode: string }) {
   if (!can(actor, 'sales.read') || actor.role === 'SALES') throw new Error('Access denied');
   const users = [...new Map(input.users.map(user => [user.id, user])).values()];
-  const participants = await getQuotaParticipants(client, users, input);
+  const participants = await getQuotaParticipants(client, users, { year: input.year, quarter: input.quarter, currencyCode: input.currencyCode });
   const reps = await Promise.all(participants.map(async user => ({
     ...await forecastForRepWithTarget(client, actor, { ...input, userId: user.id }, user.target),
     targetStatus: user.targetStatus,
