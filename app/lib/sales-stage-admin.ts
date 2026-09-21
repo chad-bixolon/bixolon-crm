@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import { ForecastCategory, type PrismaClient } from "@prisma/client";
 
 export function parseStage(form: FormData) {
   const name = String(form.get("name") ?? "").trim();
@@ -17,6 +17,14 @@ export function parseStage(form: FormData) {
 export async function saveStage(client: PrismaClient, id: number | null, data: ReturnType<typeof parseStage>) {
   if (id !== null) {
     if (!Number.isSafeInteger(id) || id <= 0) throw new Error("Invalid stage.");
-    await client.salesStage.update({ where: { id }, data });
+    await client.$transaction(async tx => {
+      const previous = await tx.salesStage.findUnique({ where: { id } });
+      if (!previous) throw new Error('Stage not found.');
+      await tx.salesStage.update({ where: { id }, data });
+      if (previous.isClosed !== data.isClosed || (data.isClosed && previous.isWon !== data.isWon)) {
+        const forecastCategory = data.isClosed ? (data.isWon ? ForecastCategory.CLOSED : ForecastCategory.OMITTED) : ForecastCategory.PIPELINE;
+        await tx.opportunity.updateMany({ where: { stageId: id }, data: { forecastCategory } });
+      }
+    });
   } else await client.salesStage.create({ data });
 }

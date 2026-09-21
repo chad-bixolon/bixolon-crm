@@ -15,9 +15,9 @@ export async function submitOpportunity(id: number | null, _state: FormState, fo
   return { errors: {}, redirectTo: `/opportunities/${opportunityId}` };
 }
 export async function changeOpportunityArchive(id: number, archive: boolean, _old: FormState): Promise<FormState> {
-  await requireMutation('sales.write');
+  const actor = await requireMutation('sales.write');
   void _old;
-  try { await setOpportunityArchived(prisma, id, archive); }
+  try { await setOpportunityArchived(prisma, id, archive, actor); }
   catch (error) { return { errors: {}, message: friendlyError(error, "Opportunity status could not be changed.") }; }
   revalidatePath("/opportunities"); revalidatePath(`/opportunities/${id}`); revalidatePath("/accounts");
   return { errors: {}, message: archive ? "Opportunity archived." : "Opportunity reactivated." };

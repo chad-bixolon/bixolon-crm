@@ -94,6 +94,13 @@ enum ForecastCategory {
   CLOSED
 }
 
+enum SalesQuarter {
+  Q1
+  Q2
+  Q3
+  Q4
+}
+
 enum PriceExceptionStatus {
   ACTIVE
   EXPIRED
@@ -165,6 +172,9 @@ model User {
   ownedReports            ReportDefinition[] @relation("ReportOwner")
   createdReports          ReportDefinition[] @relation("ReportCreatedBy")
   updatedReports          ReportDefinition[] @relation("ReportUpdatedBy")
+  salesTargets            SalesTarget[]       @relation("SalesTargetRep")
+  createdSalesTargets     SalesTarget[]       @relation("SalesTargetCreatedBy")
+  updatedSalesTargets     SalesTarget[]       @relation("SalesTargetUpdatedBy")
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
 }
@@ -383,6 +393,7 @@ model Currency {
   name          String
   active        Boolean       @default(true)
   opportunities Opportunity[]
+  salesTargets  SalesTarget[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }
@@ -401,7 +412,7 @@ model Opportunity {
   description       String?
   expectedCloseDate DateTime?
   probability       Int?
-  forecastCategory  ForecastCategory?
+  forecastCategory  ForecastCategory     @default(PIPELINE)
   currencyCode      String               @default("USD") @db.Char(3)
   currency          Currency             @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
   participants      OpportunityAccount[]
@@ -421,12 +432,35 @@ model Opportunity {
 
   @@index([legacyAccountId])
   @@index([ownerId, stageId])
+  @@index([ownerId, expectedCloseDate, currencyCode])
   @@index([stageId, expectedCloseDate])
   @@index([expectedCloseDate])
   @@index([currencyCode])
   @@index([createdById])
   @@index([updatedById])
   @@index([archivedById])
+}
+
+model SalesTarget {
+  id           Int          @id @default(autoincrement())
+  userId       Int
+  user         User         @relation("SalesTargetRep", fields: [userId], references: [id], onDelete: Restrict)
+  year         Int
+  quarter      SalesQuarter
+  currencyCode String       @db.Char(3)
+  currency     Currency     @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  targetAmount Decimal      @db.Decimal(18, 2)
+  notes        String?
+  archivedAt   DateTime?
+  createdById  Int
+  createdBy    User         @relation("SalesTargetCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById  Int?
+  updatedBy    User?        @relation("SalesTargetUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([userId, year, quarter, currencyCode, archivedAt])
+  @@index([year, quarter, currencyCode, archivedAt])
 }
 
 model OpportunityAccount {

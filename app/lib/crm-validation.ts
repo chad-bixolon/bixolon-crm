@@ -28,7 +28,7 @@ export const partyLabels: Record<OpportunityPartyRole, string> = {
 };
 export function opportunityPartyLabels(labels: LabelMap): Record<OpportunityPartyRole, string> { return { END_USER: labels.END_USER, VAR_RESELLER: labels.VAR, DISTRIBUTOR: labels.DISTRIBUTOR, ISV_PARTNER: labels.ISV, OEM: labels.OEM, OTHER: "Other" }; }
 export const forecastLabels: Record<ForecastCategory, string> = {
-  OMITTED: "Omitted", PIPELINE: "Pipeline", BEST_CASE: "Best case", COMMIT: "Commit", CLOSED: "Closed",
+  OMITTED: "Omitted", PIPELINE: "Pipeline", BEST_CASE: "Best Case", COMMIT: "Commit", CLOSED: "Closed",
 };
 export function friendlyError(error: unknown, fallback: string) {
   if (error instanceof Error && /not found|Reactivate|already|linked|active account|active product|available|primary|MOQ/i.test(error.message)) return error.message;

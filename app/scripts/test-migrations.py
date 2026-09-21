@@ -227,11 +227,6 @@ try:
         END IF;
       END $$;''')
     print("PASS: referenced Opportunity participant removed without deleting or rewriting historical Activity", flush=True)
-    history_client = run(["docker", "run", "--rm", "-i", "--network", NETWORK,
-                          "-e", f"DATABASE_URL=postgresql://postgres@{DB}:5432/backfill", IMAGE,
-                          "node", "--input-type=module"],
-                         (ROOT / "prisma/tests/activity-history-smoke.mjs").read_text())
-    print(history_client.stdout, flush=True)
     for directory in sorted(migration_root.iterdir()):
         if directory.is_dir() and directory.name > "20260918020000_activity_relationship_history":
             if directory.name == OPTIONAL_PROJECT_ACCOUNT:
@@ -254,7 +249,33 @@ try:
                   INSERT INTO "OpportunityProject" ("opportunityId","projectId") VALUES (102,1001);''')
                 print(f"PASS: Optional Project Primary Account migration preserved {len(optional_before)} table fingerprints and {len(primary_before)} existing primaryAccountId values; nullable FK retained; account-less, participant-only, and Opportunity-linked Project accepted", flush=True)
             else:
+                if directory.name == '20260921020000_forecast_sales_targets':
+                    sql('backfill', '''INSERT INTO "SalesStage" (id,name,"sortOrder",probability,"isClosed","isWon","updatedAt") VALUES
+                      (3001,'Forecast fixture won',3001,100,true,true,now()),
+                      (3002,'Forecast fixture lost',3002,0,true,false,now());
+                      INSERT INTO "Opportunity" (id,"stageId",name,"forecastCategory","updatedAt") VALUES
+                      (3001,3001,'Won forecast fixture',NULL,now()),
+                      (3002,3002,'Lost forecast fixture',NULL,now()),
+                      (3003,100,'Reopened forecast fixture','CLOSED',now()),
+                      (3004,100,'Explicit commit fixture','COMMIT',now());''')
                 sql("backfill", (directory / "migration.sql").read_text())
+                if directory.name == '20260921020000_forecast_sales_targets':
+                    categories = sql_values('backfill', '''SELECT id || ':' || "forecastCategory" FROM "Opportunity" WHERE id BETWEEN 3001 AND 3004 ORDER BY id;''')
+                    if categories != ['3001:CLOSED','3002:OMITTED','3003:PIPELINE','3004:COMMIT']:
+                        raise RuntimeError(f'Forecast category backfill mismatch: {categories}')
+                    print('PASS: won CLOSED, lost OMITTED, open CLOSED reset PIPELINE, explicit open COMMIT preserved', flush=True)
+                    sql('backfill', '''INSERT INTO "SalesTarget" ("userId",year,quarter,"currencyCode","targetAmount","createdById","updatedAt") VALUES (100,2026,'Q4','USD',1000000,100,now());''')
+                    duplicate = sql('backfill', '''INSERT INTO "SalesTarget" ("userId",year,quarter,"currencyCode","targetAmount","createdById","updatedAt") VALUES (100,2026,'Q4','USD',1,100,now());''', check=False)
+                    if duplicate.returncode == 0:
+                        raise RuntimeError('Duplicate active Sales Target was accepted')
+                    sql('backfill', '''UPDATE "SalesTarget" SET "archivedAt"=now() WHERE "userId"=100 AND year=2026 AND quarter='Q4' AND "currencyCode"='USD';
+                      INSERT INTO "SalesTarget" ("userId",year,quarter,"currencyCode","targetAmount","createdById","updatedAt") VALUES (100,2026,'Q4','USD',0,100,now());''')
+                    print('PASS: duplicate active Sales Target rejected; archived history retained and replacement accepted', flush=True)
+    history_client = run(["docker", "run", "--rm", "-i", "--network", NETWORK,
+                          "-e", f"DATABASE_URL=postgresql://postgres@{DB}:5432/backfill", IMAGE,
+                          "node", "--input-type=module"],
+                         (ROOT / "prisma/tests/activity-history-smoke.mjs").read_text())
+    print(history_client.stdout, flush=True)
     for directory in sorted(migration_root.iterdir()):
         if directory.is_dir() and directory.name >= INITIAL:
             prisma("backfill", "migrate", "resolve", "--applied", directory.name)

@@ -10,5 +10,6 @@ export async function submitStage(id: number | null, _state: { message: string; 
   revalidatePath("/administration/sales-stages");
   revalidatePath("/opportunities");
   revalidatePath("/pipeline");
+  revalidatePath("/reports/forecast");
   return { message: "Stage saved.", success: true };
 }

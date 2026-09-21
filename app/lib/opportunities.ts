@@ -7,6 +7,14 @@ import { canViewPriceException } from "./price-exception-visibility";
 export type Participant = { accountId: number; roles: OpportunityPartyRole[] };
 export type Line = { id?: number; productId: number; skuId?: number | null; quantity: number; price: string; priceSource?: OpportunityProductPriceSource; catalogPriceTier?: ProductPriceTier | null; priceExceptionLineId?: number | null };
 export type OpportunityInput = { name: string; description: string | null; ownerId: number | null; projectIds: number[]; stageId: number; expectedCloseDate: Date | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: Participant[]; lines: Line[] };
+export function categoryForStage(stage: { isClosed: boolean; isWon: boolean }, requested: ForecastCategory | null, previous?: { stageId: number; forecastCategory: ForecastCategory } | null, stageId?: number): ForecastCategory {
+  if (stage.isClosed) return stage.isWon ? ForecastCategory.CLOSED : ForecastCategory.OMITTED;
+  if (requested === ForecastCategory.CLOSED) {
+    if (previous?.forecastCategory === ForecastCategory.CLOSED && previous.stageId !== stageId) return ForecastCategory.PIPELINE;
+    throw new Error('Open Opportunities cannot have the Closed forecast category.');
+  }
+  return requested ?? ForecastCategory.PIPELINE;
+}
 export function parseOpportunity(form: FormData) {
   const errors: Errors = {};
   const name = required(form, "name", "Opportunity name", 200, errors);
@@ -92,6 +100,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       input.lines.some(line => line.priceSource === "PRICE_EXCEPTION") ? tx.priceExceptionLine.findMany({ where: { id: { in: input.lines.flatMap(line => line.priceExceptionLineId ? [line.priceExceptionLineId] : []) } }, include: { priceException: true } }) : Promise.resolve([]),
     ]);
     if (!stage || (!stage.active && existing?.stageId !== input.stageId)) throw new Error("Choose an available sales stage.");
+    if (actor?.role === 'SALES' && (input.ownerId !== actor.id || (existing && existing.ownerId !== actor.id))) throw new Error('Sales users may edit only their own Opportunities.');
     if (!currency?.active) throw new Error("Choose an available currency.");
     if (input.ownerId && (!owner?.active || owner.archivedAt)) throw new Error("Choose an active owner.");
     if (new Set(input.projectIds).size !== input.projectIds.length || projects.length !== input.projectIds.length || projects.some(project => project.archivedAt && !existing?.projects.some(link => link.projectId === project.id))) throw new Error("Choose each active Project only once.");
@@ -115,7 +124,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
         if (eligibility === "INELIGIBLE" && pricingChanged) throw new Error("Opportunity quantity does not meet the selected Price Exception MOQ.");
       }
     }
-    const data = { name: input.name, description: input.description, ownerId: input.ownerId, stageId: input.stageId, expectedCloseDate: input.expectedCloseDate, probability: input.probability, forecastCategory: input.forecastCategory, currencyCode: input.currencyCode };
+    const data = { name: input.name, description: input.description, ownerId: input.ownerId, stageId: input.stageId, expectedCloseDate: input.expectedCloseDate, probability: input.probability, forecastCategory: categoryForStage(stage, input.forecastCategory, existing, input.stageId), currencyCode: input.currencyCode };
     if (id) { await tx.opportunity.update({ where: { id }, data }); }
     else { const created = await tx.opportunity.create({ data }); id = created.id; }
     const opportunityId = id;
@@ -149,8 +158,9 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
     return opportunityId;
   });
 }
-export async function setOpportunityArchived(client: PrismaClient, id: number, archived: boolean) {
+export async function setOpportunityArchived(client: PrismaClient, id: number, archived: boolean, actor?: Actor) {
   const row = await client.opportunity.findUnique({ where: { id } }); if (!row) throw new Error("Opportunity not found.");
+  if (actor?.role === 'SALES' && row.ownerId !== actor.id) throw new Error('Sales users may edit only their own Opportunities.');
   if (!!row.archivedAt === archived) throw new Error(archived ? "Opportunity is already archived." : "Opportunity is already active.");
   await client.opportunity.update({ where: { id }, data: { archivedAt: archived ? new Date() : null } });
 }

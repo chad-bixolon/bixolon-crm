@@ -71,10 +71,16 @@ test('sales stages validate bounds and closed/won invariants, retaining immutabl
   assert.throws(() => stages.parseStage(form([['name', 'Won'], ['probability', '100'], ['sortOrder', '0'], ['isWon', 'on']])), /must also be closed/);
   assert.throws(() => stages.parseStage(form([['name', 'Too high'], ['probability', '101'], ['sortOrder', '0']])), /0–100/);
   const calls = [];
-  const client = { salesStage: { update: async args => calls.push(args), create: async args => calls.push(args) } };
+  const tx = { salesStage: { findUnique: async () => ({ isClosed: false, isWon: false }), update: async args => calls.push(args), create: async args => calls.push(args) }, opportunity: { updateMany: async args => calls.push(args) } };
+  const client = { ...tx, $transaction: async fn => fn(tx) };
   await stages.saveStage(client, 3, valid);
   assert.deepEqual(calls[0].where, { id: 3 });
   assert.equal(calls[0].data.id, undefined);
+  assert.deepEqual(calls[1], { where: { stageId: 3 }, data: { forecastCategory: 'CLOSED' } });
+  calls.length = 0;
+  tx.salesStage.findUnique = async () => ({ isClosed: true, isWon: true });
+  await stages.saveStage(client, 3, { ...valid, isClosed: false, isWon: false });
+  assert.deepEqual(calls[1], { where: { stageId: 3 }, data: { forecastCategory: 'PIPELINE' } });
 });
 
 test('settings reject unknown keys and unsafe ranges', () => {
