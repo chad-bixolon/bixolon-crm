@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from '@prisma/client';
+import { ForecastCategory, Prisma, type PrismaClient } from '@prisma/client';
 import { can, opportunityScope, type Actor } from './authorization';
 import { opportunityTotal, weightedValue } from './opportunities';
 
@@ -28,10 +28,10 @@ const pipelineDefinition: ReportTypeDefinition = {
   label: 'Pipeline', description: 'Pipeline, weighted pipeline, and Opportunity analysis', grain: 'Opportunity', implemented: true,
   semanticNote: 'Opportunities are counted once in report totals, even when they appear in more than one group.',
   filters: {
-    ownerId: { label: 'Sales rep', operators: ['eq'] }, stageId: { label: 'Stage', operators: ['eq'] }, status: { label: 'Status', operators: ['eq'] },
+    ownerId: { label: 'Sales rep', operators: ['eq'] }, activeSalesRep: { label: 'Active Sales Reps', operators: ['eq'] }, stageId: { label: 'Stage', operators: ['eq'] }, status: { label: 'Status', operators: ['eq'] },
     closeDate: { label: 'Close date', operators: ['preset','between'] }, createdDate: { label: 'Created date', operators: ['preset','between'] },
     accountId: { label: 'Participating Account', operators: ['eq'] }, accountOwnerId: { label: 'Account owner', operators: ['eq'] }, industry: { label: 'Industry', operators: ['eq'] }, territory: { label: 'Territory', operators: ['eq'] }, strategicAccount: { label: 'Strategic Account', operators: ['eq'] },
-    participantRole: { label: 'Participant role', operators: ['eq'] }, productCategoryId: { label: 'Product Category', operators: ['eq'] }, productId: { label: 'Product', operators: ['eq'] }, skuId: { label: 'SKU', operators: ['eq'] }, projectId: { label: 'Project', operators: ['eq'] }, currency: { label: 'Currency', operators: ['eq'] },
+    participantRole: { label: 'Participant role', operators: ['eq'] }, forecastCategory: { label: 'Forecast Category', operators: ['eq'] }, productCategoryId: { label: 'Product Category', operators: ['eq'] }, productId: { label: 'Product', operators: ['eq'] }, skuId: { label: 'SKU', operators: ['eq'] }, projectId: { label: 'Project', operators: ['eq'] }, currency: { label: 'Currency', operators: ['eq'] },
   },
   columns: { opportunity: 'Opportunity', account: 'Account', owner: 'Owner', stage: 'Stage', closeDate: 'Close Date', value: 'Value', weightedValue: 'Weighted Value', currency: 'Currency' },
   groupings: { owner: 'Sales Rep', stage: 'Stage', account: 'Account', industry: 'Industry', territory: 'Territory', productCategory: 'Product Category', project: 'Project' },
@@ -82,8 +82,10 @@ export const channelPartnerParticipantRoles = ['DISTRIBUTOR','VAR_RESELLER','ISV
 function validFilterValue(filter: ReportFilter) {
   if (['ownerId','stageId','accountId','accountOwnerId','productCategoryId','productId','skuId','projectId'].includes(filter.field)) return positiveInteger(filter.value);
   if (filter.field === 'strategicAccount') return typeof filter.value === 'boolean';
+  if (filter.field === 'activeSalesRep') return filter.value === true;
   if (filter.field === 'status') return statuses.includes(filter.value as typeof statuses[number]);
   if (filter.field === 'participantRole') return participantRoles.includes(filter.value as typeof participantRoles[number]);
+  if (filter.field === 'forecastCategory') return filter.value === 'IN_FORECAST' || Object.values(ForecastCategory).includes(filter.value as ForecastCategory);
   if (filter.field === 'accountBusinessRole') return channelPartnerAccountRoles.includes(filter.value as typeof channelPartnerAccountRoles[number]);
   if (['industry','territory'].includes(filter.field)) return typeof filter.value === 'string' && filter.value.length > 0 && filter.value.length <= 100;
   if (filter.field === 'currency') return typeof filter.value === 'string' && /^[A-Z]{3}$/.test(filter.value);
@@ -145,6 +147,7 @@ function pipelineWhere(config: ReportConfiguration, actor: Actor, now: Date): Pr
   for (const filter of config.filters) {
     const value = filter.value;
     if (filter.field === 'ownerId') clauses.push({ ownerId: value as number });
+    else if (filter.field === 'activeSalesRep') clauses.push({ owner: { active: true, archivedAt: null, role: { in: ['SALES','SALES_MANAGER'] } } });
     else if (filter.field === 'stageId') clauses.push({ stageId: value as number });
     else if (filter.field === 'status') clauses.push(value === 'OPEN' ? { stage: { isClosed: false } } : value === 'WON' ? { stage: { isClosed: true, isWon: true } } : { stage: { isClosed: true, isWon: false } });
     else if (filter.field === 'accountId') clauses.push({ participants: { some: { accountId: value as number } } });
@@ -153,6 +156,7 @@ function pipelineWhere(config: ReportConfiguration, actor: Actor, now: Date): Pr
     else if (filter.field === 'territory') clauses.push({ participants: { some: { account: { territory: value as string } } } });
     else if (filter.field === 'strategicAccount') clauses.push({ participants: { some: { account: { strategicAccount: value as boolean } } } });
     else if (filter.field === 'participantRole') clauses.push({ participants: { some: { roles: { some: { role: value as never } } } } });
+    else if (filter.field === 'forecastCategory') clauses.push({ forecastCategory: value === 'IN_FORECAST' ? { in: [ForecastCategory.PIPELINE, ForecastCategory.BEST_CASE, ForecastCategory.COMMIT] } : value as ForecastCategory });
     else if (filter.field === 'productCategoryId') clauses.push({ products: { some: { archivedAt: null, product: { categoryId: value as number } } } });
     else if (filter.field === 'productId') clauses.push({ products: { some: { archivedAt: null, productId: value as number } } });
     else if (filter.field === 'skuId') clauses.push({ products: { some: { archivedAt: null, skuId: value as number } } });
@@ -168,7 +172,7 @@ function pipelineWhere(config: ReportConfiguration, actor: Actor, now: Date): Pr
 
 type PipelineDbRow = Prisma.OpportunityGetPayload<{ include: { stage: true; owner: true; participants: { include: { account: { include: { owner: true; industryCategory: true; territoryCategory: true } }; roles: true } }; products: { include: { product: { include: { category: true } }; sku: true } }; projects: { include: { project: { include: { owner: true } } } } } }>;
 export type CurrencyMetrics = { currency: string; opportunityCount: number; pipeline: string; weightedPipeline: string; averageOpportunityValue: string };
-export type PipelineDetailRow = { id: number; opportunity: string; accounts: string; owner: string; stage: string; closeDate: string | null; value: string; weightedValue: string; probability: number; currency: string; groupKeys: string[] };
+export type PipelineDetailRow = { id: number; opportunity: string; accounts: string; owner: string; stage: string; forecastCategory: string; closeDate: string | null; value: string; weightedValue: string; probability: number; currency: string; groupKeys: string[] };
 export type PipelineGroup = { key: string; label: string; metrics: CurrencyMetrics[]; opportunityIds: number[] };
 export type PipelineReportResult = { reportType: 'PIPELINE'; summary: CurrencyMetrics[]; groups: PipelineGroup[]; rows: PipelineDetailRow[]; currencies: string[]; filterCount: number; semanticNote: string };
 
@@ -197,7 +201,7 @@ export async function executePipelineReport(client: PrismaClient, actor: Actor, 
   const rows=sortRows(await client.opportunity.findMany({ where:pipelineWhere(config,actor,now), include:{ stage:true, owner:true, participants:{include:{account:{include:{owner:true,industryCategory:true,territoryCategory:true}},roles:true}}, products:{where:{archivedAt:null},include:{product:{include:{category:true}},sku:true}}, projects:{include:{project:{include:{owner:true}}}} } }),config.sort);
   const groups=new Map<string,{key:string;label:string;rows:PipelineDbRow[]}>();
   for(const row of rows) for(const group of groupValues(row,config.groupBy)){ const existing=groups.get(group.key)??{...group,rows:[]}; if(!existing.rows.some(item=>item.id===row.id))existing.rows.push(row); groups.set(group.key,existing); }
-  return { reportType:'PIPELINE', summary:metrics(rows), groups:[...groups.values()].sort((a,b)=>a.label.localeCompare(b.label)).map(group=>({key:group.key,label:group.label,metrics:metrics(group.rows),opportunityIds:group.rows.map(row=>row.id)})), rows:rows.map(row=>{const value=opportunityTotal(row.products),probability=row.probability??row.stage.probability; return {id:row.id,opportunity:row.name,accounts:row.participants.map(x=>x.account.name).sort().join(', ')||'—',owner:row.owner?`${row.owner.firstName} ${row.owner.lastName}`:'Unassigned',stage:row.stage.name,closeDate:row.expectedCloseDate?.toISOString().slice(0,10)??null,value:value.toFixed(2),weightedValue:weightedValue(value,probability).toFixed(2),probability,currency:row.currencyCode,groupKeys:groupValues(row,config.groupBy).map(x=>x.key)};}), currencies:[...new Set(rows.map(row=>row.currencyCode))].sort(), filterCount:config.filters.length, semanticNote:pipelineDefinition.semanticNote };
+  return { reportType:'PIPELINE', summary:metrics(rows), groups:[...groups.values()].sort((a,b)=>a.label.localeCompare(b.label)).map(group=>({key:group.key,label:group.label,metrics:metrics(group.rows),opportunityIds:group.rows.map(row=>row.id)})), rows:rows.map(row=>{const value=opportunityTotal(row.products),probability=row.probability??row.stage.probability; return {id:row.id,opportunity:row.name,accounts:row.participants.map(x=>x.account.name).sort().join(', ')||'—',owner:row.owner?`${row.owner.firstName} ${row.owner.lastName}`:'Unassigned',stage:row.stage.name,forecastCategory:row.forecastCategory,closeDate:row.expectedCloseDate?.toISOString().slice(0,10)??null,value:value.toFixed(2),weightedValue:weightedValue(value,probability).toFixed(2),probability,currency:row.currencyCode,groupKeys:groupValues(row,config.groupBy).map(x=>x.key)};}), currencies:[...new Set(rows.map(row=>row.currencyCode))].sort(), filterCount:config.filters.length, semanticNote:pipelineDefinition.semanticNote };
 }
 
 export async function executeReport(client: PrismaClient, actor: Actor, reportType: unknown, rawConfig: unknown, now = new Date()) {

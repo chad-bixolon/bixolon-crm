@@ -10,6 +10,8 @@ export function pipelineConfigFromParams(params: Params, fallback?: unknown): Re
   for(const field of ['ownerId','stageId','accountId','productCategoryId','projectId'] as const){const value=number(one(params[field]));if(value)filters.push({field,operator:'eq',value});}
   for(const field of ['industry','territory','currency'] as const){const value=one(params[field]);if(value)filters.push({field,operator:'eq',value});}
   const status=one(params.status);if(status)filters.push({field:'status',operator:'eq',value:status});
+  if (one(params.activeSalesRep) === '1') filters.push({field:'activeSalesRep',operator:'eq',value:true});
+  const forecastCategory=one(params.forecastCategory);if(forecastCategory)filters.push({field:'forecastCategory',operator:'eq',value:forecastCategory});
   const preset=one(params.closeDatePreset);if(preset&&preset!=='CUSTOM'&&preset!=='ANY')filters.push({field:'closeDate',operator:'preset',value:preset});
   else if(preset!=='ANY'){const from=one(params.closeFrom),to=one(params.closeTo);if(from&&to)filters.push({field:'closeDate',operator:'between',value:{from,to}});}
   const metrics=many(params.metrics),columns=many(params.columns);
