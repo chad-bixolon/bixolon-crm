@@ -17,16 +17,16 @@ const { planProductImport } = load('product-import.ts');
 const client = new PrismaClient();
 const code = `VERIFY_PRODUCT_${Date.now().toString(36)}`;
 const rollback = new Error('verification rollback');
-let productId, skuId;
+let productId, skuId, originalCategoryId, originalSource;
 
 try {
   await client.$transaction(async (tx) => {
-    const product = await tx.product.findFirst({ where: { archivedAt: null, skus: { some: {} } }, include: { skus: { take: 1 } } });
+    const product = await tx.product.findFirst({ where: { archivedAt: null, skus: { some: { catalogSource: null } } }, include: { skus: { where: { catalogSource: null }, take: 1 } } });
     assert.ok(product, 'a Product with a SKU is required');
     productId = product.id;
     skuId = product.skus[0].id;
-    assert.equal(product.categoryId, null);
-    assert.equal(product.skus[0].catalogSource, null);
+    originalCategoryId = product.categoryId;
+    originalSource = product.skus[0].catalogSource;
 
     await saveLookup(tx, 'product-categories', { code, name: code, active: true, sortOrder: 9 }, false);
     const category = await tx.productCategory.findUniqueOrThrow({ where: { code } });
@@ -37,13 +37,13 @@ try {
 
     await tx.product.update({ where: { id: productId }, data: { categoryId: category.id } });
     const status = product.active ? 'active' : 'inactive';
-    for (const source of ['PRICE_LIST', 'PE_LIST', 'SPECIAL_SKU_LIST']) {
+    for (const source of ['PRICE_LIST', 'PE_LIST', 'SPECIAL_SKU_LIST', 'ODM']) {
       await tx.productSku.update({ where: { id: skuId }, data: { catalogSource: source } });
       const result = await listProducts(tx, { category: code, catalogSource: source, q: product.sku, active: status });
       assert.ok(result.products.some(value => value.id === productId), `${source} filter missed the linked Product`);
     }
 
-    for (const source of ['PE_LIST', 'SPECIAL_SKU_LIST']) {
+    for (const source of ['PE_LIST', 'SPECIAL_SKU_LIST', 'ODM']) {
       const csv = `model,part_number,category,catalog_source\n${code},${code}_${source},${code},${source}\n`;
       const plan = await planProductImport(tx, csv, source);
       assert.equal(plan.counts.errors, 0);
@@ -64,8 +64,8 @@ try {
   if (error !== rollback) throw error;
 } finally {
   assert.equal(await client.productCategory.findUnique({ where: { code } }), null);
-  if (productId) assert.equal((await client.product.findUniqueOrThrow({ where: { id: productId } })).categoryId, null);
-  if (skuId) assert.equal((await client.productSku.findUniqueOrThrow({ where: { id: skuId } })).catalogSource, null);
+  if (productId) assert.equal((await client.product.findUniqueOrThrow({ where: { id: productId } })).categoryId, originalCategoryId);
+  if (skuId) assert.equal((await client.productSku.findUniqueOrThrow({ where: { id: skuId } })).catalogSource, originalSource);
   await client.$disconnect();
 }
-console.log('PASS: Product Category create/edit/reorder/deactivate/reactivate, three source filters, and PE/Special previews; transaction rolled back.');
+console.log('PASS: Product Category create/edit/reorder/deactivate/reactivate, four source filters, and PE/Special/ODM previews; transaction rolled back.');

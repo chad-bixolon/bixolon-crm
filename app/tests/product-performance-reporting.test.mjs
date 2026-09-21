@@ -70,3 +70,18 @@ test('saved config, discovery, and read only report consumption follow current p
  assert.deepEqual(reporting.getVisibleReportTypes(actor('READ_ONLY')),['PIPELINE','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE']);
  await assert.rejects(run([],config(),'MARKETING_MANAGER'),/Access denied/);
 });
+test('ODM Catalog Source and Customer filter/group preserve Opportunity line values',async()=>{
+ const odm=line(1,'LABEL','XT5-40',2,'125.00','USD',{sku:{id:1,partNumber:'XT5-UPS',priceUnit:'EACH',catalogSource:'ODM',odmCustomerAccountId:7,odmCustomerAccount:{name:'UPS'}}});
+ const standard=line(2,'LABEL','XT5-40',1,'100.00','USD',{sku:{id:2,partNumber:'XT5-STD',priceUnit:'EACH',catalogSource:'PRICE_LIST',odmCustomerAccountId:null,odmCustomerAccount:null}});
+ const cfg={...config(),groupBy:'catalogSource',filters:[{field:'catalogSource',operator:'eq',value:'ODM'},{field:'odmCustomerAccountId',operator:'eq',value:7}]};
+ const result=await run([odm],cfg);
+ assert.deepEqual(result.groups.map(group=>[group.label,group.metrics[0].lineValue]),[['ODM','250.00']]);
+ assert.equal(result.rows[0].odmCustomer,'UPS');
+ assert.ok(run.where.AND.some(clause=>clause.sku?.catalogSource==='ODM'));
+ assert.ok(run.where.AND.some(clause=>clause.sku?.odmCustomerAccountId===7));
+ const grouped=await run([odm,standard],{...config(),groupBy:'catalogSource'});
+ assert.equal(grouped.summary[0].lineValue,'350.00');
+ assert.deepEqual(grouped.groups.map(group=>[group.label,group.metrics[0].lineValue]),[['ODM','250.00'],['PRICE LIST','100.00']]);
+ const customers=await run([odm,standard],{...config(),groupBy:'odmCustomer'});
+ assert.deepEqual(customers.groups.map(group=>group.label),['UPS','Not ODM']);
+});

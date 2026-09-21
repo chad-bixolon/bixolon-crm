@@ -31,8 +31,8 @@ export function accountActivityConfigFromParams(params:Params, fallback?:unknown
 export function productPerformanceConfigFromParams(params:Params,fallback?:unknown):ReportConfiguration {
   if(one(params.configured)!=='1')return validateReportConfiguration('PRODUCT_PERFORMANCE',fallback??defaultReportConfiguration('PRODUCT_PERFORMANCE'));
   const filters:ReportConfiguration['filters']=[];
-  for(const field of ['ownerId','stageId','accountId','productCategoryId','productId','skuId','projectId'] as const){const value=number(one(params[field]));if(value)filters.push({field,operator:'eq',value});}
-  for(const field of ['industry','territory','currency','status','forecastCategory','priceSource'] as const){const value=one(params[field]);if(value)filters.push({field,operator:'eq',value});}
+  for(const field of ['ownerId','stageId','accountId','productCategoryId','productId','skuId','odmCustomerAccountId','projectId'] as const){const value=number(one(params[field]));if(value)filters.push({field,operator:'eq',value});}
+  for(const field of ['industry','territory','currency','status','forecastCategory','priceSource','catalogSource'] as const){const value=one(params[field]);if(value)filters.push({field,operator:'eq',value});}
   if(['true','false'].includes(one(params.strategicAccount)??''))filters.push({field:'strategicAccount',operator:'eq',value:one(params.strategicAccount)==='true'});
   const preset=one(params.closeDatePreset);if(preset&&preset!=='CUSTOM'&&preset!=='ANY')filters.push({field:'closeDate',operator:'preset',value:preset});
   else if(preset!=='ANY'){const from=one(params.closeFrom),to=one(params.closeTo);if(from&&to)filters.push({field:'closeDate',operator:'between',value:{from,to}});}

@@ -4,6 +4,7 @@ import { Content,PageHeader } from '@/components/shell';
 import { ReportResults } from '@/components/report-results';
 import { ReportCloseDateFields } from '@/components/report-close-date-fields';
 import { prisma } from '@/lib/prisma';
+import { catalogSourceLabels } from '@/lib/products';
 import { filterValue,productPerformanceConfigFromParams } from '@/lib/report-builder';
 import { canShareReport,executeProductPerformanceReport,reportRegistry } from '@/lib/reporting';
 import { saveReportAction } from '../actions';
@@ -37,6 +38,8 @@ export async function ProductPerformanceBuilder({params,actor,saved}:{params:Par
         {select('productCategoryId','Product Category',categories.map(x=>({value:x.id,label:x.name})))}
         {select('productId','Product / Model',products.map(x=>({value:x.id,label:x.name})))}
         {select('skuId','SKU / Part Number',skus.map(x=>({value:x.id,label:x.partNumber})))}
+        {select('catalogSource','Catalog Source',Object.entries(catalogSourceLabels).map(([value,label])=>({value,label})))}
+        {select('odmCustomerAccountId','ODM Customer',accounts.map(x=>({value:x.id,label:x.name})))}
       </div></fieldset>
       <fieldset className="report-section"><legend className="report-section-title">Opportunity and commercial filters</legend><div className="report-filter-grid">
         {select('status','Status',[{value:'OPEN',label:'Open'},{value:'WON',label:'Closed Won'},{value:'LOST',label:'Closed Lost'}],'Any')}

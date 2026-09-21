@@ -13,7 +13,7 @@ const {parseImportCsv}=require(path.join(root,'lib/import-csv.ts'));
 const {planProductImport,applyProductImport,productImportHeaders}=require(path.join(root,'lib/product-import.ts'));
 const {mapProductWorkbookSheet}=require(path.join(root,'lib/product-workbook.ts'));
 const workbookPath=path.resolve(root,'../reference-data/BIXOLON_Price_List.xlsx');
-const emptyDb={product:{findMany:async()=>[]},productCategory:{findMany:async()=>['POS','LABEL','MOBILE','LASER','RIBBON','ACCESSORIES','PAPER','WARRANTY'].map(code=>({code,active:true}))}};
+const emptyDb={product:{findMany:async()=>[]},account:{findMany:async()=>[]},productCategory:{findMany:async()=>['POS','LABEL','MOBILE','LASER','RIBBON','ACCESSORIES','PAPER','WARRANTY'].map(code=>({code,active:true}))}};
 
 test('real workbook maps STANDARD, MSRP, and channel tiers separately', {skip:!fs.existsSync(workbookPath)}, async()=>{
   const file=fs.readFileSync(workbookPath);
@@ -25,7 +25,7 @@ test('real workbook maps STANDARD, MSRP, and channel tiers separately', {skip:!f
   assert.equal(pos.error,undefined);
   const rows=parseImportCsv(pos.csv,productImportHeaders).rows;
   assert.equal(rows.length,132);
-  assert.deepEqual(rows[0].values,{model:'SRP-275IIIAOSG',part_number:'SRP-275IIIAOSG',description:rows[0].values.description,standard_price:'144.10',msrp_price:'299.20',reseller_price:'',distributor_price:'',currency:'USD',price_unit:'EACH',active:'',category:'POS',catalog_source:'PRICE_LIST'});
+  assert.deepEqual(rows[0].values,{model:'SRP-275IIIAOSG',part_number:'SRP-275IIIAOSG',description:rows[0].values.description,standard_price:'144.10',msrp_price:'299.20',reseller_price:'',distributor_price:'',currency:'USD',price_unit:'EACH',active:'',category:'POS',catalog_source:'PRICE_LIST',odm_customer:'',base_sku:'',odm_description:''});
   assert.match((await parseImportXlsx(file,'TT ribbon ',adapter)).error,/older TT ribbon/);
   const ribbon=await parseImportXlsx(file,'TT ribbon  (2)',adapter);
   const ribbonRows=parseImportCsv(ribbon.csv,productImportHeaders).rows;

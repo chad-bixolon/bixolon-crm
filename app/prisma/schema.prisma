@@ -255,6 +255,7 @@ model Account {
   distributorPriceExceptions PriceException[]      @relation("PriceExceptionDistributor")
   varPriceExceptions         PriceException[]      @relation("PriceExceptionVar")
   endUserPriceExceptions     PriceException[]      @relation("PriceExceptionEndUser")
+  odmSkus                    ProductSku[]          @relation("OdmCustomerAccount")
   archivedAt                 DateTime?
   createdById                Int?
   createdBy                  User?                 @relation("AccountCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
@@ -534,6 +535,13 @@ model ProductSku {
   normalizedPartNumber String                @unique
   description          String?
   catalogSource        ProductCatalogSource?
+  odmCustomerAccountId Int?
+  odmCustomerAccount   Account?              @relation("OdmCustomerAccount", fields: [odmCustomerAccountId], references: [id], onDelete: Restrict)
+  odmCustomerSourceName String?
+  baseSkuId            Int?
+  baseSku              ProductSku?           @relation("OdmBaseSku", fields: [baseSkuId], references: [id], onDelete: Restrict)
+  derivedOdmSkus       ProductSku[]          @relation("OdmBaseSku")
+  odmDescription       String?
   priceUnit            ProductPriceUnit      @default(EACH)
   active               Boolean               @default(true)
   prices               ProductPrice[]
@@ -544,6 +552,8 @@ model ProductSku {
 
   @@index([productId])
   @@index([catalogSource, productId])
+  @@index([odmCustomerAccountId])
+  @@index([baseSkuId])
 }
 
 /// A finalized commercial price exception imported from an operational source.
@@ -625,6 +635,7 @@ enum ProductCatalogSource {
   PRICE_LIST
   PE_LIST
   SPECIAL_SKU_LIST
+  ODM
 }
 
 enum ProductPriceUnit {

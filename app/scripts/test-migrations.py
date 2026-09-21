@@ -37,7 +37,8 @@ def sql_values(database, statement):
 
 def prisma(database, *args):
     url = f"postgresql://postgres@{DB}:5432/{database}"
-    result = run(["docker", "run", "--rm", "--network", NETWORK, "-e", f"DATABASE_URL={url}", IMAGE,
+    result = run(["docker", "run", "--rm", "--network", NETWORK, "-e", f"DATABASE_URL={url}",
+                  "-v", f"{ROOT / 'prisma/migrations'}:/app/prisma/migrations:ro", IMAGE,
                   "./node_modules/.bin/prisma", *args])
     return result.stdout
 
@@ -167,6 +168,25 @@ try:
     print(prisma("upgrade", "migrate", "deploy"), flush=True)
     print("PASS: populated upgrade, preservation, integrity, parity, and repeat deployment", flush=True)
 
+    if sql_values("upgrade", '''SELECT count(*) FROM "ProductSku" WHERE "catalogSource"='ODM';''') != ['0']:
+        raise RuntimeError('Existing ProductSku was converted to ODM')
+    sql("upgrade", '''INSERT INTO "Account" (id,name,"updatedAt") VALUES (5000,'ODM fixture customer',now());
+      INSERT INTO "Product" (id,sku,name,"updatedAt") VALUES (5000,'ODM-FIXTURE-MODEL','ODM fixture model',now());
+      INSERT INTO "ProductSku" (id,"productId","partNumber","normalizedPartNumber","catalogSource","updatedAt") VALUES
+        (5000,5000,'ODM-BASE','ODM-BASE','PRICE_LIST',now()),
+        (5001,5000,'ODM-CUSTOM','ODM-CUSTOM','ODM',now());
+      UPDATE "ProductSku" SET "odmCustomerAccountId"=5000,"baseSkuId"=5000,"odmDescription"='Fixture customization' WHERE id=5001;''')
+    for label, statement in {
+        'ODM self reference': '''UPDATE "ProductSku" SET "baseSkuId"=5001 WHERE id=5001;''',
+        'ODM to ODM base': '''INSERT INTO "ProductSku" (id,"productId","partNumber","normalizedPartNumber","catalogSource","baseSkuId","updatedAt") VALUES (5002,5000,'ODM-CHAIN','ODM-CHAIN','ODM',5001,now());''',
+        'ODM base conversion': '''UPDATE "ProductSku" SET "catalogSource"='ODM' WHERE id=5000;''',
+        'non ODM metadata': '''UPDATE "ProductSku" SET "catalogSource"='PRICE_LIST' WHERE id=5001;''',
+        'invalid ODM customer': '''UPDATE "ProductSku" SET "odmCustomerAccountId"=999999 WHERE id=5001;''',
+    }.items():
+        if sql('upgrade', statement, check=False).returncode == 0:
+            raise RuntimeError(f'{label} unexpectedly succeeded')
+    print('PASS: zero accidental ODM conversions; ODM customer and base FKs; no self references or ODM chains; metadata classification enforced', flush=True)
+
     # Exercise the new migration on a populated legacy link in a disposable database.
     create_database("backfill")
     sql("backfill", initial)
@@ -266,7 +286,19 @@ try:
                       (3002,3002,'Lost forecast fixture',NULL,now()),
                       (3003,100,'Reopened forecast fixture','CLOSED',now()),
                       (3004,100,'Explicit commit fixture','COMMIT',now());''')
+                odm_before = None
+                if directory.name == '20260921120000_odm_product_skus':
+                    odm_before = {table: sql_values('backfill', f'''SELECT count(*) || ':' || md5(COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text)::text,'[]')) FROM "{table}" t;''')[0]
+                                  for table in ('Account', 'Product', 'ProductSku')}
+                    source_before = sql_values('backfill', '''SELECT COALESCE("catalogSource"::text,'NULL') || ':' || count(*) FROM "ProductSku" GROUP BY COALESCE("catalogSource"::text,'NULL') ORDER BY 1;''')
                 sql("backfill", (directory / "migration.sql").read_text())
+                if odm_before is not None:
+                    after = {table: sql_values('backfill', f'''SELECT count(*) || ':' || md5(COALESCE(jsonb_agg({"to_jsonb(t) - 'odmCustomerAccountId' - 'odmCustomerSourceName' - 'baseSkuId' - 'odmDescription'" if table == 'ProductSku' else 'to_jsonb(t)'} ORDER BY ({"to_jsonb(t) - 'odmCustomerAccountId' - 'odmCustomerSourceName' - 'baseSkuId' - 'odmDescription'" if table == 'ProductSku' else 'to_jsonb(t)'})::text)::text,'[]')) FROM "{table}" t;''')[0]
+                             for table in ('Account', 'Product', 'ProductSku')}
+                    source_after = sql_values('backfill', '''SELECT COALESCE("catalogSource"::text,'NULL') || ':' || count(*) FROM "ProductSku" GROUP BY COALESCE("catalogSource"::text,'NULL') ORDER BY 1;''')
+                    if after != odm_before or source_after != source_before:
+                        raise RuntimeError('ODM migration changed Account, Product, ProductSku, or catalog-source values')
+                    print('PASS: Account, Product, ProductSku fingerprints and catalog-source values unchanged', flush=True)
                 if media_before is not None:
                     if media_before != all_table_fingerprints("backfill"):
                         raise RuntimeError("Media Partner migration changed existing table rows")

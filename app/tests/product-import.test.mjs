@@ -17,7 +17,7 @@ const csv=(rows,header='model,part_number,description,standard_price,currency,ac
 const sku=(id,productId,partNumber,price='10.00')=>({id,productId,partNumber,normalizedPartNumber:normalizePartNumber(partNumber),description:'Old',priceUnit:'EACH',active:true,prices:[{currencyCode:'USD',tier:'STANDARD',amount:new Prisma.Decimal(price)}]});
 const product=(id,name,skus=[])=>({id,name,sku:skus[0]?.partNumber ?? 'LEGACY',active:true,archivedAt:null,skus});
 const categories=['POS','LABEL','MOBILE','LASER','RIBBON','ACCESSORIES','PAPER','WARRANTY'].map(code=>({code,active:true}));
-const db=(products=[],categoryRows=categories)=>({product:{findMany:async()=>products},productCategory:{findMany:async()=>categoryRows}});
+const db=(products=[],categoryRows=categories,accounts=[])=>({product:{findMany:async()=>products},productCategory:{findMany:async()=>categoryRows},account:{findMany:async()=>accounts}});
 
 test('catalog CSV parses quoted descriptions and validates headers',()=>{
   const parsed=parseImportCsv(csv(['SLP-DX220,DX220-STD,"Printer, standard",15,USD,true']),productImportHeaders);
@@ -55,7 +55,7 @@ test('confirmation refuses stale plan and rolls back a failed second SKU',async(
   const store=db();let committed=[];
   store.$transaction=async callback=>{
     const staged=[];let next=1;
-    const tx={product:{findMany:async()=>[],create:async({data})=>{const row={id:next++,...data};staged.push(row);return row;}},productCategory:{findMany:async()=>categories},productSku:{create:async({data})=>{if(data.partNumber==='DX220-PW')throw new Error('constraint');return {id:next++,...data};}},productPrice:{upsert:async()=>({})}};
+    const tx={product:{findMany:async()=>[],create:async({data})=>{const row={id:next++,...data};staged.push(row);return row;}},productCategory:{findMany:async()=>categories},account:{findMany:async()=>[]},productSku:{create:async({data})=>{if(data.partNumber==='DX220-PW')throw new Error('constraint');return {id:next++,...data};}},productPrice:{upsert:async()=>({})}};
     const result=await callback(tx);committed=staged;return result;
   };
   await assert.rejects(applyProductImport(store,input,'wrong'),/Preview changed/);
@@ -112,7 +112,7 @@ test('confirmation writes category to Product and source to SKU',async()=>{
   const input='model,part_number,category,catalog_source\nModel,SKU,POS,SPECIAL_SKU_LIST\n';
   const writes=[];
   const client=db();
-  client.$transaction=async callback=>callback({product:{findMany:async()=>[],create:async({data})=>{writes.push(['product',data]);return {id:1};}},productCategory:{findMany:async()=>categories},productSku:{create:async({data})=>{writes.push(['sku',data]);return {id:2};}},productPrice:{upsert:async()=>{}}});
+  client.$transaction=async callback=>callback({product:{findMany:async()=>[],create:async({data})=>{writes.push(['product',data]);return {id:1};}},productCategory:{findMany:async()=>categories},account:{findMany:async()=>[]},productSku:{create:async({data})=>{writes.push(['sku',data]);return {id:2};}},productPrice:{upsert:async()=>{}}});
   const plan=await planProductImport(client,input);
   await applyProductImport(client,input,plan.digest);
   assert.deepEqual(writes[0][1].category,{connect:{code:'POS'}});
@@ -120,7 +120,7 @@ test('confirmation writes category to Product and source to SKU',async()=>{
 });
 test('Products filters combine search, status, category, and SKU source',async()=>{
   assert.deepEqual(productWhere({q:'  DX  ',active:'active',category:'POS',catalogSource:'PRICE_LIST'}),{
-    OR:[{name:{contains:'DX',mode:'insensitive'}},{sku:{contains:'DX',mode:'insensitive'}}],
+    OR:[{name:{contains:'DX',mode:'insensitive'}},{sku:{contains:'DX',mode:'insensitive'}},{skus:{some:{partNumber:{contains:'DX',mode:'insensitive'}}}}],
     active:true,archivedAt:null,category:{code:'POS'},skus:{some:{catalogSource:'PRICE_LIST'}},
   });
   assert.deepEqual(productWhere({category:'BOGUS',catalogSource:'BOGUS'}),{category:{code:'BOGUS'}});
@@ -143,4 +143,39 @@ test('Products pagination URL retains filters and filter forms reset the page',(
   for(const key of ['q','active','category','catalogSource'])assert.equal(next.searchParams.get(key),filters[key]);
   assert.equal(next.searchParams.get('page'),'4');
   assert.equal(new URL(productHref(filters),'http://localhost').searchParams.get('page'),null);
+});
+test('ODM import keeps LABEL category, resolves only an exact Account, and remains idempotent', async()=>{
+  const accounts=[{id:7,name:'UPS'},{id:8,name:'UPS Europe'}];
+  const base=sku(2,1,'XT5-STD');base.catalogSource='PRICE_LIST';
+  const custom=sku(3,1,'XT5-UPS');custom.catalogSource='ODM';custom.odmCustomerAccountId=7;custom.baseSkuId=2;custom.odmDescription='RFID';
+  const model={...product(1,'XT5-40',[base,custom]),category:{code:'LABEL'}};
+  const input='model,part_number,category,catalog_source,odm_customer,base_sku,odm_description\nXT5-40,XT5-UPS,LABEL,ODM, UPS ,XT5-STD,RFID\n';
+  const plan=await planProductImport(db([model],categories,accounts),input);
+  assert.equal(plan.counts.errors,0);
+  assert.equal(plan.counts.newSkus,0);
+  assert.equal(plan.counts.unchanged,1);
+  assert.equal(plan.items[0].after.category,'LABEL');
+  assert.equal(plan.items[0].after.odmCustomerAccountId,7);
+  assert.equal(plan.items[0].after.baseSkuId,2);
+  assert.equal(base.catalogSource,'PRICE_LIST');
+  const unresolved=await planProductImport(db([model],categories,accounts),input.replace(' UPS ','Unknown'));
+  assert.equal(unresolved.counts.errors,0);
+  assert.equal(unresolved.items[0].after.odmCustomerAccountId,undefined);
+  assert.equal(unresolved.items[0].after.odmCustomerSourceName,'Unknown');
+  assert.match(unresolved.items[0].messages.join(' '),/remain unresolved/);
+  const fresh=await planProductImport(db([model],categories,accounts),'model,part_number,catalog_source,odm_customer\nXT5-40,XT5-NEW,ODM,Unknown\n');
+  assert.equal(fresh.counts.errors,0);
+  assert.equal(fresh.counts.newSkus,1);
+  assert.equal(fresh.items[0].after.odmCustomerSourceName,'Unknown');
+});
+test('ODM classification requires explicit source and rejects invalid base SKU',async()=>{
+  const standard=sku(2,1,'XT5-STD');standard.catalogSource='PRICE_LIST';
+  const model=product(1,'XT5-40',[standard]);
+  const metadata='model,part_number,odm_customer\nXT5-40,XT5-UPS,UPS\n';
+  assert.equal((await planProductImport(db([model]),metadata)).counts.errors,1);
+  const source='model,part_number,catalog_source,base_sku\nXT5-40,XT5-UPS,ODM,XT5-UPS\n';
+  assert.equal((await planProductImport(db([model]),source)).counts.errors,1);
+  const safe=await planProductImport(db([model]),'model,part_number\nXT5-40,XT5-STD\n');
+  assert.equal(safe.items[0].after.catalogSource,'PRICE_LIST');
+  assert.deepEqual(productWhere({catalogSource:'ODM'}),{skus:{some:{catalogSource:'ODM'}}});
 });

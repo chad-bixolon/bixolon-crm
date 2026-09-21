@@ -31,7 +31,7 @@ export async function setProductState(client: PrismaClient, id: number, state: "
   const row = await client.product.findUnique({ where: { id } }); if (!row) throw new Error("Product not found.");
   await client.product.update({ where: { id }, data: { active: state === "active", archivedAt: state === "archived" ? new Date() : null } });
 }
-export const catalogSourceLabels: Record<ProductCatalogSource,string> = { PRICE_LIST: "Price List", PE_LIST: "PE List", SPECIAL_SKU_LIST: "Special SKU List" };
+export { catalogSourceLabels } from './product-labels';
 export function productCategoryChoices(client: PrismaClient) {
   return client.productCategory.findMany({ where: { OR: [{ active: true }, { products: { some: {} } }] }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] });
 }
@@ -44,7 +44,7 @@ export function productHref(filters: ProductFilters, page?: number) {
 }
 export function productWhere(filters: ProductFilters): Prisma.ProductWhereInput {
   const where: Prisma.ProductWhereInput = {};
-  if (filters.q?.trim()) { const q = filters.q.trim().slice(0, 100); where.OR = [{ name: { contains: q, mode: "insensitive" } }, { sku: { contains: q, mode: "insensitive" } }]; }
+  if (filters.q?.trim()) { const q = filters.q.trim().slice(0, 100); where.OR = [{ name: { contains: q, mode: "insensitive" } }, { sku: { contains: q, mode: "insensitive" } }, { skus: { some: { partNumber: { contains: q, mode: "insensitive" } } } }]; }
   if (filters.active === "active") { where.active = true; where.archivedAt = null; }
   if (filters.active === "inactive") { where.active = false; where.archivedAt = null; }
   if (filters.active === "archived") where.archivedAt = { not: null };
@@ -55,6 +55,6 @@ export function productWhere(filters: ProductFilters): Prisma.ProductWhereInput 
 export async function listProducts(client: PrismaClient, filters: ProductFilters) {
   const where = productWhere(filters);
   const count = await client.product.count({ where }); const { page, pages } = pageNumber(filters.page, count);
-  const products = await client.product.findMany({ where, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (page - 1) * 20, take: 20 });
+  const products = await client.product.findMany({ where, include: { skus: { select: { id: true, partNumber: true, catalogSource: true, odmCustomerAccount: { select: { name: true } } } } }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (page - 1) * 20, take: 20 });
   return { products, count, page, pages };
 }

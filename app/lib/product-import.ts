@@ -2,13 +2,14 @@ import { Prisma, ProductCatalogSource, ProductPriceTier, ProductPriceUnit, type 
 import { createHash } from 'node:crypto';
 import { parseImportCsv } from './import-csv';
 
-export const productImportHeaders = ['model','part_number','description','standard_price','msrp_price','reseller_price','distributor_price','currency','price_unit','active','category','catalog_source'] as const;
+export const productImportHeaders = ['model','part_number','description','standard_price','msrp_price','reseller_price','distributor_price','currency','price_unit','active','category','catalog_source','odm_customer','base_sku','odm_description'] as const;
 export const productImportTemplate = productImportHeaders.join(',') + '\n';
 export const normalizePartNumber = (value:string) => value.trim().replace(/\s+/g,' ').toUpperCase();
+export const normalizeAccountName = (value:string) => value.trim().replace(/\s+/g,' ').toLocaleLowerCase();
 const normalizeModel = (value:string) => value.trim().replace(/\s+/g,' ').toLowerCase();
 const currencies = new Set(Intl.supportedValuesOf('currency'));
 type Db = PrismaClient | Prisma.TransactionClient;
-type Values = {model:string;partNumber:string;description?:string;standardPrice?:string;msrpPrice?:string;resellerPrice?:string;distributorPrice?:string;currency?:string;priceUnit?:ProductPriceUnit;active?:boolean;category?:string;catalogSource?:ProductCatalogSource};
+type Values = {model:string;partNumber:string;description?:string;standardPrice?:string;msrpPrice?:string;resellerPrice?:string;distributorPrice?:string;currency?:string;priceUnit?:ProductPriceUnit;active?:boolean;category?:string;catalogSource?:ProductCatalogSource;odmCustomerAccountId?:number;odmCustomerSourceName?:string;odmCustomer?:string;baseSkuId?:number;baseSku?:string;odmDescription?:string};
 const tierFields = [
   {header:'standard_price',field:'standardPrice',tier:ProductPriceTier.STANDARD},
   {header:'msrp_price',field:'msrpPrice',tier:ProductPriceTier.MSRP},
@@ -28,6 +29,7 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
   const counts = blankCounts();
   if (parsed.errors.length) return {items:[],errors:parsed.errors,counts:{...counts,errors:parsed.errors.length},digest:''};
   const products = await db.product.findMany({include:{category:true,skus:{include:{prices:true}}}});
+  const accounts = await db.account.findMany({select:{id:true,name:true}});
   const categoryRows = await db.productCategory.findMany({select:{code:true,active:true}});
   const activeCategories = new Set(categoryRows.filter(category=>category.active).map(category=>category.code));
   const allSkus = products.flatMap(product => product.skus.map(sku => ({product,sku})));
@@ -49,7 +51,9 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
     if (partNumber.length>100) messages.push('Part number exceeds 100 characters.');
     if (get('description').length>2000) messages.push('Description exceeds 2000 characters.');
     if (categoryText && !category) messages.push('Category must be an active Product Category code.');
-    if (sourceText && !catalogSource) messages.push('Catalog source must be PRICE_LIST, PE_LIST, or SPECIAL_SKU_LIST.');
+    if (sourceText && !catalogSource) messages.push('Catalog source must be PRICE_LIST, PE_LIST, SPECIAL_SKU_LIST, or ODM.');
+    if ((get('odm_customer') || get('base_sku') || get('odm_description')) && catalogSource !== 'ODM') messages.push('ODM metadata requires explicit Catalog Source ODM.');
+    if (get('odm_description').length > 2000) messages.push('ODM Description exceeds 2000 characters.');
     if (selectedSource && get('catalog_source') && get('catalog_source').toUpperCase()!==selectedSource) messages.push('Catalog source differs from the selected upload source.');
     if (category && modelCategories.has(modelKey) && modelCategories.get(modelKey)!==category) messages.push('Conflicting categories for the same Product/model in this import.');
     if (category && modelKey) modelCategories.set(modelKey,category);
@@ -79,10 +83,25 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
     if (skuMatch && normalizeModel(skuMatch.product.name)!==modelKey && skuMatch.product.skus.length>1) messages.push('Changing a model shared by multiple SKUs is ambiguous. Review the Product manually.');
     const product=skuMatch?.product ?? modelMatch;
     const sku=skuMatch?.sku;
+    if (catalogSource === 'ODM' && sku && allSkus.some(entry=>entry.sku.baseSkuId===sku.id)) messages.push('An ODM SKU cannot be used as a Base SKU.');
     const existingCurrency=currency || (sku && new Set(sku.prices.map(p=>p.currencyCode)).size===1 ? sku.prices[0]?.currencyCode : undefined);
     const oldPrices=sku?.prices.filter(p=>p.currencyCode===existingCurrency) ?? [];
-    const before:Values|null=sku ? {model:skuMatch!.product.name,partNumber:sku.partNumber,description:sku.description ?? undefined,currency:existingCurrency,priceUnit:sku.priceUnit,active:sku.active,category:skuMatch!.product.category?.code,catalogSource:sku.catalogSource ?? undefined} : null;
+    const before:Values|null=sku ? {model:skuMatch!.product.name,partNumber:sku.partNumber,description:sku.description ?? undefined,currency:existingCurrency,priceUnit:sku.priceUnit,active:sku.active,category:skuMatch!.product.category?.code,catalogSource:sku.catalogSource ?? undefined,odmCustomerAccountId:sku.odmCustomerAccountId??undefined,odmCustomerSourceName:sku.odmCustomerSourceName??undefined,baseSkuId:sku.baseSkuId??undefined,odmDescription:sku.odmDescription??undefined} : null;
     const after:Values={model,partNumber,description:get('description') || before?.description,currency:currency || before?.currency,priceUnit:unitText && Object.values(ProductPriceUnit).includes(unitText as ProductPriceUnit) ? unitText as ProductPriceUnit : before?.priceUnit ?? ProductPriceUnit.EACH,active:active ?? before?.active ?? true,category:category ?? product?.category?.code,catalogSource:catalogSource ?? before?.catalogSource};
+    if (after.catalogSource === 'ODM') {
+      const customer = get('odm_customer');
+      const matches = customer ? accounts.filter(account=>normalizeAccountName(account.name)===normalizeAccountName(customer)) : [];
+      if (customer) { after.odmCustomer=customer; after.odmCustomerAccountId=matches.length===1?matches[0].id:undefined; after.odmCustomerSourceName=matches.length===1?undefined:customer; if(matches.length!==1) messages.push('WARNING: ODM Customer has no unique Account match and will remain unresolved.'); }
+      else { after.odmCustomerAccountId=before?.odmCustomerAccountId; after.odmCustomerSourceName=before?.odmCustomerSourceName; }
+      const base=get('base_sku');
+      if (base) {
+        const match=allSkus.find(entry=>entry.sku.normalizedPartNumber===normalizePartNumber(base));
+        if (!match) messages.push('Base SKU must match an existing part number.');
+        else if (match.sku.id===sku?.id || match.sku.catalogSource==='ODM') messages.push('Base SKU must be a different, non-ODM SKU.');
+        else {after.baseSkuId=match.sku.id;after.baseSku=match.sku.partNumber;}
+      } else after.baseSkuId=before?.baseSkuId;
+      after.odmDescription=get('odm_description')||before?.odmDescription;
+    }
     for (const spec of tierFields) {
       const old=oldPrices.find(price=>price.tier===spec.tier);
       if (before) before[spec.field]=old?.amount.toFixed(2);
@@ -93,16 +112,22 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
     if (!product && !proposedModels.has(modelKey)) classes.push('NEW PRODUCT');
     if (!sku) classes.push('NEW SKU');
     if (product && (product.name!==model || (category && product.category?.code!==category))) classes.push('UPDATE PRODUCT');
-    if (sku && (sku.partNumber!==partNumber || (get('description') && sku.description!==get('description')) || (active!==undefined && sku.active!==active) || (unitText && sku.priceUnit!==unitText) || (catalogSource && sku.catalogSource!==catalogSource))) classes.push('UPDATE SKU');
+    if (sku && (sku.partNumber!==partNumber || (get('description') && sku.description!==get('description')) || (active!==undefined && sku.active!==active) || (unitText && sku.priceUnit!==unitText) || (catalogSource && sku.catalogSource!==catalogSource) || (sku.odmCustomerAccountId??null)!==(after.odmCustomerAccountId??null) || (sku.odmCustomerSourceName??null)!==(after.odmCustomerSourceName??null) || (sku.baseSkuId??null)!==(after.baseSkuId??null) || (sku.odmDescription??null)!==(after.odmDescription??null))) classes.push('UPDATE SKU');
     if (tierFields.some(spec=>get(spec.header) && validPrice(get(spec.header)) && !oldPrices.find(price=>price.tier===spec.tier)?.amount.equals(get(spec.header)))) classes.push('PRICE CHANGE');
     if (!classes.length) classes.push('UNCHANGED');
     const hasError=messages.length>0;
-    if (!sku && !get('standard_price')) {classes.push('WARNING');messages.push('No STANDARD/base price supplied for this new SKU. Other tiers remain separate.');}
-    if (hasError) classes.splice(0,classes.length,'ERROR');
+    if (!sku && !get('standard_price')) {classes.push('WARNING');messages.push('WARNING: No STANDARD/base price supplied for this new SKU. Other tiers remain separate.');}
+    if (messages.some(message=>message.startsWith('WARNING:')) && !classes.includes('WARNING')) classes.push('WARNING');
+    if (hasError && messages.some(message=>!message.startsWith('WARNING:'))) classes.splice(0,classes.length,'ERROR');
     const item:ProductImportItem={line:row.line,label:partNumber || '(missing part number)',classes,before,after,messages,productId:product?.id,skuId:sku?.id};
     items.push(item);
     if (key) seen.set(key,item);
     if (modelKey) proposedModels.add(modelKey);
+  }
+  const importedOdmIds = new Set(items.filter(item=>item.skuId && item.after.catalogSource==='ODM').map(item=>item.skuId));
+  for (const item of items) if (item.after.baseSkuId && importedOdmIds.has(item.after.baseSkuId)) {
+    item.messages.push('Base SKU is classified ODM in this import. ODM chains are not allowed.');
+    item.classes=['ERROR'];
   }
   const productUpdates=new Set<number>();
   for (const item of items) {
@@ -134,9 +159,9 @@ export async function applyProductImport(db:PrismaClient,csv:string,expectedDige
       } else if (item.classes.includes('UPDATE PRODUCT') || (created.has(modelKey) && value.category)) await tx.product.update({where:{id:productId},data:{name:value.model,category:value.category ? {connect:{code:value.category}} : undefined}});
       let skuId=item.skuId;
       if (!skuId) {
-        const sku=await tx.productSku.create({data:{productId,partNumber:value.partNumber,normalizedPartNumber:normalizePartNumber(value.partNumber),description:value.description,priceUnit:value.priceUnit ?? ProductPriceUnit.EACH,active:value.active ?? true,catalogSource:value.catalogSource}});
+        const sku=await tx.productSku.create({data:{productId,partNumber:value.partNumber,normalizedPartNumber:normalizePartNumber(value.partNumber),description:value.description,priceUnit:value.priceUnit ?? ProductPriceUnit.EACH,active:value.active ?? true,catalogSource:value.catalogSource,odmCustomerAccountId:value.odmCustomerAccountId,odmCustomerSourceName:value.odmCustomerSourceName,baseSkuId:value.baseSkuId,odmDescription:value.odmDescription}});
         skuId=sku.id;
-      } else if (item.classes.includes('UPDATE SKU')) await tx.productSku.update({where:{id:skuId},data:{partNumber:value.partNumber,description:value.description,priceUnit:value.priceUnit,active:value.active,catalogSource:value.catalogSource}});
+      } else if (item.classes.includes('UPDATE SKU')) await tx.productSku.update({where:{id:skuId},data:{partNumber:value.partNumber,description:value.description,priceUnit:value.priceUnit,active:value.active,catalogSource:value.catalogSource,odmCustomerAccountId:value.odmCustomerAccountId??null,odmCustomerSourceName:value.odmCustomerSourceName??null,baseSkuId:value.baseSkuId??null,odmDescription:value.odmDescription??null}});
       if (value.currency) for (const spec of tierFields) {
         const amount=value[spec.field];
         if (amount && amount!==item.before?.[spec.field]) await tx.productPrice.upsert({where:{skuId_currencyCode_tier:{skuId,currencyCode:value.currency,tier:spec.tier}},create:{skuId,currencyCode:value.currency,tier:spec.tier,amount},update:{amount}});
