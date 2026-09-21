@@ -30,6 +30,25 @@ export class PriceExceptionAccountValidationError extends Error {
   constructor(public readonly errors: Record<string, string>) { super('Invalid Price Exception Account links.'); }
 }
 
+export function parseAssignedSalesRepUserId(form: FormData) {
+  const raw = String(form.get('assignedSalesRepUserId') ?? '').trim();
+  if (!raw) return { value: '', assignedSalesRepUserId: null as number | null };
+  const id = positiveId(raw);
+  return id ? { value: raw, assignedSalesRepUserId: id } : { value: raw, error: 'Choose a valid SalesHub user.' };
+}
+
+export async function updatePriceExceptionSalesRep(db: Db, priceExceptionId: number, actor: Actor, assignedSalesRepUserId: number | null) {
+  assertPermission(actor, 'users.manage');
+  if (!Number.isSafeInteger(priceExceptionId) || priceExceptionId <= 0) throw new PriceExceptionAccountValidationError({ form: 'Invalid Price Exception.' });
+  const [priceException, user] = await Promise.all([
+    db.priceException.findUnique({ where: { id: priceExceptionId }, select: { id: true } }),
+    assignedSalesRepUserId ? db.user.findUnique({ where: { id: assignedSalesRepUserId }, select: { id: true, role: true, active: true, archivedAt: true } }) : null,
+  ]);
+  if (!priceException) throw new PriceExceptionAccountValidationError({ form: 'Price Exception not found.' });
+  if (assignedSalesRepUserId && (!user || !['SALES', 'SALES_MANAGER'].includes(user.role))) throw new PriceExceptionAccountValidationError({ assignedSalesRepUserId: 'Choose a Sales or Sales Manager user.' });
+  await db.priceException.update({ where: { id: priceExceptionId }, data: { assignedSalesRepUserId, updatedById: actor.id } });
+}
+
 type Db = PrismaClient | Prisma.TransactionClient;
 export async function updatePriceExceptionAccountLinks(db: Db, priceExceptionId: number, actor: Actor, patch: PriceExceptionAccountPatch) {
   assertPermission(actor, 'users.manage');

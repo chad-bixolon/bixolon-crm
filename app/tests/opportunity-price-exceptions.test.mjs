@@ -11,8 +11,9 @@ Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(f
 const require = Module.createRequire(import.meta.url);
 const { Prisma } = require('@prisma/client');
 const { findPriceExceptionCandidates, moqEligibility, priceExceptionEligibilityWhere, priceExceptionSnapshot } = require(path.join(root, 'lib/opportunity-price-exceptions.ts'));
-const { parseOpportunity, saveOpportunity } = require(path.join(root, 'lib/opportunities.ts'));
+const { parseOpportunity, saveOpportunity: saveOpportunityWithActor } = require(path.join(root, 'lib/opportunities.ts'));
 const { can } = require(path.join(root, 'lib/authorization.ts'));
+const saveOpportunity = (client, input, id) => saveOpportunityWithActor(client, input, id, { id: 1, role: 'ADMIN', active: true });
 
 const parent = (overrides = {}) => ({ id: 40, peCode: 'SPAZ12102025', status: 'ACTIVE', archivedAt: null, expirationDate: new Date('2026-12-31T00:00:00Z'), distributorAccountId: 7, varAccountId: null, endUserAccountId: null, distributorSourceName: 'Blue Star', varSourceName: 'Legacy VAR', endUserSourceName: null, sourceDescription: 'Approved deal price', distributorAccount: { id: 7, name: 'Blue Star' }, varAccount: null, endUserAccount: null, ...overrides });
 const line = (id, quantity, price, pe = parent()) => ({ id, priceExceptionId: pe.id, productSkuId: 9, approvedUnitPrice: new Prisma.Decimal(price), currencyCode: 'USD', sourceQuantity: new Prisma.Decimal(quantity), sourceQuantityRaw: quantity, sourceUnit: null, comments: null, sortOrder: id, priceException: pe });

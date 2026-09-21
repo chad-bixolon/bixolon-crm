@@ -4,7 +4,7 @@ import { findPriceExceptionCandidates } from "@/lib/opportunity-price-exceptions
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
-  await requirePermission("sales.write");
+  const actor = await requirePermission("sales.write");
   const skuId = Number(request.nextUrl.searchParams.get("skuId"));
   const currencyCode = (request.nextUrl.searchParams.get("currencyCode") ?? "").trim().toUpperCase();
   const relatedOnly = request.nextUrl.searchParams.get("scope") !== "all";
@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     opportunityAccountIds: accountIds,
     relatedOnly,
     query: relatedOnly ? undefined : request.nextUrl.searchParams.get("q") ?? "",
+    actor,
   });
   return NextResponse.json({ options });
 }

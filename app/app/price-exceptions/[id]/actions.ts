@@ -2,9 +2,24 @@
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireMutation } from '@/lib/current-user';
-import { parsePriceExceptionAccountPatch, PriceExceptionAccountValidationError, updatePriceExceptionAccountLinks, type PriceExceptionAccountValues } from '@/lib/price-exception-resolution';
+import { parseAssignedSalesRepUserId, parsePriceExceptionAccountPatch, PriceExceptionAccountValidationError, updatePriceExceptionAccountLinks, updatePriceExceptionSalesRep, type PriceExceptionAccountValues } from '@/lib/price-exception-resolution';
 
 export type ResolvePriceExceptionState = { errors: Record<string, string>; values?: PriceExceptionAccountValues; saved?: boolean };
+export type AssignPriceExceptionSalesRepState = { error?: string; value?: string; saved?: boolean };
+
+export async function assignPriceExceptionSalesRep(id:number,_state:AssignPriceExceptionSalesRepState,form:FormData):Promise<AssignPriceExceptionSalesRepState>{
+  const actor=await requireMutation('users.manage');
+  const parsed=parseAssignedSalesRepUserId(form);
+  if(parsed.error)return {error:parsed.error,value:parsed.value};
+  try{
+    await updatePriceExceptionSalesRep(prisma,id,actor,parsed.assignedSalesRepUserId!);
+    revalidatePath('/price-exceptions');revalidatePath(`/price-exceptions/${id}`);revalidatePath('/accounts');revalidatePath('/opportunities');
+    return {saved:true,value:parsed.value};
+  }catch(error){
+    if(error instanceof PriceExceptionAccountValidationError)return {error:error.errors.assignedSalesRepUserId??error.errors.form,value:parsed.value};
+    return {error:'BIXOLON Sales Rep could not be saved. Please try again.',value:parsed.value};
+  }
+}
 
 export async function resolvePriceExceptionAccounts(id:number,_state:ResolvePriceExceptionState,form:FormData):Promise<ResolvePriceExceptionState>{
   const actor=await requireMutation('users.manage');

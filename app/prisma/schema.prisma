@@ -112,43 +112,44 @@ enum OpportunityProductPriceSource {
 }
 
 model User {
-  id                     Int                @id @default(autoincrement())
-  email                  String             @unique
-  firstName              String
-  lastName               String
-  active                 Boolean            @default(true)
-  role                   UserRole           @default(READ_ONLY)
-  archivedAt             DateTime?
-  identities             ExternalIdentity[]
-  ownedAccounts          Account[]          @relation("AccountOwner")
-  opportunities          Opportunity[]      @relation("OpportunityOwner")
-  tasks                  Task[]             @relation("TaskAssignee")
-  activities             Activity[]         @relation("ActivityUser")
-  createdAccounts        Account[]          @relation("AccountCreatedBy")
-  updatedAccounts        Account[]          @relation("AccountUpdatedBy")
-  archivedAccounts       Account[]          @relation("AccountArchivedBy")
-  createdContacts        Contact[]          @relation("ContactCreatedBy")
-  updatedContacts        Contact[]          @relation("ContactUpdatedBy")
-  archivedContacts       Contact[]          @relation("ContactArchivedBy")
-  createdOpportunities   Opportunity[]      @relation("OpportunityCreatedBy")
-  updatedOpportunities   Opportunity[]      @relation("OpportunityUpdatedBy")
-  archivedOpportunities  Opportunity[]      @relation("OpportunityArchivedBy")
-  createdTasks           Task[]             @relation("TaskCreatedBy")
-  updatedTasks           Task[]             @relation("TaskUpdatedBy")
-  archivedTasks          Task[]             @relation("TaskArchivedBy")
-  createdActivities      Activity[]         @relation("ActivityCreatedBy")
-  updatedActivities      Activity[]         @relation("ActivityUpdatedBy")
-  archivedActivities     Activity[]         @relation("ActivityArchivedBy")
-  createdNotes           Note[]             @relation("NoteCreatedBy")
-  updatedNotes           Note[]             @relation("NoteUpdatedBy")
-  archivedNotes          Note[]             @relation("NoteArchivedBy")
-  ownedProjects          Project[]          @relation("ProjectOwner")
-  createdProjects        Project[]          @relation("ProjectCreatedBy")
-  updatedProjects        Project[]          @relation("ProjectUpdatedBy")
-  createdPriceExceptions PriceException[]   @relation("PriceExceptionCreatedBy")
-  updatedPriceExceptions PriceException[]   @relation("PriceExceptionUpdatedBy")
-  createdAt              DateTime           @default(now())
-  updatedAt              DateTime           @updatedAt
+  id                      Int                @id @default(autoincrement())
+  email                   String             @unique
+  firstName               String
+  lastName                String
+  active                  Boolean            @default(true)
+  role                    UserRole           @default(READ_ONLY)
+  archivedAt              DateTime?
+  identities              ExternalIdentity[]
+  ownedAccounts           Account[]          @relation("AccountOwner")
+  opportunities           Opportunity[]      @relation("OpportunityOwner")
+  tasks                   Task[]             @relation("TaskAssignee")
+  activities              Activity[]         @relation("ActivityUser")
+  createdAccounts         Account[]          @relation("AccountCreatedBy")
+  updatedAccounts         Account[]          @relation("AccountUpdatedBy")
+  archivedAccounts        Account[]          @relation("AccountArchivedBy")
+  createdContacts         Contact[]          @relation("ContactCreatedBy")
+  updatedContacts         Contact[]          @relation("ContactUpdatedBy")
+  archivedContacts        Contact[]          @relation("ContactArchivedBy")
+  createdOpportunities    Opportunity[]      @relation("OpportunityCreatedBy")
+  updatedOpportunities    Opportunity[]      @relation("OpportunityUpdatedBy")
+  archivedOpportunities   Opportunity[]      @relation("OpportunityArchivedBy")
+  createdTasks            Task[]             @relation("TaskCreatedBy")
+  updatedTasks            Task[]             @relation("TaskUpdatedBy")
+  archivedTasks           Task[]             @relation("TaskArchivedBy")
+  createdActivities       Activity[]         @relation("ActivityCreatedBy")
+  updatedActivities       Activity[]         @relation("ActivityUpdatedBy")
+  archivedActivities      Activity[]         @relation("ActivityArchivedBy")
+  createdNotes            Note[]             @relation("NoteCreatedBy")
+  updatedNotes            Note[]             @relation("NoteUpdatedBy")
+  archivedNotes           Note[]             @relation("NoteArchivedBy")
+  ownedProjects           Project[]          @relation("ProjectOwner")
+  createdProjects         Project[]          @relation("ProjectCreatedBy")
+  updatedProjects         Project[]          @relation("ProjectUpdatedBy")
+  createdPriceExceptions  PriceException[]   @relation("PriceExceptionCreatedBy")
+  updatedPriceExceptions  PriceException[]   @relation("PriceExceptionUpdatedBy")
+  assignedPriceExceptions PriceException[]   @relation("PriceExceptionAssignedSalesRep")
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
 }
 
 model ExternalIdentity {
@@ -453,37 +454,41 @@ model ProductSku {
 /// A finalized commercial price exception imported from an operational source.
 /// sourceKey, not peCode, is the stable import identity because legacy codes are reused.
 model PriceException {
-  id                    Int                      @id @default(autoincrement())
-  peCode                String?
-  predecessorPeCode     String?
-  status                PriceExceptionStatus
-  sourceType            PriceExceptionSourceType
-  sourceKey             String
-  distributorAccountId  Int?
-  distributorAccount    Account?                 @relation("PriceExceptionDistributor", fields: [distributorAccountId], references: [id], onDelete: Restrict)
-  varAccountId          Int?
-  varAccount            Account?                 @relation("PriceExceptionVar", fields: [varAccountId], references: [id], onDelete: Restrict)
-  endUserAccountId      Int?
-  endUserAccount        Account?                 @relation("PriceExceptionEndUser", fields: [endUserAccountId], references: [id], onDelete: Restrict)
-  distributorSourceName String?
-  varSourceName         String?
-  endUserSourceName     String?
-  distributorSalesRep   String?
-  effectiveDate         DateTime?                @db.Date
-  expirationDate        DateTime?                @db.Date
-  sourceDescription     String?
-  competitor            String?
-  sourceFileName        String?
-  sourceSheet           String?
-  sourceMetadata        Json?
-  lines                 PriceExceptionLine[]
-  archivedAt            DateTime?
-  createdById           Int?
-  createdBy             User?                    @relation("PriceExceptionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  updatedById           Int?
-  updatedBy             User?                    @relation("PriceExceptionUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
-  createdAt             DateTime                 @default(now())
-  updatedAt             DateTime                 @updatedAt
+  id                     Int                      @id @default(autoincrement())
+  peCode                 String?
+  predecessorPeCode      String?
+  status                 PriceExceptionStatus
+  sourceType             PriceExceptionSourceType
+  sourceKey              String
+  distributorAccountId   Int?
+  distributorAccount     Account?                 @relation("PriceExceptionDistributor", fields: [distributorAccountId], references: [id], onDelete: Restrict)
+  varAccountId           Int?
+  varAccount             Account?                 @relation("PriceExceptionVar", fields: [varAccountId], references: [id], onDelete: Restrict)
+  endUserAccountId       Int?
+  endUserAccount         Account?                 @relation("PriceExceptionEndUser", fields: [endUserAccountId], references: [id], onDelete: Restrict)
+  distributorSourceName  String?
+  varSourceName          String?
+  endUserSourceName      String?
+  distributorSalesRep    String?
+  sourceSalesRepName     String?
+  sourceSalesRepEmail    String?
+  assignedSalesRepUserId Int?
+  assignedSalesRepUser   User?                    @relation("PriceExceptionAssignedSalesRep", fields: [assignedSalesRepUserId], references: [id], onDelete: SetNull)
+  effectiveDate          DateTime?                @db.Date
+  expirationDate         DateTime?                @db.Date
+  sourceDescription      String?
+  competitor             String?
+  sourceFileName         String?
+  sourceSheet            String?
+  sourceMetadata         Json?
+  lines                  PriceExceptionLine[]
+  archivedAt             DateTime?
+  createdById            Int?
+  createdBy              User?                    @relation("PriceExceptionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById            Int?
+  updatedBy              User?                    @relation("PriceExceptionUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
 
   @@unique([sourceType, sourceKey])
   @@index([peCode])
@@ -491,6 +496,7 @@ model PriceException {
   @@index([distributorAccountId])
   @@index([varAccountId])
   @@index([endUserAccountId])
+  @@index([assignedSalesRepUserId])
   @@index([archivedAt])
 }
 

@@ -1,4 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
+import type { Actor } from "./authorization";
+import { priceExceptionVisibilityWhere } from "./price-exception-visibility";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 export type PriceExceptionCandidate = {
@@ -52,11 +54,15 @@ function numericSearch(q: string): Prisma.PriceExceptionLineWhereInput[] {
 
 export async function findPriceExceptionCandidates(
   db: Db,
-  input: { skuId: number; currencyCode: string; opportunityAccountIds: number[]; relatedOnly: boolean; query?: string; today?: Date },
+  input: { skuId: number; currencyCode: string; opportunityAccountIds: number[]; relatedOnly: boolean; query?: string; today?: Date; actor?: Actor },
 ): Promise<PriceExceptionCandidate[]> {
   const accountIds = [...new Set(input.opportunityAccountIds)];
   const q = input.query?.trim().slice(0, 100) ?? "";
   const where: Prisma.PriceExceptionLineWhereInput = priceExceptionEligibilityWhere(input.skuId, input.currencyCode, input.today);
+  if (input.actor) {
+    const parent = where.priceException as Prisma.PriceExceptionWhereInput;
+    where.priceException = { AND: [parent, priceExceptionVisibilityWhere(input.actor)] };
+  }
   if (input.relatedOnly) {
     if (!accountIds.length) return [];
     const parent = where.priceException as Prisma.PriceExceptionWhereInput;

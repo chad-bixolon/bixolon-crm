@@ -3,9 +3,10 @@ import {currentUser} from '@/lib/current-user';
 import {can} from '@/lib/authorization';
 import {prisma} from '@/lib/prisma';
 import {archivePriceException} from './actions';
+import {scopedPriceExceptionWhere} from '@/lib/price-exception-visibility';
 
 export default async function PriceExceptionDetailLayout({children,params}:{children:ReactNode;params:Promise<{id:string}>}){
   const actor=await currentUser();const id=Number((await params).id);
-  const pe=Number.isSafeInteger(id)&&id>0?await prisma.priceException.findUnique({where:{id},select:{archivedAt:true}}):null;
+  const pe=Number.isSafeInteger(id)&&id>0?await prisma.priceException.findFirst({where:scopedPriceExceptionWhere(actor,{id}),select:{archivedAt:true}}):null;
   return <>{children}{pe&&!pe.archivedAt&&can(actor,'users.manage')&&<aside className="mx-auto mb-8 max-w-7xl px-5 lg:px-8"><form action={archivePriceException} className="panel flex items-center justify-between gap-4 p-4"><input type="hidden" name="id" value={id}/><p className="text-sm text-slate-600">Archive this finalized commercial record. Re-imports will preserve the archived state.</p><button className="btn-secondary" type="submit">Archive Price Exception</button></form></aside>}</>;
 }

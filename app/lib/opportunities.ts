@@ -2,6 +2,8 @@ import { ForecastCategory, OpportunityPartyRole, OpportunityProductPriceSource, 
 import { field, optional, pageNumber, positiveId, required, type Errors } from "./crm-validation";
 import { archivedWhere, recordVisibility } from "./record-visibility";
 import { moqEligibility, priceExceptionSnapshot } from "./opportunity-price-exceptions";
+import type { Actor } from "./authorization";
+import { canViewPriceException } from "./price-exception-visibility";
 export type Participant = { accountId: number; roles: OpportunityPartyRole[] };
 export type Line = { id?: number; productId: number; skuId?: number | null; quantity: number; price: string; priceSource?: OpportunityProductPriceSource; catalogPriceTier?: ProductPriceTier | null; priceExceptionLineId?: number | null };
 export type OpportunityInput = { name: string; description: string | null; ownerId: number | null; projectIds: number[]; stageId: number; expectedCloseDate: Date | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: Participant[]; lines: Line[] };
@@ -73,7 +75,7 @@ export async function opportunityOptions(client: PrismaClient) {
   ]);
   return { accounts, owners, stages, currencies, productCount, projects, productCategories };
 }
-export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number) {
+export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number, actor?: Actor) {
   input = { ...input, lines: input.lines.map(line => ({ ...line, priceSource: line.priceSource ?? "MANUAL", catalogPriceTier: line.catalogPriceTier ?? null, priceExceptionLineId: line.priceExceptionLineId ?? null })) };
   return client.$transaction(async (tx) => {
     const existing = id ? await tx.opportunity.findUnique({ where: { id }, include: { projects: true } }) : null;
@@ -105,6 +107,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
         const retainingHistoricalSelection = !!selected && old?.priceSource === "PRICE_EXCEPTION" && old.priceExceptionLineId === selected.id && old.skuId === line.skuId && old.priceExceptionCurrencyCode === input.currencyCode;
         const cutoff = new Date(); cutoff.setUTCHours(0, 0, 0, 0);
         if (!retainingHistoricalSelection && (!selected || selected.productSkuId !== line.skuId || !selected.approvedUnitPrice || selected.currencyCode !== input.currencyCode)) throw new Error("Choose a Price Exception line for this SKU and Opportunity currency.");
+        if (!retainingHistoricalSelection && (!actor || !canViewPriceException(actor, selected!.priceException))) throw new Error("That Price Exception is not available to this user.");
         if (!retainingHistoricalSelection && (selected!.priceException.status !== "ACTIVE" || selected!.priceException.archivedAt || (selected!.priceException.expirationDate && selected!.priceException.expirationDate < cutoff))) throw new Error("That Price Exception is no longer available for new selection.");
         const eligibility = moqEligibility(line.quantity, retainingHistoricalSelection ? old.priceExceptionSourceQty : selected!.sourceQuantity?.toString() ?? null);
         const pricingChanged = !old || old.quantity !== line.quantity || !old.estimatedUnitPrice.equals(line.price) || !retainingHistoricalSelection;
