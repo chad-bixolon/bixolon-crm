@@ -78,7 +78,7 @@ function blankCounts():PriceExceptionImportCounts{return {headers:0,lines:0,newP
 
 export async function planPriceExceptionImport(db:Db, parsed:LegacyParseResult, fileName:string):Promise<PriceExceptionImportPlan> {
   const counts=blankCounts(); counts.skippedRows=parsed.skippedRows;
-  if(parsed.errors.length){counts.errors=parsed.errors.length;return {items:[],counts,errors:parsed.errors,digest:'',fileName,currencyNote:'USD is supplied by the legacy adapter because the workbook has no currency column.'};}
+  if(parsed.errors.length){counts.errors=parsed.errors.length;return {items:[],counts,errors:parsed.errors,digest:'',fileName,currencyNote:'Prices in this workbook use USD because it has no currency column.'};}
   const [accounts,skus,existing]=await Promise.all([
     db.account.findMany({where:{archivedAt:null},select:{id:true,name:true}}),
     db.productSku.findMany({select:{id:true,normalizedPartNumber:true}}),
@@ -90,8 +90,8 @@ export async function planPriceExceptionImport(db:Db, parsed:LegacyParseResult, 
   const items:PriceExceptionImportItem[]=[];
   for(const [sourceKey,rows] of groups){const first=rows[0];const messages:string[]=[];
     const resolve=(name:Raw,role:string)=>{if(!name)return undefined;const matches=accountMap.get(normalizeAccountName(name))??[];if(matches.length===1){counts.resolvedAccounts++;return matches[0].id;}counts.unresolvedAccounts++;messages.push(matches.length?`${role} account is ambiguous (${matches.length} matches).`:`${role} account is unresolved.`);return undefined;};
-    const occurrences=new Map<string,number>(); const lines=rows.map((row,index)=>{const base=[row.sku,row.price,row.quantity,row.comments,row.competitor].map(normalized).join('|');const occurrence=(occurrences.get(base)??0)+1;occurrences.set(base,occurrence);const skuId=row.sku?skuMap.get(normalizePartNumber(row.sku)):undefined;if(skuId)counts.resolvedSkus++;else {counts.unresolvedSkus++;messages.push(`Row ${row.rowNumber}: SKU ${row.sku??'(blank)'} is unresolved.`);}const parsedPrice=money(row.price);if(row.price&&!parsedPrice)messages.push(`Row ${row.rowNumber}: price “${row.price}” is preserved as raw source text; normalized unit price is blank.`);const qty=quantity(row.quantity);if(row.quantity&&!qty.value)messages.push(`Row ${row.rowNumber}: quantity “${row.quantity}” is preserved as raw source text; normalized MOQ is blank.`);return {sourceLineKey:lineIdentity(row,occurrence),sourceSku:row.sku,productSkuId:skuId,price:parsedPrice,currency:'USD' as const,currencyDefaulted:true as const,sourceQuantity:qty.value,sourceQuantityRaw:row.quantity,sourceUnit:qty.unit,comments:row.comments,competitor:row.competitor,sortOrder:index,rawValues:row.rawValues,unresolvedSku:!skuId};});
-    const existingRow=existingMap.get(sourceKey); const existingId=existingRow?.id; const expirationDate=parseLegacyDate(first.expirationDate); if(first.expirationDate&&!expirationDate)messages.push(`Expiration date “${first.expirationDate}” is preserved in raw source data; normalized expiration is blank.`);
+    const occurrences=new Map<string,number>(); const lines=rows.map((row,index)=>{const base=[row.sku,row.price,row.quantity,row.comments,row.competitor].map(normalized).join('|');const occurrence=(occurrences.get(base)??0)+1;occurrences.set(base,occurrence);const skuId=row.sku?skuMap.get(normalizePartNumber(row.sku)):undefined;if(skuId)counts.resolvedSkus++;else {counts.unresolvedSkus++;messages.push(`Row ${row.rowNumber}: SKU ${row.sku??'(blank)'} is unresolved.`);}const parsedPrice=money(row.price);if(row.price&&!parsedPrice)messages.push(`Row ${row.rowNumber}: price “${row.price}” could not be read as a number. The original value was kept; the unit price is blank.`);const qty=quantity(row.quantity);if(row.quantity&&!qty.value)messages.push(`Row ${row.rowNumber}: quantity “${row.quantity}” could not be read as a number. The original value was kept; MOQ is blank.`);return {sourceLineKey:lineIdentity(row,occurrence),sourceSku:row.sku,productSkuId:skuId,price:parsedPrice,currency:'USD' as const,currencyDefaulted:true as const,sourceQuantity:qty.value,sourceQuantityRaw:row.quantity,sourceUnit:qty.unit,comments:row.comments,competitor:row.competitor,sortOrder:index,rawValues:row.rawValues,unresolvedSku:!skuId};});
+    const existingRow=existingMap.get(sourceKey); const existingId=existingRow?.id; const expirationDate=parseLegacyDate(first.expirationDate); if(first.expirationDate&&!expirationDate)messages.push(`Expiration date “${first.expirationDate}” could not be read. The original value was kept; the expiration date is blank.`);
     const automaticDistributorAccountId=resolve(first.distributor,'Distributor/OEM');
     const automaticVarAccountId=resolve(first.varName,'VAR/ISV');
     const automaticEndUserAccountId=resolve(first.endUser,'End User');
@@ -104,7 +104,7 @@ export async function planPriceExceptionImport(db:Db, parsed:LegacyParseResult, 
   }
   const errors:string[]=[];
   const digest=hash(JSON.stringify(items));
-  return {items,counts,errors,digest,fileName,currencyNote:'USD is supplied by the legacy adapter because the workbook has no currency column.'};
+  return {items,counts,errors,digest,fileName,currencyNote:'Prices in this workbook use USD because it has no currency column.'};
 }
 
 export async function applyPriceExceptionImport(db:PrismaClient,parsed:LegacyParseResult,fileName:string,expectedDigest:string,actorId:number){

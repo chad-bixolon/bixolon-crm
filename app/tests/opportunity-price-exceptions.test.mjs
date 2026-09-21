@@ -174,13 +174,13 @@ test('schema, importer, detail UI, and authorization encode historical and read-
   assert.match(importer, /opportunityProducts:\{none:\{\}\}/);
   assert.match(detail, /manual override/);
   assert.match(detail, /price-exceptions\/\$\{line\.priceExceptionLine\.priceExceptionId\}/);
-  assert.match(picker, /Search all PEs for this SKU/);
-  assert.match(picker, /No linked PE account matches this Opportunity/);
+  assert.match(picker, /Search all Price Exceptions for this SKU/);
+  assert.match(picker, /No linked Price Exception Account matches this Opportunity/);
   assert.match(picker, /Eligible/);
   assert.match(picker, /Not eligible/);
   assert.match(picker, /Unknown MOQ/);
   assert.doesNotMatch(picker, /Source Qty|source quantity/);
-  assert.match(peDetail, /Minimum Order Quantity/);
+  assert.match(peDetail, /minimum order quantity/);
   assert.doesNotMatch(peDetail, />Source quantity</);
   for (const role of ['ADMIN', 'SALES_MANAGER', 'SALES']) assert.equal(can({ id: 1, role, active: true }, 'sales.write'), true);
   assert.equal(can({ id: 1, role: 'READ_ONLY', active: true }, 'sales.write'), false);
