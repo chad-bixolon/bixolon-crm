@@ -250,6 +250,13 @@ try:
                 print(f"PASS: Optional Project Primary Account migration preserved {len(optional_before)} table fingerprints and {len(primary_before)} existing primaryAccountId values; nullable FK retained; account-less, participant-only, and Opportunity-linked Project accepted", flush=True)
             else:
                 media_before = all_table_fingerprints("backfill") if directory.name == '20260921030000_media_partner_roles' else None
+                if directory.name == '20260921040000_service_partner_participant_role':
+                    sql("backfill", '''INSERT INTO "OpportunityAccountRole" ("opportunityId","accountId",role,"updatedAt")
+                      SELECT m."opportunityId",m."accountId",'OTHER',now() FROM "OpportunityAccount" m
+                      WHERE NOT EXISTS (SELECT 1 FROM "OpportunityAccountRole" r WHERE r."opportunityId"=m."opportunityId" AND r."accountId"=m."accountId" AND r.role='OTHER')
+                      ORDER BY m."opportunityId",m."accountId" LIMIT 1;''')
+                service_before = all_table_fingerprints("backfill") if directory.name == '20260921040000_service_partner_participant_role' else None
+                other_before = sql_values("backfill", '''SELECT count(*) FROM "OpportunityAccountRole" WHERE role='OTHER';''') if service_before is not None else None
                 if directory.name == '20260921020000_forecast_sales_targets':
                     sql('backfill', '''INSERT INTO "SalesStage" (id,name,"sortOrder",probability,"isClosed","isWon","updatedAt") VALUES
                       (3001,'Forecast fixture won',3001,100,true,true,now()),
@@ -269,6 +276,14 @@ try:
                     if sql_values("backfill", '''SELECT count(*) FROM "AccountBusinessRole" WHERE role='MEDIA_PARTNER';''') != ['1'] or sql_values("backfill", '''SELECT count(*) FROM "OpportunityAccountRole" WHERE role='MEDIA_PARTNER';''') != ['1']:
                         raise RuntimeError("Media Partner assignments were not stored independently")
                     print("PASS: Media Partner migration preserved all existing rows; both new role assignments accepted", flush=True)
+                if service_before is not None:
+                    if service_before != all_table_fingerprints("backfill") or other_before != sql_values("backfill", '''SELECT count(*) FROM "OpportunityAccountRole" WHERE role='OTHER';''') or other_before == ['0']:
+                        raise RuntimeError("Service Partner migration changed existing participant rows")
+                    sql("backfill", '''INSERT INTO "OpportunityAccountRole" ("opportunityId","accountId",role,"updatedAt")
+                      SELECT "opportunityId","accountId",'SERVICE_PARTNER',now() FROM "OpportunityAccount" ORDER BY "opportunityId","accountId" LIMIT 1;''')
+                    if sql_values("backfill", '''SELECT count(*) FROM "OpportunityAccountRole" WHERE role='SERVICE_PARTNER';''') != ['1']:
+                        raise RuntimeError("Service Partner participant role was not accepted")
+                    print("PASS: Service Partner migration preserved existing rows and OTHER assignments; new participant role accepted", flush=True)
                 if directory.name == '20260921020000_forecast_sales_targets':
                     categories = sql_values('backfill', '''SELECT id || ':' || "forecastCategory" FROM "Opportunity" WHERE id BETWEEN 3001 AND 3004 ORDER BY id;''')
                     if categories != ['3001:CLOSED','3002:OMITTED','3003:PIPELINE','3004:COMMIT']:

@@ -38,6 +38,7 @@ enum OpportunityPartyRole {
   OEM
   OTHER
   MEDIA_PARTNER
+  SERVICE_PARTNER
 }
 
 enum ProjectStatus {

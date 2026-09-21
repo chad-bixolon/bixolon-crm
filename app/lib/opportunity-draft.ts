@@ -9,7 +9,7 @@ export type OpportunityDraft = {
 };
 type DraftStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 const forecastCategories = ["OMITTED", "PIPELINE", "BEST_CASE", "COMMIT", "CLOSED"];
-const partyRoles = ["END_USER", "VAR_RESELLER", "DISTRIBUTOR", "ISV_PARTNER", "OEM", "OTHER", "MEDIA_PARTNER"];
+const partyRoles = ["END_USER", "VAR_RESELLER", "DISTRIBUTOR", "ISV_PARTNER", "OEM", "OTHER", "MEDIA_PARTNER", "SERVICE_PARTNER"];
 const priceSources = ["MANUAL", "CATALOG", "PRICE_EXCEPTION"];
 const catalogTiers = ["STANDARD", "MSRP", "RESELLER", "DISTRIBUTOR"];
 const isId = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value > 0;
