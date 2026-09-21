@@ -119,5 +119,5 @@ test('Project filters and saved configuration round trip',async()=>{
   let record;await saved.saveReportDefinition({reportDefinition:{create:async({data})=>(record={id:1,...data})}},actor('SALES_MANAGER'),{name:'Projects',description:null,reportType:'PROJECT_INITIATIVE',visibility:'SHARED',configuration:cfg});
   assert.deepEqual(record.configuration,cfg);
   assert.ok(reporting.getVisibleReportTypes(actor('ADMIN')).includes('PROJECT_INITIATIVE'));
-  assert.ok(!reporting.getVisibleReportTypes(actor('ADMIN')).includes('PRICE_EXCEPTION_USAGE'));
+  assert.ok(reporting.getVisibleReportTypes(actor('ADMIN')).includes('PRICE_EXCEPTION_USAGE'));
 });

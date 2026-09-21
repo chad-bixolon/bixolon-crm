@@ -39,6 +39,16 @@ export function productPerformanceConfigFromParams(params:Params,fallback?:unkno
   const defaults=defaultReportConfiguration('PRODUCT_PERFORMANCE'),metrics=many(params.metrics),columns=many(params.columns);
   return validateReportConfiguration('PRODUCT_PERFORMANCE',{filters,groupBy:one(params.groupBy)||null,sort:[{field:one(params.sortField)||'lineValue',direction:one(params.sortDirection)||'desc'}],metrics:metrics.length?metrics:defaults.metrics,columns:columns.length?columns:defaults.columns});
 }
+export function priceExceptionUsageConfigFromParams(params:Params,fallback?:unknown):ReportConfiguration {
+  if(one(params.configured)!=='1')return validateReportConfiguration('PRICE_EXCEPTION_USAGE',fallback??defaultReportConfiguration('PRICE_EXCEPTION_USAGE'));
+  const filters:ReportConfiguration['filters']=[];
+  for(const field of ['ownerId','accountId','opportunityId','stageId','productId','skuId','productCategoryId','priceExceptionId','peSalespersonId'] as const){const value=number(one(params[field]));if(value)filters.push({field,operator:'eq',value});}
+  for(const field of ['forecastCategory','status','currency','moqStatus','overrideStatus'] as const){const value=one(params[field]);if(value)filters.push({field,operator:'eq',value});}
+  const preset=one(params.closeDatePreset);if(preset&&preset!=='CUSTOM'&&preset!=='ANY')filters.push({field:'closeDate',operator:'preset',value:preset});
+  else if(preset!=='ANY'){const from=one(params.closeFrom),to=one(params.closeTo);if(from&&to)filters.push({field:'closeDate',operator:'between',value:{from,to}});}
+  const defaults=defaultReportConfiguration('PRICE_EXCEPTION_USAGE'),metrics=many(params.metrics),columns=many(params.columns);
+  return validateReportConfiguration('PRICE_EXCEPTION_USAGE',{filters,groupBy:one(params.groupBy)||null,sort:[{field:one(params.sortField)||'lineValue',direction:one(params.sortDirection)||'desc'}],metrics:metrics.length?metrics:defaults.metrics,columns:columns.length?columns:defaults.columns});
+}
 export function channelPartnerConfigFromParams(params:Params,fallback?:unknown):ReportConfiguration {
   if(one(params.configured)!=='1')return validateReportConfiguration('CHANNEL_PARTNER',fallback??defaultReportConfiguration('CHANNEL_PARTNER'));
   const filters:ReportConfiguration['filters']=[];
