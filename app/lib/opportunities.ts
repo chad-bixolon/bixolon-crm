@@ -6,7 +6,7 @@ import type { Actor } from "./authorization";
 import { canViewPriceException } from "./price-exception-visibility";
 export type Participant = { accountId: number; roles: OpportunityPartyRole[] };
 export type Line = { id?: number; productId: number; skuId?: number | null; quantity: number; price: string; priceSource?: OpportunityProductPriceSource; catalogPriceTier?: ProductPriceTier | null; priceExceptionLineId?: number | null };
-export type OpportunityInput = { name: string; description: string | null; ownerId: number | null; projectIds: number[]; stageId: number; expectedCloseDate: Date | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: Participant[]; lines: Line[] };
+export type OpportunityInput = { name: string; description: string | null; competitorId?: number | null; currentProductBeingUsed?: string | null; customerPainPoints?: string | null; ownerId: number | null; projectIds: number[]; stageId: number; expectedCloseDate: Date | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: Participant[]; lines: Line[] };
 export function categoryForStage(stage: { isClosed: boolean; isWon: boolean }, requested: ForecastCategory | null, previous?: { stageId: number; forecastCategory: ForecastCategory } | null, stageId?: number): ForecastCategory {
   if (stage.isClosed) return stage.isWon ? ForecastCategory.CLOSED : ForecastCategory.OMITTED;
   if (requested === ForecastCategory.CLOSED) {
@@ -19,6 +19,10 @@ export function parseOpportunity(form: FormData) {
   const errors: Errors = {};
   const name = required(form, "name", "Opportunity name", 200, errors);
   const description = optional(form, "description", 5000, errors);
+  const competitorRaw = field(form, "competitorId"), competitorId = competitorRaw ? positiveId(competitorRaw) : null;
+  if (competitorRaw && !competitorId) errors.competitorId = "Choose a valid competitor.";
+  const currentProductBeingUsed = optional(form, "currentProductBeingUsed", 500, errors);
+  const customerPainPoints = optional(form, "customerPainPoints", 20000, errors);
   const ownerRaw = field(form, "ownerId"), ownerId = ownerRaw ? positiveId(ownerRaw) : null;
   if (ownerRaw && !ownerId) errors.ownerId = "Choose a valid owner.";
   const projectRaw = form.getAll("projectIds").map(String), projectIds = projectRaw.map(positiveId);
@@ -66,13 +70,13 @@ export function parseOpportunity(form: FormData) {
     lines.push({ id: id ?? undefined, productId, ...(skuId ? { skuId } : {}), quantity, price, ...(priceSources[i] ? { priceSource: priceSource!, catalogPriceTier, priceExceptionLineId: priceExceptionLineId ?? null } : {}) });
   }
   if (new Set(lines.map((line) => line.id).filter(Boolean)).size !== lines.filter((line) => line.id).length) errors.lines = "Duplicate line item.";
-  return { errors, value: Object.keys(errors).length ? undefined : { name, description, ownerId, projectIds: projectIds as number[], stageId: stageId!, expectedCloseDate, probability, forecastCategory, currencyCode, participants, lines } satisfies OpportunityInput };
+  return { errors, value: Object.keys(errors).length ? undefined : { name, description, competitorId, currentProductBeingUsed, customerPainPoints, ownerId, projectIds: projectIds as number[], stageId: stageId!, expectedCloseDate, probability, forecastCategory, currencyCode, participants, lines } satisfies OpportunityInput };
 }
 export function lineTotal(line: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number }) { return new Prisma.Decimal(line.estimatedUnitPrice).mul(line.quantity); }
 export function opportunityTotal(lines: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number; archivedAt?: Date | null }[]) { return lines.reduce((sum, line) => line.archivedAt ? sum : sum.add(lineTotal(line)), new Prisma.Decimal(0)); }
 export function weightedValue(total: Prisma.Decimal, probability: number) { return total.mul(probability).div(100); }
 export async function opportunityOptions(client: PrismaClient) {
-  const [accounts, owners, stages, currencies, productCount, projects, productCategories] = await Promise.all([
+  const [accounts, owners, stages, currencies, productCount, projects, productCategories, competitors] = await Promise.all([
     client.account.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     client.user.findMany({ where: { active: true, archivedAt: null }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
     client.salesStage.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
@@ -80,8 +84,9 @@ export async function opportunityOptions(client: PrismaClient) {
     client.product.count({ where: { active: true, archivedAt: null } }),
     client.project.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     client.productCategory.findMany({ where: { OR: [{ active: true }, { products: { some: {} } }] }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
+    client.competitorOption.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true, active: true } }),
   ]);
-  return { accounts, owners, stages, currencies, productCount, projects, productCategories };
+  return { accounts, owners, stages, currencies, productCount, projects, productCategories, competitors };
 }
 export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number, actor?: Actor) {
   input = { ...input, lines: input.lines.map(line => ({ ...line, priceSource: line.priceSource ?? "MANUAL", catalogPriceTier: line.catalogPriceTier ?? null, priceExceptionLineId: line.priceExceptionLineId ?? null })) };
@@ -100,6 +105,10 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       input.lines.some(line => line.priceSource === "PRICE_EXCEPTION") ? tx.priceExceptionLine.findMany({ where: { id: { in: input.lines.flatMap(line => line.priceExceptionLineId ? [line.priceExceptionLineId] : []) } }, include: { priceException: true } }) : Promise.resolve([]),
     ]);
     if (!stage || (!stage.active && existing?.stageId !== input.stageId)) throw new Error("Choose an available sales stage.");
+    if (input.competitorId) {
+      const competitor = await tx.competitorOption.findUnique({ where: { id: input.competitorId } });
+      if (!competitor || (!competitor.active && existing?.competitorId !== input.competitorId)) throw new Error("Choose an available competitor.");
+    }
     if (actor?.role === 'SALES' && (input.ownerId !== actor.id || (existing && existing.ownerId !== actor.id))) throw new Error('Sales users may edit only their own Opportunities.');
     if (!currency?.active) throw new Error("Choose an available currency.");
     if (input.ownerId && (!owner?.active || owner.archivedAt)) throw new Error("Choose an active owner.");
@@ -124,7 +133,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
         if (eligibility === "INELIGIBLE" && pricingChanged) throw new Error("Opportunity quantity does not meet the selected Price Exception MOQ.");
       }
     }
-    const data = { name: input.name, description: input.description, ownerId: input.ownerId, stageId: input.stageId, expectedCloseDate: input.expectedCloseDate, probability: input.probability, forecastCategory: categoryForStage(stage, input.forecastCategory, existing, input.stageId), currencyCode: input.currencyCode };
+    const data = { name: input.name, description: input.description, competitorId: input.competitorId ?? null, currentProductBeingUsed: input.currentProductBeingUsed ?? null, customerPainPoints: input.customerPainPoints ?? null, ownerId: input.ownerId, stageId: input.stageId, expectedCloseDate: input.expectedCloseDate, probability: input.probability, forecastCategory: categoryForStage(stage, input.forecastCategory, existing, input.stageId), currencyCode: input.currencyCode };
     if (id) { await tx.opportunity.update({ where: { id }, data }); }
     else { const created = await tx.opportunity.create({ data }); id = created.id; }
     const opportunityId = id;
@@ -164,11 +173,12 @@ export async function setOpportunityArchived(client: PrismaClient, id: number, a
   if (!!row.archivedAt === archived) throw new Error(archived ? "Opportunity is already archived." : "Opportunity is already active.");
   await client.opportunity.update({ where: { id }, data: { archivedAt: archived ? new Date() : null } });
 }
-export type OpportunityFilters = { q?: string; stageId?: string; ownerId?: string; projectId?: string; forecastCategory?: string; closeFrom?: string; closeTo?: string; accountId?: string; page?: string; archived?: string };
+export type OpportunityFilters = { q?: string; stageId?: string; ownerId?: string; competitorId?: string; projectId?: string; forecastCategory?: string; closeFrom?: string; closeTo?: string; accountId?: string; page?: string; archived?: string };
 export function opportunityWhere(filters: OpportunityFilters): Prisma.OpportunityWhereInput {
   const where: Prisma.OpportunityWhereInput = { ...archivedWhere(recordVisibility(filters.archived === "yes" ? "archived" : filters.archived === "all" ? "all" : "active")) };
   if (filters.q?.trim()) where.name = { contains: filters.q.trim().slice(0, 100), mode: "insensitive" };
   const stageId = positiveId(filters.stageId ?? ""); if (stageId) where.stageId = stageId;
+  const competitorId = positiveId(filters.competitorId ?? ""); if (competitorId) where.competitorId = competitorId;
   const ownerId = positiveId(filters.ownerId ?? ""); if (ownerId) where.ownerId = ownerId;
   const accountId = positiveId(filters.accountId ?? ""); if (accountId) where.participants = { some: { accountId } };
   if (filters.projectId === 'none') where.projects = { none: {} };

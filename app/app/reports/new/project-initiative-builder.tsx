@@ -13,7 +13,7 @@ type Params=Record<string,string|string[]|undefined>;
 type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|'SHARED';configuration:unknown}|null;
 export async function ProjectInitiativeBuilder({params,actor,saved}:{params:Params;actor:Actor;saved:Saved}){
   const config=projectInitiativeConfigFromParams(params,saved?.configuration),definition=reportRegistry.PROJECT_INITIATIVE;
-  const [result,owners,projects,accounts,stages,categories,currencies]=await Promise.all([
+  const [result,owners,projects,accounts,stages,categories,currencies,competitors]=await Promise.all([
     executeProjectInitiativeReport(prisma,actor,config),
     prisma.user.findMany({where:{active:true,archivedAt:null},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
     prisma.project.findMany({where:{AND:[{archivedAt:null},projectReadWhere(actor)]},select:{id:true,name:true},orderBy:{name:'asc'}}),
@@ -21,6 +21,7 @@ export async function ProjectInitiativeBuilder({params,actor,saved}:{params:Para
     prisma.salesStage.findMany({orderBy:[{sortOrder:'asc'},{id:'asc'}]}),
     prisma.productCategory.findMany({where:{active:true},orderBy:{name:'asc'}}),
     prisma.currency.findMany({where:{active:true},orderBy:{code:'asc'}}),
+    prisma.competitorOption.findMany({where:{OR:[{active:true},...(Number(filterValue(config,'competitorId'))?[{id:Number(filterValue(config,'competitorId'))}]:[])]},orderBy:[{sortOrder:'asc'},{name:'asc'}]}),
   ]);
   const selected=(field:string)=>String(filterValue(config,field)??'');
   const select=(name:string,label:string,items:{value:string|number;label:string}[],empty='All')=><label className="label">{label}<select className="field" name={name} defaultValue={selected(name)}><option value="">{empty}</option>{items.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</select></label>;
@@ -40,6 +41,7 @@ export async function ProjectInitiativeBuilder({params,actor,saved}:{params:Para
         {select('hasOpportunities','Opportunities',[{value:'true',label:'Has Opportunities'},{value:'false',label:'No Opportunities'}])}
         {select('ownerId','Sales Rep',owners.filter(x=>actor.role!=='SALES'||x.id===actor.id).map(x=>({value:x.id,label:`${x.firstName} ${x.lastName}`})))}
         {select('stageId','Opportunity Stage',stages.map(x=>({value:x.id,label:x.name})))}
+        {select('competitorId','Competitor',competitors.map(x=>({value:x.id,label:x.name+(x.active?'':' (Inactive)')})))}
         {select('forecastCategory','Forecast Category',['PIPELINE','BEST_CASE','COMMIT','OMITTED','CLOSED'].map(x=>({value:x,label:x.replaceAll('_',' ')})))}
         {select('status','Opportunity Status',[{value:'OPEN',label:'Open'},{value:'WON',label:'Closed Won'},{value:'LOST',label:'Closed Lost'}],'Any')}
         {select('productCategoryId','Product Category',categories.map(x=>({value:x.id,label:x.name})))}

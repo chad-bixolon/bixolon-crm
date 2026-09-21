@@ -8,6 +8,7 @@ const sections = [
   ["Territories", "/administration/lookups/territories", "Manage account territory choices."],
   ["Product Categories", "/administration/lookups/product-categories", "Manage Product category choices and order."],
   ["Activity Types", "/administration/lookups/activity-types", "Manage activity choices and order."],
+  ["Competitors", "/administration/competitors", "Manage competitor options available on Opportunities."],
   ["Sales Stages", "/administration/sales-stages", "Manage stage names and properties."],
   ["Sales Targets", "/administration/sales-targets", "Set quarterly targets by sales rep and currency."],
   ["Labels & Terminology", "/administration/labels", "Edit business-facing display labels."],

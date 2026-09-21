@@ -12,7 +12,7 @@ type Params=Record<string,string|string[]|undefined>;
 type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|'SHARED';configuration:unknown}|null;
 export async function PriceExceptionUsageBuilder({params,actor,saved}:{params:Params;actor:Actor;saved:Saved}){
   const config=priceExceptionUsageConfigFromParams(params,saved?.configuration);
-  const [result,owners,stages,accounts,categories,products,skus,opportunities,priceExceptions,peSalespeople,currencies]=await Promise.all([
+  const [result,owners,stages,accounts,categories,products,skus,opportunities,priceExceptions,peSalespeople,currencies,competitors]=await Promise.all([
     executePriceExceptionUsageReport(prisma,actor,config),
     prisma.user.findMany({where:{active:true,archivedAt:null,...(actor.role==='SALES'?{id:actor.id}:{})},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
     prisma.salesStage.findMany({orderBy:[{sortOrder:'asc'},{id:'asc'}]}),
@@ -24,6 +24,7 @@ export async function PriceExceptionUsageBuilder({params,actor,saved}:{params:Pa
     prisma.priceException.findMany({where:{lines:{some:{opportunityProducts:{some:{archivedAt:null,opportunity:{archivedAt:null,...(actor.role==='SALES'?{ownerId:actor.id}:{})}}}}}},select:{id:true,peCode:true},orderBy:{peCode:'asc'}}),
     prisma.user.findMany({where:{assignedPriceExceptions:{some:{lines:{some:{opportunityProducts:{some:{archivedAt:null,opportunity:{archivedAt:null,...(actor.role==='SALES'?{ownerId:actor.id}:{})}}}}}}}},select:{id:true,firstName:true,lastName:true},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
     prisma.currency.findMany({where:{active:true},orderBy:{code:'asc'}}),
+    prisma.competitorOption.findMany({where:{OR:[{active:true},...(Number(filterValue(config,'competitorId'))?[{id:Number(filterValue(config,'competitorId'))}]:[])]},orderBy:[{sortOrder:'asc'},{name:'asc'}]}),
   ]);
   const selected=(field:string)=>String(filterValue(config,field)??'');
   const preset=String(config.filters.find(x=>x.field==='closeDate'&&x.operator==='preset')?.value??'');
@@ -42,6 +43,7 @@ export async function PriceExceptionUsageBuilder({params,actor,saved}:{params:Pa
       <fieldset className="report-section"><legend className="report-section-title">Opportunity and commercial filters</legend><div className="report-filter-grid">
         {select('status','Status',[{value:'OPEN',label:'Open'},{value:'WON',label:'Closed Won'},{value:'LOST',label:'Closed Lost'}],'Any')}
         {select('stageId','Stage',stages.map(x=>({value:x.id,label:x.name})))}
+        {select('competitorId','Competitor',competitors.map(x=>({value:x.id,label:x.name+(x.active?'':' (Inactive)')})))}
         {select('forecastCategory','Forecast Category',['PIPELINE','BEST_CASE','COMMIT','OMITTED','CLOSED'].map(x=>({value:x,label:x.replaceAll('_',' ')})))}
         {select('accountId','Account',accounts.map(x=>({value:x.id,label:x.name})))}
         {select('opportunityId','Opportunity',opportunities.map(x=>({value:x.id,label:x.name})))}

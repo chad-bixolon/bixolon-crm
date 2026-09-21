@@ -3,7 +3,7 @@ import type { ForecastCategory, OpportunityPartyRole, OpportunityProductPriceSou
 export type ParticipantDraft = { accountId: number; roles: OpportunityPartyRole[] };
 export type LineDraft = { id: number; productId: number; skuId?: number | null; quantity: string; price: string; priceSource: OpportunityProductPriceSource; catalogPriceTier: ProductPriceTier | null; priceExceptionLineId: number | null; priceExceptionCode: string | null; priceExceptionUnitPrice: string | null; priceExceptionCurrencyCode: string | null; priceExceptionSourceQty: string | null; priceExceptionAccountIds: number[] };
 export type OpportunityDraft = {
-  name: string; description: string; ownerId: string; stageId: string; expectedCloseDate: string;
+  name: string; description: string; competitorId: string; currentProductBeingUsed: string; customerPainPoints: string; ownerId: string; stageId: string; expectedCloseDate: string;
   probability: string; forecastCategory: ForecastCategory | ""; currencyCode: string; projectIds: number[];
   participants: ParticipantDraft[]; lines: LineDraft[];
 };
@@ -51,6 +51,12 @@ export function readDraft(raw: string | null, fallback: OpportunityDraft): Oppor
       if (!Array.isArray(line.priceExceptionAccountIds) || !line.priceExceptionAccountIds.every(isId)) return fallback;
       for (const key of ["priceExceptionCode", "priceExceptionUnitPrice", "priceExceptionCurrencyCode", "priceExceptionSourceQty"]) if (line[key] !== null && typeof line[key] !== "string") return fallback;
     }
+    for (const key of ["competitorId", "currentProductBeingUsed", "customerPainPoints"] as const) {
+      if (value[key] === undefined && fallback[key] !== undefined) value[key] = fallback[key];
+      if (value[key] === undefined) continue;
+      if (typeof value[key] !== "string") return fallback;
+    }
+    if (value.competitorId !== undefined && value.competitorId !== "" && !/^[1-9]\d*$/.test(value.competitorId as string)) return fallback;
     return value as OpportunityDraft;
   } catch { return fallback; }
 }

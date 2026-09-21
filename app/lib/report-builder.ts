@@ -7,7 +7,7 @@ const number=(value:string|undefined)=>value&&Number.isSafeInteger(Number(value)
 export function pipelineConfigFromParams(params: Params, fallback?: unknown): ReportConfiguration {
   if(one(params.configured)!=='1') return validateReportConfiguration('PIPELINE',fallback??defaultReportConfiguration('PIPELINE'));
   const filters:ReportConfiguration['filters']=[];
-  for(const field of ['ownerId','stageId','accountId','productCategoryId','projectId'] as const){const value=number(one(params[field]));if(value)filters.push({field,operator:'eq',value});}
+  for(const field of ['ownerId','stageId','competitorId','accountId','productCategoryId','projectId'] as const){const value=number(one(params[field]));if(value)filters.push({field,operator:'eq',value});}
   for(const field of ['industry','territory','currency'] as const){const value=one(params[field]);if(value)filters.push({field,operator:'eq',value});}
   const status=one(params.status);if(status)filters.push({field:'status',operator:'eq',value:status});
   if (one(params.activeSalesRep) === '1') filters.push({field:'activeSalesRep',operator:'eq',value:true});
@@ -42,7 +42,7 @@ export function productPerformanceConfigFromParams(params:Params,fallback?:unkno
 export function priceExceptionUsageConfigFromParams(params:Params,fallback?:unknown):ReportConfiguration {
   if(one(params.configured)!=='1')return validateReportConfiguration('PRICE_EXCEPTION_USAGE',fallback??defaultReportConfiguration('PRICE_EXCEPTION_USAGE'));
   const filters:ReportConfiguration['filters']=[];
-  for(const field of ['ownerId','accountId','opportunityId','stageId','productId','skuId','productCategoryId','priceExceptionId','peSalespersonId'] as const){const value=number(one(params[field]));if(value)filters.push({field,operator:'eq',value});}
+  for(const field of ['ownerId','accountId','opportunityId','stageId','competitorId','productId','skuId','productCategoryId','priceExceptionId','peSalespersonId'] as const){const value=number(one(params[field]));if(value)filters.push({field,operator:'eq',value});}
   for(const field of ['forecastCategory','status','currency','moqStatus','overrideStatus'] as const){const value=one(params[field]);if(value)filters.push({field,operator:'eq',value});}
   const preset=one(params.closeDatePreset);if(preset&&preset!=='CUSTOM'&&preset!=='ANY')filters.push({field:'closeDate',operator:'preset',value:preset});
   else if(preset!=='ANY'){const from=one(params.closeFrom),to=one(params.closeTo);if(from&&to)filters.push({field:'closeDate',operator:'between',value:{from,to}});}
@@ -63,7 +63,7 @@ export function channelPartnerConfigFromParams(params:Params,fallback?:unknown):
 export function projectInitiativeConfigFromParams(params:Params,fallback?:unknown):ReportConfiguration {
   if(one(params.configured)!=='1')return validateReportConfiguration('PROJECT_INITIATIVE',fallback??defaultReportConfiguration('PROJECT_INITIATIVE'));
   const filters:ReportConfiguration['filters']=[];
-  for(const field of ['projectOwnerId','projectId','primaryAccountId','participantAccountId','ownerId','stageId','productCategoryId'] as const){const value=number(one(params[field]));if(value)filters.push({field,operator:'eq',value});}
+  for(const field of ['projectOwnerId','projectId','primaryAccountId','participantAccountId','ownerId','stageId','competitorId','productCategoryId'] as const){const value=number(one(params[field]));if(value)filters.push({field,operator:'eq',value});}
   for(const field of ['projectStatus','forecastCategory','status','currency'] as const){const value=one(params[field]);if(value)filters.push({field,operator:'eq',value});}
   for(const field of ['hasAccount','hasOpportunities'] as const){const value=one(params[field]);if(value==='true'||value==='false')filters.push({field,operator:'eq',value:value==='true'});}
   for(const field of ['startDate','targetEndDate','closeDate'] as const){const choice=one(params[`${field}Preset`]);if(field==='targetEndDate'&&['OVERDUE','NEXT_30_DAYS','NO_DATE'].includes(choice??''))filters.push({field,operator:'attention',value:choice});else if(choice&&choice!=='CUSTOM'&&choice!=='ANY')filters.push({field,operator:'preset',value:choice});else if(choice==='CUSTOM'){const from=one(params[`${field}From`]),to=one(params[`${field}To`]);if(from&&to)filters.push({field,operator:'between',value:{from,to}});}}

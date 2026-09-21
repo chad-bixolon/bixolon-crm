@@ -175,9 +175,9 @@ model User {
   ownedReports            ReportDefinition[] @relation("ReportOwner")
   createdReports          ReportDefinition[] @relation("ReportCreatedBy")
   updatedReports          ReportDefinition[] @relation("ReportUpdatedBy")
-  salesTargets            SalesTarget[]       @relation("SalesTargetRep")
-  createdSalesTargets     SalesTarget[]       @relation("SalesTargetCreatedBy")
-  updatedSalesTargets     SalesTarget[]       @relation("SalesTargetUpdatedBy")
+  salesTargets            SalesTarget[]      @relation("SalesTargetRep")
+  createdSalesTargets     SalesTarget[]      @relation("SalesTargetCreatedBy")
+  updatedSalesTargets     SalesTarget[]      @relation("SalesTargetUpdatedBy")
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
 }
@@ -391,6 +391,18 @@ model SalesStage {
   @@index([active, sortOrder])
 }
 
+model CompetitorOption {
+  id            Int           @id @default(autoincrement())
+  name          String        @unique
+  active        Boolean       @default(true)
+  sortOrder     Int           @default(0)
+  opportunities Opportunity[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([active, sortOrder])
+}
+
 model Currency {
   code          String        @id @db.Char(3)
   name          String
@@ -402,36 +414,40 @@ model Currency {
 }
 
 model Opportunity {
-  id                Int                  @id @default(autoincrement())
-  projects          OpportunityProject[]
+  id                      Int                  @id @default(autoincrement())
+  projects                OpportunityProject[]
   /// Original column is retained; participants is the authoritative account relationship.
-  legacyAccountId   Int?                 @map("accountId")
-  legacyAccount     Account?             @relation("LegacyOpportunityAccount", fields: [legacyAccountId], references: [id], onDelete: Restrict, map: "Opportunity_accountId_fkey")
-  ownerId           Int?
-  owner             User?                @relation("OpportunityOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  stageId           Int
-  stage             SalesStage           @relation(fields: [stageId], references: [id], onDelete: Restrict)
-  name              String
-  description       String?
-  expectedCloseDate DateTime?
-  probability       Int?
-  forecastCategory  ForecastCategory     @default(PIPELINE)
-  currencyCode      String               @default("USD") @db.Char(3)
-  currency          Currency             @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
-  participants      OpportunityAccount[]
-  products          OpportunityProduct[]
-  tasks             Task[]
-  activities        Activity[]
-  notes             Note[]
-  archivedAt        DateTime?
-  createdById       Int?
-  createdBy         User?                @relation("OpportunityCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  updatedById       Int?
-  updatedBy         User?                @relation("OpportunityUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
-  archivedById      Int?
-  archivedBy        User?                @relation("OpportunityArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  legacyAccountId         Int?                 @map("accountId")
+  legacyAccount           Account?             @relation("LegacyOpportunityAccount", fields: [legacyAccountId], references: [id], onDelete: Restrict, map: "Opportunity_accountId_fkey")
+  ownerId                 Int?
+  owner                   User?                @relation("OpportunityOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  stageId                 Int
+  stage                   SalesStage           @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  name                    String
+  description             String?
+  competitorId            Int?
+  competitor              CompetitorOption?    @relation(fields: [competitorId], references: [id], onDelete: Restrict)
+  currentProductBeingUsed String?
+  customerPainPoints      String?              @db.Text
+  expectedCloseDate       DateTime?
+  probability             Int?
+  forecastCategory        ForecastCategory     @default(PIPELINE)
+  currencyCode            String               @default("USD") @db.Char(3)
+  currency                Currency             @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  participants            OpportunityAccount[]
+  products                OpportunityProduct[]
+  tasks                   Task[]
+  activities              Activity[]
+  notes                   Note[]
+  archivedAt              DateTime?
+  createdById             Int?
+  createdBy               User?                @relation("OpportunityCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById             Int?
+  updatedBy               User?                @relation("OpportunityUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  archivedById            Int?
+  archivedBy              User?                @relation("OpportunityArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
 
   @@index([legacyAccountId])
   @@index([ownerId, stageId])
@@ -439,6 +455,7 @@ model Opportunity {
   @@index([stageId, expectedCloseDate])
   @@index([expectedCloseDate])
   @@index([currencyCode])
+  @@index([competitorId])
   @@index([createdById])
   @@index([updatedById])
   @@index([archivedById])
