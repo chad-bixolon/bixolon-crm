@@ -50,3 +50,13 @@ export function channelPartnerConfigFromParams(params:Params,fallback?:unknown):
   const defaults=defaultReportConfiguration('CHANNEL_PARTNER'),metrics=many(params.metrics),columns=many(params.columns);
   return validateReportConfiguration('CHANNEL_PARTNER',{filters,groupBy:one(params.groupBy)||null,sort:[{field:one(params.sortField)||'value',direction:one(params.sortDirection)||'desc'}],metrics:metrics.length?metrics:defaults.metrics,columns:columns.length?columns:defaults.columns});
 }
+export function projectInitiativeConfigFromParams(params:Params,fallback?:unknown):ReportConfiguration {
+  if(one(params.configured)!=='1')return validateReportConfiguration('PROJECT_INITIATIVE',fallback??defaultReportConfiguration('PROJECT_INITIATIVE'));
+  const filters:ReportConfiguration['filters']=[];
+  for(const field of ['projectOwnerId','projectId','primaryAccountId','participantAccountId','ownerId','stageId','productCategoryId'] as const){const value=number(one(params[field]));if(value)filters.push({field,operator:'eq',value});}
+  for(const field of ['projectStatus','forecastCategory','status','currency'] as const){const value=one(params[field]);if(value)filters.push({field,operator:'eq',value});}
+  for(const field of ['hasAccount','hasOpportunities'] as const){const value=one(params[field]);if(value==='true'||value==='false')filters.push({field,operator:'eq',value:value==='true'});}
+  for(const field of ['startDate','targetEndDate','closeDate'] as const){const choice=one(params[`${field}Preset`]);if(field==='targetEndDate'&&['OVERDUE','NEXT_30_DAYS','NO_DATE'].includes(choice??''))filters.push({field,operator:'attention',value:choice});else if(choice&&choice!=='CUSTOM'&&choice!=='ANY')filters.push({field,operator:'preset',value:choice});else if(choice==='CUSTOM'){const from=one(params[`${field}From`]),to=one(params[`${field}To`]);if(from&&to)filters.push({field,operator:'between',value:{from,to}});}}
+  const defaults=defaultReportConfiguration('PROJECT_INITIATIVE'),metrics=many(params.metrics),columns=many(params.columns);
+  return validateReportConfiguration('PROJECT_INITIATIVE',{filters,groupBy:one(params.groupBy)||null,sort:[{field:one(params.sortField)||'pipeline',direction:one(params.sortDirection)||'desc'}],metrics:metrics.length?metrics:defaults.metrics,columns:columns.length?columns:defaults.columns});
+}

@@ -8,6 +8,10 @@ export function formatCurrency(value: Money, currency: string, showCode = false)
   }).format(typeof value === "number" ? value : value.toNumber()).replace(/\u00a0/g, " ");
 }
 
+export function formatCurrencyOrDash(value: Money, currency: string | null, showCode = false): string {
+  return currency === null ? "—" : formatCurrency(value, currency, showCode);
+}
+
 export function formatCloseMonth(month: string): string {
   if (month === "Unscheduled") return month;
   return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" })
