@@ -1,6 +1,6 @@
 import { ForecastCategory, Prisma, type PrismaClient } from '@prisma/client';
 import { can, opportunityScope, type Actor } from './authorization';
-import { opportunityTotal, weightedValue } from './opportunities';
+import { lineTotal, opportunityTotal, weightedValue } from './opportunities';
 import { daysSince, engagementAccountWhere, hasNoActivityInDays, latestAccountActivityOrder } from './engagement';
 import { getSettings } from './configuration';
 
@@ -49,6 +49,15 @@ const accountActivityDefinition: ReportTypeDefinition = {
   metrics: {accountCount:'Account Count',noActivityCount:'Accounts With No Activity',staleAccountCount:'Stale Account Count',activityCount:'Activity Count',averageDaysSinceLastActivity:'Average Days Since Last Activity'},
   sorts: {account:'Account',owner:'Owner',lastActivity:'Last Activity',daysSinceLastActivity:'Days Since Last Activity',activityCount:'Activity Count'},
 };
+const productPerformanceDefinition: ReportTypeDefinition = {
+  label:'Product Performance', description:'Product and category opportunity line performance', grain:'OpportunityProduct', implemented:true,
+  semanticNote:'Each active product line contributes its own quantity × Opportunity unit price. Opportunity Count is distinct within each group; totals are separated by currency and SKU price unit. Lines without a SKU use Each.',
+  filters:{ownerId:{label:'Sales Rep',operators:['eq']},stageId:{label:'Stage',operators:['eq']},forecastCategory:{label:'Forecast Category',operators:['eq']},status:{label:'Status',operators:['eq']},closeDate:{label:'Expected Close Date',operators:['preset','between']},accountId:{label:'Account',operators:['eq']},industry:{label:'Industry',operators:['eq']},territory:{label:'Territory',operators:['eq']},strategicAccount:{label:'Strategic Account',operators:['eq']},productCategoryId:{label:'Product Category',operators:['eq']},productId:{label:'Product',operators:['eq']},skuId:{label:'SKU',operators:['eq']},priceSource:{label:'Pricing Source',operators:['eq']},projectId:{label:'Project',operators:['eq']},currency:{label:'Currency',operators:['eq']}},
+  columns:{opportunity:'Opportunity',account:'Account',owner:'Owner',stage:'Stage',forecastCategory:'Forecast Category',closeDate:'Expected Close Date',productCategory:'Product Category',product:'Product / Model',sku:'SKU / Part Number',quantity:'Quantity',unit:'Unit',unitPrice:'Unit Price',lineValue:'Line Value',priceSource:'Pricing Source',currency:'Currency',project:'Project',peCode:'PE #'},
+  groupings:{productCategory:'Product Category',product:'Product / Model',sku:'SKU',owner:'Sales Rep',account:'Account',stage:'Stage',forecastCategory:'Forecast Category',priceSource:'Pricing Source',project:'Project'},
+  metrics:{lineValue:'Line Value',quantity:'Quantity',opportunityCount:'Opportunity Count',productLineCount:'Product Line Count',averageUnitPrice:'Average Unit Price'},
+  sorts:{product:'Product / Model',sku:'SKU',quantity:'Quantity',lineValue:'Line Value',opportunityCount:'Opportunity Count',averageUnitPrice:'Average Unit Price',closeDate:'Expected Close Date',owner:'Sales Rep'},
+};
 
 function foundation(label: string, description: string, grain: string, note: string): ReportTypeDefinition {
   return { label, description, grain, implemented: false, semanticNote: note, filters: {}, columns: {}, groupings: {}, metrics: {}, sorts: {} };
@@ -57,7 +66,7 @@ function foundation(label: string, description: string, grain: string, note: str
 export const reportRegistry: Record<CuratedReportType, ReportTypeDefinition> = {
   PIPELINE: pipelineDefinition,
   ACCOUNT_ACTIVITY: accountActivityDefinition,
-  PRODUCT_PERFORMANCE: foundation('Product Performance', 'Product and category sales performance', 'OpportunityProduct', 'Line value is quantity × actual OpportunityProduct price; it is not Opportunity-level pipeline.'),
+  PRODUCT_PERFORMANCE: productPerformanceDefinition,
   CHANNEL_PARTNER: { ...foundation('Channel / Partner', 'Distributor, reseller, and partner performance', 'Opportunity', 'Participant roles describe each deal; Account business roles describe the company generally. Organization totals must deduplicate Opportunities across partners.'),
     filters: { participantRole: { label: 'Opportunity participant role', operators: ['eq'] }, accountBusinessRole: { label: 'Account business role', operators: ['eq'] } },
     groupings: { participantRole: 'Opportunity participant role', accountBusinessRole: 'Account business role' } },
@@ -65,7 +74,7 @@ export const reportRegistry: Record<CuratedReportType, ReportTypeDefinition> = {
   PRICE_EXCEPTION_USAGE: foundation('Price Exception Usage', 'Price Exception usage and associated Opportunities', 'OpportunityProduct', 'Metrics describe PE-associated pricing use, not PE-generated revenue, and must retain PE visibility rules.'),
 };
 
-export const builtInReportTypes = ['MY_OPEN_PIPELINE','PIPELINE_THIS_QUARTER','PIPELINE_BY_SALES_REP','ACCOUNT_ENGAGEMENT'] as const;
+export const builtInReportTypes = ['MY_OPEN_PIPELINE','PIPELINE_THIS_QUARTER','PIPELINE_BY_SALES_REP','ACCOUNT_ENGAGEMENT','PRODUCT_THIS_QUARTER','PIPELINE_BY_PRODUCT'] as const;
 export type BuiltInReportType = typeof builtInReportTypes[number];
 
 export function canRunReportType(actor: Actor, reportType: unknown) {
@@ -74,7 +83,7 @@ export function canRunReportType(actor: Actor, reportType: unknown) {
 export function getVisibleReportTypes(actor: Actor) { return reportTypes.filter(reportType=>canRunReportType(actor,reportType)); }
 export function getCreatableReportTypes(actor: Actor) { return can(actor,'sales.write') ? getVisibleReportTypes(actor) : []; }
 export function canViewBuiltInReport(actor: Actor, reportType: BuiltInReportType) {
-  return reportType === 'ACCOUNT_ENGAGEMENT' ? canRunReportType(actor,'ACCOUNT_ACTIVITY') : getCreatableReportTypes(actor).includes('PIPELINE');
+  return reportType === 'ACCOUNT_ENGAGEMENT' ? canRunReportType(actor,'ACCOUNT_ACTIVITY') : reportType === 'PRODUCT_THIS_QUARTER' || reportType === 'PIPELINE_BY_PRODUCT' ? getCreatableReportTypes(actor).includes('PRODUCT_PERFORMANCE') : getCreatableReportTypes(actor).includes('PIPELINE');
 }
 export function getVisibleBuiltInReports(actor: Actor) { return builtInReportTypes.filter(reportType=>canViewBuiltInReport(actor,reportType)); }
 export function canAccessReports(actor: Actor) { return getVisibleReportTypes(actor).length > 0 || getVisibleBuiltInReports(actor).length > 0; }
@@ -98,6 +107,7 @@ function validFilterValue(filter: ReportFilter) {
   if (filter.field === 'strategicAccount') return typeof filter.value === 'boolean';
   if (filter.field === 'activeSalesRep') return filter.value === true;
   if (filter.field === 'status') return statuses.includes(filter.value as typeof statuses[number]);
+  if (filter.field === 'priceSource') return ['MANUAL','CATALOG','PRICE_EXCEPTION'].includes(String(filter.value));
   if (filter.field === 'participantRole') return participantRoles.includes(filter.value as typeof participantRoles[number]);
   if (filter.field === 'forecastCategory') return filter.value === 'IN_FORECAST' || Object.values(ForecastCategory).includes(filter.value as ForecastCategory);
   if (filter.field === 'accountBusinessRole') return channelPartnerAccountRoles.includes(filter.value as typeof channelPartnerAccountRoles[number]);
@@ -109,6 +119,7 @@ function validFilterValue(filter: ReportFilter) {
 }
 
 export function defaultReportConfiguration(reportType: CuratedReportType): ReportConfiguration {
+  if (reportType === 'PRODUCT_PERFORMANCE') return {filters:[{field:'status',operator:'eq',value:'OPEN'}],groupBy:'productCategory',sort:[{field:'lineValue',direction:'desc'}],columns:['opportunity','account','owner','stage','closeDate','productCategory','product','sku','quantity','unit','unitPrice','lineValue','priceSource','currency'],metrics:['lineValue','quantity','opportunityCount','productLineCount','averageUnitPrice']};
   if (reportType === 'ACCOUNT_ACTIVITY') return {filters:[],groupBy:null,sort:[{field:'lastActivity',direction:'asc'}],columns:['account','owner','industry','territory','businessRoles','strategicAccount','lastActivity','daysSinceLastActivity','activityStatus','latestActivityType','latestActivityBy','activityCount'],metrics:['accountCount','noActivityCount','staleAccountCount','activityCount','averageDaysSinceLastActivity']};
   if (reportType !== 'PIPELINE') return { filters: [], groupBy: null, sort: [], columns: [], metrics: [] };
   return { filters: [{ field: 'status', operator: 'eq', value: 'OPEN' }], groupBy: null, sort: [{ field: 'closeDate', direction: 'asc' }], columns: ['opportunity','account','owner','stage','closeDate','value','weightedValue','currency'], metrics: ['pipeline','weightedPipeline','opportunityCount','averageOpportunityValue'] };
@@ -219,6 +230,57 @@ export async function executePipelineReport(client: PrismaClient, actor: Actor, 
   return { reportType:'PIPELINE', summary:metrics(rows), groups:[...groups.values()].sort((a,b)=>a.label.localeCompare(b.label)).map(group=>({key:group.key,label:group.label,metrics:metrics(group.rows),opportunityIds:group.rows.map(row=>row.id)})), rows:rows.map(row=>{const value=opportunityTotal(row.products),probability=row.probability??row.stage.probability; return {id:row.id,opportunity:row.name,accounts:row.participants.map(x=>x.account.name).sort().join(', ')||'—',owner:row.owner?`${row.owner.firstName} ${row.owner.lastName}`:'Unassigned',stage:row.stage.name,forecastCategory:row.forecastCategory,closeDate:row.expectedCloseDate?.toISOString().slice(0,10)??null,value:value.toFixed(2),weightedValue:weightedValue(value,probability).toFixed(2),probability,currency:row.currencyCode,groupKeys:groupValues(row,config.groupBy).map(x=>x.key)};}), currencies:[...new Set(rows.map(row=>row.currencyCode))].sort(), filterCount:config.filters.length, semanticNote:pipelineDefinition.semanticNote };
 }
 
+const productLineInclude = {product:{select:{name:true,sku:true,categoryId:true,category:{select:{name:true}}}},sku:{select:{partNumber:true,priceUnit:true}},opportunity:{select:{name:true,ownerId:true,owner:{select:{firstName:true,lastName:true}},stageId:true,stage:{select:{name:true}},forecastCategory:true,expectedCloseDate:true,currencyCode:true,participants:{select:{accountId:true,account:{select:{name:true}}}},projects:{select:{projectId:true,project:{select:{name:true}}}}}}} as const;
+type ProductLineDbRow = Prisma.OpportunityProductGetPayload<{include:typeof productLineInclude}>;
+export type ProductMetrics = {currency:string;unit:string;lineValue:string;quantity:number;opportunityCount:number;productLineCount:number;averageUnitPrice:string};
+export type ProductDetailRow = {id:number;opportunityId:number;opportunity:string;accounts:{id:number;name:string}[];owner:string;stage:string;forecastCategory:string;closeDate:string|null;productCategory:string;product:string;productId:number;sku:string;quantity:number;unit:string;unitPrice:string;lineValue:string;priceSource:string;currency:string;project:string;peCode:string;groupKeys:string[]};
+export type ProductPerformanceResult = {reportType:'PRODUCT_PERFORMANCE';summary:ProductMetrics[];groups:{key:string;label:string;metrics:ProductMetrics[];lineIds:number[]}[];rows:ProductDetailRow[];currencies:string[];filterCount:number;semanticNote:string};
+const priceSourceLabel = (source:string) => source==='PRICE_EXCEPTION'?'Price Exception':source==='CATALOG'?'Catalog':'Manual';
+function productGroupValues(row:ProductLineDbRow, groupBy:string|null):{key:string;label:string}[] {
+  const opportunity=row.opportunity;
+  if(groupBy==='productCategory')return [{key:String(row.product.categoryId??'none'),label:row.product.category?.name??'No Product Category'}];
+  if(groupBy==='product')return [{key:String(row.productId),label:row.product.name}];
+  if(groupBy==='sku')return [{key:String(row.skuId??`legacy-${row.productId}`),label:row.sku?.partNumber??row.product.sku}];
+  if(groupBy==='owner')return [{key:String(opportunity.ownerId??'none'),label:opportunity.owner?`${opportunity.owner.firstName} ${opportunity.owner.lastName}`:'Unassigned'}];
+  if(groupBy==='stage')return [{key:String(opportunity.stageId),label:opportunity.stage.name}];
+  if(groupBy==='forecastCategory')return [{key:opportunity.forecastCategory,label:opportunity.forecastCategory.replaceAll('_',' ')}];
+  if(groupBy==='priceSource')return [{key:row.priceSource,label:priceSourceLabel(row.priceSource)}];
+  if(groupBy==='account')return opportunity.participants.length?opportunity.participants.map(x=>({key:String(x.accountId),label:x.account.name})):[{key:'none',label:'No participating Account'}];
+  if(groupBy==='project')return opportunity.projects.length?opportunity.projects.map(x=>({key:String(x.projectId),label:x.project.name})):[{key:'none',label:'No Project'}];
+  return [];
+}
+function productMetrics(rows:ProductLineDbRow[]):ProductMetrics[] {
+  return [...new Set(rows.map(row=>`${row.opportunity.currencyCode}|${row.sku?.priceUnit??'EACH'}`))].sort().map(key=>{
+    const [currency,unit]=key.split('|');
+    const selected=rows.filter(row=>row.opportunity.currencyCode===currency&&(row.sku?.priceUnit??'EACH')===unit);
+    const value=selected.reduce((sum,row)=>sum.add(lineTotal(row)),new Prisma.Decimal(0));
+    const quantity=selected.reduce((sum,row)=>sum+row.quantity,0);
+    return {currency,unit,lineValue:value.toFixed(2),quantity,opportunityCount:new Set(selected.map(row=>row.opportunityId)).size,productLineCount:selected.length,averageUnitPrice:quantity?value.div(quantity).toFixed(2):'0.00'};
+  });
+}
+export async function executeProductPerformanceReport(client:PrismaClient, actor:Actor, rawConfig:unknown, now=new Date()):Promise<ProductPerformanceResult> {
+  if(!canRunReportType(actor,'PRODUCT_PERFORMANCE'))throw new Error('Access denied');
+  const config=validateReportConfiguration('PRODUCT_PERFORMANCE',rawConfig);
+  const opportunityConfig={...config,filters:config.filters.filter(filter=>!['productCategoryId','productId','skuId','priceSource'].includes(filter.field))};
+  const lineClauses:Prisma.OpportunityProductWhereInput[]=[{archivedAt:null},{opportunity:pipelineWhere(opportunityConfig,actor,now)}];
+  for(const filter of config.filters){
+    if(filter.field==='productCategoryId')lineClauses.push({product:{categoryId:filter.value as number}});
+    else if(filter.field==='productId')lineClauses.push({productId:filter.value as number});
+    else if(filter.field==='skuId')lineClauses.push({skuId:filter.value as number});
+    else if(filter.field==='priceSource')lineClauses.push({priceSource:filter.value as never});
+  }
+  // One scoped line query. No live PE join: the OpportunityProduct price and PE code are snapshots.
+  const rows=await client.opportunityProduct.findMany({where:{AND:lineClauses},include:productLineInclude});
+  const groups=new Map<string,{key:string;label:string;rows:ProductLineDbRow[]}>();
+  for(const row of rows)for(const group of productGroupValues(row,config.groupBy)){const found=groups.get(group.key)??{...group,rows:[]};found.rows.push(row);groups.set(group.key,found);}
+  const specs=config.sort.length?config.sort:[{field:'lineValue',direction:'desc' as const}];
+  const read=(row:ProductLineDbRow,field:string):string|number=>field==='product'?row.product.name:field==='sku'?(row.sku?.partNumber??row.product.sku):field==='quantity'?row.quantity:field==='lineValue'?lineTotal(row).toNumber():field==='averageUnitPrice'?Number(row.estimatedUnitPrice):field==='closeDate'?(row.opportunity.expectedCloseDate?.getTime()??Number.MAX_SAFE_INTEGER):field==='owner'?(row.opportunity.owner?`${row.opportunity.owner.lastName} ${row.opportunity.owner.firstName}`:''):1;
+  rows.sort((a,b)=>{for(const spec of specs){const x=read(a,spec.field),y=read(b,spec.field),cmp=x<y?-1:x>y?1:0;if(cmp)return spec.direction==='asc'?cmp:-cmp;}return a.id-b.id;});
+  const comparableTotals=new Set(rows.map(row=>`${row.opportunity.currencyCode}|${row.sku?.priceUnit??'EACH'}`)).size<=1;
+  const sortedGroups=[...groups.values()].sort((a,b)=>{if(!comparableTotals)return a.label.localeCompare(b.label);for(const spec of specs){const metric=(items:ProductLineDbRow[])=>{const value=items.reduce((sum,row)=>sum.add(lineTotal(row)),new Prisma.Decimal(0));const qty=items.reduce((sum,row)=>sum+row.quantity,0);return spec.field==='quantity'?qty:spec.field==='opportunityCount'?new Set(items.map(row=>row.opportunityId)).size:spec.field==='averageUnitPrice'?(qty?value.div(qty).toNumber():0):value.toNumber();};if(['quantity','lineValue','opportunityCount','averageUnitPrice'].includes(spec.field)){const x=metric(a.rows),y=metric(b.rows);if(x!==y)return spec.direction==='asc'?x-y:y-x;}}return a.label.localeCompare(b.label);});
+  return {reportType:'PRODUCT_PERFORMANCE',summary:productMetrics(rows),groups:sortedGroups.map(group=>({key:group.key,label:group.label,metrics:productMetrics(group.rows),lineIds:group.rows.map(row=>row.id)})),rows:rows.map(row=>({id:row.id,opportunityId:row.opportunityId,opportunity:row.opportunity.name,accounts:row.opportunity.participants.map(x=>({id:x.accountId,name:x.account.name})).sort((a,b)=>a.name.localeCompare(b.name)),owner:row.opportunity.owner?`${row.opportunity.owner.firstName} ${row.opportunity.owner.lastName}`:'Unassigned',stage:row.opportunity.stage.name,forecastCategory:row.opportunity.forecastCategory,closeDate:row.opportunity.expectedCloseDate?.toISOString().slice(0,10)??null,productCategory:row.product.category?.name??'No Product Category',product:row.product.name,productId:row.productId,sku:row.sku?.partNumber??row.product.sku,quantity:row.quantity,unit:row.sku?.priceUnit??'EACH',unitPrice:new Prisma.Decimal(row.estimatedUnitPrice).toFixed(2),lineValue:lineTotal(row).toFixed(2),priceSource:priceSourceLabel(row.priceSource),currency:row.opportunity.currencyCode,project:row.opportunity.projects.map(x=>x.project.name).join(', ')||'—',peCode:row.priceSource==='PRICE_EXCEPTION'?(row.priceExceptionCode??'—'):'—',groupKeys:productGroupValues(row,config.groupBy).map(x=>x.key)})),currencies:[...new Set(rows.map(row=>row.opportunity.currencyCode))].sort(),filterCount:config.filters.length,semanticNote:productPerformanceDefinition.semanticNote};
+}
+
 type AccountDbRow = Prisma.AccountGetPayload<{include:{owner:true,industryCategory:true,territoryCategory:true,businessRoles:true,activities:{include:{activityType:true,user:true}}}}>;
 export type AccountActivityMetrics = {accountCount:number;noActivityCount:number;staleAccountCount:number;activityCount:number;averageDaysSinceLastActivity:number|null};
 export type AccountActivityDetailRow = {id:number;account:string;owner:string;industry:string;territory:string;businessRoles:string;strategicAccount:boolean;lastActivity:string|null;daysSinceLastActivity:number|null;activityStatus:string;latestActivityType:string;latestActivityBy:string;activityCount:number;groupKeys:string[]};
@@ -261,6 +323,7 @@ export async function executeAccountActivityReport(client:PrismaClient, actor:Ac
 export async function executeReport(client: PrismaClient, actor: Actor, reportType: unknown, rawConfig: unknown, now = new Date()) {
   if (!canRunReportType(actor,reportType)) throw new Error('Access denied');
   if (reportType === 'ACCOUNT_ACTIVITY') return executeAccountActivityReport(client,actor,rawConfig,now);
+  if (reportType === 'PRODUCT_PERFORMANCE') return executeProductPerformanceReport(client,actor,rawConfig,now);
   if (reportType !== 'PIPELINE') { validateReportConfiguration(reportType,rawConfig); throw new Error('Report execution is not implemented.'); }
   return executePipelineReport(client,actor,rawConfig,now);
 }
