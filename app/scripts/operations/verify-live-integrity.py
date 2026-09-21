@@ -59,10 +59,11 @@ tests=(APP/'prisma/tests/integrity.sql').read_text()
 # Retain the high-bound probability test while replacing fixture IDs only.
 tests=tests.replace('probability=101','probability=2147483647')
 tests=re.sub(r'\b(?:100|101|102|103|200)\b',lambda m:mapping[m.group()],tests)
-fixture_ids=f"{mapping['100']},{mapping['101']}"
-for table in ['Activity','Note']:
-    tests=tests.replace(f'(SELECT count(*)=2 FROM "{table}")',f'(SELECT count(*)=2 FROM "{table}" WHERE id IN ({fixture_ids}))')
-    tests=tests.replace(f'FROM "{table}" WHERE "archivedAt" IS NOT NULL',f'FROM "{table}" WHERE id IN ({fixture_ids}) AND "archivedAt" IS NOT NULL')
+fixture_ids={'Activity':f"{mapping['100']},{mapping['101']},{mapping['102']}",'Note':f"{mapping['100']},{mapping['101']}"}
+for table,ids in fixture_ids.items():
+    expected=3 if table=='Activity' else 2
+    tests=tests.replace(f'(SELECT count(*)={expected} FROM "{table}")',f'(SELECT count(*)={expected} FROM "{table}" WHERE id IN ({ids}))')
+    tests=tests.replace(f'FROM "{table}" WHERE "archivedAt" IS NOT NULL',f'FROM "{table}" WHERE id IN ({ids}) AND "archivedAt" IS NOT NULL')
 tests=tests.replace('"opportunityId"=-1','"opportunityId"=-2099998500').replace('"createdById"=-1','"createdById"=-2099998500')
 tests=tests.replace("'second@example.invalid'",f"'{prefix}_second@example.invalid'")
 tests=tests.replace("'fixture-subject'",f"'{prefix}_subject'")

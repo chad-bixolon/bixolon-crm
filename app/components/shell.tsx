@@ -8,10 +8,10 @@ import type { ReactNode } from "react";
 import { signOutAction } from "@/app/sign-out-action";
 import type { LabelMap } from "@/lib/configuration";
 
-const nav = ["Dashboard", "Accounts", "Contacts", "Projects", "Opportunities", "Pipeline", "Tasks", "Engagement", "Products", "Price Exceptions", "Administration", "Integrations"];
-const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Engagement" ? "/reports/engagement" : item === "Price Exceptions" ? "/price-exceptions" : `/${item.toLowerCase()}`;
+const nav = ["Dashboard", "Accounts", "Contacts", "Projects", "Opportunities", "Pipeline", "Reports", "Tasks", "Products", "Price Exceptions", "Administration", "Integrations"];
+const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Price Exceptions" ? "/price-exceptions" : `/${item.toLowerCase()}`;
 const navLabelKeys: Partial<Record<string, keyof LabelMap>> = { Accounts: "ACCOUNT", Contacts: "CONTACT", Projects: "PROJECT", Opportunities: "OPPORTUNITY", Tasks: "TASK" };
-type ShellUser = { name: string; role: UserRole; canManageUsers: boolean };
+type ShellUser = { name: string; role: UserRole; canManageUsers: boolean; canViewReports: boolean };
 export function Shell({ children, user, labels }: { children: ReactNode; user: ShellUser | null; labels?: LabelMap }) {
   const pathname = usePathname();
   if (pathname === "/sign-in") return <div className="min-h-screen">{children}</div>;
@@ -21,7 +21,7 @@ export function Shell({ children, user, labels }: { children: ReactNode; user: S
         <Image src="/brand/bixolon-logo.png" alt="BIXOLON" width={500} height={40} priority className="h-6 w-44 object-cover object-center" />
       </div>
       <nav aria-label="Primary navigation" className="flex gap-1 overflow-x-auto px-3 pb-3 lg:block lg:space-y-1 lg:py-5">
-        {nav.filter((item) => (item !== "Administration" || user?.canManageUsers) && (item !== "Engagement" || ['ADMIN','SALES_MANAGER','SALES'].includes(user?.role ?? ''))).map((item) => { const href = hrefFor(item); const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+        {nav.filter((item) => (item !== "Administration" || user?.canManageUsers) && (item !== "Reports" || user?.canViewReports)).map((item) => { const href = hrefFor(item); const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           const key = navLabelKeys[item];
           const title = labels && key ? key === "OPPORTUNITY" && labels[key] === "Opportunity" ? "Opportunities" : `${labels[key]}s` : item;
           return <Link key={item} href={href} aria-current={active ? "page" : undefined} className={`block whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${active ? "bg-orange-50 text-orange-800 border-l-2 border-orange-600" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}>{title}</Link>; })}

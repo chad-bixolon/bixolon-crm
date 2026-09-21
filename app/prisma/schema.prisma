@@ -111,6 +111,20 @@ enum OpportunityProductPriceSource {
   PRICE_EXCEPTION
 }
 
+enum ReportType {
+  PIPELINE
+  ACCOUNT_ACTIVITY
+  PRODUCT_PERFORMANCE
+  CHANNEL_PARTNER
+  PROJECT_INITIATIVE
+  PRICE_EXCEPTION_USAGE
+}
+
+enum ReportVisibility {
+  PERSONAL
+  SHARED
+}
+
 model User {
   id                      Int                @id @default(autoincrement())
   email                   String             @unique
@@ -148,8 +162,35 @@ model User {
   createdPriceExceptions  PriceException[]   @relation("PriceExceptionCreatedBy")
   updatedPriceExceptions  PriceException[]   @relation("PriceExceptionUpdatedBy")
   assignedPriceExceptions PriceException[]   @relation("PriceExceptionAssignedSalesRep")
+  ownedReports            ReportDefinition[] @relation("ReportOwner")
+  createdReports          ReportDefinition[] @relation("ReportCreatedBy")
+  updatedReports          ReportDefinition[] @relation("ReportUpdatedBy")
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
+}
+
+/// A saved, validated query against a curated BIXOLON report type. Results are never persisted.
+model ReportDefinition {
+  id            Int              @id @default(autoincrement())
+  name          String
+  description   String?
+  reportType    ReportType
+  ownerId       Int
+  owner         User             @relation("ReportOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  visibility    ReportVisibility @default(PERSONAL)
+  configuration Json
+  archivedAt    DateTime?
+  createdById   Int
+  createdBy     User             @relation("ReportCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById   Int?
+  updatedBy     User?            @relation("ReportUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([ownerId, archivedAt])
+  @@index([visibility, reportType, archivedAt])
+  @@index([createdById])
+  @@index([updatedById])
 }
 
 model ExternalIdentity {

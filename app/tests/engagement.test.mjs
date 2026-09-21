@@ -79,7 +79,8 @@ test('report scope and task rollup enforce role and open overdue logic', () => {
   assert.deepEqual(reportAccountScope(actor('SALES_MANAGER')),{});
   assert.deepEqual(reportAccountScope(actor('ADMIN')),{});
   assert.throws(()=>reportAccountScope(actor('MARKETING_MANAGER')));
-  assert.equal(routeAccess('/reports/engagement',actor('MARKETING_MANAGER')),'denied');
+  for (const role of ['ADMIN','SALES_MANAGER','SALES']) assert.equal(routeAccess('/reports/engagement',actor(role)),'allowed');
+  for (const role of ['MARKETING_MANAGER','READ_ONLY']) assert.equal(routeAccess('/reports/engagement',actor(role)),'denied');
   const rollup=taskRollup([{status:'OPEN',dueDate:new Date('2026-09-15'),archivedAt:null},{status:'IN_PROGRESS',dueDate:null,archivedAt:null},{status:'COMPLETED',dueDate:new Date('2026-09-15'),archivedAt:null},{status:'OPEN',dueDate:new Date('2026-09-15'),archivedAt:new Date()}],new Date('2026-09-16'));
   assert.deepEqual(rollup,{open:2,overdue:1});
 });

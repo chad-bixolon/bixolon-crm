@@ -7,11 +7,12 @@ import { daysSince, engagementState, lookbackStart, repAccountSummary, reportAcc
 import { dayBounds } from '@/lib/work';
 import { notFound } from 'next/navigation';
 import type { Prisma } from '@prisma/client';
+import { canViewBuiltInReport } from '@/lib/reporting';
 export const dynamic = 'force-dynamic';
 type Filters = { ownerId?: string; territory?: string; businessRole?: string; industry?: string; strategic?: string; minDays?: string; hasOpenTask?: string; hasOverdueTask?: string; hasOpenOpportunity?: string };
 export default async function EngagementReport({ searchParams }: { searchParams: Promise<Filters> }) {
   const actor = await currentUser();
-  if (!['ADMIN','SALES_MANAGER','SALES'].includes(actor.role)) notFound();
+  if (!canViewBuiltInReport(actor,'ACCOUNT_ENGAGEMENT')) notFound();
   const f = await searchParams, [settings, labels] = await Promise.all([getSettings(prisma), getLabels(prisma)]), now = new Date(), today = dayBounds(now).start;
   const where: Prisma.AccountWhereInput = { ...reportAccountScope(actor), archivedAt: null, status: 'ACTIVE' };
   if (actor.role !== 'SALES' && f.ownerId && Number.isSafeInteger(Number(f.ownerId))) where.ownerId = Number(f.ownerId);
