@@ -47,7 +47,9 @@ export const reportRegistry: Record<CuratedReportType, ReportTypeDefinition> = {
   PIPELINE: pipelineDefinition,
   ACCOUNT_ACTIVITY: foundation('Account Activity', 'Account activity, follow-up, and stale Accounts', 'Account', 'Activities remain Account-anchored. No-activity Accounts require an Account-grain execution path.'),
   PRODUCT_PERFORMANCE: foundation('Product Performance', 'Product and category sales performance', 'OpportunityProduct', 'Line value is quantity × actual OpportunityProduct price; it is not Opportunity-level pipeline.'),
-  CHANNEL_PARTNER: foundation('Channel / Partner', 'Distributor, reseller, and partner performance', 'Opportunity', 'Participant roles are authoritative. Organization totals must deduplicate Opportunities across partners.'),
+  CHANNEL_PARTNER: { ...foundation('Channel / Partner', 'Distributor, reseller, and partner performance', 'Opportunity', 'Participant roles describe each deal; Account business roles describe the company generally. Organization totals must deduplicate Opportunities across partners.'),
+    filters: { participantRole: { label: 'Opportunity participant role', operators: ['eq'] }, accountBusinessRole: { label: 'Account business role', operators: ['eq'] } },
+    groupings: { participantRole: 'Opportunity participant role', accountBusinessRole: 'Account business role' } },
   PROJECT_INITIATIVE: foundation('Project / Initiative', 'Projects and strategic initiative performance', 'Opportunity', 'Opportunities remain authoritative and totals must deduplicate Opportunities across Projects.'),
   PRICE_EXCEPTION_USAGE: foundation('Price Exception Usage', 'Price Exception usage and associated Opportunities', 'OpportunityProduct', 'Metrics describe PE-associated pricing use, not PE-generated revenue, and must retain PE visibility rules.'),
 };
@@ -73,13 +75,16 @@ function positiveInteger(value: unknown) { return typeof value === 'number' && N
 function dateString(value: unknown) { return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)); }
 const presets = ['THIS_MONTH','THIS_QUARTER','NEXT_QUARTER','THIS_YEAR'] as const;
 const statuses = ['OPEN','WON','LOST'] as const;
-const participantRoles = ['END_USER','VAR_RESELLER','DISTRIBUTOR','ISV_PARTNER','OEM','OTHER'] as const;
+const participantRoles = ['END_USER','VAR_RESELLER','DISTRIBUTOR','ISV_PARTNER','OEM','OTHER','MEDIA_PARTNER'] as const;
+export const channelPartnerAccountRoles = ['DISTRIBUTOR','VAR','ISV','OEM','PARTNER','MEDIA_PARTNER'] as const;
+export const channelPartnerParticipantRoles = ['DISTRIBUTOR','VAR_RESELLER','ISV_PARTNER','OEM','MEDIA_PARTNER'] as const;
 
 function validFilterValue(filter: ReportFilter) {
   if (['ownerId','stageId','accountId','accountOwnerId','productCategoryId','productId','skuId','projectId'].includes(filter.field)) return positiveInteger(filter.value);
   if (filter.field === 'strategicAccount') return typeof filter.value === 'boolean';
   if (filter.field === 'status') return statuses.includes(filter.value as typeof statuses[number]);
   if (filter.field === 'participantRole') return participantRoles.includes(filter.value as typeof participantRoles[number]);
+  if (filter.field === 'accountBusinessRole') return channelPartnerAccountRoles.includes(filter.value as typeof channelPartnerAccountRoles[number]);
   if (['industry','territory'].includes(filter.field)) return typeof filter.value === 'string' && filter.value.length > 0 && filter.value.length <= 100;
   if (filter.field === 'currency') return typeof filter.value === 'string' && /^[A-Z]{3}$/.test(filter.value);
   if (['closeDate','createdDate'].includes(filter.field) && filter.operator === 'preset') return presets.includes(filter.value as typeof presets[number]);

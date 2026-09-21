@@ -35,6 +35,15 @@ test('report discovery follows runnable type and built-in authorization',()=>{
  assert.equal(reporting.canAccessReports(actor('READ_ONLY')),true);
  for(const reportType of reporting.reportTypes.filter(type=>type!=='PIPELINE'))assert.equal(reporting.canRunReportType(actor('ADMIN'),reportType),false);
 });
+test('Channel / Partner foundation distinguishes every partner business role and Media Partner deal role',()=>{
+ assert.deepEqual(reporting.channelPartnerAccountRoles,['DISTRIBUTOR','VAR','ISV','OEM','PARTNER','MEDIA_PARTNER']);
+ assert.deepEqual(reporting.channelPartnerParticipantRoles,['DISTRIBUTOR','VAR_RESELLER','ISV_PARTNER','OEM','MEDIA_PARTNER']);
+ const definition=reporting.reportRegistry.CHANNEL_PARTNER;
+ assert.equal(definition.implemented,false);
+ assert.deepEqual(Object.keys(definition.groupings),['participantRole','accountBusinessRole']);
+ assert.ok(definition.filters.participantRole);
+ assert.ok(definition.filters.accountBusinessRole);
+});
 
 test('Engagement discovery and direct route authorization preserve the existing role matrix',()=>{
  for(const role of ['ADMIN','SALES_MANAGER','SALES'])assert.equal(reporting.canViewBuiltInReport(actor(role),'ACCOUNT_ENGAGEMENT'),true);

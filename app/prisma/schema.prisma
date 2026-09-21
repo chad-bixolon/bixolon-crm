@@ -27,6 +27,7 @@ enum AccountBusinessRoleCode {
   ISV
   OEM
   PARTNER
+  MEDIA_PARTNER
 }
 
 enum OpportunityPartyRole {
@@ -36,6 +37,7 @@ enum OpportunityPartyRole {
   ISV_PARTNER
   OEM
   OTHER
+  MEDIA_PARTNER
 }
 
 enum ProjectStatus {

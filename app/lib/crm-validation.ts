@@ -24,9 +24,9 @@ export function phone(value: string | null, key: string, errors: Errors) {
   if (value && !/^[+()\d .-]{5,50}$/.test(value)) errors[key] = "Enter a valid phone number.";
 }
 export const partyLabels: Record<OpportunityPartyRole, string> = {
-  END_USER: defaultLabels.END_USER, VAR_RESELLER: defaultLabels.VAR, DISTRIBUTOR: defaultLabels.DISTRIBUTOR, ISV_PARTNER: defaultLabels.ISV, OEM: defaultLabels.OEM, OTHER: "Other",
+  END_USER: defaultLabels.END_USER, VAR_RESELLER: defaultLabels.VAR, DISTRIBUTOR: defaultLabels.DISTRIBUTOR, ISV_PARTNER: defaultLabels.ISV, OEM: defaultLabels.OEM, OTHER: "Other", MEDIA_PARTNER: defaultLabels.MEDIA_PARTNER,
 };
-export function opportunityPartyLabels(labels: LabelMap): Record<OpportunityPartyRole, string> { return { END_USER: labels.END_USER, VAR_RESELLER: labels.VAR, DISTRIBUTOR: labels.DISTRIBUTOR, ISV_PARTNER: labels.ISV, OEM: labels.OEM, OTHER: "Other" }; }
+export function opportunityPartyLabels(labels: LabelMap): Record<OpportunityPartyRole, string> { return { END_USER: labels.END_USER, VAR_RESELLER: labels.VAR, DISTRIBUTOR: labels.DISTRIBUTOR, ISV_PARTNER: labels.ISV, OEM: labels.OEM, OTHER: "Other", MEDIA_PARTNER: labels.MEDIA_PARTNER }; }
 export const forecastLabels: Record<ForecastCategory, string> = {
   OMITTED: "Omitted", PIPELINE: "Pipeline", BEST_CASE: "Best Case", COMMIT: "Commit", CLOSED: "Closed",
 };

@@ -11,6 +11,8 @@ const require = Module.createRequire(fileURLToPath(import.meta.url));
 const contacts = require(path.join(root, 'lib/contacts.ts'));
 const opportunities = require(path.join(root, 'lib/opportunities.ts'));
 const drafts = require(path.join(root, 'lib/opportunity-draft.ts'));
+const { partyLabels, opportunityPartyLabels } = require(path.join(root, 'lib/crm-validation.ts'));
+const { defaultLabels } = require(path.join(root, 'lib/configuration.ts'));
 const users = require(path.join(root, 'lib/users.ts'));
 const visibility = require(path.join(root, 'lib/record-visibility.ts'));
 function form(entries) { const f = new FormData(); for (const [key, value] of entries) f.append(key, value); return f; }
@@ -86,13 +88,18 @@ test('participant addition and removal prevent duplicate accounts and preserve s
   assert.deepEqual(base.participants, []);
 });
 test('opportunity participant roles start empty and stay independent of account business roles', () => {
-  const account = { id: 11, businessRoles: ['DISTRIBUTOR', 'OEM'] };
+  assert.equal(partyLabels.MEDIA_PARTNER, 'Media Partner');
+  assert.equal(opportunityPartyLabels(defaultLabels).MEDIA_PARTNER, 'Media Partner');
+  const account = { id: 11, businessRoles: ['MEDIA_PARTNER', 'OEM'] };
   const base = { participants: [] };
   const added = drafts.addParticipant(base, account.id);
   assert.deepEqual(added.participants, [{ accountId: 11, roles: [] }]);
-  const assigned = drafts.setParticipantRoles(added, account.id, ['END_USER', 'VAR_RESELLER']);
-  assert.deepEqual(assigned.participants[0].roles, ['END_USER', 'VAR_RESELLER']);
-  assert.deepEqual(account.businessRoles, ['DISTRIBUTOR', 'OEM']);
+  const assigned = drafts.setParticipantRoles(added, account.id, ['MEDIA_PARTNER', 'VAR_RESELLER']);
+  assert.deepEqual(assigned.participants[0].roles, ['MEDIA_PARTNER', 'VAR_RESELLER']);
+  assert.deepEqual(account.businessRoles, ['MEDIA_PARTNER', 'OEM']);
+  const parsed = opportunities.parseOpportunity(form([['name', 'Media deal'], ['stageId', '1'], ['currencyCode', 'USD'], ['accountId', '11'], ['participantRoles', 'MEDIA_PARTNER']]));
+  assert.deepEqual(parsed.value.participants, [{ accountId: 11, roles: ['MEDIA_PARTNER'] }]);
+  assert.deepEqual(account.businessRoles, ['MEDIA_PARTNER', 'OEM']);
 });
 test('opportunity draft restores every editable field after remount without changing the fallback', () => {
   const fallback = { name: '', description: '', ownerId: '', stageId: '', expectedCloseDate: '', probability: '', forecastCategory: '', currencyCode: 'USD', projectIds: [], participants: [], lines: [] };
@@ -163,16 +170,17 @@ test('saving an opportunity persists each account and each selected role', async
   const tx = {
     salesStage: { findUnique: async () => ({ active: true }) }, currency: { findUnique: async () => ({ active: true }) },
     account: { findMany: async () => [{ id: 11 }, { id: 12 }] }, product: { findMany: async () => [{ id: 3 }] }, project: { findMany: async () => [] },
+    accountBusinessRole: { create: async () => { throw Error('Opportunity changed Account roles'); }, deleteMany: async () => { throw Error('Opportunity changed Account roles'); } },
     opportunity: { create: async () => ({ id: 5 }) },
     opportunityAccount: { findMany: async () => [], upsert: async ({ create }) => memberships.push(create) },
     opportunityAccountRole: { create: async ({ data }) => roles.push(data) },
     opportunityProduct: { findMany: async () => [], create: async ({ data }) => productLines.push(data) },
   };
   const client = { $transaction: async (fn) => fn(tx) };
-  const input = { name: 'New fleet', description: null, ownerId: null, stageId: 1, expectedCloseDate: null, probability: null, forecastCategory: null, currencyCode: 'USD', projectIds: [], participants: [{ accountId: 11, roles: ['END_USER', 'OEM'] }, { accountId: 12, roles: ['DISTRIBUTOR'] }], lines: [{ productId: 3, quantity: 2, price: '19.95' }] };
+  const input = { name: 'New fleet', description: null, ownerId: null, stageId: 1, expectedCloseDate: null, probability: null, forecastCategory: null, currencyCode: 'USD', projectIds: [], participants: [{ accountId: 11, roles: ['MEDIA_PARTNER', 'OEM'] }, { accountId: 12, roles: ['DISTRIBUTOR'] }], lines: [{ productId: 3, quantity: 2, price: '19.95' }] };
   assert.equal(await opportunities.saveOpportunity(client, input), 5);
   assert.deepEqual(memberships.map((m) => m.accountId), [11, 12]);
-  assert.deepEqual(roles.map((r) => [r.accountId, r.role]), [[11, 'END_USER'], [11, 'OEM'], [12, 'DISTRIBUTOR']]);
+  assert.deepEqual(roles.map((r) => [r.accountId, r.role]), [[11, 'MEDIA_PARTNER'], [11, 'OEM'], [12, 'DISTRIBUTOR']]);
   assert.equal(productLines[0].estimatedUnitPrice, '19.95');
 });
 test('saving an edited opportunity removes a participant and its roles', async () => {

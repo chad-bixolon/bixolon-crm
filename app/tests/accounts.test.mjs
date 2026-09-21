@@ -20,7 +20,7 @@ function loadTs(relative) {
   mod._compile(output, filename);
   return mod.exports;
 }
-const { parseAccountForm } = loadTs('lib/account-validation.ts');
+const { parseAccountForm, roleLabels } = loadTs('lib/account-validation.ts');
 const { accountWhere, accountView, accountHref, listAccounts, PAGE_SIZE, checkAccountReferences, setAccountArchived } = loadTs('lib/accounts.ts');
 const { routeAccess } = loadTs('lib/authorization.ts');
 const { parseLookup } = loadTs('lib/lookups.ts');
@@ -39,6 +39,16 @@ test('account validation accepts multiple unique roles and trims fields', () => 
   assert.equal(result.value.city, 'Boston');
   assert.equal(result.value.country, null);
 });
+test('Media Partner is an independent Account business role and coexists with existing roles', () => {
+  assert.equal(roleLabels.MEDIA_PARTNER, 'Media Partner');
+  assert.equal(parseAccountForm(form([['name', 'Specialty'], ['roles', 'MEDIA_PARTNER']])).value.roles[0], 'MEDIA_PARTNER');
+  const result = parseAccountForm(form([['name', 'Specialty'], ['roles', 'MEDIA_PARTNER'], ['roles', 'VAR'], ['roles', 'OEM']]));
+  assert.deepEqual(result.errors, {});
+  assert.deepEqual(result.value.roles, ['MEDIA_PARTNER', 'VAR', 'OEM']);
+  for (const role of ['END_USER', 'DISTRIBUTOR', 'VAR', 'ISV', 'OEM', 'PARTNER']) {
+    assert.deepEqual(parseAccountForm(form([['name', 'Existing'], ['roles', role]])).value.roles, [role]);
+  }
+});
 test('address fields remain optional and enforce length limits', () => {
   const valid = parseAccountForm(form([['name', 'Example']]));
   assert.equal(valid.value.addressLine1, null);
@@ -48,6 +58,7 @@ test('address fields remain optional and enforce length limits', () => {
 test('filter accepts supported role only', () => {
   assert.deepEqual(accountWhere({ role: 'BOGUS' }), {});
   assert.deepEqual(accountWhere({ role: 'VAR', strategic: 'yes' }), { businessRoles: { some: { role: 'VAR' } }, strategicAccount: true });
+  assert.deepEqual(accountWhere({ role: 'MEDIA_PARTNER' }), { businessRoles: { some: { role: 'MEDIA_PARTNER' } } });
 });
 test('All Accounts keeps the existing unscoped query for every role', async () => {
   const calls = [];

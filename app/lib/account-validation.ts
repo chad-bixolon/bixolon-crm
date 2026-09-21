@@ -3,7 +3,7 @@ import { parseAddress, type Address } from "./address";
 import { defaultLabels } from "./configuration";
 
 export const roleLabels: Record<AccountBusinessRoleCode, string> = {
-  END_USER: defaultLabels.END_USER, DISTRIBUTOR: defaultLabels.DISTRIBUTOR, VAR: defaultLabels.VAR, ISV: defaultLabels.ISV, OEM: defaultLabels.OEM, PARTNER: defaultLabels.PARTNER,
+  END_USER: defaultLabels.END_USER, DISTRIBUTOR: defaultLabels.DISTRIBUTOR, VAR: defaultLabels.VAR, ISV: defaultLabels.ISV, OEM: defaultLabels.OEM, PARTNER: defaultLabels.PARTNER, MEDIA_PARTNER: defaultLabels.MEDIA_PARTNER,
 };
 export const statuses = ["ACTIVE", "INACTIVE", "ARCHIVED"] as const;
 export type AccountFields = Address & {

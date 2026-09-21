@@ -4,7 +4,7 @@ export const defaultLabels = {
   ACCOUNT: "Account", CONTACT: "Contact", OPPORTUNITY: "Opportunity", PROJECT: "Project",
   TASK: "Task", ACTIVITY: "Activity", NOTE: "Note", END_USER: "End User",
   DISTRIBUTOR: "Distributor", VAR: "VAR / Reseller", ISV: "ISV", OEM: "OEM",
-  PARTNER: "Service Partner", STRATEGIC_ACCOUNT: "Strategic Account",
+  PARTNER: "Service Partner", MEDIA_PARTNER: "Media Partner", STRATEGIC_ACCOUNT: "Strategic Account",
 } as const;
 export type LabelKey = keyof typeof defaultLabels;
 export type LabelMap = Record<LabelKey, string>;
