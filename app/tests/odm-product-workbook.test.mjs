@@ -87,7 +87,7 @@ test('standard price-list routing and worksheet validation remain intact',async(
 });
 test('blank customers are not carried forward and uncertain part numbers block review',async()=>{
   const {result}=await parsed(real);
-  const review={classifications:{'IFJ-WDK (NEW PART IFJ-WDAK)':'ODM','XT5-43D9S/BRD':'ODM'}};
+  const review={subtypes:{'IFJ-WDK (NEW PART IFJ-WDAK)':'CUSTOMER_SPECIFIC','XT5-43D9S/BRD':'CUSTOMER_SPECIFIC'}};
   const plan=await planProductImport(fakeDb([{id:7,name:'Brady'}]),result.csv,undefined,review);
   const blank=plan.items.find(item=>item.line===85);
   assert.equal(blank.source.customerCell,'');
@@ -111,15 +111,15 @@ test('real workbook requires classification, keeps complex labels for mapping, a
   assert.equal(initial.customers.find(c=>c.source==='UPS').status,'Matched');
   assert.equal(initial.customers.find(c=>c.source==='Amazon (thr BS -> Levata)').status,'Unresolved');
   assert.equal(initial.items.filter(item=>item.source&&!item.source.customerCell).length,6);
-  assert.equal(initial.items.filter(item=>item.messages.some(message=>message.includes('Choose ODM or Special SKU'))).length,122);
-  assert.equal(initial.items.filter(item=>item.after.catalogSource==='ODM').length,0);
+  assert.equal(initial.items.filter(item=>item.messages.some(message=>message.includes('Choose an ODM subtype'))).length,122);
+  assert.equal(initial.items.filter(item=>item.after.catalogSource==='ODM').length,122);
   assert.equal(initial.items.filter(item=>item.after.catalogSource==='SPECIAL_SKU_LIST').length,0);
-  const review={customerMappings:{'amazon (thr bs -> levata)':8},classifications:{'XL5-40CTG/AMZ':'ODM','XL5-40CTBG/AMZ':'SPECIAL_SKU_LIST'}};
+  const review={customerMappings:{'amazon (thr bs -> levata)':8},subtypes:{'XL5-40CTG/AMZ':'CUSTOMER_SPECIFIC','XL5-40CTBG/AMZ':'SPECIAL_CONFIGURATION'}};
   const mapped=await planProductImport(fakeDb([{id:7,name:'UPS'},{id:8,name:'Amazon'}]),result.csv,undefined,review);
   assert.equal(mapped.items.find(item=>item.line===4).after.odmCustomerAccountId,8);
   assert.equal(mapped.items.find(item=>item.line===4).after.odmCustomerSourceName,'Amazon (thr BS -> Levata)');
   assert.equal(mapped.items.find(item=>item.line===5).after.odmCustomerAccountId,undefined);
-  assert.equal(mapped.items.find(item=>item.line===5).after.catalogSource,'SPECIAL_SKU_LIST');
+  assert.equal(mapped.items.find(item=>item.line===5).after.catalogSource,'ODM');
   assert.equal(mapped.items.filter(item=>item.classes.includes('PRICE CHANGE')).length,0);
   assert.match(mapped.notices.join(' '),/No catalog prices are written/);
   assert.doesNotMatch(mapped.items.find(item=>item.line===45).messages.join(' '),/Duplicate part number/);
@@ -142,11 +142,11 @@ test('current-upload Account mapping resolves every matching real workbook row w
     assert.equal(mapped.customers.find(customer=>customer.source===source).status,'Manually Mapped');
     for(const item of rows) {
       assert.equal(item.source.customerCell,source);
-      assert.equal(item.after.catalogSource,undefined);
+      assert.equal(item.after.catalogSource,'ODM');
       assert.equal(item.after.odmCustomerAccountId,undefined);
     }
   }
-  const classified=await planProductImport(fakeDb(accounts),result.csv,undefined,{...review,classifications:{'XT5-43D9S/BRD':'ODM'}});
+  const classified=await planProductImport(fakeDb(accounts),result.csv,undefined,{...review,subtypes:{'XT5-43D9S/BRD':'CUSTOMER_SPECIFIC'}});
   const row=classified.items.find(item=>item.line===122);
   assert.equal(row.after.odmCustomerAccountId,70);
   assert.equal(row.after.odmCustomerSourceName,'Brady');
@@ -161,9 +161,9 @@ test('existing SKU keeps its Product and category until its classification is ex
   assert.equal(row.skuId,2);
   assert.equal(row.after.model,'XT5-40');
   assert.equal(row.after.category,'LABEL');
-  assert.equal(row.after.catalogSource,'PRICE_LIST');
-  const reviewed=await planProductImport(fakeDb([], [product]),result.csv,undefined,{classifications:{'XT5-40S':'SPECIAL_SKU_LIST'}});
-  assert.equal(reviewed.items.find(item=>item.line===98).after.catalogSource,'SPECIAL_SKU_LIST');
+  assert.equal(row.after.catalogSource,'ODM');
+  const reviewed=await planProductImport(fakeDb([], [product]),result.csv,undefined,{subtypes:{'XT5-40S':'SPECIAL_CONFIGURATION'}});
+  assert.equal(reviewed.items.find(item=>item.line===98).after.odmSubtype,'SPECIAL_CONFIGURATION');
   assert.equal(reviewed.items.find(item=>item.line===98).classes.includes('NEW SKU'),false);
 });
 test('LF, CRLF, CR, blanks, and whitespace expand into independent candidates with shared provenance',async()=>{
@@ -188,18 +188,18 @@ test('LF, CRLF, CR, blanks, and whitespace expand into independent candidates wi
 });
 test('classification and import decisions remain per SKU and repeats consolidate after expansion',async()=>{
   const {csv}=syntheticCsv('SRP-S300LOEK/RDU\nSRP-S300LOEK/NSU','NCR',[['','UPS','SRP-S300LOEK/RDU','','','250']]);
-  const review={classifications:{'SRP-S300LOEK/RDU':'ODM','SRP-S300LOEK/NSU':'SPECIAL_SKU_LIST','SINGLE-SKU':'SPECIAL_SKU_LIST'}};
+  const review={subtypes:{'SRP-S300LOEK/RDU':'CUSTOMER_SPECIFIC','SRP-S300LOEK/NSU':'SPECIAL_CONFIGURATION','SINGLE-SKU':'OTHER'}};
   const plan=await planProductImport(fakeDb([{id:1,name:'NCR'},{id:2,name:'UPS'}]),csv,undefined,review);
   const rdu=plan.items.filter(item=>item.after.partNumber==='SRP-S300LOEK/RDU');
   const nsu=plan.items.find(item=>item.after.partNumber==='SRP-S300LOEK/NSU');
   assert.equal(rdu.length,2);
   assert.deepEqual(rdu.map(item=>item.after.odmCustomerAccountId),[1,2]);
-  assert.equal(nsu.after.catalogSource,'SPECIAL_SKU_LIST');
+  assert.equal(nsu.after.catalogSource,'ODM');
   assert.equal(nsu.after.odmCustomerAccountId,undefined);
   assert.equal(nsu.line,3);
   assert.equal(plan.counts.newSkus,3); // Includes the unrelated single-line SKU.
   assert.ok(rdu.every(item=>!item.classes.includes('ERROR')));
-  assert.ok(nsu.messages.every(message=>!message.includes('Choose ODM or Special SKU')));
+  assert.ok(nsu.messages.every(message=>!message.includes('Choose an ODM subtype')));
   const unresolved=await planProductImport(fakeDb([{id:2,name:'UPS'}]),csv,undefined,review);
   assert.match(unresolved.items.find(item=>item.line===3&&item.after.partNumber==='SRP-S300LOEK/RDU').messages.join(' '),/needs an existing SalesHub Account/);
   assert.equal(unresolved.items.find(item=>item.line===3&&item.after.partNumber==='SRP-S300LOEK/NSU').classes.includes('ERROR'),false);
@@ -224,6 +224,6 @@ test('single-line parts stay unchanged and ambiguous multiline cells remain bloc
   assert.equal(padded.values.odm_source_part_number,'\r\n SINGLE-SKU \n\n');
   const {csv,rows}=syntheticCsv('GOOD-SKU\nquestionable part?');
   assert.equal(rows.filter(row=>row.values.odm_source_row==='3').length,1);
-  const plan=await planProductImport(fakeDb(),csv,undefined,{classifications:{'GOOD-SKU QUESTIONABLE PART?':'SPECIAL_SKU_LIST'}});
+  const plan=await planProductImport(fakeDb(),csv,undefined,{subtypes:{'GOOD-SKU QUESTIONABLE PART?':'OTHER'}});
   assert.match(plan.items.find(item=>item.line===3).messages.join(' '),/could not be safely separated/);
 });

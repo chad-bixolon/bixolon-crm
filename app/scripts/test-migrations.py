@@ -301,7 +301,20 @@ try:
                       INSERT INTO "ProductSku" (id,"productId","partNumber","normalizedPartNumber","catalogSource","odmCustomerAccountId","odmCustomerSourceName","updatedAt")
                         VALUES (5100,5100,'BACKFILL-ODM','BACKFILL-ODM','ODM',5100,'Original raw label',now());''')
                     legacy_odm = {table: sql_values('backfill', f'''SELECT count(*) || ':' || md5(COALESCE(jsonb_agg({"to_jsonb(t) - 'odmCustomerAccountId'" if table == 'ProductSku' else 'to_jsonb(t)'} ORDER BY ({"to_jsonb(t) - 'odmCustomerAccountId'" if table == 'ProductSku' else 'to_jsonb(t)'})::text)::text,'[]')) FROM "{table}" t;''')[0] for table in ('Account','ProductSku')}
+                if directory.name == '20260922120000_odm_customization_subtype':
+                    sql('backfill', '''UPDATE "ProductSku" SET "odmCustomerSourceName"='Original source',"odmDescription"='Original note' WHERE id=5103;
+                      INSERT INTO "ProductSku" (id,"productId","partNumber","normalizedPartNumber","catalogSource","baseSkuId","updatedAt")
+                      VALUES (5104,5100,'SPECIAL-CHILD','SPECIAL-CHILD','SPECIAL_SKU_LIST',5103,now());''')
+                    blocked = sql('backfill', (directory / 'migration.sql').read_text(), check=False)
+                    if blocked.returncode == 0 or sql_values('backfill', '''SELECT count(*) FROM information_schema.columns WHERE table_name='ProductSku' AND column_name='odmSubtype';''') != ['0']:
+                        raise RuntimeError('ODM subtype migration failed to reject base-SKU conflict atomically')
+                    sql('backfill', '''DELETE FROM "ProductSku" WHERE id=5104;''')
                 sql("backfill", (directory / "migration.sql").read_text())
+                if directory.name == '20260922120000_odm_customization_subtype':
+                    values = sql_values('backfill', '''SELECT "catalogSource"::text || ':' || "odmSubtype"::text || ':' || "odmCustomerSourceName" || ':' || "odmDescription" FROM "ProductSku" WHERE id=5103;''')
+                    if values != ['ODM:LEGACY_SPECIAL_SKU:Original source:Original note'] or sql_values('backfill', '''SELECT count(*) FROM "ProductSku" WHERE "catalogSource"='SPECIAL_SKU_LIST';''') != ['0']:
+                        raise RuntimeError('Legacy Special SKU conversion lost source details or classification')
+                    print('PASS: conflict blocks atomically; legacy Special SKU converts to ODM with subtype and source details intact', flush=True)
                 if legacy_odm is not None:
                     current = {table: sql_values('backfill', f'''SELECT count(*) || ':' || md5(COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text)::text,'[]')) FROM "{table}" t;''')[0] for table in ('Account','ProductSku')}
                     if current != legacy_odm or sql_values('backfill', '''SELECT "skuId" || ':' || "accountId" || ':' || "sourceCustomerName" FROM "ProductSkuOdmCustomer" WHERE "skuId"=5100;''') != ['5100:5100:Original raw label']:

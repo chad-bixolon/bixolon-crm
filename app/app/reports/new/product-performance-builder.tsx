@@ -38,7 +38,7 @@ export async function ProductPerformanceBuilder({params,actor,saved}:{params:Par
         {select('productCategoryId','Product Category',categories.map(x=>({value:x.id,label:x.name})))}
         {select('productId','Product / Model',products.map(x=>({value:x.id,label:x.name})))}
         {select('skuId','SKU / Part Number',skus.map(x=>({value:x.id,label:x.partNumber})))}
-        {select('catalogSource','Catalog Source',Object.entries(catalogSourceLabels).map(([value,label])=>({value,label})))}
+        {select('catalogSource','Catalog Source',Object.entries(catalogSourceLabels).filter(([value])=>value!=='SPECIAL_SKU_LIST').map(([value,label])=>({value,label})))}
         {select('odmCustomerAccountId','ODM Customer',accounts.map(x=>({value:x.id,label:x.name})))}
       </div></fieldset>
       <fieldset className="report-section"><legend className="report-section-title">Opportunity and commercial filters</legend><div className="report-filter-grid">

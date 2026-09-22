@@ -25,7 +25,7 @@ test('real workbook maps STANDARD, MSRP, and channel tiers separately', {skip:!f
   assert.equal(pos.error,undefined);
   const rows=parseImportCsv(pos.csv,productImportHeaders).rows;
   assert.equal(rows.length,132);
-  assert.deepEqual(rows[0].values,{model:'SRP-275IIIAOSG',part_number:'SRP-275IIIAOSG',description:rows[0].values.description,standard_price:'144.10',msrp_price:'299.20',reseller_price:'',distributor_price:'',currency:'USD',price_unit:'EACH',active:'',category:'POS',catalog_source:'PRICE_LIST',odm_customer:'',base_sku:'',odm_description:''});
+  assert.deepEqual(rows[0].values,{model:'SRP-275IIIAOSG',part_number:'SRP-275IIIAOSG',description:rows[0].values.description,standard_price:'144.10',msrp_price:'299.20',reseller_price:'',distributor_price:'',currency:'USD',price_unit:'EACH',active:'',category:'POS',catalog_source:'PRICE_LIST',odm_customer:'',base_sku:'',odm_description:'',odm_subtype:''});
   assert.match((await parseImportXlsx(file,'TT ribbon ',adapter)).error,/older TT ribbon/);
   const ribbon=await parseImportXlsx(file,'TT ribbon  (2)',adapter);
   const ribbonRows=parseImportCsv(ribbon.csv,productImportHeaders).rows;

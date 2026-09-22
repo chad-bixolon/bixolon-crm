@@ -535,6 +535,7 @@ model ProductSku {
   normalizedPartNumber String                @unique
   description          String?
   catalogSource        ProductCatalogSource?
+  odmSubtype           OdmCustomizationSubtype?
   odmCustomers         ProductSkuOdmCustomer[]
   odmCustomerSourceName String?
   baseSkuId            Int?
@@ -647,6 +648,14 @@ enum ProductCatalogSource {
   PE_LIST
   SPECIAL_SKU_LIST
   ODM
+}
+
+enum OdmCustomizationSubtype {
+  CUSTOMER_SPECIFIC
+  SPECIAL_CONFIGURATION
+  CABLE_PACKAGING_ACCESSORY
+  OTHER
+  LEGACY_SPECIAL_SKU
 }
 
 enum ProductPriceUnit {

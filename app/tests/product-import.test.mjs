@@ -109,14 +109,14 @@ test('classification is optional for legacy imports and validates explicit list 
   assert.match(conflict.items[0].messages.join(' '),/differs from the selected/);
 });
 test('confirmation writes category to Product and source to SKU',async()=>{
-  const input='model,part_number,category,catalog_source\nModel,SKU,POS,SPECIAL_SKU_LIST\n';
+  const input='model,part_number,category,catalog_source,odm_subtype\nModel,SKU,POS,ODM,OTHER\n';
   const writes=[];const links=[];
   const client=db();
   client.$transaction=async callback=>callback({product:{findMany:async()=>[],create:async({data})=>{writes.push(['product',data]);return {id:1};}},productCategory:{findMany:async()=>categories},account:{findMany:async()=>[]},productSku:{create:async({data})=>{writes.push(['sku',data]);return {id:2};}},productPrice:{upsert:async()=>{}},productSkuOdmCustomer:{findUnique:async()=>null,upsert:async({create})=>{links.push(create)}}});
   const plan=await planProductImport(client,input);
   await applyProductImport(client,input,plan.digest);
   assert.deepEqual(writes[0][1].category,{connect:{code:'POS'}});
-  assert.equal(writes[1][1].catalogSource,'SPECIAL_SKU_LIST');
+  assert.equal(writes[1][1].catalogSource,'ODM');
 });
 test('Products filters combine search, status, category, and SKU source',async()=>{
   assert.deepEqual(productWhere({q:'  DX  ',active:'active',category:'POS',catalogSource:'PRICE_LIST'}),{
@@ -149,7 +149,7 @@ test('ODM import keeps LABEL category, resolves only an exact Account, and remai
   const base=sku(2,1,'XT5-STD');base.catalogSource='PRICE_LIST';
   const custom=sku(3,1,'XT5-UPS');custom.catalogSource='ODM';custom.odmCustomerAccountId=7;custom.baseSkuId=2;custom.odmDescription='RFID';
   const model={...product(1,'XT5-40',[base,custom]),category:{code:'LABEL'}};
-  const input='model,part_number,category,catalog_source,odm_customer,base_sku,odm_description\nXT5-40,XT5-UPS,LABEL,ODM, UPS ,XT5-STD,RFID\n';
+  const input='model,part_number,category,catalog_source,odm_customer,base_sku,odm_description,odm_subtype\nXT5-40,XT5-UPS,LABEL,ODM, UPS ,XT5-STD,RFID,CUSTOMER_SPECIFIC\n';
   const plan=await planProductImport(db([model],categories,accounts),input);
   assert.equal(plan.counts.errors,0);
   assert.equal(plan.counts.newSkus,0);
@@ -172,18 +172,18 @@ test('ODM import keeps LABEL category, resolves only an exact Account, and remai
 });
 test('customer labels match exactly, manual mapping covers repeated rows, and Special SKU has no ODM Account',async()=>{
   const accounts=[{id:7,name:'Amazon'},{id:8,name:'Levata'},{id:9,name:'Zones'},{id:10,name:'CDW'}];
-  const input='model,part_number,catalog_source,odm_customer,odm_description\nModel,SKU-1,ODM,Amazon (thr BS -> Levata),Program\nModel,SKU-2,ODM,Amazon (thr BS -> Levata),Cable\nModel,SKU-3,ODM,Zones & CDW,Bundle\nModel,SKU-4,ODM,Amazon (thr BS -> Levata),Variant\n';
+  const input='model,part_number,catalog_source,odm_customer,odm_description,odm_subtype\nModel,SKU-1,ODM,Amazon (thr BS -> Levata),Program,CUSTOMER_SPECIFIC\nModel,SKU-2,ODM,Amazon (thr BS -> Levata),Cable,CABLE_PACKAGING_ACCESSORY\nModel,SKU-3,ODM,Zones & CDW,Bundle,CUSTOMER_SPECIFIC\nModel,SKU-4,ODM,Amazon (thr BS -> Levata),Variant,CUSTOMER_SPECIFIC\n';
   const initial=await planProductImport(db([],categories,accounts),input);
-  assert.equal(initial.counts.errors,4);
+  assert.equal(initial.counts.errors,3);
   assert.equal(initial.customers[0].status,'Unresolved');
   assert.equal(initial.customers[0].rows,3);
   assert.equal(initial.items[0].after.odmCustomerAccountId,undefined);
-  const review={customerMappings:{'amazon (thr bs -> levata)':7},classifications:{'SKU-2':'SPECIAL_SKU_LIST'}};
+  const review={customerMappings:{'amazon (thr bs -> levata)':7},subtypes:{'SKU-2':'CABLE_PACKAGING_ACCESSORY'}};
   const corrected=await planProductImport(db([],categories,accounts),input,undefined,review);
   assert.equal(corrected.customers[0].status,'Manually Mapped');
   assert.equal(corrected.items[0].after.odmCustomerAccountId,7);
   assert.equal(corrected.items[0].after.odmCustomerSourceName,'Amazon (thr BS -> Levata)');
-  assert.equal(corrected.items[1].after.catalogSource,'SPECIAL_SKU_LIST');
+  assert.equal(corrected.items[1].after.catalogSource,'ODM');
   assert.equal(corrected.items[1].after.odmCustomerAccountId,undefined);
   assert.equal(corrected.items[1].after.odmCustomerSourceName,'Amazon (thr BS -> Levata)');
   assert.equal(corrected.items[3].after.odmCustomerAccountId,7);
@@ -191,7 +191,7 @@ test('customer labels match exactly, manual mapping covers repeated rows, and Sp
   assert.equal(corrected.customers[1].status,'Unresolved');
   const resolved=await planProductImport(db([],categories,accounts),input,undefined,{...review,customerMappings:{...review.customerMappings,'zones & cdw':9}});
   assert.equal(resolved.counts.errors,0);
-  const directSpecial=await planProductImport(db([],categories,accounts),'model,part_number,catalog_source,odm_customer,odm_description\nModel,CABLE-1,SPECIAL_SKU_LIST,Amazon (thr BS -> Levata),Extra cable\n');
+  const directSpecial=await planProductImport(db([],categories,accounts),'model,part_number,catalog_source,odm_customer,odm_description,odm_subtype\nModel,CABLE-1,ODM,Amazon (thr BS -> Levata),Extra cable,CABLE_PACKAGING_ACCESSORY\n');
   assert.equal(directSpecial.counts.errors,0);
   assert.equal(directSpecial.items[0].after.odmCustomerAccountId,undefined);
   assert.equal(directSpecial.items[0].after.odmCustomerSourceName,'Amazon (thr BS -> Levata)');
@@ -200,7 +200,7 @@ test('customer labels match exactly, manual mapping covers repeated rows, and Sp
   assert.equal(ambiguous.counts.errors,1);
 });
 test('reviewed import writes linked Account and raw label without creating Accounts; re-import updates same SKU',async()=>{
-  const input='model,part_number,catalog_source,odm_customer\nModel,SKU-1,ODM,Amazon (thr BS -> Levata)\n';
+  const input='model,part_number,catalog_source,odm_customer,odm_subtype\nModel,SKU-1,ODM,Amazon (thr BS -> Levata),CUSTOMER_SPECIFIC\n';
   const review={customerMappings:{'amazon (thr bs -> levata)':7}};
   const accounts=[{id:7,name:'Amazon'}];
   const writes=[];const links=[];
@@ -211,7 +211,7 @@ test('reviewed import writes linked Account and raw label without creating Accou
   assert.equal(writes.length,1);
   assert.equal(links[0].accountId,7);
   assert.equal(writes[0].odmCustomerSourceName,'Amazon (thr BS -> Levata)');
-  const existing=sku(2,1,'SKU-1');existing.catalogSource='ODM';existing.odmCustomers=[{accountId:7}];existing.odmCustomerSourceName='Amazon (thr BS -> Levata)';
+  const existing=sku(2,1,'SKU-1');existing.catalogSource='ODM';existing.odmSubtype='CUSTOMER_SPECIFIC';existing.odmCustomers=[{accountId:7}];existing.odmCustomerSourceName='Amazon (thr BS -> Levata)';
   const repeated=await planProductImport(db([product(1,'Model',[existing])],categories,accounts),input,undefined,review);
   assert.equal(repeated.counts.newSkus,0);
   assert.equal(repeated.counts.unchanged,1);
@@ -224,7 +224,7 @@ test('reviewed ODM workbook rows share one SKU and link distinct Accounts withou
   const products=[],skus=[],links=new Map(),prices=[];
   const client={product:{findMany:async()=>products,create:async({data})=>{const value={id:1,...data};products.push({...value,skus:[]});return value;}},productCategory:{findMany:async()=>[]},account:{findMany:async()=>accounts},productSku:{create:async({data})=>{const value={id:2,...data};skus.push(value);return value;}},productSkuOdmCustomer:{findUnique:async({where})=>links.get(where.skuId_accountId.accountId)??null,upsert:async({create,update})=>links.set(create.accountId,{sourceCustomerName:update.sourceCustomerName})},productPrice:{upsert:async(value)=>prices.push(value)}};
   client.$transaction=async callback=>callback(client);
-  const review={classifications:{'ODM-1':'ODM'},customerMappings:{'ups alias':7}};
+  const review={subtypes:{'ODM-1':'CUSTOMER_SPECIFIC'},customerMappings:{'ups alias':7}};
   const plan=await planProductImport(client,input,undefined,review);
   assert.equal(plan.counts.errors,0);
   assert.equal(plan.counts.newSkus,1);

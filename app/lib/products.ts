@@ -55,6 +55,6 @@ export function productWhere(filters: ProductFilters): Prisma.ProductWhereInput 
 export async function listProducts(client: PrismaClient, filters: ProductFilters) {
   const where = productWhere(filters);
   const count = await client.product.count({ where }); const { page, pages } = pageNumber(filters.page, count);
-  const products = await client.product.findMany({ where, include: { skus: { select: { id: true, partNumber: true, catalogSource: true, odmCustomers: { select: { account: { select: { name: true } } } } } } }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (page - 1) * 20, take: 20 });
+  const products = await client.product.findMany({ where, include: { skus: { select: { id: true, partNumber: true, catalogSource: true, odmSubtype: true, odmCustomers: { select: { account: { select: { name: true } } } } } } }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (page - 1) * 20, take: 20 });
   return { products, count, page, pages };
 }

@@ -4,12 +4,12 @@ import { requirePermission } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { searchCatalog } from "@/lib/catalog-search";
 
-const selection = { id: true, productId: true, partNumber: true, description: true, active: true, catalogSource: true, odmDescription: true, odmCustomers: { select: { accountId: true, account: { select: { name: true } } } },
+const selection = { id: true, productId: true, partNumber: true, description: true, active: true, catalogSource: true, odmSubtype: true, odmDescription: true, odmCustomers: { select: { accountId: true, account: { select: { name: true } } } },
   product: { select: { name: true, categoryId: true } },
   prices: { select: { tier: true, currencyCode: true, amount: true } },
 } as const;
-function serialize(sku: { id: number; productId: number; partNumber: string; description: string | null; catalogSource: string | null; odmDescription: string | null; odmCustomers: { accountId: number; account: { name: string } }[]; prices: { tier: string; currencyCode: string; amount: Prisma.Decimal }[]; product: { name: string; categoryId: number | null } }) {
-  return { id: sku.id, productId: sku.productId, productName: sku.product.name, categoryId: sku.product.categoryId, partNumber: sku.partNumber, description: sku.description, catalogSource: sku.catalogSource, odmCustomers: sku.odmCustomers.map(link => ({ accountId: link.accountId, name: link.account.name })), odmDescription: sku.odmDescription,
+function serialize(sku: { id: number; productId: number; partNumber: string; description: string | null; catalogSource: string | null; odmSubtype: string | null; odmDescription: string | null; odmCustomers: { accountId: number; account: { name: string } }[]; prices: { tier: string; currencyCode: string; amount: Prisma.Decimal }[]; product: { name: string; categoryId: number | null } }) {
+  return { id: sku.id, productId: sku.productId, productName: sku.product.name, categoryId: sku.product.categoryId, partNumber: sku.partNumber, description: sku.description, catalogSource: sku.catalogSource, odmSubtype: sku.odmSubtype, odmCustomers: sku.odmCustomers.map(link => ({ accountId: link.accountId, name: link.account.name })), odmDescription: sku.odmDescription,
     prices: sku.prices.map(price => ({ tier: price.tier, currencyCode: price.currencyCode, amount: price.amount.toFixed(2) })) };
 }
 

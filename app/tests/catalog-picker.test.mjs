@@ -32,11 +32,15 @@ test('selecting an exact catalog item sets both IDs and suggested unit price', (
   assert.deepEqual(selectCatalogItem(item, 'JPY'), { productId: 1, skuId: 2, tier: '', price: '0.00' });
 });
 test('ODM customer warning uses participating Account IDs and never blocks pricing', () => {
-  const odm={...item,catalogSource:'ODM',odmCustomers:[{accountId:7,name:'UPS'},{accountId:8,name:'Other'}]};
+  const odm={...item,catalogSource:'ODM',odmSubtype:'CUSTOMER_SPECIFIC',odmCustomers:[{accountId:7,name:'UPS'},{accountId:8,name:'Other'}]};
   assert.equal(odmCustomerWarning(odm,[7]),null);
   assert.equal(odmCustomerWarning(odm,[8]),null);
   assert.equal(odmCustomerWarning(odm,[9]),'This ODM SKU is not associated with any Account participating in this Opportunity.');
-  assert.equal(odmCustomerWarning({...odm,odmCustomers:[]},[]),'This ODM SKU is not associated with any Account participating in this Opportunity.');
+  assert.equal(odmCustomerWarning({...odm,odmCustomers:[]},[]),'This customer-specific ODM SKU has no associated Account.');
+  assert.equal(odmCustomerWarning({...odm,odmSubtype:null,odmCustomers:[]},[]),'This ODM SKU is not associated with any Account participating in this Opportunity.');
+  assert.equal(odmCustomerWarning({...odm,odmSubtype:'SPECIAL_CONFIGURATION',odmCustomers:[]},[]),null);
+  assert.equal(odmCustomerWarning({...odm,odmSubtype:'CABLE_PACKAGING_ACCESSORY',odmCustomers:[]},[]),null);
+  assert.equal(odmCustomerWarning({...odm,odmSubtype:'LEGACY_SPECIAL_SKU',odmCustomers:[]},[]),null);
   assert.equal(odmCustomerWarning(item,[]),null);
   assert.deepEqual(selectCatalogItem(odm,'USD'),selectCatalogItem(item,'USD'));
 });

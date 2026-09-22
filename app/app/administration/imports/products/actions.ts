@@ -6,7 +6,7 @@ import { readUpload } from '../actions';
 import { parseProductWorkbookXlsx } from '@/lib/odm-product-workbook';
 import { maxXlsxBytes } from '@/lib/import-xlsx';
 import { revalidatePath } from 'next/cache';
-import { ProductCatalogSource } from '@prisma/client';
+import { ProductCatalogSource, OdmCustomizationSubtype } from '@prisma/client';
 import { createAccountFromImport } from '@/lib/accounts';
 
 export async function createAccountForProductImport(form:FormData) {
@@ -22,7 +22,7 @@ export async function createAccountForProductImport(form:FormData) {
 
 function selectedSource(form:FormData) {
   const value=String(form.get('catalogSource') ?? '');
-  return Object.values(ProductCatalogSource).includes(value as ProductCatalogSource) ? value as ProductCatalogSource : undefined;
+  return value !== 'SPECIAL_SKU_LIST' && Object.values(ProductCatalogSource).includes(value as ProductCatalogSource) ? value as ProductCatalogSource : undefined;
 }
 function reviewChoices(form:FormData):ProductImportReview {
   const raw=String(form.get('review') ?? '');
@@ -32,7 +32,7 @@ function reviewChoices(form:FormData):ProductImportReview {
     if (!data || typeof data!=='object') return {};
     const numbers=(value:unknown)=>Object.fromEntries(Object.entries(value && typeof value==='object' ? value : {}).filter(([key,id])=>key.length<=100 && Number.isSafeInteger(id) && Number(id)>0));
     const strings=(value:unknown,allowed?:string[])=>Object.fromEntries(Object.entries(value && typeof value==='object' ? value : {}).filter(([key,item])=>key.length<=100 && typeof item==='string' && item.length<=100 && (!allowed || allowed.includes(item))));
-    return {customerMappings:numbers(data.customerMappings),rowAccountIds:numbers(data.rowAccountIds),classifications:strings(data.classifications,['ODM','SPECIAL_SKU_LIST']) as ProductImportReview['classifications'],baseSkus:strings(data.baseSkus)};
+    return {customerMappings:numbers(data.customerMappings),rowAccountIds:numbers(data.rowAccountIds),subtypes:strings(data.subtypes,Object.values(OdmCustomizationSubtype).filter(value=>value!=='LEGACY_SPECIAL_SKU')) as ProductImportReview['subtypes'],baseSkus:strings(data.baseSkus)};
   } catch { return {}; }
 }
 async function readProductUpload(form:FormData) {
@@ -46,6 +46,7 @@ async function readProductUpload(form:FormData) {
 
 export async function previewProductUpload(form:FormData) {
   await requireMutation('users.manage');
+  if (form.get('catalogSource') === 'SPECIAL_SKU_LIST') return {error:'Use ODM with a subtype for custom SKUs.',sheets:[]};
   const upload=await readProductUpload(form);
   if (!upload.csv) return {error:upload.error ?? 'Upload could not be read.',sheets:'sheets' in upload ? upload.sheets : []};
   try { return {plan:await planProductImport(prisma,upload.csv,selectedSource(form),reviewChoices(form)),accounts:await prisma.account.findMany({where:{archivedAt:null},select:{id:true,name:true},orderBy:{name:'asc'}}),sheets:'sheets' in upload ? upload.sheets : [],selectedSheet:'selectedSheet' in upload ? upload.selectedSheet : undefined,ignoredSheets:'ignoredSheets' in upload ? upload.ignoredSheets : []}; }
@@ -53,6 +54,7 @@ export async function previewProductUpload(form:FormData) {
 }
 export async function confirmProductUpload(form:FormData,digest:string) {
   await requireMutation('users.manage');
+  if (form.get('catalogSource') === 'SPECIAL_SKU_LIST') return {ok:false as const,message:'Use ODM with a subtype for custom SKUs.'};
   const upload=await readProductUpload(form);
   if (!upload.csv) return {ok:false as const,message:upload.error ?? 'Upload could not be read.'};
   try {

@@ -87,3 +87,11 @@ test('ODM Catalog Source and Customer filter/group preserve Opportunity line val
  assert.equal(customers.summary[0].lineValue,'350.00');
  assert.equal(customers.groups.find(group=>group.label==='UPS').metrics[0].lineValue,'250.00');
 });
+test('customerless configuration ODM is not grouped as unresolved customer',async()=>{
+ const configuration=line(3,'POS','Configured',1,'25.00','USD',{sku:{id:3,partNumber:'CFG-3',priceUnit:'EACH',catalogSource:'ODM',odmSubtype:'SPECIAL_CONFIGURATION',odmCustomers:[]}});
+ const unresolved=line(4,'POS','Unresolved',1,'15.00','USD',{sku:{id:4,partNumber:'CUST-4',priceUnit:'EACH',catalogSource:'ODM',odmSubtype:'CUSTOMER_SPECIFIC',odmCustomers:[]}});
+ const historical=line(5,'POS','Historical',1,'10.00','USD',{sku:{id:5,partNumber:'OLD-5',priceUnit:'EACH',catalogSource:'ODM',odmSubtype:null,odmCustomers:[]}});
+ const result=await run([configuration,unresolved,historical],{...config(),groupBy:'odmCustomer'});
+ assert.deepEqual(result.groups.map(group=>group.label),['No ODM Customer Required','Unresolved ODM Customer','ODM Subtype Not Set']);
+ assert.equal(result.summary[0].lineValue,'50.00');
+});
