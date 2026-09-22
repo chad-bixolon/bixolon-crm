@@ -1,30 +1,49 @@
 'use client';
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { measureTableScroll, setTableScrollPosition, updateTableScrollPosition } from './table-scroll-state.mjs';
+
+type ScrollState = { max: number; position: number; thumb: number };
 
 export function TableScroll({ label, children }: { label: string; children: ReactNode }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const id = useId();
-  const [scroll, setScroll] = useState({ max: 0, position: 0, thumb: 32 });
+  const [scroll, setScroll] = useState<ScrollState>({ max: 0, position: 0, thumb: 0 });
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
+    let mounted = true;
     const update = () => {
-      const max = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-      const thumb = Math.max(32, Math.round(Math.max(viewport.clientWidth - 32, 0) * viewport.clientWidth / Math.max(viewport.scrollWidth, 1)));
-      setScroll({ max, position: Math.min(viewport.scrollLeft, max), thumb });
+      if (!mounted) return;
+      const next = measureTableScroll(viewport);
+      setScroll(current => current.max === next.max && current.position === next.position && current.thumb === next.thumb ? current : next);
     };
     const observer = new ResizeObserver(update);
     observer.observe(viewport);
     if (viewport.firstElementChild) observer.observe(viewport.firstElementChild);
     update();
-    return () => observer.disconnect();
+    return () => {
+      mounted = false;
+      observer.disconnect();
+    };
   }, [children]);
   return <>
     <div id={id} ref={viewportRef} role="region" aria-label={`${label} table`} tabIndex={0} onScroll={event => {
-      setScroll(current => ({ ...current, position: event.currentTarget.scrollLeft }));
+      // React only guarantees currentTarget during the handler. Capture every DOM
+      // value before scheduling the state updater.
+      const { scrollLeft, scrollWidth, clientWidth } = event.currentTarget;
+      const position = measureTableScroll({ scrollLeft, scrollWidth, clientWidth }).position;
+      setScroll(current => updateTableScrollPosition(current, position));
     }} className="report-table-viewport max-w-full overflow-x-auto overscroll-x-contain focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-orange-600">
       {children}
     </div>
-    {scroll.max > 1 && <div className="report-scroll-control"><input className="report-scroll-range" type="range" min={0} max={scroll.max} step={1} value={scroll.position} aria-label={`Scroll ${label} horizontally`} aria-controls={id} style={{ '--report-thumb-width': `${scroll.thumb}px` } as CSSProperties} onChange={event => { if (viewportRef.current) viewportRef.current.scrollLeft = Number(event.target.value); }}/></div>}
+    {scroll.max > 1 && <div className="report-scroll-control"><input className="report-scroll-range" type="range" min={0} max={scroll.max} step={1} value={scroll.position} aria-label={`Scroll ${label} horizontally`} aria-controls={id} style={{ '--report-thumb-width': `${scroll.thumb}px` } as CSSProperties} onChange={event => {
+      const requestedPosition = Number(event.currentTarget.value);
+      const viewport = viewportRef.current;
+      if (!viewport) return;
+      const position = setTableScrollPosition(viewport, requestedPosition);
+      // The resulting native scroll event confirms the position. Updating here
+      // keeps the controlled range responsive without writing back to the DOM.
+      setScroll(current => updateTableScrollPosition(current, position));
+    }}/></div>}
   </>;
 }
