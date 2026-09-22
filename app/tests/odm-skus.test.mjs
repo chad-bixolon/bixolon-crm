@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText, filename);
 const require = Module.createRequire(import.meta.url);
-const { saveSkuMetadata, DuplicateSkuError } = require(path.join(root,'lib/odm-skus.ts'));
+const { saveSkuMetadata, parseSkuMetadataForm, DuplicateSkuError } = require(path.join(root,'lib/odm-skus.ts'));
 function fixture() {
   const calls=[];
   const rows=new Map([[1,{id:1,productId:10,catalogSource:'PRICE_LIST',odmCustomers:[]}],[2,{id:2,productId:10,catalogSource:'ODM',odmSubtype:'CUSTOMER_SPECIFIC',baseSkuId:null,odmDescription:null,odmCustomers:[]}]]);
@@ -34,6 +34,15 @@ test('ODM validation rejects invalid Account, self base, and ODM base',async()=>
   await assert.rejects(saveSkuMetadata(db,{...input,odmCustomerAccountIds:[]}),/requires at least one active Account/);
   await assert.rejects(saveSkuMetadata(db,{...input,odmSubtype:'LEGACY_SPECIAL_SKU'}),/reserved for migrated/);
   await assert.rejects(saveSkuMetadata(db,{...input,catalogSource:'SPECIAL_SKU_LIST'}),/Use ODM/);
+});
+test('free-text customer name cannot satisfy Customer-Specific validation',async()=>{
+  const form=new FormData();
+  form.set('partNumber','XT5-UPS');form.set('catalogSource','ODM');form.set('odmSubtype','CUSTOMER_SPECIFIC');
+  form.set('odmCustomerNames','7-Eleven');
+  const parsed=parseSkuMetadataForm(form);
+  assert.deepEqual(parsed.odmCustomerAccountIds,[]);
+  const {db}=fixture();
+  await assert.rejects(saveSkuMetadata(db,{...parsed,productId:10}),/requires at least one active Account/);
 });
 test('source changes require ODM subtype and preserve existing ODM history',async()=>{
   const {db}=fixture();
