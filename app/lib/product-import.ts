@@ -2,10 +2,11 @@ import { Prisma, ProductCatalogSource, OdmCustomizationSubtype, ProductPriceTier
 import { createHash } from 'node:crypto';
 import { parseImportCsv } from './import-csv';
 import { normalizeAccountName } from './accounts';
+import { calculateOdmCustomerPrice } from './odm-customer-pricing';
 export { normalizeAccountName } from './accounts';
 
 export const productImportHeaders = ['model','part_number','description','standard_price','msrp_price','reseller_price','distributor_price','currency','price_unit','active','category','catalog_source','odm_customer','base_sku','odm_description','odm_subtype'] as const;
-export const odmSourceHeaders = ['odm_source_format','odm_source_sheet','odm_source_row','odm_source_part_index','odm_source_part_count','odm_source_customer_cell','odm_source_part_number','odm_source_old_price','odm_source_prior_price','odm_source_new_price','odm_source_tariff_percent','odm_source_tariff_amount','odm_source_note'] as const;
+export const odmSourceHeaders = ['odm_source_format','odm_source_sheet','odm_source_row','odm_source_part_index','odm_source_part_count','odm_source_customer_cell','odm_source_part_number','odm_source_old_price','odm_source_prior_price','odm_source_new_price','odm_source_tariff_percent','odm_source_tariff_amount','odm_source_note','odm_source_old_price_raw','odm_source_prior_price_raw','odm_source_new_price_raw','odm_source_tariff_percent_raw','odm_source_tariff_amount_raw'] as const;
 export const productImportTemplate = productImportHeaders.join(',') + '\n';
 export const normalizePartNumber = (value:string) => value.trim().replace(/\s+/g,' ').toUpperCase();
 const normalizeModel = (value:string) => value.trim().replace(/\s+/g,' ').toLowerCase();
@@ -18,8 +19,8 @@ const tierFields = [
   {header:'reseller_price',field:'resellerPrice',tier:ProductPriceTier.RESELLER},
   {header:'distributor_price',field:'distributorPrice',tier:ProductPriceTier.DISTRIBUTOR},
 ] as const;
-export type ProductImportSource = {sheet:string;customerCell:string;partNumber:string;partIndex:number;partCount:number;oldPrice:string;priorPrice:string;newPrice:string;tariffPercent:string;tariffAmount:string;note:string};
-export type ProductImportItem = {line:number;label:string;classes:string[];before:Values|null;after:Values;messages:string[];productId?:number;skuId?:number;source?:ProductImportSource};
+export type ProductImportSource = {sheet:string;customerCell:string;partNumber:string;partIndex:number;partCount:number;oldPrice:string;priorPrice:string;newPrice:string;tariffPercent:string;tariffAmount:string;note:string;rawOldPrice:string;rawPriorPrice:string;rawNewPrice:string;rawTariffPercent:string;rawTariffAmount:string};
+export type ProductImportItem = {line:number;label:string;classes:string[];before:Values|null;after:Values;messages:string[];productId?:number;skuId?:number;source?:ProductImportSource;odmPricing?:ReturnType<typeof calculateOdmCustomerPrice>};
 export type ProductImportCounts = {newProducts:number;updatedProducts:number;newSkus:number;updatedSkus:number;priceChanges:number;unchanged:number;warnings:number;errors:number};
 export type CustomerResolution = {source:string;key:string;accountId?:number;accountName?:string;status:'Matched'|'Manually Mapped'|'Needs Review'|'Unresolved';rows:number};
 export type ProductImportReview = {customerMappings?:Record<string,number>;rowAccountIds?:Record<string,number>;subtypes?:Record<string,OdmCustomizationSubtype>;baseSkus?:Record<string,string>};
@@ -50,7 +51,7 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
     const partNumber=get('part_number'), key=normalizePartNumber(partNumber);
     const fromOdm=get('odm_source_format')==='ODM_CUSTOMER_PRICING';
     const lineNumber=fromOdm && /^\d+$/.test(get('odm_source_row')) ? Number(get('odm_source_row')) : row.line;
-    const source:ProductImportSource|undefined=fromOdm ? {sheet:get('odm_source_sheet'),customerCell:get('odm_source_customer_cell'),partNumber:(row.values as Record<string,string>).odm_source_part_number ?? '',partIndex:Number(get('odm_source_part_index'))||1,partCount:Number(get('odm_source_part_count'))||1,oldPrice:get('odm_source_old_price'),priorPrice:get('odm_source_prior_price'),newPrice:get('odm_source_new_price'),tariffPercent:get('odm_source_tariff_percent'),tariffAmount:get('odm_source_tariff_amount'),note:get('odm_source_note')} : undefined;
+    const source:ProductImportSource|undefined=fromOdm ? {sheet:get('odm_source_sheet'),customerCell:get('odm_source_customer_cell'),partNumber:(row.values as Record<string,string>).odm_source_part_number ?? '',partIndex:Number(get('odm_source_part_index'))||1,partCount:Number(get('odm_source_part_count'))||1,oldPrice:get('odm_source_old_price'),priorPrice:get('odm_source_prior_price'),newPrice:get('odm_source_new_price'),tariffPercent:get('odm_source_tariff_percent'),tariffAmount:get('odm_source_tariff_amount'),note:get('odm_source_note'),rawOldPrice:get('odm_source_old_price_raw'),rawPriorPrice:get('odm_source_prior_price_raw'),rawNewPrice:get('odm_source_new_price_raw'),rawTariffPercent:get('odm_source_tariff_percent_raw'),rawTariffAmount:get('odm_source_tariff_amount_raw')} : undefined;
     const currencyText=get('currency'), activeText=get('active'), unitText=get('price_unit').toUpperCase();
     const categoryText=get('category'), sourceText=(get('catalog_source') || (fromOdm ? '' : selectedSource) || '').toUpperCase();
     const subtypeText=review.subtypes?.[key] ?? get('odm_subtype').toUpperCase();
@@ -64,9 +65,10 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
     if (fromOdm && /[\r\n]/.test(partNumber)) messages.push('Source part number could not be safely separated into SKUs. Review the raw source cell manually.');
     if (fromOdm && /\([^)]*\)/.test(partNumber) && !/^.+?\s+\(Y\d+\)$/i.test(source?.partNumber ?? '')) messages.push('Annotated source part number needs manual review before import.');
     if (fromOdm && /\bdiscontinued\b/i.test(source?.note ?? '')) messages.push('Discontinued source row needs review before import.');
-    if (fromOdm && !source?.newPrice) messages.push('WARNING: New Price is blank; no catalog price will be written.');
-    if (fromOdm && source?.newPrice==='-') messages.push('WARNING: New Price is marked unavailable; no catalog price will be written.');
+    if (fromOdm && !source?.newPrice) messages.push('WARNING: New Price is blank; no active ODM customer pricing will be created.');
+    if (fromOdm && source?.newPrice==='-') messages.push('WARNING: New Price is unavailable (-); no active ODM customer pricing will be created.');
     if (fromOdm && /^\$?\d+(?:\.\d+)?$/.test(source?.note ?? '')) messages.push('WARNING: Notes contain a price-like value; review source pricing.');
+    if (fromOdm && source?.rawNewPrice && /^\d+(?:\.\d+)?$/.test(source.rawNewPrice) && validPrice(source.newPrice) && !new Prisma.Decimal(source.rawNewPrice).sub(source.newPrice).abs().lte('0.0000001')) messages.push('WARNING: New Price was rounded half up to cents; exact workbook value is retained in provenance.');
     if (model.length>200) messages.push('Model exceeds 200 characters.');
     if (partNumber.length>100) messages.push('Part number exceeds 100 characters.');
     if (get('description').length>2000) messages.push('Description exceeds 2000 characters.');
@@ -144,6 +146,12 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
       } else after.baseSkuId=before?.baseSkuId;
       after.odmDescription=get('odm_description')||before?.odmDescription;
     }
+    let odmPricing: ReturnType<typeof calculateOdmCustomerPrice> | undefined;
+    if (fromOdm && after.odmSubtype === 'CUSTOMER_SPECIFIC' && after.odmCustomerAccountId && source?.newPrice && source.newPrice !== '-' && !/\bdiscontinued\b/i.test(source.note)) {
+      try { odmPricing = calculateOdmCustomerPrice({ customerPrice: source.newPrice, previousPrice: [source.oldPrice,source.priorPrice].find(value=>value&&value!=='-'), tariffPercent: source.tariffPercent, tariffAmount: source.tariffAmount, currencyCode: currency || 'USD', notes: source.note }); }
+      catch (error) { messages.push(`Customer pricing needs review: ${error instanceof Error ? error.message : 'invalid price or tariff'}`); }
+    }
+    if (fromOdm && after.odmSubtype !== 'CUSTOMER_SPECIFIC' && (source?.oldPrice || source?.newPrice || source?.tariffPercent || source?.tariffAmount)) messages.push('WARNING: Source prices and tariff retained for review; non-customer-specific ODM has no active customer pricing.');
     for (const spec of tierFields) {
       const old=oldPrices.find(price=>price.tier===spec.tier);
       if (before) before[spec.field]=old?.amount.toFixed(2);
@@ -161,7 +169,7 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
     if (!sku && !get('standard_price') && !fromOdm) {classes.push('WARNING');messages.push('WARNING: No STANDARD/base price supplied for this new SKU. Other tiers remain separate.');}
     if (messages.some(message=>message.startsWith('WARNING:')) && !classes.includes('WARNING')) classes.push('WARNING');
     if (hasError && messages.some(message=>!message.startsWith('WARNING:'))) classes.splice(0,classes.length,'ERROR');
-    const item:ProductImportItem={line:lineNumber,label:partNumber || '(missing part number)',classes,before,after,messages,productId:product?.id,skuId:sku?.id,source};
+    const item:ProductImportItem={line:lineNumber,label:partNumber || '(missing part number)',classes,before,after,messages,productId:product?.id,skuId:sku?.id,source,odmPricing};
     items.push(item);
     if (key && !prior) seen.set(key,item);
     if (modelKey) proposedModels.add(modelKey);
@@ -170,6 +178,15 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
   for (const item of items) if (item.after.baseSkuId && importedOdmIds.has(item.after.baseSkuId)) {
     item.messages.push('Base SKU is classified ODM in this import. ODM chains are not allowed.');
     item.classes=['ERROR'];
+  }
+  const pricingByRelationship = new Map<string, ProductImportItem>();
+  for (const item of items) {
+    if (!item.odmPricing || !item.after.odmCustomerAccountId) continue;
+    const key = `${normalizePartNumber(item.after.partNumber)}:${item.after.odmCustomerAccountId}`;
+    const prior = pricingByRelationship.get(key);
+    if (prior && JSON.stringify(prior.odmPricing) !== JSON.stringify(item.odmPricing)) {
+      for (const conflict of [prior, item]) { conflict.messages.push('Repeated SKU/Account has conflicting customer pricing; resolve the source rows before import.'); conflict.classes = ['ERROR']; }
+    } else if (!prior) pricingByRelationship.set(key, item);
   }
   const productUpdates=new Set<number>();
   const updatedSkuKeys=new Set<string>();
@@ -185,7 +202,7 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
   }
   counts.updatedProducts=productUpdates.size;
   counts.updatedSkus=updatedSkuKeys.size;
-  return {items,customers:[...customers.values()],errors:[],notices:odmWorkbook?['Choose an ODM subtype for each SKU candidate.','Workbook Old Price, New Price, notes, and tariff values are shown for review only. No catalog prices are written from this worksheet.','Blank Customer cells are left unresolved; the workbook does not establish that they belong to the previous customer.']:[],counts,digest:digestOf(items)};
+  return {items,customers:[...customers.values()],errors:[],notices:odmWorkbook?['Choose an ODM subtype for each SKU candidate. Resolved Customer-Specific prices are saved per SKU and Account.','Workbook pricing is never written to generic catalog tiers. Blank Customer cells are left unresolved.']:[],counts,digest:digestOf(items)};
 }
 
 export async function applyProductImport(db:PrismaClient,csv:string,expectedDigest:string,selectedSource?:ProductCatalogSource,review:ProductImportReview={}) {
@@ -209,7 +226,7 @@ export async function applyProductImport(db:PrismaClient,csv:string,expectedDige
         const sku=await tx.productSku.create({data:{productId,partNumber:value.partNumber,normalizedPartNumber:skuKey,description:value.description,priceUnit:value.priceUnit ?? ProductPriceUnit.EACH,active:value.active ?? true,catalogSource:value.catalogSource,odmSubtype:value.odmSubtype,odmCustomerSourceName:value.odmCustomerSourceName,baseSkuId:value.baseSkuId,odmDescription:value.odmDescription}});
         skuId=sku.id;
       } else if (!repeatedOdmRow && item.classes.includes('UPDATE SKU')) {
-        if (value.catalogSource!=='ODM') await tx.productSkuOdmCustomer.deleteMany({where:{skuId}});
+        if (value.catalogSource!=='ODM') await tx.productSkuOdmCustomer.updateMany({where:{skuId,archivedAt:null},data:{archivedAt:new Date()}});
         await tx.productSku.update({where:{id:skuId},data:{partNumber:value.partNumber,description:value.description,priceUnit:value.priceUnit,active:value.active,catalogSource:value.catalogSource,odmSubtype:value.catalogSource==='ODM'?value.odmSubtype??null:null,odmCustomerSourceName:value.odmCustomerSourceName??null,baseSkuId:value.baseSkuId??null,odmDescription:value.odmDescription??null}});
       }
       createdSkus.set(skuKey,skuId);
@@ -217,7 +234,15 @@ export async function applyProductImport(db:PrismaClient,csv:string,expectedDige
         const where={skuId_accountId:{skuId,accountId:value.odmCustomerAccountId}};
         const existing=await tx.productSkuOdmCustomer.findUnique({where,select:{sourceCustomerName:true}});
         const names=[...new Set([...(existing?.sourceCustomerName?.split('\n') ?? []),...(value.odmCustomerSourceName ? [value.odmCustomerSourceName] : [])])];
-        await tx.productSkuOdmCustomer.upsert({where,create:{skuId,accountId:value.odmCustomerAccountId,sourceCustomerName:names.join('\n') || null},update:{sourceCustomerName:names.join('\n') || null}});
+        await tx.productSkuOdmCustomer.upsert({where,create:{skuId,accountId:value.odmCustomerAccountId,sourceCustomerName:names.join('\n') || null},update:{sourceCustomerName:names.join('\n') || null,archivedAt:null}});
+        if (item.odmPricing && value.odmSubtype === 'CUSTOMER_SPECIFIC') {
+          const active = await tx.productSkuOdmCustomerPrice.findFirst({where:{skuId,accountId:value.odmCustomerAccountId,archivedAt:null}});
+          const terms=item.odmPricing;
+          if (!active || active.currencyCode!==terms.currencyCode || !active.customerPrice.equals(terms.customerPrice) || (active.previousPrice?.toFixed(2)??null)!==terms.previousPrice || !active.tariffPercent.equals(terms.tariffPercent) || !active.tariffAmount.equals(terms.tariffAmount) || active.notes!==terms.notes) {
+            if (active) await tx.productSkuOdmCustomerPrice.update({where:{id:active.id},data:{archivedAt:new Date()}});
+            await tx.productSkuOdmCustomerPrice.create({data:{skuId,accountId:value.odmCustomerAccountId,...terms,sourceType:'GARY_WORKBOOK',sourceMetadata:{sheet:item.source?.sheet,row:item.line,oldPrice:item.source?.oldPrice,priorPrice:item.source?.priorPrice,newPrice:item.source?.newPrice,tariffPercent:item.source?.tariffPercent,tariffAmount:item.source?.tariffAmount,rawOldPrice:item.source?.rawOldPrice,rawPriorPrice:item.source?.rawPriorPrice,rawNewPrice:item.source?.rawNewPrice,rawTariffPercent:item.source?.rawTariffPercent,rawTariffAmount:item.source?.rawTariffAmount}}});
+          }
+        }
       }
       if (value.currency && !item.source) for (const spec of tierFields) {
         const amount=value[spec.field];

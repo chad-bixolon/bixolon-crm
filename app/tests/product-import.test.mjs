@@ -218,11 +218,12 @@ test('reviewed import writes linked Account and raw label without creating Accou
 });
 test('reviewed ODM workbook rows share one SKU and link distinct Accounts without catalog prices',async()=>{
   const header=[...productImportHeaders,'odm_source_format','odm_source_row','odm_source_customer_cell','odm_source_part_number','odm_source_old_price','odm_source_prior_price','odm_source_new_price','odm_source_tariff_percent','odm_source_tariff_amount','odm_source_note'];
-  const row=(line,customer)=>Object.fromEntries([...header.map(key=>[key,'']),['model','MODEL'],['part_number','ODM-1'],['odm_customer',customer],['odm_source_format','ODM_CUSTOMER_PRICING'],['odm_source_row',String(line)],['odm_source_customer_cell',customer],['odm_source_part_number','ODM-1'],['odm_source_new_price',line===3?'10':'12']]);
+  const row=(line,customer)=>Object.fromEntries([...header.map(key=>[key,'']),['model','MODEL'],['part_number','ODM-1'],['odm_customer',customer],['odm_source_format','ODM_CUSTOMER_PRICING'],['odm_source_row',String(line)],['odm_source_customer_cell',customer],['odm_source_part_number','ODM-1'],['odm_source_new_price',line===4?'12':'10']]);
   const input=[header.join(','),...[row(3,'UPS'),row(4,'Amazon'),row(5,'UPS alias')].map(values=>header.map(key=>values[key]).join(','))].join('\n')+'\n';
   const accounts=[{id:7,name:'UPS'},{id:8,name:'Amazon'}];
   const products=[],skus=[],links=new Map(),prices=[];
-  const client={product:{findMany:async()=>products,create:async({data})=>{const value={id:1,...data};products.push({...value,skus:[]});return value;}},productCategory:{findMany:async()=>[]},account:{findMany:async()=>accounts},productSku:{create:async({data})=>{const value={id:2,...data};skus.push(value);return value;}},productSkuOdmCustomer:{findUnique:async({where})=>links.get(where.skuId_accountId.accountId)??null,upsert:async({create,update})=>links.set(create.accountId,{sourceCustomerName:update.sourceCustomerName})},productPrice:{upsert:async(value)=>prices.push(value)}};
+  const customerPrices=[];
+  const client={product:{findMany:async()=>products,create:async({data})=>{const value={id:1,...data};products.push({...value,skus:[]});return value;}},productCategory:{findMany:async()=>[]},account:{findMany:async()=>accounts},productSku:{create:async({data})=>{const value={id:2,...data};skus.push(value);return value;}},productSkuOdmCustomer:{findUnique:async({where})=>links.get(where.skuId_accountId.accountId)??null,upsert:async({create,update})=>links.set(create.accountId,{sourceCustomerName:update.sourceCustomerName})},productSkuOdmCustomerPrice:{findFirst:async({where})=>customerPrices.find(price=>price.skuId===where.skuId&&price.accountId===where.accountId)??null,create:async({data})=>customerPrices.push({...data,customerPrice:new Prisma.Decimal(data.customerPrice),previousPrice:data.previousPrice?new Prisma.Decimal(data.previousPrice):null,tariffPercent:new Prisma.Decimal(data.tariffPercent),tariffAmount:new Prisma.Decimal(data.tariffAmount)})},productPrice:{upsert:async(value)=>prices.push(value)}};
   client.$transaction=async callback=>callback(client);
   const review={subtypes:{'ODM-1':'CUSTOMER_SPECIFIC'},customerMappings:{'ups alias':7}};
   const plan=await planProductImport(client,input,undefined,review);
@@ -232,6 +233,8 @@ test('reviewed ODM workbook rows share one SKU and link distinct Accounts withou
   assert.equal(skus.length,1);
   assert.deepEqual([...links.entries()].map(([accountId,link])=>[accountId,link.sourceCustomerName]),[[7,'UPS\nUPS alias'],[8,'Amazon']]);
   assert.equal(prices.length,0);
+  assert.equal(customerPrices.length,2);
+  assert.deepEqual([...new Set(customerPrices.map(price=>price.accountId))],[7,8]);
 });
 test('ODM classification requires explicit source and rejects invalid base SKU',async()=>{
   const standard=sku(2,1,'XT5-STD');standard.catalogSource='PRICE_LIST';

@@ -50,7 +50,7 @@ export async function ProductPerformanceBuilder({params,actor,saved}:{params:Par
         {select('territory','Territory',territories.map(x=>({value:x.code,label:x.name})))}
         {select('strategicAccount','Strategic Account',[{value:'true',label:'Yes'},{value:'false',label:'No'}])}
         {select('projectId','Project',projects.map(x=>({value:x.id,label:x.name})))}
-        {select('priceSource','Pricing Source',[{value:'MANUAL',label:'Manual'},{value:'CATALOG',label:'Catalog'},{value:'PRICE_EXCEPTION',label:'Price Exception'}])}
+        {select('priceSource','Pricing Source',[{value:'MANUAL',label:'Manual'},{value:'CATALOG',label:'Catalog'},{value:'PRICE_EXCEPTION',label:'Price Exception'},{value:'ODM_CUSTOMER',label:'ODM Customer'}])}
         {select('currency','Currency',currencies.map(x=>({value:x.code,label:x.code})),'All currencies')}
         <ReportCloseDateFields initialChoice={between?'CUSTOM':preset||'ANY'} initialFrom={between?.from} initialTo={between?.to}/>
       </div></fieldset>

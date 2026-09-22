@@ -7,20 +7,22 @@ import { friendlyError } from "@/lib/crm-validation";
 import { requireMutation } from '@/lib/current-user';
 import { DuplicateSkuError, parseSkuMetadataForm, saveSkuMetadata } from '@/lib/odm-skus';
 export type ProductSubmittedValues = {
-  name: string; categoryId: string; sku: string; catalogSource: string; active: string;
+  name: string; categoryId: string; sku: string; description: string; catalogSource: string; active: string;
   odmSubtype: string; baseSkuId: string; baseSkuLabel: string;
   odmCustomerAccountIds: string[]; odmCustomerNames: string[]; odmDescription: string;
+  odmPriceRows: Record<string, string[]>;
 };
 export type FormState = { errors: Record<string, string>; message?: string; existingSku?: { href: string; label: string }; values?: ProductSubmittedValues };
 function submittedProductValues(form: FormData): ProductSubmittedValues {
   const value = (key: string) => String(form.get(key) ?? '');
   return {
-    name: value('name'), categoryId: value('categoryId'), sku: value('sku'),
+    name: value('name'), categoryId: value('categoryId'), sku: value('sku') || value('partNumber'), description: value('description'),
     catalogSource: value('catalogSource'), active: value('active'),
     odmSubtype: value('odmSubtype'), baseSkuId: value('baseSkuId'), baseSkuLabel: value('baseSkuLabel'),
     odmCustomerAccountIds: form.getAll('odmCustomerAccountIds').map(String),
     odmCustomerNames: form.getAll('odmCustomerNames').map(String),
     odmDescription: value('odmDescription'),
+    odmPriceRows: Object.fromEntries(['odmPriceAccountId','odmCustomerPrice','odmPreviousPrice','odmCurrencyCode','odmTariffPercent','odmTariffAmount','odmEffectiveDate','odmPricingNotes'].map(key => [key, form.getAll(key).map(String)])),
   };
 }
 export async function submitProduct(id: number | null, _state: FormState, form: FormData): Promise<FormState> {
@@ -45,13 +47,14 @@ export async function changeProductState(id: number, state: "active" | "inactive
 }
 export async function submitProductSku(productId: number, skuId: number | null, _state: FormState, form: FormData): Promise<FormState> {
   await requireMutation('products.write');
+  const values = submittedProductValues(form);
   let savedId: number;
   try {
     const saved = await saveSkuMetadata(prisma, { productId, skuId: skuId ?? undefined, ...parseSkuMetadataForm(form) });
     savedId = saved.id;
   } catch (error) {
-    if (error instanceof DuplicateSkuError) return { errors: {}, message: `${error.message}${error.existing.catalogSource === 'ODM' ? ' Edit the existing ODM SKU to add customer associations.' : ''}`, existingSku: { href: `/products/${error.existing.productId}/edit#sku-${error.existing.id}`, label: `${error.existing.productName} / ${error.existing.partNumber}` } };
-    return { errors: {}, message: friendlyError(error, 'SKU could not be saved.') };
+    if (error instanceof DuplicateSkuError) return { errors: {}, message: `${error.message}${error.existing.catalogSource === 'ODM' ? ' Edit the existing ODM SKU to add customer associations.' : ''}`, existingSku: { href: `/products/${error.existing.productId}/edit#sku-${error.existing.id}`, label: `${error.existing.productName} / ${error.existing.partNumber}` }, values };
+    return { errors: {}, message: friendlyError(error, 'SKU could not be saved.'), values };
   }
   revalidatePath('/products'); revalidatePath(`/products/${productId}/edit`);
   redirect(`/products/${productId}/edit#sku-${savedId}`);

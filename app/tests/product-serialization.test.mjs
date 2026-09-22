@@ -17,7 +17,7 @@ test('existing Product SKU form props contain exact decimal strings and plain da
   const sku = {
     id: 2, partNumber: 'DX220-STD', description: null, active: true,
     catalogSource: 'ODM', odmSubtype: 'CUSTOMER_SPECIFIC', odmDescription: null,
-    odmCustomers: [{ account: { id: 5, name: 'Example' }, createdAt }],
+    odmCustomers: [{ account: { id: 5, name: 'Example' }, prices: [], createdAt }],
     baseSku: { id: 1, partNumber: 'DX220', product: { name: 'DX220', createdAt }, createdAt },
     createdAt, prices: [
       { id: 3, tier: 'STANDARD', currencyCode: 'USD', amount: new Prisma.Decimal('9999999999.99'), createdAt },

@@ -81,20 +81,33 @@ test('Opportunity form parsing retains explicit PE provenance through a manual u
   assert.equal(parsed.value.lines[0].priceExceptionLineId, 102);
 });
 
-function saveDb({ existingLine = null, selectedLines = [], catalogPrices = [] } = {}) {
+function saveDb({ existingLine = null, selectedLines = [], catalogPrices = [], odmPrices = [] } = {}) {
   const writes = [];
   const tx = {
     opportunity: { findUnique: async () => existingLine ? { id: 5, archivedAt: null, stageId: 1, projects: [] } : null, create: async () => ({ id: 5 }), update: async () => ({}) },
     opportunityProduct: { findMany: async () => existingLine ? [existingLine] : [], create: async ({ data }) => { writes.push(data); }, update: async ({ data }) => { writes.push(data); } },
     salesStage: { findUnique: async () => ({ id: 1, active: true }) }, currency: { findUnique: async () => ({ code: 'USD', active: true }) },
     user: { findUnique: async () => null }, account: { findMany: async () => [{ id: 7 }] }, product: { findMany: async () => [{ id: 3 }] }, project: { findMany: async () => [] },
-    productSku: { findMany: async () => [{ id: 9, productId: 3, active: true }] }, productPrice: { findMany: async () => catalogPrices }, priceExceptionLine: { findMany: async () => selectedLines },
+    productSku: { findMany: async () => [{ id: 9, productId: 3, active: true }] }, productPrice: { findMany: async () => catalogPrices }, priceExceptionLine: { findMany: async () => selectedLines }, productSkuOdmCustomerPrice: { findMany: async () => odmPrices },
     opportunityProject: { delete: async () => ({}), create: async () => ({}) }, opportunityAccount: { findMany: async () => [], delete: async () => ({}), upsert: async () => ({}) }, opportunityAccountRole: { deleteMany: async () => ({}), create: async () => ({}) },
   };
   return { writes, client: { $transaction: async fn => fn(tx) } };
 }
 const input = lineInput => ({ name: 'Deal', description: null, ownerId: null, projectIds: [], stageId: 1, expectedCloseDate: null, probability: null, forecastCategory: null, currencyCode: 'USD', participants: [{ accountId: 7, roles: ['END_USER'] }], lines: [lineInput] });
 const selectedLine = (overrides = {}) => ({ id: 102, productSkuId: 9, approvedUnitPrice: new Prisma.Decimal('189.00'), currencyCode: 'USD', sourceQuantity: new Prisma.Decimal('1000'), sourceQuantityRaw: '1000', sourceUnit: null, priceException: parent(), ...overrides });
+
+test('ODM customer source snapshots final price and preserves it after terms change',async()=>{
+  const selected={id:201,skuId:9,accountId:7,customerPrice:new Prisma.Decimal('100'),tariffPercent:new Prisma.Decimal('10'),tariffAmount:new Prisma.Decimal('10'),finalUnitPrice:new Prisma.Decimal('110'),currencyCode:'USD',effectiveDate:new Date('2026-09-01'),archivedAt:null,odmCustomer:{archivedAt:null,sku:{catalogSource:'ODM',odmSubtype:'CUSTOMER_SPECIFIC'}}};
+  const line={productId:3,skuId:9,quantity:1,price:'110.00',priceSource:'ODM_CUSTOMER',catalogPriceTier:null,priceExceptionLineId:null,odmCustomerPriceId:201,odmCustomerAccountId:7};
+  const created=saveDb({odmPrices:[selected]});await saveOpportunity(created.client,input(line));
+  assert.equal(created.writes[0].odmCustomerBasePrice.toString(),'100');assert.equal(created.writes[0].odmCustomerTariffAmount.toString(),'10');assert.equal(created.writes[0].odmCustomerFinalUnitPrice.toString(),'110');
+  const existing={...created.writes[0],id:55,opportunityId:5,archivedAt:null,estimatedUnitPrice:new Prisma.Decimal('110')};
+  const changed={...selected,customerPrice:new Prisma.Decimal('120'),tariffPercent:new Prisma.Decimal('25'),tariffAmount:new Prisma.Decimal('30'),finalUnitPrice:new Prisma.Decimal('150'),archivedAt:new Date()};
+  const historical=saveDb({existingLine:existing,odmPrices:[changed]});await saveOpportunity(historical.client,input({...line,id:55}),5);
+  assert.equal(historical.writes[0].odmCustomerFinalUnitPrice.toString(),'110');
+  await assert.rejects(saveOpportunity(saveDb({odmPrices:[selected]}).client,input({...line,price:'109.00'})),/must equal/);
+  await assert.rejects(saveOpportunity(saveDb({odmPrices:[{...selected,accountId:8}]}).client,input({...line,odmCustomerAccountId:8})),/participating Account/);
+});
 
 test('saving an eligible PE price or manual override writes durable relationship and immutable MOQ snapshot', async () => {
   for (const opportunityPrice of ['189.00', '185.00']) {

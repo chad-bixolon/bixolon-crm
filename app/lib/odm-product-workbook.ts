@@ -26,7 +26,7 @@ const price=(value:string|undefined)=>{
 const percent=(value:string|undefined)=>{
   const raw=flat(value);
   if (!raw) return '';
-  try { return `${new Prisma.Decimal(raw).mul(100).toDecimalPlaces(2).toString()}%`; }
+  try { return `${new Prisma.Decimal(raw).mul(100).toDecimalPlaces(4,Prisma.Decimal.ROUND_HALF_UP).toString()}%`; }
   catch { return raw; }
 };
 
@@ -53,7 +53,8 @@ export const mapOdmProductWorkbookSheet:XlsxTransform=(sheet,rows)=>{
       const values:Record<string,string>={model:part,part_number:part,odm_customer:flat(row[1]),odm_description:description,
         odm_source_format:'ODM_CUSTOMER_PRICING',odm_source_sheet:sheet,odm_source_row:String(index+1),odm_source_part_index:String(partIndex+1),odm_source_part_count:String(parts.length),odm_source_customer_cell:flat(row[1]),odm_source_part_number:rawPart,
         odm_source_old_price:price(row[3]),odm_source_prior_price:price(row[4]),odm_source_new_price:price(row[5]),
-        odm_source_tariff_percent:percent(row[6]),odm_source_tariff_amount:price(row[7]),odm_source_note:note};
+        odm_source_tariff_percent:percent(row[6]),odm_source_tariff_amount:price(row[7]),odm_source_note:note,
+        odm_source_old_price_raw:flat(row[3]),odm_source_prior_price_raw:flat(row[4]),odm_source_new_price_raw:flat(row[5]),odm_source_tariff_percent_raw:flat(row[6]),odm_source_tariff_amount_raw:flat(row[7])};
       mapped.push([...productImportHeaders,...odmSourceHeaders].map(key=>values[key] ?? ''));
     }
   }

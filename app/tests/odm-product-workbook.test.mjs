@@ -121,7 +121,7 @@ test('real workbook requires classification, keeps complex labels for mapping, a
   assert.equal(mapped.items.find(item=>item.line===5).after.odmCustomerAccountId,undefined);
   assert.equal(mapped.items.find(item=>item.line===5).after.catalogSource,'ODM');
   assert.equal(mapped.items.filter(item=>item.classes.includes('PRICE CHANGE')).length,0);
-  assert.match(mapped.notices.join(' '),/No catalog prices are written/);
+  assert.match(mapped.notices.join(' '),/never written to generic catalog tiers/);
   assert.doesNotMatch(mapped.items.find(item=>item.line===45).messages.join(' '),/Duplicate part number/);
   assert.doesNotMatch(mapped.items.find(item=>item.line===47).messages.join(' '),/Duplicate part number/);
 });
@@ -187,7 +187,8 @@ test('LF, CRLF, CR, blanks, and whitespace expand into independent candidates wi
   }
 });
 test('classification and import decisions remain per SKU and repeats consolidate after expansion',async()=>{
-  const {csv}=syntheticCsv('SRP-S300LOEK/RDU\nSRP-S300LOEK/NSU','NCR',[['','UPS','SRP-S300LOEK/RDU','','','250']]);
+  const {csv:rawCsv}=syntheticCsv('SRP-S300LOEK/RDU\nSRP-S300LOEK/NSU','NCR',[['','UPS','SRP-S300LOEK/RDU','','','250']]);
+  const csv=rawCsv.replaceAll('15.00','16.20');
   const review={subtypes:{'SRP-S300LOEK/RDU':'CUSTOMER_SPECIFIC','SRP-S300LOEK/NSU':'SPECIAL_CONFIGURATION','SINGLE-SKU':'OTHER'}};
   const plan=await planProductImport(fakeDb([{id:1,name:'NCR'},{id:2,name:'UPS'}]),csv,undefined,review);
   const rdu=plan.items.filter(item=>item.after.partNumber==='SRP-S300LOEK/RDU');
@@ -210,10 +211,22 @@ test('classification and import decisions remain per SKU and repeats consolidate
     product:{findMany:async()=>[],create:async()=>({id:createdSkus.length+1})},
     productSku:{create:async({data})=>{createdSkus.push(data);return {id:createdSkus.length}}},
     productSkuOdmCustomer:{findUnique:async()=>null,upsert:async({create})=>{links.push(create)}},
+    productSkuOdmCustomerPrice:{findFirst:async()=>null,create:async()=>{}},
   })};
   await applyProductImport(client,csv,plan.digest,undefined,review);
   assert.equal(createdSkus.filter(sku=>sku.partNumber==='SRP-S300LOEK/RDU').length,1);
   assert.deepEqual(links.map(link=>link.accountId),[1,2]);
+});
+test('Gary Old/New and tariff columns produce reviewed customer pricing and flag inconsistent source math',async()=>{
+  const {csv:raw}=syntheticCsv('ODM-PRICED','UPS');
+  const review={subtypes:{'ODM-PRICED':'CUSTOMER_SPECIFIC','SINGLE-SKU':'OTHER'}};
+  const inconsistent=await planProductImport(fakeDb([{id:7,name:'UPS'}]),raw,undefined,review);
+  assert.match(inconsistent.items[0].messages.join(' '),/Tariff Amount disagrees/);
+  assert.equal(inconsistent.items[0].odmPricing,undefined);
+  const valid=await planProductImport(fakeDb([{id:7,name:'UPS'}]),raw.replace('15.00','16.20'),undefined,review);
+  const price=valid.items[0].odmPricing;
+  assert.deepEqual([price.previousPrice,price.customerPrice,price.tariffPercent,price.tariffAmount,price.finalUnitPrice],['100.00','120.00','13.5000','16.20','136.20']);
+  assert.equal(valid.items[0].after.odmCustomerAccountId,7);
 });
 test('single-line parts stay unchanged and ambiguous multiline cells remain blocked',async()=>{
   const single=syntheticCsv('SINGLE-SKU').rows.find(row=>row.values.odm_source_row==='3');

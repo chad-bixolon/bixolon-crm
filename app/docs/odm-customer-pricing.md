@@ -1,0 +1,11 @@
+# Customer-Specific ODM pricing
+
+Pricing belongs to a `ProductSkuOdmCustomer` association. Each commercial revision is a `ProductSkuOdmCustomerPrice` row. A partial unique index permits one unarchived revision per SKU and Account. Editing terms archives the old revision and inserts a new one; removing an Account archives its association and active price. Existing Opportunity snapshots retain their values and the price revision remains referenced.
+
+`customerPrice` is the active base price; `previousPrice` is reference history only. `tariffPercent` is stored as a percentage with four decimal places. When the amount is missing, tariff amount is `customerPrice × tariffPercent / 100`, rounded half up to two decimal places. When the percent is missing and base price is positive, it is `tariffAmount / customerPrice × 100`, rounded half up to four decimal places. With neither, both tariff fields are zero. Final Unit Price is base price plus tariff amount, with both money fields stored to two decimal places.
+
+If a source supplies both tariff fields, the rounded calculation may differ from the supplied amount by at most $0.01. The supplied amount remains authoritative within that tolerance. A larger difference blocks the pricing row for review. Workbook `-` values remain unresolved source inputs; a blank or unavailable New Price cannot create an active price. The workbook importer writes customer pricing only after Customer-Specific classification and Account resolution. Its values never enter generic catalog tiers or Price Exceptions.
+
+Gary's workbook can contain fractional cents from Excel formulas. The importer rounds workbook money values half up to cents and tariff percentages half up to four decimal places. It keeps the exact cell text in provenance alongside those operational values and warns when New Price changed by more than Excel's tiny binary representation noise.
+
+Opportunity lines with `ODM_CUSTOMER` snapshot the Account, base price, tariff percent, tariff amount, final price, currency, and effective date. Editing that Opportunity keeps the snapshot if the same price revision remains selected, even when the current revision has since changed or been archived. Selecting a different revision creates a new snapshot. The Opportunity Unit Price must equal the selected final price; a different amount uses Manual pricing.

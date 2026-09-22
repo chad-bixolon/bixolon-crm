@@ -28,6 +28,7 @@ Module._load = function(request, parent, isMain) {
   if (request === '@/lib/odm-skus') return require(path.join(root, 'lib/odm-skus.ts'));
   if (request === '@/lib/product-labels') return require(path.join(root, 'lib/product-labels.ts'));
   if (request === '@/lib/odm-customer-selection') return require(path.join(root, 'lib/odm-customer-selection.ts'));
+  if (request === '@/lib/odm-customer-pricing') return require(path.join(root, 'lib/odm-customer-pricing.ts'));
   return originalLoad.call(this, request, parent, isMain);
 };
 const { submitProduct } = require(path.join(root, 'app/products/actions.ts'));
@@ -52,7 +53,8 @@ const expectedValues = {
   name: 'Custom Printer', categoryId: '5', sku: 'ODM-NEW', catalogSource: 'ODM', active: 'false',
   odmSubtype: 'CUSTOMER_SPECIFIC', baseSkuId: '20', baseSkuLabel: 'BASE-20 · Base Printer',
   odmCustomerAccountIds: ['7', '8'], odmCustomerNames: ['Alpha', 'Beta'],
-  odmDescription: 'RFID customization',
+  odmDescription: 'RFID customization', description: '',
+  odmPriceRows: Object.fromEntries(['odmPriceAccountId','odmCustomerPrice','odmPreviousPrice','odmCurrencyCode','odmTariffPercent','odmTariffAmount','odmEffectiveDate','odmPricingNotes'].map(key=>[key,[]])),
 };
 
 test('failed ODM Product validation returns every submitted form value without redirecting', async () => {

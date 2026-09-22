@@ -119,6 +119,12 @@ enum OpportunityProductPriceSource {
   MANUAL
   CATALOG
   PRICE_EXCEPTION
+  ODM_CUSTOMER
+}
+
+enum OdmCustomerPriceSource {
+  MANUAL
+  GARY_WORKBOOK
 }
 
 enum ReportType {
@@ -561,11 +567,39 @@ model ProductSkuOdmCustomer {
   sourceCustomerName String?
   sku                ProductSku @relation(fields: [skuId], references: [id], onDelete: Restrict)
   account            Account    @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  prices             ProductSkuOdmCustomerPrice[]
+  archivedAt         DateTime?
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
   @@id([skuId, accountId])
   @@index([accountId])
+}
+
+/// Commercial revisions belong to one SKU/Account association. Exactly one unarchived
+/// revision is enforced by a partial unique index in the migration.
+model ProductSkuOdmCustomerPrice {
+  id                 Int @id @default(autoincrement())
+  skuId              Int
+  accountId          Int
+  odmCustomer        ProductSkuOdmCustomer @relation(fields: [skuId, accountId], references: [skuId, accountId], onDelete: Restrict)
+  currencyCode       String @db.VarChar(3)
+  customerPrice      Decimal @db.Decimal(12, 2)
+  previousPrice      Decimal? @db.Decimal(12, 2)
+  tariffPercent      Decimal @db.Decimal(9, 4)
+  tariffAmount       Decimal @db.Decimal(12, 2)
+  finalUnitPrice     Decimal @db.Decimal(12, 2)
+  effectiveDate      DateTime? @db.Date
+  notes              String?
+  sourceType         OdmCustomerPriceSource
+  sourceMetadata     Json?
+  archivedAt         DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  opportunityProducts OpportunityProduct[]
+
+  @@index([skuId, accountId, archivedAt])
+  @@index([accountId, currencyCode, archivedAt])
 }
 
 /// A finalized commercial price exception imported from an operational source.
@@ -703,6 +737,15 @@ model OpportunityProduct {
   priceExceptionUnitPrice    Decimal?                      @db.Decimal(12, 2)
   priceExceptionCurrencyCode String?                       @db.VarChar(3)
   priceExceptionSourceQty    String?
+  odmCustomerPriceId         Int?
+  odmCustomerPrice           ProductSkuOdmCustomerPrice? @relation(fields: [odmCustomerPriceId], references: [id], onDelete: Restrict)
+  odmCustomerAccountId       Int?
+  odmCustomerBasePrice       Decimal? @db.Decimal(12, 2)
+  odmCustomerTariffPercent   Decimal? @db.Decimal(9, 4)
+  odmCustomerTariffAmount    Decimal? @db.Decimal(12, 2)
+  odmCustomerFinalUnitPrice  Decimal? @db.Decimal(12, 2)
+  odmCustomerCurrencyCode    String? @db.VarChar(3)
+  odmCustomerEffectiveDate   DateTime? @db.Date
   archivedAt                 DateTime?
   createdAt                  DateTime                      @default(now())
   updatedAt                  DateTime                      @updatedAt
@@ -712,6 +755,8 @@ model OpportunityProduct {
   @@index([skuId])
   @@index([priceSource])
   @@index([priceExceptionLineId])
+  @@index([odmCustomerPriceId])
+  @@index([odmCustomerAccountId])
 }
 
 model Task {

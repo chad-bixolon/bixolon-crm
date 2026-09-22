@@ -34,7 +34,7 @@ export async function searchCatalog(client: PrismaClient, query: string, categor
     { partNumber: { contains: query, mode: "insensitive" } },
     { description: { contains: query, mode: "insensitive" } },
     { odmDescription: { contains: query, mode: "insensitive" } },
-    { odmCustomers: { some: { account: { name: { contains: query, mode: "insensitive" } } } } },
+    { odmCustomers: { some: { archivedAt: null, account: { name: { contains: query, mode: "insensitive" } } } } },
   ];
   const candidates = await client.productSku.findMany({ where, select: {
     id: true, partNumber: true, description: true, product: { select: { name: true, sku: true } },
@@ -42,7 +42,7 @@ export async function searchCatalog(client: PrismaClient, query: string, categor
   const ids = rankCatalogResults(candidates, query).map(item => item.id);
   if (!ids.length) return [];
   const rows = await client.productSku.findMany({ where: { id: { in: ids } }, select: {
-    id: true, productId: true, partNumber: true, description: true, catalogSource: true, odmSubtype: true, odmDescription: true, odmCustomers: { select: { accountId: true, account: { select: { name: true } } } },
+    id: true, productId: true, partNumber: true, description: true, catalogSource: true, odmSubtype: true, odmDescription: true, odmCustomers: { where: { archivedAt: null }, select: { accountId: true, account: { select: { name: true } }, prices: { where: { archivedAt: null, currencyCode }, select: { id: true, currencyCode: true, customerPrice: true, tariffPercent: true, tariffAmount: true, finalUnitPrice: true, effectiveDate: true } } } },
     product: { select: { name: true, categoryId: true } },
     prices: { where: { currencyCode }, select: { tier: true, currencyCode: true, amount: true } },
   } });
@@ -50,7 +50,7 @@ export async function searchCatalog(client: PrismaClient, query: string, categor
   return ids.flatMap(id => {
     const row = byId.get(id);
     return row ? [{ id: row.id, productId: row.productId, productName: row.product.name, categoryId: row.product.categoryId,
-      partNumber: row.partNumber, description: row.description, catalogSource: row.catalogSource, odmSubtype: row.odmSubtype, odmCustomers: row.odmCustomers.map(link => ({ accountId: link.accountId, name: link.account.name })), odmDescription: row.odmDescription,
+      partNumber: row.partNumber, description: row.description, catalogSource: row.catalogSource, odmSubtype: row.odmSubtype, odmCustomers: row.odmCustomers.map(link => ({ accountId: link.accountId, name: link.account.name, prices: link.prices.map(price => ({ id: price.id, currencyCode: price.currencyCode, customerPrice: price.customerPrice.toFixed(2), tariffPercent: price.tariffPercent.toString(), tariffAmount: price.tariffAmount.toFixed(2), finalUnitPrice: price.finalUnitPrice.toFixed(2), effectiveDate: price.effectiveDate?.toISOString().slice(0,10) ?? null })) })), odmDescription: row.odmDescription,
       prices: row.prices.map(price => ({ tier: price.tier, currencyCode: price.currencyCode, amount: price.amount.toFixed(2) })) }] : [];
   });
 }

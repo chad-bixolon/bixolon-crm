@@ -1,11 +1,13 @@
 import { ProductCatalogSource, OdmCustomizationSubtype, type PrismaClient, type Prisma } from '@prisma/client';
 import { normalizePartNumber, normalizeAccountName } from './product-import';
+import { calculateOdmCustomerPrice, parseOdmPriceForm, type SubmittedOdmPrice } from './odm-customer-pricing';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 export type SkuMetadataInput = {
   productId: number; skuId?: number; partNumber: string; description: string | null; active: boolean;
   catalogSource: ProductCatalogSource | null; odmCustomerAccountIds: number[];
   odmSubtype: OdmCustomizationSubtype | null; baseSkuId: number | null; odmDescription: string | null;
+  odmPrices?: SubmittedOdmPrice[];
 };
 
 export function parseSkuMetadataForm(form: FormData, partNumberField = 'partNumber'): Omit<SkuMetadataInput, 'productId' | 'skuId'> {
@@ -24,6 +26,7 @@ export function parseSkuMetadataForm(form: FormData, partNumberField = 'partNumb
     odmCustomerAccountIds: catalogSource === 'ODM' ? form.getAll('odmCustomerAccountIds').map(value => Number(value)) : [],
     baseSkuId: catalogSource === 'ODM' ? baseSkuId : null,
     odmDescription: catalogSource === 'ODM' ? String(form.get('odmDescription') ?? '').trim() || null : null,
+    odmPrices: catalogSource === 'ODM' ? parseOdmPriceForm(form) : [],
   };
 }
 
@@ -63,12 +66,15 @@ export async function saveSkuMetadataInTransaction(tx: Prisma.TransactionClient,
     if (current?.catalogSource === 'ODM' && input.catalogSource !== 'ODM') throw new Error('Existing ODM SKUs cannot change Catalog Source because their classification and customer history must be preserved.');
     if (input.catalogSource !== 'ODM' && accountIds.length) throw new Error('ODM Customer fields require Catalog Source ODM.');
     if (input.catalogSource !== 'ODM' && (input.baseSkuId || input.odmDescription)) throw new Error('Base SKU and description require Catalog Source ODM.');
-    const retainedIds = new Set(current?.odmCustomers.map(link => link.accountId) ?? []);
+    const retainedIds = new Set(current?.odmCustomers.filter(link => !link.archivedAt).map(link => link.accountId) ?? []);
     const newIds = accountIds.filter(id => !retainedIds.has(id));
     if (accountIds.some(id => !Number.isSafeInteger(id) || id <= 0) || await tx.account.count({ where: { id: { in: newIds }, status: 'ACTIVE', archivedAt: null } }) !== newIds.length) throw new Error('ODM Customer must be an existing active Account.');
     const relevantChange = !current || current.catalogSource !== 'ODM' || current.odmSubtype !== input.odmSubtype || current.baseSkuId !== input.baseSkuId || current.odmDescription !== input.odmDescription || accountIds.length !== retainedIds.size || accountIds.some(id => !retainedIds.has(id));
     if (input.odmSubtype === 'CUSTOMER_SPECIFIC' && !accountIds.length && relevantChange) throw new Error('Customer-specific ODM requires at least one active Account.');
     if (input.odmSubtype === 'CUSTOMER_SPECIFIC' && accountIds.length && relevantChange && await tx.account.count({ where: { id: { in: accountIds }, status: 'ACTIVE', archivedAt: null } }) === 0) throw new Error('Customer-specific ODM requires at least one active Account.');
+    if (input.odmPrices?.length && (input.catalogSource !== 'ODM' || input.odmSubtype !== 'CUSTOMER_SPECIFIC')) throw new Error('Customer pricing requires a Customer-Specific ODM SKU.');
+    if (input.odmPrices?.some(price => !accountIds.includes(price.accountId))) throw new Error('ODM pricing Account must be associated with this SKU.');
+    const calculatedPrices = input.odmPrices?.map(price => ({ accountId: price.accountId, ...calculateOdmCustomerPrice(price) })) ?? [];
     if (input.baseSkuId) {
       if (input.baseSkuId === input.skuId) throw new Error('A SKU cannot be its own Base SKU.');
       const base = await tx.productSku.findUnique({ where: { id: input.baseSkuId }, select: { catalogSource: true } });
@@ -82,10 +88,19 @@ export async function saveSkuMetadataInTransaction(tx: Prisma.TransactionClient,
       odmDescription: input.catalogSource === 'ODM' ? input.odmDescription : null,
       odmCustomerSourceName: input.catalogSource === 'ODM' ? current?.odmCustomerSourceName ?? null : null };
     if (current) {
-      await tx.productSkuOdmCustomer.deleteMany({ where: { skuId: current.id, accountId: { notIn: accountIds } } });
+      await tx.productSkuOdmCustomer.updateMany({ where: { skuId: current.id, accountId: { notIn: accountIds }, archivedAt: null }, data: { archivedAt: new Date() } });
+      await tx.productSkuOdmCustomerPrice.updateMany({ where: { skuId: current.id, accountId: { notIn: accountIds }, archivedAt: null }, data: { archivedAt: new Date() } });
+      if (input.odmSubtype !== 'CUSTOMER_SPECIFIC') await tx.productSkuOdmCustomerPrice.updateMany({ where: { skuId: current.id, archivedAt: null }, data: { archivedAt: new Date() } });
       await tx.productSku.update({ where: { id: current.id }, data });
     }
     const sku = current ?? await tx.productSku.create({ data: { ...data, productId: input.productId } });
-    for (const accountId of accountIds) await tx.productSkuOdmCustomer.upsert({ where: { skuId_accountId: { skuId: sku.id, accountId } }, create: { skuId: sku.id, accountId }, update: {} });
+    for (const accountId of accountIds) await tx.productSkuOdmCustomer.upsert({ where: { skuId_accountId: { skuId: sku.id, accountId } }, create: { skuId: sku.id, accountId }, update: { archivedAt: null } });
+    for (const price of calculatedPrices) {
+      const active = await tx.productSkuOdmCustomerPrice.findFirst({ where: { skuId: sku.id, accountId: price.accountId, archivedAt: null } });
+      const { accountId, ...terms } = price;
+      if (active && active.currencyCode === terms.currencyCode && active.customerPrice.equals(terms.customerPrice) && (active.previousPrice?.toFixed(2) ?? null) === terms.previousPrice && active.tariffPercent.equals(terms.tariffPercent) && active.tariffAmount.equals(terms.tariffAmount) && active.finalUnitPrice.equals(terms.finalUnitPrice) && (active.effectiveDate?.toISOString().slice(0,10) ?? null) === (terms.effectiveDate?.toISOString().slice(0,10) ?? null) && active.notes === terms.notes) continue;
+      if (active) await tx.productSkuOdmCustomerPrice.update({ where: { id: active.id }, data: { archivedAt: new Date() } });
+      await tx.productSkuOdmCustomerPrice.create({ data: { skuId: sku.id, accountId, ...terms, sourceType: 'MANUAL' } });
+    }
     return sku;
 }

@@ -1,7 +1,7 @@
 import type { ForecastCategory, OpportunityPartyRole, OpportunityProductPriceSource, ProductPriceTier } from "@prisma/client";
 
 export type ParticipantDraft = { accountId: number; roles: OpportunityPartyRole[] };
-export type LineDraft = { id: number; productId: number; skuId?: number | null; quantity: string; price: string; priceSource: OpportunityProductPriceSource; catalogPriceTier: ProductPriceTier | null; priceExceptionLineId: number | null; priceExceptionCode: string | null; priceExceptionUnitPrice: string | null; priceExceptionCurrencyCode: string | null; priceExceptionSourceQty: string | null; priceExceptionAccountIds: number[] };
+export type LineDraft = { id: number; productId: number; skuId?: number | null; quantity: string; price: string; priceSource: OpportunityProductPriceSource; catalogPriceTier: ProductPriceTier | null; priceExceptionLineId: number | null; priceExceptionCode: string | null; priceExceptionUnitPrice: string | null; priceExceptionCurrencyCode: string | null; priceExceptionSourceQty: string | null; priceExceptionAccountIds: number[]; odmCustomerPriceId?: number | null; odmCustomerAccountId?: number | null; odmCustomerBasePrice?: string | null; odmCustomerTariffPercent?: string | null; odmCustomerTariffAmount?: string | null; odmCustomerFinalUnitPrice?: string | null };
 export type OpportunityDraft = {
   name: string; description: string; competitorId: string; currentProductBeingUsed: string; customerPainPoints: string; ownerId: string; stageId: string; expectedCloseDate: string;
   probability: string; forecastCategory: ForecastCategory | ""; currencyCode: string; projectIds: number[];
@@ -10,7 +10,7 @@ export type OpportunityDraft = {
 type DraftStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 const forecastCategories = ["OMITTED", "PIPELINE", "BEST_CASE", "COMMIT", "CLOSED"];
 const partyRoles = ["END_USER", "VAR_RESELLER", "DISTRIBUTOR", "ISV_PARTNER", "OEM", "OTHER", "MEDIA_PARTNER", "SERVICE_PARTNER"];
-const priceSources = ["MANUAL", "CATALOG", "PRICE_EXCEPTION"];
+const priceSources = ["MANUAL", "CATALOG", "PRICE_EXCEPTION", "ODM_CUSTOMER"];
 const catalogTiers = ["STANDARD", "MSRP", "RESELLER", "DISTRIBUTOR"];
 const isId = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 const isLineId = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
@@ -49,6 +49,8 @@ export function readDraft(raw: string | null, fallback: OpportunityDraft): Oppor
       if (line.catalogPriceTier !== null && (typeof line.catalogPriceTier !== "string" || !catalogTiers.includes(line.catalogPriceTier))) return fallback;
       if (line.priceExceptionLineId !== null && !isId(line.priceExceptionLineId)) return fallback;
       if (!Array.isArray(line.priceExceptionAccountIds) || !line.priceExceptionAccountIds.every(isId)) return fallback;
+      if (line.odmCustomerPriceId != null && !isId(line.odmCustomerPriceId)) return fallback;
+      if (line.odmCustomerAccountId != null && !isId(line.odmCustomerAccountId)) return fallback;
       for (const key of ["priceExceptionCode", "priceExceptionUnitPrice", "priceExceptionCurrencyCode", "priceExceptionSourceQty"]) if (line[key] !== null && typeof line[key] !== "string") return fallback;
     }
     for (const key of ["competitorId", "currentProductBeingUsed", "customerPainPoints"] as const) {

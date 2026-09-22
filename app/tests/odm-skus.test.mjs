@@ -8,12 +8,13 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText, filename);
 const require = Module.createRequire(import.meta.url);
+const { Prisma } = require('@prisma/client');
 const { saveSkuMetadata, parseSkuMetadataForm, DuplicateSkuError } = require(path.join(root,'lib/odm-skus.ts'));
 function fixture() {
   const calls=[];
   const rows=new Map([[1,{id:1,productId:10,catalogSource:'PRICE_LIST',odmCustomers:[]}],[2,{id:2,productId:10,catalogSource:'ODM',odmSubtype:'CUSTOMER_SPECIFIC',baseSkuId:null,odmDescription:null,odmCustomers:[]}]]);
-  const tx={product:{findUnique:async()=>({id:10,archivedAt:null})},productSku:{findUnique:async({where})=>where.normalizedPartNumber?rows.get('duplicate')??null:rows.get(where.id)??null,count:async()=>0,create:async({data})=>{calls.push(data);return {id:3,...data};},update:async({data})=>{calls.push(data);return {id:2,...data};}},account:{count:async({where})=>where.id.in.filter(id=>[7,8].includes(id)).length},productSkuOdmCustomer:{deleteMany:async args=>{calls.push({delete:args.where});},upsert:async({create})=>{calls.push(create)}}};
-  return {calls,rows,db:{$transaction:async callback=>callback(tx)}};
+  const tx={product:{findUnique:async()=>({id:10,archivedAt:null})},productSku:{findUnique:async({where})=>where.normalizedPartNumber?rows.get('duplicate')??null:rows.get(where.id)??null,count:async()=>0,create:async({data})=>{calls.push(data);return {id:3,...data};},update:async({data})=>{calls.push(data);return {id:2,...data};}},account:{count:async({where})=>where.id.in.filter(id=>[7,8].includes(id)).length},productSkuOdmCustomer:{updateMany:async args=>{calls.push({archive:args.where});},upsert:async({create})=>{calls.push(create)}},productSkuOdmCustomerPrice:{updateMany:async()=>{},findFirst:async()=>null,create:async({data})=>{calls.push({customerPrice:data})}}};
+  return {calls,rows,tx,db:{$transaction:async callback=>callback(tx)}};
 }
 const input={productId:10,partNumber:'XT5-UPS',description:null,active:true,catalogSource:'ODM',odmSubtype:'CUSTOMER_SPECIFIC',odmCustomerAccountIds:[7,8],baseSkuId:1,odmDescription:'RFID'};
 test('ODM SKU links existing Account and standard base without touching Account roles',async()=>{
@@ -66,7 +67,7 @@ test('changing Catalog Source cannot silently remove existing ODM customer links
 test('editing ODM updates customers and fields without touching prices',async()=>{
   const {db,rows,calls}=fixture();rows.get(2).odmCustomers=[{accountId:7}];
   await saveSkuMetadata(db,{...input,skuId:2,odmCustomerAccountIds:[8],baseSkuId:1,active:false});
-  assert.deepEqual(calls.find(call=>call.delete).delete.accountId.notIn,[8]);
+  assert.deepEqual(calls.find(call=>call.archive).archive.accountId.notIn,[8]);
   assert.equal(calls.find(call=>call.catalogSource==='ODM').active,false);
   assert.ok(calls.some(call=>call.accountId===8));
   assert.ok(calls.every(call=>!('prices' in call)));
@@ -75,4 +76,42 @@ test('normalized duplicate identifies the existing Product and SKU',async()=>{
   const {db,rows,calls}=fixture();rows.set('duplicate',{id:40,productId:20,partNumber:'XT5-UPS',catalogSource:'ODM',product:{name:'Printer'}});
   await assert.rejects(saveSkuMetadata(db,{...input,partNumber:' xt5-ups  '}),error=>error instanceof DuplicateSkuError&&error.existing.id===40&&error.existing.productName==='Printer');
   assert.equal(calls.length,0);
+});
+
+test('changing active ODM customer pricing archives the old revision and creates a new one in one transaction',async()=>{
+  const {db,tx,rows}=fixture();
+  rows.get(2).odmCustomers=[{accountId:7,archivedAt:null}];
+  const decimal=value=>new Prisma.Decimal(value);
+  const old={id:41,skuId:2,accountId:7,currencyCode:'USD',customerPrice:decimal('100.00'),previousPrice:null,tariffPercent:decimal('10.0000'),tariffAmount:decimal('10.00'),finalUnitPrice:decimal('110.00'),effectiveDate:null,notes:null,archivedAt:null};
+  const events=[];
+  db.$transaction=async callback=>{events.push('begin');const result=await callback(tx);events.push('commit');return result;};
+  tx.productSkuOdmCustomerPrice.findFirst=async()=>old;
+  tx.productSkuOdmCustomerPrice.update=async args=>{events.push(['archive',args]);return {...old,...args.data};};
+  tx.productSkuOdmCustomerPrice.create=async args=>{events.push(['create',args]);return {id:42,...args.data};};
+  await saveSkuMetadata(db,{...input,skuId:2,baseSkuId:null,odmDescription:null,odmCustomerAccountIds:[7],odmPrices:[{accountId:7,customerPrice:'120.00',tariffPercent:'10',currencyCode:'USD'}]});
+  assert.deepEqual(events.map(event=>Array.isArray(event)?event[0]:event),['begin','archive','create','commit']);
+  assert.deepEqual(events[1][1].where,{id:41});
+  assert.deepEqual(Object.keys(events[1][1].data),['archivedAt']);
+  assert.ok(events[1][1].data.archivedAt instanceof Date);
+  assert.equal(events[2][1].data.customerPrice,'120.00');
+  assert.equal(events[2][1].data.sourceType,'MANUAL');
+  assert.equal(old.customerPrice.toString(),'100');
+});
+
+test('re-adding an archived ODM Account reuses the SKU and Account association',async()=>{
+  const {db,tx,rows}=fixture();
+  const archived={skuId:2,accountId:7,archivedAt:new Date('2026-09-01')};
+  rows.get(2).odmCustomers=[archived];
+  let reused=false;
+  tx.productSkuOdmCustomer.upsert=async({where,create,update})=>{
+    assert.deepEqual(where,{skuId_accountId:{skuId:2,accountId:7}});
+    assert.deepEqual(update,{archivedAt:null});
+    assert.deepEqual(create,{skuId:2,accountId:7});
+    reused=true;
+    archived.archivedAt=update.archivedAt;
+    return archived;
+  };
+  await saveSkuMetadata(db,{...input,skuId:2,baseSkuId:null,odmDescription:null,odmCustomerAccountIds:[7]});
+  assert.equal(reused,true);
+  assert.equal(archived.archivedAt,null);
 });
