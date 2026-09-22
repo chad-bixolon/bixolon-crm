@@ -30,26 +30,32 @@ const percent=(value:string|undefined)=>{
   catch { return raw; }
 };
 
-/** Leaves one output row per source row so import preview line numbers remain workbook row numbers. */
+// Split only unmistakable SKU tokens. Keep an ambiguous cell intact so review blocks import.
+const skuLine=(value:string)=>/^[A-Z0-9][A-Z0-9._/-]*$/i.test(value);
+
+/** Keeps the source row number on every candidate after a multiline cell expands. */
 export const mapOdmProductWorkbookSheet:XlsxTransform=(sheet,rows)=>{
-  void sheet;
   const headerIndex=odmHeaderIndex(rows);
   if (headerIndex<0) return {error:'The worksheet does not match the supported ODM customer-pricing format.'};
   const mapped:string[][]=[[...productImportHeaders,...odmSourceHeaders]];
   for(let index=1;index<rows.length;index++) {
     const row=rows[index] ?? [];
     if(index<=headerIndex) {mapped.push([]);continue;}
-    const rawPart=(row[2] ?? '').trim();
+    const rawPart=row[2] ?? '';
     if(!rawPart && !row.some(value=>flat(value))) {mapped.push([]);continue;}
-    const external=/^(.+?)\s+\((Y\d+)\)$/i.exec(rawPart);
-    const part=external ? external[1].trim() : rawPart;
+    const lines=rawPart.split(/\r\n|\r|\n/).map(value=>value.trim()).filter(Boolean);
+    const parts=lines.length===1 ? lines : lines.length>1 && lines.every(skuLine) ? lines : [rawPart.trim()];
     const note=flat(row[8]);
-    const description=[note && !/^\$?\d+(?:\.\d+)?$/.test(note) ? note : '',external ? `Customer reference ${external[2]}` : ''].filter(Boolean).join('; ');
-    const values:Record<string,string>={model:part,part_number:part,odm_customer:flat(row[1]),odm_description:description,
-      odm_source_format:'ODM_CUSTOMER_PRICING',odm_source_row:String(index+1),odm_source_customer_cell:flat(row[1]),odm_source_part_number:rawPart,
-      odm_source_old_price:price(row[3]),odm_source_prior_price:price(row[4]),odm_source_new_price:price(row[5]),
-      odm_source_tariff_percent:percent(row[6]),odm_source_tariff_amount:price(row[7]),odm_source_note:note};
-    mapped.push([...productImportHeaders,...odmSourceHeaders].map(key=>values[key] ?? ''));
+    for(const [partIndex,candidate] of parts.entries()) {
+      const external=/^(.+?)\s+\((Y\d+)\)$/i.exec(candidate);
+      const part=external ? external[1].trim() : candidate;
+      const description=[note && !/^\$?\d+(?:\.\d+)?$/.test(note) ? note : '',external ? `Customer reference ${external[2]}` : ''].filter(Boolean).join('; ');
+      const values:Record<string,string>={model:part,part_number:part,odm_customer:flat(row[1]),odm_description:description,
+        odm_source_format:'ODM_CUSTOMER_PRICING',odm_source_sheet:sheet,odm_source_row:String(index+1),odm_source_part_index:String(partIndex+1),odm_source_part_count:String(parts.length),odm_source_customer_cell:flat(row[1]),odm_source_part_number:rawPart,
+        odm_source_old_price:price(row[3]),odm_source_prior_price:price(row[4]),odm_source_new_price:price(row[5]),
+        odm_source_tariff_percent:percent(row[6]),odm_source_tariff_amount:price(row[7]),odm_source_note:note};
+      mapped.push([...productImportHeaders,...odmSourceHeaders].map(key=>values[key] ?? ''));
+    }
   }
   return {rows:mapped};
 };

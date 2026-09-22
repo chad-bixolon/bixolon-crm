@@ -5,7 +5,7 @@ import { normalizeAccountName } from './accounts';
 export { normalizeAccountName } from './accounts';
 
 export const productImportHeaders = ['model','part_number','description','standard_price','msrp_price','reseller_price','distributor_price','currency','price_unit','active','category','catalog_source','odm_customer','base_sku','odm_description'] as const;
-export const odmSourceHeaders = ['odm_source_format','odm_source_row','odm_source_customer_cell','odm_source_part_number','odm_source_old_price','odm_source_prior_price','odm_source_new_price','odm_source_tariff_percent','odm_source_tariff_amount','odm_source_note'] as const;
+export const odmSourceHeaders = ['odm_source_format','odm_source_sheet','odm_source_row','odm_source_part_index','odm_source_part_count','odm_source_customer_cell','odm_source_part_number','odm_source_old_price','odm_source_prior_price','odm_source_new_price','odm_source_tariff_percent','odm_source_tariff_amount','odm_source_note'] as const;
 export const productImportTemplate = productImportHeaders.join(',') + '\n';
 export const normalizePartNumber = (value:string) => value.trim().replace(/\s+/g,' ').toUpperCase();
 const normalizeModel = (value:string) => value.trim().replace(/\s+/g,' ').toLowerCase();
@@ -18,7 +18,7 @@ const tierFields = [
   {header:'reseller_price',field:'resellerPrice',tier:ProductPriceTier.RESELLER},
   {header:'distributor_price',field:'distributorPrice',tier:ProductPriceTier.DISTRIBUTOR},
 ] as const;
-export type ProductImportSource = {customerCell:string;partNumber:string;oldPrice:string;priorPrice:string;newPrice:string;tariffPercent:string;tariffAmount:string;note:string};
+export type ProductImportSource = {sheet:string;customerCell:string;partNumber:string;partIndex:number;partCount:number;oldPrice:string;priorPrice:string;newPrice:string;tariffPercent:string;tariffAmount:string;note:string};
 export type ProductImportItem = {line:number;label:string;classes:string[];before:Values|null;after:Values;messages:string[];productId?:number;skuId?:number;source?:ProductImportSource};
 export type ProductImportCounts = {newProducts:number;updatedProducts:number;newSkus:number;updatedSkus:number;priceChanges:number;unchanged:number;warnings:number;errors:number};
 export type CustomerResolution = {source:string;key:string;accountId?:number;accountName?:string;status:'Matched'|'Manually Mapped'|'Needs Review'|'Unresolved';rows:number};
@@ -50,7 +50,7 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
     const partNumber=get('part_number'), key=normalizePartNumber(partNumber);
     const fromOdm=get('odm_source_format')==='ODM_CUSTOMER_PRICING';
     const lineNumber=fromOdm && /^\d+$/.test(get('odm_source_row')) ? Number(get('odm_source_row')) : row.line;
-    const source:ProductImportSource|undefined=fromOdm ? {customerCell:get('odm_source_customer_cell'),partNumber:get('odm_source_part_number'),oldPrice:get('odm_source_old_price'),priorPrice:get('odm_source_prior_price'),newPrice:get('odm_source_new_price'),tariffPercent:get('odm_source_tariff_percent'),tariffAmount:get('odm_source_tariff_amount'),note:get('odm_source_note')} : undefined;
+    const source:ProductImportSource|undefined=fromOdm ? {sheet:get('odm_source_sheet'),customerCell:get('odm_source_customer_cell'),partNumber:(row.values as Record<string,string>).odm_source_part_number ?? '',partIndex:Number(get('odm_source_part_index'))||1,partCount:Number(get('odm_source_part_count'))||1,oldPrice:get('odm_source_old_price'),priorPrice:get('odm_source_prior_price'),newPrice:get('odm_source_new_price'),tariffPercent:get('odm_source_tariff_percent'),tariffAmount:get('odm_source_tariff_amount'),note:get('odm_source_note')} : undefined;
     const currencyText=get('currency'), activeText=get('active'), unitText=get('price_unit').toUpperCase();
     const categoryText=get('category'), sourceText=(get('catalog_source') || (fromOdm ? '' : selectedSource) || '').toUpperCase();
     const override=review.classifications?.[key];
@@ -59,9 +59,9 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
     const messages:string[]=[];
     if (!model) messages.push('Product/model is required.');
     if (!partNumber) messages.push('Part number is required.');
-    if (fromOdm && !override) messages.push('Choose ODM or Special SKU for this workbook row.');
-    if (fromOdm && /[\r\n]/.test(source?.partNumber ?? '')) messages.push('Source part number contains multiple lines. Review the SKUs separately.');
-    if (fromOdm && /\([^)]*\)/.test(source?.partNumber ?? '') && !/^.+?\s+\(Y\d+\)$/i.test(source?.partNumber ?? '')) messages.push('Annotated source part number needs manual review before import.');
+    if (fromOdm && !override) messages.push('Choose ODM or Special SKU.');
+    if (fromOdm && /[\r\n]/.test(partNumber)) messages.push('Source part number could not be safely separated into SKUs. Review the raw source cell manually.');
+    if (fromOdm && /\([^)]*\)/.test(partNumber) && !/^.+?\s+\(Y\d+\)$/i.test(source?.partNumber ?? '')) messages.push('Annotated source part number needs manual review before import.');
     if (fromOdm && /\bdiscontinued\b/i.test(source?.note ?? '')) messages.push('Discontinued source row needs review before import.');
     if (fromOdm && !source?.newPrice) messages.push('WARNING: New Price is blank; no catalog price will be written.');
     if (fromOdm && source?.newPrice==='-') messages.push('WARNING: New Price is marked unavailable; no catalog price will be written.');
@@ -189,7 +189,7 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
   }
   counts.updatedProducts=productUpdates.size;
   counts.updatedSkus=updatedSkuKeys.size;
-  return {items,customers:[...customers.values()],errors:[],notices:odmWorkbook?['Choose ODM or Special SKU for each workbook row; the upload Catalog Source selection does not classify this worksheet.','Workbook Old Price, New Price, notes, and tariff values are shown for review only. No catalog prices are written from this worksheet.','Blank Customer cells are left unresolved; the workbook does not establish that they belong to the previous customer.']:[],counts,digest:digestOf(items)};
+  return {items,customers:[...customers.values()],errors:[],notices:odmWorkbook?['Choose ODM or Special SKU for each SKU candidate; the upload Catalog Source selection does not classify this worksheet.','Workbook Old Price, New Price, notes, and tariff values are shown for review only. No catalog prices are written from this worksheet.','Blank Customer cells are left unresolved; the workbook does not establish that they belong to the previous customer.']:[],counts,digest:digestOf(items)};
 }
 
 export async function applyProductImport(db:PrismaClient,csv:string,expectedDigest:string,selectedSource?:ProductCatalogSource,review:ProductImportReview={}) {

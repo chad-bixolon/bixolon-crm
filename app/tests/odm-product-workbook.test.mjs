@@ -9,14 +9,21 @@ import {zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 Module._extensions['.ts']=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,filename);
 const require=Module.createRequire(fileURLToPath(import.meta.url));
-const {parseProductWorkbookXlsx,routeProductWorkbookSheet,odmHeaderIndex}=require(path.join(root,'lib/odm-product-workbook.ts'));
-const {planProductImport,productImportHeaders,odmSourceHeaders}=require(path.join(root,'lib/product-import.ts'));
+const {parseProductWorkbookXlsx,routeProductWorkbookSheet,odmHeaderIndex,mapOdmProductWorkbookSheet}=require(path.join(root,'lib/odm-product-workbook.ts'));
+const {planProductImport,applyProductImport,productImportHeaders,odmSourceHeaders}=require(path.join(root,'lib/product-import.ts'));
 const {parseImportCsv}=require(path.join(root,'lib/import-csv.ts'));
 const realPath=path.resolve(root,'../reference-data/ODM customer pricing_Sep 2026.xlsx');
 const real=fs.readFileSync(realPath);
 const headers=[...productImportHeaders,...odmSourceHeaders];
 const parsed=async buffer=>{const result=await parseProductWorkbookXlsx(buffer,undefined,'USD');return {result,rows:result.csv?parseImportCsv(result.csv,headers).rows:[]};};
 const fakeDb=(accounts=[],products=[])=>({account:{findMany:async()=>accounts},product:{findMany:async()=>products},productCategory:{findMany:async()=>[]}});
+const odmHeader=['','Customer','Bixolon Part Number','Old Price','Old Price','New Price','Tariff Separate Line (%)','Tariff Separate Line ($)'];
+function syntheticCsv(part,customer='NCR',extra=[]) {
+  const mapped=mapOdmProductWorkbookSheet('Test sheet',[[],odmHeader,['',customer,part,'100','110','120','0.135','15','Shared note'],['','UPS','SINGLE-SKU','','','200'],...extra]);
+  assert.equal(mapped.error,undefined);
+  const csv=mapped.rows.map(row=>row.map(value=>/[",\r\n]/.test(value)?`"${value.replaceAll('"','""')}"`:value).join(',')).join('\n')+'\n';
+  return {csv,rows:parseImportCsv(csv,headers).rows};
+}
 function withSecondSheet(name,xml) {
   const entries=unzipSync(real);
   entries['xl/workbook.xml']=strToU8(strFromU8(entries['xl/workbook.xml']).replace('</sheets>',`<sheet name="${name}" sheetId="17" r:id="rId22"/></sheets>`));
@@ -31,7 +38,7 @@ test('real ODM sheet is recognized by row-two structure and preserves commercial
   assert.equal(result.error,undefined);
   assert.deepEqual(result.sheets,['09.14.26']);
   assert.equal(result.selectedSheet,'09.14.26');
-  assert.equal(rows.length,121);
+  assert.equal(rows.length,122);
   assert.equal(rows[0].line,3);
   assert.equal(rows[0].values.odm_source_new_price,'425.70');
   assert.equal(rows[0].values.standard_price,'');
@@ -51,7 +58,7 @@ test('ODM detection ignores worksheet names but rejects unrelated sheets',async(
   const changed=await parsed(Buffer.from(zipSync(entries)));
   assert.equal(changed.result.error,undefined);
   assert.equal(changed.result.selectedSheet,'Future Customer Prices');
-  assert.equal(changed.rows.length,121);
+  assert.equal(changed.rows.length,122);
   const signature=[[],['','Customer','Bixolon Part Number','Old Price','Old Price','New Price','Tariff\nSeparate Line\n(%)','Tariff\nSeparate Line\n($)'],['','UPS','SKU-1','','','10'],['','UPS','SKU-2','','','11']];
   assert.equal(odmHeaderIndex(signature),1);
   assert.equal(odmHeaderIndex([['Customer','Bixolon Part Number','New Price'],['UPS','SKU-1','10']]),-1);
@@ -87,8 +94,9 @@ test('blank customers are not carried forward and uncertain part numbers block r
   assert.equal(blank.after.odmCustomerAccountId,undefined);
   assert.match(blank.messages.join(' '),/needs an existing SalesHub Account/);
   assert.match(blank.messages.join(' '),/Annotated source part number/);
-  const multiline=plan.items.find(item=>item.line===66);
-  assert.match(multiline.messages.join(' '),/multiple lines/);
+  const multiline=plan.items.filter(item=>item.line===66);
+  assert.equal(multiline.length,2);
+  assert.ok(multiline.every(item=>!item.messages.some(message=>message.includes('multiple lines'))));
   const brady=plan.items.find(item=>item.line===122);
   assert.equal(brady.after.odmCustomerAccountId,7);
   assert.equal(brady.after.odmCustomerSourceName,'Brady');
@@ -98,12 +106,12 @@ test('blank customers are not carried forward and uncertain part numbers block r
 test('real workbook requires classification, keeps complex labels for mapping, and never writes prices',async()=>{
   const {result}=await parsed(real);
   const initial=await planProductImport(fakeDb([{id:7,name:'UPS'},{id:8,name:'Amazon'}]),result.csv);
-  assert.equal(initial.items.length,121);
+  assert.equal(initial.items.length,122);
   assert.equal(initial.customers.length,21);
   assert.equal(initial.customers.find(c=>c.source==='UPS').status,'Matched');
   assert.equal(initial.customers.find(c=>c.source==='Amazon (thr BS -> Levata)').status,'Unresolved');
   assert.equal(initial.items.filter(item=>item.source&&!item.source.customerCell).length,6);
-  assert.equal(initial.items.filter(item=>item.messages.some(message=>message.includes('Choose ODM or Special SKU'))).length,121);
+  assert.equal(initial.items.filter(item=>item.messages.some(message=>message.includes('Choose ODM or Special SKU'))).length,122);
   assert.equal(initial.items.filter(item=>item.after.catalogSource==='ODM').length,0);
   assert.equal(initial.items.filter(item=>item.after.catalogSource==='SPECIAL_SKU_LIST').length,0);
   const review={customerMappings:{'amazon (thr bs -> levata)':8},classifications:{'XL5-40CTG/AMZ':'ODM','XL5-40CTBG/AMZ':'SPECIAL_SKU_LIST'}};
@@ -157,4 +165,65 @@ test('existing SKU keeps its Product and category until its classification is ex
   const reviewed=await planProductImport(fakeDb([], [product]),result.csv,undefined,{classifications:{'XT5-40S':'SPECIAL_SKU_LIST'}});
   assert.equal(reviewed.items.find(item=>item.line===98).after.catalogSource,'SPECIAL_SKU_LIST');
   assert.equal(reviewed.items.find(item=>item.line===98).classes.includes('NEW SKU'),false);
+});
+test('LF, CRLF, CR, blanks, and whitespace expand into independent candidates with shared provenance',async()=>{
+  for(const separator of ['\n','\r\n','\r']) {
+    const raw=`  SRP-S300LOEK/RDU  ${separator}${separator} SRP-S300LOEK/NSU  `;
+    const {rows}=syntheticCsv(raw);
+    const split=rows.filter(row=>row.values.odm_source_row==='3');
+    assert.deepEqual(split.map(row=>row.values.part_number),['SRP-S300LOEK/RDU','SRP-S300LOEK/NSU']);
+    for(const [index,row] of split.entries()) {
+      assert.equal(row.values.odm_source_part_number,raw);
+      assert.equal(row.values.odm_source_sheet,'Test sheet');
+      assert.equal(row.values.odm_source_part_index,String(index+1));
+      assert.equal(row.values.odm_source_part_count,'2');
+      assert.equal(row.values.odm_source_customer_cell,'NCR');
+      assert.equal(row.values.odm_source_old_price,'100.00');
+      assert.equal(row.values.odm_source_new_price,'120.00');
+      assert.equal(row.values.odm_source_tariff_percent,'13.5%');
+      assert.equal(row.values.odm_source_tariff_amount,'15.00');
+      assert.equal(row.values.odm_source_note,'Shared note');
+    }
+  }
+});
+test('classification and import decisions remain per SKU and repeats consolidate after expansion',async()=>{
+  const {csv}=syntheticCsv('SRP-S300LOEK/RDU\nSRP-S300LOEK/NSU','NCR',[['','UPS','SRP-S300LOEK/RDU','','','250']]);
+  const review={classifications:{'SRP-S300LOEK/RDU':'ODM','SRP-S300LOEK/NSU':'SPECIAL_SKU_LIST','SINGLE-SKU':'SPECIAL_SKU_LIST'}};
+  const plan=await planProductImport(fakeDb([{id:1,name:'NCR'},{id:2,name:'UPS'}]),csv,undefined,review);
+  const rdu=plan.items.filter(item=>item.after.partNumber==='SRP-S300LOEK/RDU');
+  const nsu=plan.items.find(item=>item.after.partNumber==='SRP-S300LOEK/NSU');
+  assert.equal(rdu.length,2);
+  assert.deepEqual(rdu.map(item=>item.after.odmCustomerAccountId),[1,2]);
+  assert.equal(nsu.after.catalogSource,'SPECIAL_SKU_LIST');
+  assert.equal(nsu.after.odmCustomerAccountId,undefined);
+  assert.equal(nsu.line,3);
+  assert.equal(plan.counts.newSkus,3); // Includes the unrelated single-line SKU.
+  assert.ok(rdu.every(item=>!item.classes.includes('ERROR')));
+  assert.ok(nsu.messages.every(message=>!message.includes('Choose ODM or Special SKU')));
+  const unresolved=await planProductImport(fakeDb([{id:2,name:'UPS'}]),csv,undefined,review);
+  assert.match(unresolved.items.find(item=>item.line===3&&item.after.partNumber==='SRP-S300LOEK/RDU').messages.join(' '),/needs an existing SalesHub Account/);
+  assert.equal(unresolved.items.find(item=>item.line===3&&item.after.partNumber==='SRP-S300LOEK/NSU').classes.includes('ERROR'),false);
+  const createdSkus=[];
+  const links=[];
+  const client={...fakeDb([{id:1,name:'NCR'},{id:2,name:'UPS'}]),$transaction:async callback=>callback({
+    ...fakeDb([{id:1,name:'NCR'},{id:2,name:'UPS'}]),
+    product:{findMany:async()=>[],create:async()=>({id:createdSkus.length+1})},
+    productSku:{create:async({data})=>{createdSkus.push(data);return {id:createdSkus.length}}},
+    productSkuOdmCustomer:{findUnique:async()=>null,upsert:async({create})=>{links.push(create)}},
+  })};
+  await applyProductImport(client,csv,plan.digest,undefined,review);
+  assert.equal(createdSkus.filter(sku=>sku.partNumber==='SRP-S300LOEK/RDU').length,1);
+  assert.deepEqual(links.map(link=>link.accountId),[1,2]);
+});
+test('single-line parts stay unchanged and ambiguous multiline cells remain blocked',async()=>{
+  const single=syntheticCsv('SINGLE-SKU').rows.find(row=>row.values.odm_source_row==='3');
+  assert.equal(single.values.part_number,'SINGLE-SKU');
+  assert.equal(single.values.odm_source_part_count,'1');
+  const padded=syntheticCsv('\r\n SINGLE-SKU \n\n').rows.find(row=>row.values.odm_source_row==='3');
+  assert.equal(padded.values.part_number,'SINGLE-SKU');
+  assert.equal(padded.values.odm_source_part_number,'\r\n SINGLE-SKU \n\n');
+  const {csv,rows}=syntheticCsv('GOOD-SKU\nquestionable part?');
+  assert.equal(rows.filter(row=>row.values.odm_source_row==='3').length,1);
+  const plan=await planProductImport(fakeDb(),csv,undefined,{classifications:{'GOOD-SKU QUESTIONABLE PART?':'SPECIAL_SKU_LIST'}});
+  assert.match(plan.items.find(item=>item.line===3).messages.join(' '),/could not be safely separated/);
 });

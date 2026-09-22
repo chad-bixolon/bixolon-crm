@@ -20,9 +20,9 @@ export function parseImportCsv(input: string, catalogHeaders?: readonly string[]
       else if (c === '"') { quoted = false; closed = true; }
       else { cell += c; if (c === '\n') line++; }
     } else if (c === ',' || c === '\n' || c === '\r') {
-      cells.push(cell.trim()); cell = ''; closed = false;
+      cells.push(cell); cell = ''; closed = false;
       if (c !== ',') {
-        if (cells.some(Boolean)) records.push({line:start,cells});
+        if (cells.some(value=>value.trim())) records.push({line:start,cells});
         cells = []; if (c === '\r' && source[i+1] === '\n') i++; line++; start = line;
       }
     } else if (c === '"' && !cell && !closed) quoted = true;
@@ -30,9 +30,9 @@ export function parseImportCsv(input: string, catalogHeaders?: readonly string[]
     else cell += c;
   }
   if (quoted) return {rows:[],errors:[`Malformed CSV at line ${start}: unclosed quoted value.`]};
-  cells.push(cell.trim()); if (cells.some(Boolean)) records.push({line:start,cells});
+  cells.push(cell); if (cells.some(value=>value.trim())) records.push({line:start,cells});
   if (!records.length) return {rows:[],errors:['CSV header row is required.']};
-  const headers = records[0].cells.map(x => x.toLowerCase());
+  const headers = records[0].cells.map(x => x.trim().toLowerCase());
   const duplicates = headers.filter((h,i) => headers.indexOf(h) !== i);
   if (duplicates.length) errors.push(`Duplicate column header: ${[...new Set(duplicates)].join(', ')}.`);
   const unknown = headers.filter(h => !(catalogHeaders ?? importHeaders).includes(h));
@@ -48,7 +48,7 @@ export function parseImportCsv(input: string, catalogHeaders?: readonly string[]
   const rows: CsvRow[] = [];
   for (const record of records.slice(1)) {
     if (record.cells.length > headers.length) { errors.push(`Line ${record.line}: expected at most ${headers.length} columns, found ${record.cells.length}.`); continue; }
-    rows.push({line:record.line,values:Object.fromEntries(headers.map((h,i) => [h,record.cells[i] ?? '']))});
+    rows.push({line:record.line,values:Object.fromEntries(headers.map((h,i) => [h,h==='odm_source_part_number' ? record.cells[i] ?? '' : (record.cells[i] ?? '').trim()]))});
   }
   return {rows,errors};
 }

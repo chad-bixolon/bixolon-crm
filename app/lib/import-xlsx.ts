@@ -46,7 +46,7 @@ export function inspectZip(buffer: Buffer): string | undefined {
 function cellString(value: unknown, preserveNewlines=false): string {
   if (value === null || value === undefined) return '';
   if (value instanceof Date) return Number.isNaN(value.valueOf()) ? '' : value.toISOString().slice(0, 10);
-  if (typeof value === 'string') return preserveNewlines ? value.trim() : value.trim().replace(/\r\n|\r|\n/g, ' ');
+  if (typeof value === 'string') return preserveNewlines ? value : value.trim().replace(/\r\n|\r|\n/g, ' ');
   if (typeof value === 'boolean') return String(value);
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   throw new Error('Workbook contains an unsupported cell value.');
