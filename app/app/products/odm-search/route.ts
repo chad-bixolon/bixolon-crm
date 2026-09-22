@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   if (q.length < 2) return NextResponse.json({ items: [] });
   if (kind === 'account') {
     await requirePermission('accounts.read');
-    const items = await prisma.account.findMany({ where: { name: { contains: q, mode: 'insensitive' } }, select: { id: true, name: true }, orderBy: { name: 'asc' }, take: 20 });
+    const items = await prisma.account.findMany({ where: { name: { contains: q, mode: 'insensitive' }, status: 'ACTIVE', archivedAt: null }, select: { id: true, name: true }, orderBy: { name: 'asc' }, take: 20 });
     return NextResponse.json({ items: items.map(item => ({ id: item.id, label: item.name })) });
   }
   if (kind === 'baseSku') {

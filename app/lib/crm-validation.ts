@@ -31,6 +31,6 @@ export const forecastLabels: Record<ForecastCategory, string> = {
   OMITTED: "Omitted", PIPELINE: "Pipeline", BEST_CASE: "Best Case", COMMIT: "Commit", CLOSED: "Closed",
 };
 export function friendlyError(error: unknown, fallback: string) {
-  if (error instanceof Error && /not found|Reactivate|already|linked|active account|active product|available|primary|MOQ/i.test(error.message)) return error.message;
+  if (error instanceof Error && /not found|Reactivate|already|linked|active account|active product|available|primary|MOQ|ODM|Catalog Source|Base SKU|subtype|Part number|Description|reserved/i.test(error.message)) return error.message;
   return fallback;
 }
