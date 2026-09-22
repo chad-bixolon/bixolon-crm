@@ -48,6 +48,9 @@ test('Trade Show roles and row scopes preserve Marketing and Sales boundaries', 
   assert.equal(shows.canEditTradeShowLead(actor('SALES'), { assignedSalesRepUserId: 7 }), true);
   assert.equal(routeAccess('/trade-shows/1/leads/2/edit', actor('SALES')), 'allowed');
   assert.equal(routeAccess('/trade-shows/1/leads/2/edit', actor('READ_ONLY')), 'denied');
+  assert.equal(routeAccess('/trade-shows/1/import', actor('MARKETING_MANAGER')), 'allowed');
+  assert.equal(routeAccess('/trade-shows/1/import', actor('SALES_MANAGER')), 'denied');
+  assert.equal(routeAccess('/trade-shows/1/import', actor('SALES')), 'denied');
 });
 
 test('Trade Show create/edit validates eligible owner and archive stays reversible', async () => {

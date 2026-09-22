@@ -38,6 +38,7 @@ export function routeAccess(path: string, actor: Actor | null): 'sign-in' | 'den
     if (!can(actor, editPermission)) return 'denied';
   }
   if (path.startsWith('/trade-shows') && path.endsWith('/new') && !can(actor, 'trade-shows.manage')) return 'denied';
+  if (/^\/trade-shows\/\d+\/import$/.test(path) && !can(actor, 'trade-shows.manage')) return 'denied';
   if (path.startsWith('/trade-shows')) return 'allowed';
   if (path.endsWith('/new') || path.endsWith('/edit')) {
     const write: Permission = path.startsWith('/accounts') ? 'accounts.write' : path.startsWith('/contacts') ? 'contacts.write' : path.startsWith('/opportunities') ? 'sales.write' : path.startsWith('/projects') ? 'projects.write' : path.startsWith('/products') ? 'products.write' : path.startsWith('/administration') ? 'users.manage' : 'tasks.write';
