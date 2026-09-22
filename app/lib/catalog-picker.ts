@@ -2,7 +2,7 @@ import type { ProductPriceTier } from "@prisma/client";
 
 export const priceTierOrder: ProductPriceTier[] = ["STANDARD", "MSRP", "RESELLER", "DISTRIBUTOR"];
 export type CatalogPrice = { tier: ProductPriceTier; currencyCode: string; amount: string };
-export type CatalogItem = { id: number; productId: number; productName: string; categoryId: number | null; partNumber: string; description: string | null; catalogSource?: string | null; odmCustomerAccountId?: number | null; odmCustomerName?: string | null; odmDescription?: string | null; prices: CatalogPrice[] };
+export type CatalogItem = { id: number; productId: number; productName: string; categoryId: number | null; partNumber: string; description: string | null; catalogSource?: string | null; odmCustomers?: { accountId: number; name: string }[]; odmDescription?: string | null; prices: CatalogPrice[] };
 
 export function pricesForCurrency(item: CatalogItem, currencyCode: string) {
   return item.prices.filter(price => price.currencyCode === currencyCode).sort((a, b) => priceTierOrder.indexOf(a.tier) - priceTierOrder.indexOf(b.tier));
@@ -21,6 +21,6 @@ export function selectedProductFitsCategory(selectedCategoryId: number | null, p
 }
 
 export function odmCustomerWarning(item: CatalogItem | null, participatingAccountIds: number[]) {
-  return item?.catalogSource === 'ODM' && item.odmCustomerAccountId && !participatingAccountIds.includes(item.odmCustomerAccountId)
-    ? `This ODM SKU is associated with ${item.odmCustomerName ?? 'another Account'}.` : null;
+  return item?.catalogSource === 'ODM' && !item.odmCustomers?.some(customer => participatingAccountIds.includes(customer.accountId))
+    ? 'This ODM SKU is not associated with any Account participating in this Opportunity.' : null;
 }

@@ -255,7 +255,7 @@ model Account {
   distributorPriceExceptions PriceException[]      @relation("PriceExceptionDistributor")
   varPriceExceptions         PriceException[]      @relation("PriceExceptionVar")
   endUserPriceExceptions     PriceException[]      @relation("PriceExceptionEndUser")
-  odmSkus                    ProductSku[]          @relation("OdmCustomerAccount")
+  odmSkus                    ProductSkuOdmCustomer[]
   archivedAt                 DateTime?
   createdById                Int?
   createdBy                  User?                 @relation("AccountCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
@@ -535,8 +535,7 @@ model ProductSku {
   normalizedPartNumber String                @unique
   description          String?
   catalogSource        ProductCatalogSource?
-  odmCustomerAccountId Int?
-  odmCustomerAccount   Account?              @relation("OdmCustomerAccount", fields: [odmCustomerAccountId], references: [id], onDelete: Restrict)
+  odmCustomers         ProductSkuOdmCustomer[]
   odmCustomerSourceName String?
   baseSkuId            Int?
   baseSku              ProductSku?           @relation("OdmBaseSku", fields: [baseSkuId], references: [id], onDelete: Restrict)
@@ -552,8 +551,20 @@ model ProductSku {
 
   @@index([productId])
   @@index([catalogSource, productId])
-  @@index([odmCustomerAccountId])
   @@index([baseSkuId])
+}
+
+model ProductSkuOdmCustomer {
+  skuId              Int
+  accountId          Int
+  sourceCustomerName String?
+  sku                ProductSku @relation(fields: [skuId], references: [id], onDelete: Restrict)
+  account            Account    @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  @@id([skuId, accountId])
+  @@index([accountId])
 }
 
 /// A finalized commercial price exception imported from an operational source.

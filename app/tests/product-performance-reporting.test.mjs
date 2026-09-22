@@ -14,7 +14,7 @@ const builder=require(path.join(root,'lib/report-builder.ts'));
 const saved=require(path.join(root,'lib/saved-reports.ts'));
 const actor=(role,id=7)=>({id,role,active:true,archivedAt:null});
 const config=()=>reporting.defaultReportConfiguration('PRODUCT_PERFORMANCE');
-const line=(id,category,name,qty,price,currency='USD',overrides={})=>({id,opportunityId:1,productId:id,skuId:id,quantity:qty,estimatedUnitPrice:new Prisma.Decimal(price),priceSource:'MANUAL',priceExceptionCode:null,archivedAt:null,product:{id,name,sku:`LEGACY-${id}`,categoryId:id,category:{id, name:category}},sku:{id,partNumber:`SKU-${id}`},opportunity:{id:1,name:'Deal A',ownerId:7,owner:{firstName:'Sales',lastName:'Rep'},stageId:1,stage:{name:'Open'},forecastCategory:'PIPELINE',expectedCloseDate:new Date('2026-09-30'),currencyCode:currency,participants:[{accountId:8,account:{name:'Customer'}}],projects:[{projectId:9,project:{name:'Launch'}}]},...overrides});
+const line=(id,category,name,qty,price,currency='USD',overrides={})=>({id,opportunityId:1,productId:id,skuId:id,quantity:qty,estimatedUnitPrice:new Prisma.Decimal(price),priceSource:'MANUAL',priceExceptionCode:null,archivedAt:null,product:{id,name,sku:`LEGACY-${id}`,categoryId:id,category:{id, name:category}},sku:{id,partNumber:`SKU-${id}`,odmCustomers:[]},opportunity:{id:1,name:'Deal A',ownerId:7,owner:{firstName:'Sales',lastName:'Rep'},stageId:1,stage:{name:'Open'},forecastCategory:'PIPELINE',expectedCloseDate:new Date('2026-09-30'),currencyCode:currency,participants:[{accountId:8,account:{name:'Customer'}}],projects:[{projectId:9,project:{name:'Launch'}}]},...overrides});
 const run=(rows,cfg=config(),role='ADMIN')=>reporting.executeProductPerformanceReport({opportunityProduct:{findMany:async args=>{run.where=args.where;return rows;}}},actor(role),cfg,new Date('2026-09-21'));
 
 test('Product lines split a 100K Opportunity into additive 40K, 35K and 25K categories',async()=>{
@@ -44,12 +44,12 @@ test('currency totals remain partitioned, and archived lines and Opportunities a
  assert.ok(run.where.AND.some(x=>x.archivedAt===null));assert.ok(run.where.AND.some(x=>x.opportunity?.AND?.some(y=>y.archivedAt===null)));
 });
 test('different SKU price units have separate quantity and weighted price totals',async()=>{
- const each=line(1,'POS','P',2,'10');const box=line(2,'POS','P',3,'100','USD',{sku:{id:2,partNumber:'BOX-2',priceUnit:'BOX'}});
+ const each=line(1,'POS','P',2,'10');const box=line(2,'POS','P',3,'100','USD',{sku:{id:2,partNumber:'BOX-2',priceUnit:'BOX',odmCustomers:[]}});
  const result=await run([each,box]);
  assert.deepEqual(result.summary.map(x=>[x.unit,x.quantity,x.lineValue,x.averageUnitPrice]),[['BOX',3,'300.00','100.00'],['EACH',2,'20.00','10.00']]);
 });
 test('quantity is additive when grouping by product and SKU',async()=>{
- const rows=[line(1,'POS','P',2,'10'),line(2,'POS','P',3,'10','USD',{productId:1,product:{id:1,name:'P',sku:'LEGACY-1',categoryId:1,category:{id:1,name:'POS'}},skuId:1,sku:{id:1,partNumber:'SKU-1',priceUnit:'EACH'}})];
+ const rows=[line(1,'POS','P',2,'10'),line(2,'POS','P',3,'10','USD',{productId:1,product:{id:1,name:'P',sku:'LEGACY-1',categoryId:1,category:{id:1,name:'POS'}},skuId:1,sku:{id:1,partNumber:'SKU-1',priceUnit:'EACH',odmCustomers:[]}})];
  for(const groupBy of ['product','sku']){const result=await run(rows,{...config(),groupBy});assert.equal(result.groups.length,1);assert.equal(result.groups[0].metrics[0].quantity,5);assert.equal(result.groups[0].metrics[0].productLineCount,2);}
 });
 test('filters scope lines and Opportunities, including sales ownership',async()=>{
@@ -71,17 +71,19 @@ test('saved config, discovery, and read only report consumption follow current p
  await assert.rejects(run([],config(),'MARKETING_MANAGER'),/Access denied/);
 });
 test('ODM Catalog Source and Customer filter/group preserve Opportunity line values',async()=>{
- const odm=line(1,'LABEL','XT5-40',2,'125.00','USD',{sku:{id:1,partNumber:'XT5-UPS',priceUnit:'EACH',catalogSource:'ODM',odmCustomerAccountId:7,odmCustomerAccount:{name:'UPS'}}});
- const standard=line(2,'LABEL','XT5-40',1,'100.00','USD',{sku:{id:2,partNumber:'XT5-STD',priceUnit:'EACH',catalogSource:'PRICE_LIST',odmCustomerAccountId:null,odmCustomerAccount:null}});
+ const odm=line(1,'LABEL','XT5-40',2,'125.00','USD',{sku:{id:1,partNumber:'XT5-UPS',priceUnit:'EACH',catalogSource:'ODM',odmCustomers:[{accountId:7,account:{name:'UPS'}},{accountId:8,account:{name:'Other'}}]}});
+ const standard=line(2,'LABEL','XT5-40',1,'100.00','USD',{sku:{id:2,partNumber:'XT5-STD',priceUnit:'EACH',catalogSource:'PRICE_LIST',odmCustomers:[]}});
  const cfg={...config(),groupBy:'catalogSource',filters:[{field:'catalogSource',operator:'eq',value:'ODM'},{field:'odmCustomerAccountId',operator:'eq',value:7}]};
  const result=await run([odm],cfg);
  assert.deepEqual(result.groups.map(group=>[group.label,group.metrics[0].lineValue]),[['ODM','250.00']]);
- assert.equal(result.rows[0].odmCustomer,'UPS');
+ assert.equal(result.rows[0].odmCustomer,'UPS, Other');
  assert.ok(run.where.AND.some(clause=>clause.sku?.catalogSource==='ODM'));
- assert.ok(run.where.AND.some(clause=>clause.sku?.odmCustomerAccountId===7));
+ assert.ok(run.where.AND.some(clause=>clause.sku?.odmCustomers?.some?.accountId===7));
  const grouped=await run([odm,standard],{...config(),groupBy:'catalogSource'});
  assert.equal(grouped.summary[0].lineValue,'350.00');
  assert.deepEqual(grouped.groups.map(group=>[group.label,group.metrics[0].lineValue]),[['ODM','250.00'],['PRICE LIST','100.00']]);
  const customers=await run([odm,standard],{...config(),groupBy:'odmCustomer'});
- assert.deepEqual(customers.groups.map(group=>group.label),['UPS','Not ODM']);
+ assert.deepEqual(customers.groups.map(group=>group.label),['Other','UPS','Not ODM']);
+ assert.equal(customers.summary[0].lineValue,'350.00');
+ assert.equal(customers.groups.find(group=>group.label==='UPS').metrics[0].lineValue,'250.00');
 });

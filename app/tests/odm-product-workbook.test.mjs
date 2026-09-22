@@ -1,0 +1,160 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import Module from 'node:module';
+import path from 'node:path';
+import ts from 'typescript';
+import {fileURLToPath} from 'node:url';
+import {zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+Module._extensions['.ts']=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,filename);
+const require=Module.createRequire(fileURLToPath(import.meta.url));
+const {parseProductWorkbookXlsx,routeProductWorkbookSheet,odmHeaderIndex}=require(path.join(root,'lib/odm-product-workbook.ts'));
+const {planProductImport,productImportHeaders,odmSourceHeaders}=require(path.join(root,'lib/product-import.ts'));
+const {parseImportCsv}=require(path.join(root,'lib/import-csv.ts'));
+const realPath=path.resolve(root,'../reference-data/ODM customer pricing_Sep 2026.xlsx');
+const real=fs.readFileSync(realPath);
+const headers=[...productImportHeaders,...odmSourceHeaders];
+const parsed=async buffer=>{const result=await parseProductWorkbookXlsx(buffer,undefined,'USD');return {result,rows:result.csv?parseImportCsv(result.csv,headers).rows:[]};};
+const fakeDb=(accounts=[],products=[])=>({account:{findMany:async()=>accounts},product:{findMany:async()=>products},productCategory:{findMany:async()=>[]}});
+function withSecondSheet(name,xml) {
+  const entries=unzipSync(real);
+  entries['xl/workbook.xml']=strToU8(strFromU8(entries['xl/workbook.xml']).replace('</sheets>',`<sheet name="${name}" sheetId="17" r:id="rId22"/></sheets>`));
+  entries['xl/_rels/workbook.xml.rels']=strToU8(strFromU8(entries['xl/_rels/workbook.xml.rels']).replace('</Relationships>','<Relationship Id="rId22" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>'));
+  entries['[Content_Types].xml']=strToU8(strFromU8(entries['[Content_Types].xml']).replace('</Types>','<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>'));
+  entries['xl/worksheets/sheet2.xml']=xml;
+  return Buffer.from(zipSync(entries));
+}
+
+test('real ODM sheet is recognized by row-two structure and preserves commercial source details',async()=>{
+  const {result,rows}=await parsed(real);
+  assert.equal(result.error,undefined);
+  assert.deepEqual(result.sheets,['09.14.26']);
+  assert.equal(result.selectedSheet,'09.14.26');
+  assert.equal(rows.length,121);
+  assert.equal(rows[0].line,3);
+  assert.equal(rows[0].values.odm_source_new_price,'425.70');
+  assert.equal(rows[0].values.standard_price,'');
+  assert.equal(rows.find(row=>row.values.odm_source_row==='18').values.odm_source_tariff_percent,'13.5%');
+  const brady=rows.find(row=>row.values.odm_source_row==='122').values;
+  assert.equal(brady.part_number,'XT5-43D9S/BRD');
+  assert.equal(brady.odm_source_part_number,'XT5-43D9S/BRD (Y6727848)');
+  assert.match(brady.odm_description,/Customer reference Y6727848/);
+  assert.equal(rows.find(row=>row.values.odm_source_row==='46').values.part_number,'RSC-S300II (KM04-01262A)');
+  assert.equal(rows.find(row=>row.values.odm_source_row==='85').values.odm_customer,'');
+});
+test('ODM detection ignores worksheet names but rejects unrelated sheets',async()=>{
+  const entries=unzipSync(real);
+  const workbook=strFromU8(entries['xl/workbook.xml']);
+  assert.match(workbook,/09\.14\.26/);
+  entries['xl/workbook.xml']=strToU8(workbook.replace('09.14.26','Future Customer Prices'));
+  const changed=await parsed(Buffer.from(zipSync(entries)));
+  assert.equal(changed.result.error,undefined);
+  assert.equal(changed.result.selectedSheet,'Future Customer Prices');
+  assert.equal(changed.rows.length,121);
+  const signature=[[],['','Customer','Bixolon Part Number','Old Price','Old Price','New Price','Tariff\nSeparate Line\n(%)','Tariff\nSeparate Line\n($)'],['','UPS','SKU-1','','','10'],['','UPS','SKU-2','','','11']];
+  assert.equal(odmHeaderIndex(signature),1);
+  assert.equal(odmHeaderIndex([['Customer','Bixolon Part Number','New Price'],['UPS','SKU-1','10']]),-1);
+  assert.match(routeProductWorkbookSheet('Unrelated',[['Some','Other','Headers']], 'USD').error,/does not match the supported/);
+});
+test('multi-sheet upload selects one ODM sheet and reports unrelated sheets',async()=>{
+  const note=strToU8('<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Notes only</t></is></c></row></sheetData></worksheet>');
+  const one=await parseProductWorkbookXlsx(withSecondSheet('Notes',note),undefined,'USD');
+  assert.equal(one.error,undefined);
+  assert.equal(one.selectedSheet,'09.14.26');
+  assert.deepEqual(one.ignoredSheets,['Notes']);
+  const duplicate=await parseProductWorkbookXlsx(withSecondSheet('Later',unzipSync(real)['xl/worksheets/sheet1.xml']),undefined,'USD');
+  assert.match(duplicate.error,/Choose an ODM customer-pricing worksheet/);
+  assert.equal(duplicate.csv,undefined);
+});
+test('standard price-list routing and worksheet validation remain intact',async()=>{
+  const file=fs.readFileSync(path.resolve(root,'../reference-data/BIXOLON_Price_List.xlsx'));
+  const pos=await parseProductWorkbookXlsx(file,'POS printers','USD');
+  assert.equal(pos.error,undefined);
+  const rows=parseImportCsv(pos.csv,productImportHeaders).rows;
+  assert.equal(rows.length,132);
+  assert.equal(rows[0].values.catalog_source,'PRICE_LIST');
+  assert.equal(rows[0].values.category,'POS');
+  assert.match((await parseProductWorkbookXlsx(file,'TT ribbon ','USD')).error,/older TT ribbon/);
+  assert.match((await parseProductWorkbookXlsx(file,undefined,'USD')).error,/Choose the worksheet/);
+});
+test('blank customers are not carried forward and uncertain part numbers block review',async()=>{
+  const {result}=await parsed(real);
+  const review={classifications:{'IFJ-WDK (NEW PART IFJ-WDAK)':'ODM','XT5-43D9S/BRD':'ODM'}};
+  const plan=await planProductImport(fakeDb([{id:7,name:'Brady'}]),result.csv,undefined,review);
+  const blank=plan.items.find(item=>item.line===85);
+  assert.equal(blank.source.customerCell,'');
+  assert.equal(blank.after.odmCustomerAccountId,undefined);
+  assert.match(blank.messages.join(' '),/needs an existing SalesHub Account/);
+  assert.match(blank.messages.join(' '),/Annotated source part number/);
+  const multiline=plan.items.find(item=>item.line===66);
+  assert.match(multiline.messages.join(' '),/multiple lines/);
+  const brady=plan.items.find(item=>item.line===122);
+  assert.equal(brady.after.odmCustomerAccountId,7);
+  assert.equal(brady.after.odmCustomerSourceName,'Brady');
+  assert.equal(brady.after.partNumber,'XT5-43D9S/BRD');
+  assert.equal(brady.after.standardPrice,undefined);
+});
+test('real workbook requires classification, keeps complex labels for mapping, and never writes prices',async()=>{
+  const {result}=await parsed(real);
+  const initial=await planProductImport(fakeDb([{id:7,name:'UPS'},{id:8,name:'Amazon'}]),result.csv);
+  assert.equal(initial.items.length,121);
+  assert.equal(initial.customers.length,21);
+  assert.equal(initial.customers.find(c=>c.source==='UPS').status,'Matched');
+  assert.equal(initial.customers.find(c=>c.source==='Amazon (thr BS -> Levata)').status,'Unresolved');
+  assert.equal(initial.items.filter(item=>item.source&&!item.source.customerCell).length,6);
+  assert.equal(initial.items.filter(item=>item.messages.some(message=>message.includes('Choose ODM or Special SKU'))).length,121);
+  assert.equal(initial.items.filter(item=>item.after.catalogSource==='ODM').length,0);
+  assert.equal(initial.items.filter(item=>item.after.catalogSource==='SPECIAL_SKU_LIST').length,0);
+  const review={customerMappings:{'amazon (thr bs -> levata)':8},classifications:{'XL5-40CTG/AMZ':'ODM','XL5-40CTBG/AMZ':'SPECIAL_SKU_LIST'}};
+  const mapped=await planProductImport(fakeDb([{id:7,name:'UPS'},{id:8,name:'Amazon'}]),result.csv,undefined,review);
+  assert.equal(mapped.items.find(item=>item.line===4).after.odmCustomerAccountId,8);
+  assert.equal(mapped.items.find(item=>item.line===4).after.odmCustomerSourceName,'Amazon (thr BS -> Levata)');
+  assert.equal(mapped.items.find(item=>item.line===5).after.odmCustomerAccountId,undefined);
+  assert.equal(mapped.items.find(item=>item.line===5).after.catalogSource,'SPECIAL_SKU_LIST');
+  assert.equal(mapped.items.filter(item=>item.classes.includes('PRICE CHANGE')).length,0);
+  assert.match(mapped.notices.join(' '),/No catalog prices are written/);
+  assert.doesNotMatch(mapped.items.find(item=>item.line===45).messages.join(' '),/Duplicate part number/);
+  assert.doesNotMatch(mapped.items.find(item=>item.line===47).messages.join(' '),/Duplicate part number/);
+});
+test('current-upload Account mapping resolves every matching real workbook row without changing source text or classification',async()=>{
+  const {result}=await parsed(real);
+  const initial=await planProductImport(fakeDb(),result.csv);
+  const brady=initial.customers.find(customer=>customer.source==='Brady');
+  const amazon=initial.customers.find(customer=>customer.source==='Amazon (thr BS -> Levata)');
+  assert.equal(brady.status,'Unresolved');
+  assert.equal(amazon.status,'Unresolved');
+  const review={customerMappings:{[brady.key]:70,[amazon.key]:71}};
+  const accounts=[{id:70,name:'Brady'},{id:71,name:'Amazon'}];
+  const mapped=await planProductImport(fakeDb(accounts),result.csv,undefined,review);
+  for(const source of ['Brady','Amazon (thr BS -> Levata)']) {
+    const rows=mapped.items.filter(item=>item.source?.customerCell===source);
+    assert.ok(rows.length>0);
+    assert.equal(rows.length,initial.customers.find(customer=>customer.source===source).rows);
+    assert.equal(mapped.customers.find(customer=>customer.source===source).status,'Manually Mapped');
+    for(const item of rows) {
+      assert.equal(item.source.customerCell,source);
+      assert.equal(item.after.catalogSource,undefined);
+      assert.equal(item.after.odmCustomerAccountId,undefined);
+    }
+  }
+  const classified=await planProductImport(fakeDb(accounts),result.csv,undefined,{...review,classifications:{'XT5-43D9S/BRD':'ODM'}});
+  const row=classified.items.find(item=>item.line===122);
+  assert.equal(row.after.odmCustomerAccountId,70);
+  assert.equal(row.after.odmCustomerSourceName,'Brady');
+  assert.equal(row.after.catalogSource,'ODM');
+});
+test('existing SKU keeps its Product and category until its classification is explicitly reviewed',async()=>{
+  const {result}=await parsed(real);
+  const sku={id:2,partNumber:'XT5-40S',normalizedPartNumber:'XT5-40S',catalogSource:'PRICE_LIST',description:null,priceUnit:'EACH',active:true,prices:[]};
+  const product={id:1,name:'XT5-40',category:{code:'LABEL'},archivedAt:null,skus:[sku]};
+  const initial=await planProductImport(fakeDb([], [product]),result.csv);
+  const row=initial.items.find(item=>item.line===98);
+  assert.equal(row.skuId,2);
+  assert.equal(row.after.model,'XT5-40');
+  assert.equal(row.after.category,'LABEL');
+  assert.equal(row.after.catalogSource,'PRICE_LIST');
+  const reviewed=await planProductImport(fakeDb([], [product]),result.csv,undefined,{classifications:{'XT5-40S':'SPECIAL_SKU_LIST'}});
+  assert.equal(reviewed.items.find(item=>item.line===98).after.catalogSource,'SPECIAL_SKU_LIST');
+  assert.equal(reviewed.items.find(item=>item.line===98).classes.includes('NEW SKU'),false);
+});

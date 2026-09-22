@@ -24,11 +24,13 @@ def fingerprint(table,columns):
     table='"'+table.replace('"','""')+'"'
     return f'''SELECT json_build_object('rows',count(*),'sha256',encode(sha256(convert_to(COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text)::text,'[]'),'UTF8')),'hex')) FROM (SELECT {projection} FROM {table}) t;'''
 
-if mode in ('capture','capture-forecast'):
+if mode in ('capture','capture-forecast','capture-odm'):
     tables=json.loads(query("SELECT json_object_agg(table_name,columns) FROM (SELECT table_name,json_agg(column_name ORDER BY ordinal_position) AS columns FROM information_schema.columns WHERE table_schema='public' AND table_name<>'_prisma_migrations' GROUP BY table_name) x;"))
     if mode=='capture-forecast':
         # The forecast migration intentionally backfills this one column.
         tables['Opportunity'].remove('forecastCategory')
+    if mode=='capture-odm':
+        tables['ProductSku'].remove('odmCustomerAccountId')
     results=query('\n'.join(fingerprint(t,c) for t,c in sorted(tables.items()))).splitlines()
     data={t:{'columns':c,**json.loads(value)} for (t,c),value in zip(sorted(tables.items()),results,strict=True)}
     with manifest.open('x') as output: json.dump(data,output,indent=2)

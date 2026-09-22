@@ -29,7 +29,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
         <tbody className="divide-y divide-slate-100">{products.map((p) => {
           const state = p.archivedAt ? "archived" : p.active ? "active" : "inactive";
           return <ProductTableRow key={p.id} id={p.id} name={p.name}>
-            <td className={styles.sku}>{p.sku}{p.skus.filter(sku => sku.catalogSource === 'ODM').slice(0, 2).map(sku => <span key={sku.id} className="ml-2 inline-block rounded bg-orange-50 px-1.5 py-0.5 text-xs font-semibold text-orange-800">{sku.partNumber} · ODM{sku.odmCustomerAccount ? ` · ${sku.odmCustomerAccount.name}` : ''}</span>)}</td>
+            <td className={styles.sku}>{p.sku}{p.skus.filter(sku => sku.catalogSource === 'ODM').slice(0, 2).map(sku => <span key={sku.id} className="ml-2 inline-block rounded bg-orange-50 px-1.5 py-0.5 text-xs font-semibold text-orange-800">{sku.partNumber} · ODM{sku.odmCustomers.length ? ` · ${sku.odmCustomers.map(link => link.account.name).join(", ")}` : ''}</span>)}</td>
             <td><Link className={styles.model} href={`/products/${p.id}/edit`}>{p.name}</Link></td>
             <td><span className={`${styles.badge} ${styles[state]}`}>{state[0].toUpperCase() + state.slice(1)}</span></td>
             <td><div className={styles.stateAction}><CrmStateControl kind="product" id={p.id} state={state}/></div></td>

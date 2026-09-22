@@ -21,7 +21,7 @@ function loadTs(relative) {
   return mod.exports;
 }
 const { parseAccountForm, roleLabels } = loadTs('lib/account-validation.ts');
-const { accountWhere, accountView, accountHref, listAccounts, PAGE_SIZE, checkAccountReferences, setAccountArchived } = loadTs('lib/accounts.ts');
+const { accountWhere, accountView, accountHref, listAccounts, PAGE_SIZE, checkAccountReferences, setAccountArchived, findAccountNameMatches, normalizeAccountName, saveAccount, createAccountFromImport } = loadTs('lib/accounts.ts');
 const { routeAccess } = loadTs('lib/authorization.ts');
 const { parseLookup } = loadTs('lib/lookups.ts');
 function form(entries) { const f = new FormData(); for (const [key, value] of entries) f.append(key, value); return f; }
@@ -54,6 +54,49 @@ test('address fields remain optional and enforce length limits', () => {
   assert.equal(valid.value.addressLine1, null);
   const invalid = parseAccountForm(form([['name', 'Example'], ['postalCode', 'x'.repeat(31)]]));
   assert.match(invalid.errors.postalCode, /30 characters/);
+});
+test('import Account name matching collapses whitespace and finds exact normalized duplicates', async () => {
+  const client={account:{findMany:async()=>[{id:1,name:'Amazon',archivedAt:null},{id:2,name:' Amazon  ',archivedAt:null},{id:3,name:'Amazon West',archivedAt:null}]}};
+  assert.equal(normalizeAccountName(' AMAZON   '),'amazon');
+  assert.deepEqual((await findAccountNameMatches(client,' amazon ')).map(account=>account.id),[1,2]);
+  assert.deepEqual(await findAccountNameMatches(client,'  '),[]);
+});
+test('minimal Account creation uses normal defaults and acting Admin attribution', async () => {
+  const input=parseAccountForm(form([['name',' Amazon ']])).value;
+  let created;
+  const client={$transaction:async fn=>fn({account:{create:async ({data})=>{created=data;return {id:42};}}})};
+  assert.equal(await saveAccount(client,input,undefined,7),42);
+  assert.equal(created.name,'Amazon');
+  assert.equal(created.status,'ACTIVE');
+  assert.equal(created.ownerId,null);
+  assert.equal(created.industry,null);
+  assert.equal(created.territory,null);
+  assert.equal(created.accountType,null);
+  assert.deepEqual(created.businessRoles,{create:[]});
+  assert.equal(created.createdById,7);
+  assert.equal(created.updatedById,7);
+});
+test('import Account creation enforces Admin access and reuses exact normalized matches', async () => {
+  const admin={id:7,role:'ADMIN',active:true,archivedAt:null};
+  let creates=0;
+  const records=[{id:10,name:' Amazon ',archivedAt:null}];
+  const client={account:{findMany:async()=>records},$transaction:async fn=>fn({account:{create:async ({data})=>{creates++;return {id:20,...data};}}})};
+  await assert.rejects(createAccountFromImport(client,{...admin,role:'SALES'},form([['name','Brady']])),/Access denied/);
+  assert.equal(creates,0);
+  const existing=await createAccountFromImport(client,admin,form([['name','amazon']]));
+  assert.equal(existing.kind,'existing');
+  assert.equal(existing.account.id,10);
+  assert.equal(creates,0);
+  records.push({id:11,name:'AMAZON',archivedAt:null});
+  const ambiguous=await createAccountFromImport(client,admin,form([['name','Amazon']]));
+  assert.equal(ambiguous.kind,'ambiguous');
+  assert.deepEqual(ambiguous.matches.map(account=>account.id),[10,11]);
+  assert.equal(creates,0);
+  records.length=0;
+  const created=await createAccountFromImport(client,admin,form([['name','  Brady  ']]));
+  assert.equal(created.kind,'created');
+  assert.equal(created.account.name,'Brady');
+  assert.equal(creates,1);
 });
 test('filter accepts supported role only', () => {
   assert.deepEqual(accountWhere({ role: 'BOGUS' }), {});

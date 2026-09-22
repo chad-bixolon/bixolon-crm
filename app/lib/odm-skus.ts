@@ -12,7 +12,7 @@ export async function resolveOdmAccount(db: Db, name: string) {
 
 export async function saveSkuMetadata(db: PrismaClient, input: {
   productId: number; skuId?: number; partNumber: string; description: string | null;
-  catalogSource: ProductCatalogSource | null; odmCustomerAccountId: number | null;
+  catalogSource: ProductCatalogSource | null; odmCustomerAccountIds: number[];
   baseSkuId: number | null; odmDescription: string | null;
 }) {
   return db.$transaction(async tx => {
@@ -26,8 +26,10 @@ export async function saveSkuMetadata(db: PrismaClient, input: {
     const key = normalizePartNumber(input.partNumber);
     const duplicate = await tx.productSku.findUnique({ where: { normalizedPartNumber: key } });
     if (duplicate && duplicate.id !== input.skuId) throw new Error('Part number already exists.');
-    if (input.catalogSource !== 'ODM' && (input.odmCustomerAccountId || input.baseSkuId || input.odmDescription)) throw new Error('ODM fields require Catalog Source ODM.');
-    if (input.odmCustomerAccountId && !await tx.account.findUnique({ where: { id: input.odmCustomerAccountId }, select: { id: true } })) throw new Error('ODM Customer must be an existing Account.');
+    const accountIds = [...new Set(input.odmCustomerAccountIds)];
+    if (input.catalogSource !== 'ODM' && accountIds.length) throw new Error('ODM Customer fields require Catalog Source ODM.');
+    if (input.catalogSource !== 'ODM' && input.catalogSource !== 'SPECIAL_SKU_LIST' && (input.baseSkuId || input.odmDescription)) throw new Error('Base SKU and description require ODM or Special SKU.');
+    if (accountIds.some(id => !Number.isSafeInteger(id) || id <= 0) || await tx.account.count({ where: { id: { in: accountIds }, archivedAt: null } }) !== accountIds.length) throw new Error('ODM Customer must be an existing Account.');
     if (input.baseSkuId) {
       if (input.baseSkuId === input.skuId) throw new Error('A SKU cannot be its own Base SKU.');
       const base = await tx.productSku.findUnique({ where: { id: input.baseSkuId }, select: { catalogSource: true } });
@@ -35,10 +37,16 @@ export async function saveSkuMetadata(db: PrismaClient, input: {
     }
     if (input.catalogSource === 'ODM' && input.skuId && await tx.productSku.count({ where: { baseSkuId: input.skuId } })) throw new Error('An ODM SKU cannot be used as a Base SKU.');
     const data = { partNumber: input.partNumber.trim(), normalizedPartNumber: key, description: input.description,
-      catalogSource: input.catalogSource, odmCustomerAccountId: input.catalogSource === 'ODM' ? input.odmCustomerAccountId : null,
-      baseSkuId: input.catalogSource === 'ODM' ? input.baseSkuId : null,
-      odmDescription: input.catalogSource === 'ODM' ? input.odmDescription : null,
-      odmCustomerSourceName: input.catalogSource === 'ODM' && !input.odmCustomerAccountId ? current?.odmCustomerSourceName ?? null : null };
-    return current ? tx.productSku.update({ where: { id: current.id }, data }) : tx.productSku.create({ data: { ...data, productId: input.productId } });
+      catalogSource: input.catalogSource,
+      baseSkuId: input.catalogSource === 'ODM' || input.catalogSource === 'SPECIAL_SKU_LIST' ? input.baseSkuId : null,
+      odmDescription: input.catalogSource === 'ODM' || input.catalogSource === 'SPECIAL_SKU_LIST' ? input.odmDescription : null,
+      odmCustomerSourceName: input.catalogSource === 'ODM' || input.catalogSource === 'SPECIAL_SKU_LIST' ? current?.odmCustomerSourceName ?? null : null };
+    if (current) {
+      await tx.productSkuOdmCustomer.deleteMany({ where: { skuId: current.id, accountId: { notIn: accountIds } } });
+      await tx.productSku.update({ where: { id: current.id }, data });
+    }
+    const sku = current ?? await tx.productSku.create({ data: { ...data, productId: input.productId } });
+    for (const accountId of accountIds) await tx.productSkuOdmCustomer.upsert({ where: { skuId_accountId: { skuId: sku.id, accountId } }, create: { skuId: sku.id, accountId }, update: {} });
+    return sku;
   });
 }

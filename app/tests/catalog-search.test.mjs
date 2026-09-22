@@ -10,7 +10,7 @@ Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(f
 const require = Module.createRequire(import.meta.url);
 const { catalogRank, rankCatalogResults, searchCatalog } = require(path.join(root, 'lib/catalog-search.ts'));
 const { selectedProductFitsCategory, selectCatalogItem, pricesForCurrency } = require(path.join(root, 'lib/catalog-picker.ts'));
-const row = (id, name, partNumber, description = '', sku = partNumber, categoryId = 1) => ({ id, productId: id, partNumber, description, product: { name, sku, categoryId } });
+const row = (id, name, partNumber, description = '', sku = partNumber, categoryId = 1) => ({ id, productId: id, partNumber, description, odmCustomers: [], product: { name, sku, categoryId } });
 const rows = [row(1, 'Ribbon', 'RIBBON-1', 'Compatible with XT5'), row(2, 'XT5', 'PRINTER-2'), row(3, 'Printer', 'XT5'), row(4, 'XT5-40', 'PRINTER-4'), row(5, 'Printer', 'XT5-50'), row(6, 'BIXOLON XT5', 'PRINTER-6'), row(7, 'Printer', 'BLACK-XT5-RIBBON'), row(8, 'Printer', 'OTHER', 'XT5 compatible ribbon', 'OTHER', 2)];
 test('XT5 ranking follows model, SKU, prefix, contains, then description', () => {
   assert.deepEqual(rankCatalogResults(rows, 'xt5').map(item => item.id), [2, 3, 4, 5, 6, 7, 8, 1]);

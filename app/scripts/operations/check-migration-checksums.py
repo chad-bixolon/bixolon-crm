@@ -19,6 +19,6 @@ for name, checksum in applied.items():
     if not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != checksum:
         raise SystemExit(f'Migration checksum mismatch: {name}')
 pending = sorted(path.name for path in (ROOT / 'app/prisma/migrations').iterdir() if path.is_dir() and path.name not in applied)
-if pending not in ([], ['20260921120000_odm_product_skus']):
+if pending not in ([], ['20260921120000_odm_product_skus'], ['20260921130000_odm_sku_customers'], ['20260921120000_odm_product_skus', '20260921130000_odm_sku_customers']):
     raise SystemExit(f'Unexpected pending migrations: {pending}')
 print(f'PASS: {len(applied)} migration checksums match; pending: {pending or "none"}.')

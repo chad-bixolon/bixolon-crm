@@ -1,7 +1,31 @@
 import { AccountBusinessRoleCode, AccountStatus, Prisma, type PrismaClient, type UserRole } from "@prisma/client";
 import type { AccountFields } from "./account-validation";
+import { parseAccountForm } from "./account-validation";
+import { assertPermission, type Actor } from "./authorization";
 
 export const PAGE_SIZE = 20;
+export const normalizeAccountName = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+export async function findAccountNameMatches(client: Pick<PrismaClient, "account">, name: string) {
+  const key = normalizeAccountName(name);
+  if (!key) return [];
+  const candidates = await client.account.findMany({ where: { name: { contains: name.trim().split(/\s+/)[0], mode: "insensitive" } }, select: { id: true, name: true, archivedAt: true } });
+  return candidates.filter((account) => normalizeAccountName(account.name) === key);
+}
+export async function createAccountFromImport(client: PrismaClient, actor: Actor, form: FormData) {
+  assertPermission(actor, 'users.manage');
+  if (actor.role !== 'ADMIN') throw new Error('Access denied');
+  const parsed = parseAccountForm(form);
+  if (!parsed.value) return {kind:'validation' as const,errors:parsed.errors,message:'Please correct the Account name.'};
+  const references = await checkAccountReferences(client,parsed.value);
+  if (Object.keys(references).length) return {kind:'validation' as const,errors:references,message:'Please correct the Account details.'};
+  const matches = await findAccountNameMatches(client,parsed.value.name);
+  const available = matches.filter(account=>!account.archivedAt);
+  if (matches.length===1 && available.length===1) return {kind:'existing' as const,account:{id:available[0].id,name:available[0].name}};
+  if (matches.length>1) return {kind:'ambiguous' as const,matches:available.map(({id,name})=>({id,name})),message:'More than one Account has this name. Choose the correct existing Account.'};
+  if (matches.length) return {kind:'validation' as const,errors:{name:'An archived Account has this name. Reactivate it before mapping.'},message:'Account could not be created.'};
+  const id = await saveAccount(client,parsed.value,undefined,actor.id);
+  return {kind:'created' as const,account:{id,name:parsed.value.name}};
+}
 export type AccountFilters = { q?: string; status?: string; role?: string; territory?: string; industry?: string; strategic?: string; page?: string; view?: string };
 
 export function accountView(filters: AccountFilters, role?: UserRole): "all" | "my" {
@@ -72,7 +96,7 @@ export async function checkAccountReferences(client: PrismaClient, input: Accoun
   return errors;
 }
 
-export async function saveAccount(client: PrismaClient, input: AccountFields, id?: number) {
+export async function saveAccount(client: PrismaClient, input: AccountFields, id?: number, actorId?: number) {
   const data = { name: input.name, status: input.status, strategicAccount: input.strategicAccount,
     industry: input.industry, territory: input.territory, ownerId: input.ownerId,
     website: input.website, phone: input.phone, addressLine1: input.addressLine1, addressLine2: input.addressLine2,
@@ -83,12 +107,12 @@ export async function saveAccount(client: PrismaClient, input: AccountFields, id
       const existing = await tx.account.findUnique({ where: { id }, select: { status: true } });
       if (!existing) throw new Error("Account not found.");
       if (existing.status === "ARCHIVED") throw new Error("Reactivate this account before editing it.");
-      await tx.account.update({ where: { id }, data });
+      await tx.account.update({ where: { id }, data: { ...data, updatedById: actorId } });
       await tx.accountBusinessRole.deleteMany({ where: { accountId: id } });
       if (input.roles.length) await tx.accountBusinessRole.createMany({ data: input.roles.map((role) => ({ accountId: id, role })) });
       return id;
     }
-    const account = await tx.account.create({ data: { ...data, businessRoles: { create: input.roles.map((role) => ({ role })) } } });
+    const account = await tx.account.create({ data: { ...data, createdById: actorId, updatedById: actorId, businessRoles: { create: input.roles.map((role) => ({ role })) } } });
     return account.id;
   });
 }

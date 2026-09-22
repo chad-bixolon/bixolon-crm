@@ -38,9 +38,9 @@ export async function submitProductSku(productId: number, skuId: number | null, 
   try {
     const saved = await saveSkuMetadata(prisma, { productId, skuId: skuId ?? undefined,
       partNumber: String(form.get('partNumber') ?? ''), description: String(form.get('description') ?? '').trim() || null,
-      catalogSource: source, odmCustomerAccountId: source === 'ODM' ? parseId('odmCustomerAccountId') : null,
-      baseSkuId: source === 'ODM' ? parseId('baseSkuId') : null,
-      odmDescription: source === 'ODM' ? String(form.get('odmDescription') ?? '').trim() || null : null });
+      catalogSource: source, odmCustomerAccountIds: source === 'ODM' ? form.getAll('odmCustomerAccountIds').map(value => Number(value)) : [],
+      baseSkuId: source === 'ODM' || source === 'SPECIAL_SKU_LIST' ? parseId('baseSkuId') : null,
+      odmDescription: source === 'ODM' || source === 'SPECIAL_SKU_LIST' ? String(form.get('odmDescription') ?? '').trim() || null : null });
     savedId = saved.id;
   } catch (error) { return { errors: {}, message: friendlyError(error, 'SKU could not be saved.') }; }
   revalidatePath('/products'); revalidatePath(`/products/${productId}/edit`);

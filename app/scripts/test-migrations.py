@@ -175,13 +175,16 @@ try:
       INSERT INTO "ProductSku" (id,"productId","partNumber","normalizedPartNumber","catalogSource","updatedAt") VALUES
         (5000,5000,'ODM-BASE','ODM-BASE','PRICE_LIST',now()),
         (5001,5000,'ODM-CUSTOM','ODM-CUSTOM','ODM',now());
-      UPDATE "ProductSku" SET "odmCustomerAccountId"=5000,"baseSkuId"=5000,"odmDescription"='Fixture customization' WHERE id=5001;''')
+      UPDATE "ProductSku" SET "baseSkuId"=5000,"odmDescription"='Fixture customization' WHERE id=5001;
+      INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","updatedAt") VALUES (5001,5000,now());''')
     for label, statement in {
         'ODM self reference': '''UPDATE "ProductSku" SET "baseSkuId"=5001 WHERE id=5001;''',
         'ODM to ODM base': '''INSERT INTO "ProductSku" (id,"productId","partNumber","normalizedPartNumber","catalogSource","baseSkuId","updatedAt") VALUES (5002,5000,'ODM-CHAIN','ODM-CHAIN','ODM',5001,now());''',
         'ODM base conversion': '''UPDATE "ProductSku" SET "catalogSource"='ODM' WHERE id=5000;''',
         'non ODM metadata': '''UPDATE "ProductSku" SET "catalogSource"='PRICE_LIST' WHERE id=5001;''',
-        'invalid ODM customer': '''UPDATE "ProductSku" SET "odmCustomerAccountId"=999999 WHERE id=5001;''',
+        'invalid ODM customer': '''INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","updatedAt") VALUES (5001,999999,now());''',
+        'duplicate ODM customer': '''INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","updatedAt") VALUES (5001,5000,now());''',
+        'special SKU customer': '''INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","updatedAt") VALUES (5000,5000,now());''',
     }.items():
         if sql('upgrade', statement, check=False).returncode == 0:
             raise RuntimeError(f'{label} unexpectedly succeeded')
@@ -291,7 +294,29 @@ try:
                     odm_before = {table: sql_values('backfill', f'''SELECT count(*) || ':' || md5(COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text)::text,'[]')) FROM "{table}" t;''')[0]
                                   for table in ('Account', 'Product', 'ProductSku')}
                     source_before = sql_values('backfill', '''SELECT COALESCE("catalogSource"::text,'NULL') || ':' || count(*) FROM "ProductSku" GROUP BY COALESCE("catalogSource"::text,'NULL') ORDER BY 1;''')
+                legacy_odm = None
+                if directory.name == '20260921130000_odm_sku_customers':
+                    sql('backfill', '''INSERT INTO "Account" (id,name,"updatedAt") VALUES (5100,'Backfill customer',now());
+                      INSERT INTO "Product" (id,sku,name,"updatedAt") VALUES (5100,'BACKFILL-MODEL','Backfill model',now());
+                      INSERT INTO "ProductSku" (id,"productId","partNumber","normalizedPartNumber","catalogSource","odmCustomerAccountId","odmCustomerSourceName","updatedAt")
+                        VALUES (5100,5100,'BACKFILL-ODM','BACKFILL-ODM','ODM',5100,'Original raw label',now());''')
+                    legacy_odm = {table: sql_values('backfill', f'''SELECT count(*) || ':' || md5(COALESCE(jsonb_agg({"to_jsonb(t) - 'odmCustomerAccountId'" if table == 'ProductSku' else 'to_jsonb(t)'} ORDER BY ({"to_jsonb(t) - 'odmCustomerAccountId'" if table == 'ProductSku' else 'to_jsonb(t)'})::text)::text,'[]')) FROM "{table}" t;''')[0] for table in ('Account','ProductSku')}
                 sql("backfill", (directory / "migration.sql").read_text())
+                if legacy_odm is not None:
+                    current = {table: sql_values('backfill', f'''SELECT count(*) || ':' || md5(COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text)::text,'[]')) FROM "{table}" t;''')[0] for table in ('Account','ProductSku')}
+                    if current != legacy_odm or sql_values('backfill', '''SELECT "skuId" || ':' || "accountId" || ':' || "sourceCustomerName" FROM "ProductSkuOdmCustomer" WHERE "skuId"=5100;''') != ['5100:5100:Original raw label']:
+                        raise RuntimeError('ODM customer backfill changed ProductSku/Account data or lost legacy association')
+                    sql('backfill', '''INSERT INTO "Account" (id,name,"updatedAt") VALUES (5101,'Second customer',now());
+                      INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","sourceCustomerName","updatedAt") VALUES (5100,5101,'Second raw label',now());''')
+                    if sql_values('backfill', '''SELECT count(*) FROM "ProductSkuOdmCustomer" WHERE "skuId"=5100;''') != ['2'] or sql('backfill', '''INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","updatedAt") VALUES (5100,5101,now());''', check=False).returncode == 0:
+                        raise RuntimeError('Multiple ODM customers or duplicate constraint failed')
+                    sql('backfill', '''INSERT INTO "ProductSku" (id,"productId","partNumber","normalizedPartNumber","catalogSource","updatedAt") VALUES
+                      (5102,5100,'BACKFILL-ODM-2','BACKFILL-ODM-2','ODM',now()),
+                      (5103,5100,'BACKFILL-SPECIAL','BACKFILL-SPECIAL','SPECIAL_SKU_LIST',now());
+                      INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","updatedAt") VALUES (5102,5100,now());''')
+                    if sql_values('backfill', '''SELECT count(DISTINCT s.id) FROM "ProductSku" s WHERE s."catalogSource"='ODM' AND EXISTS (SELECT 1 FROM "ProductSkuOdmCustomer" c WHERE c."skuId"=s.id AND c."accountId"=5100);''') != ['2'] or sql('backfill', '''INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","updatedAt") VALUES (5103,5100,now());''', check=False).returncode == 0:
+                        raise RuntimeError('Account SKU membership or customerless Special SKU constraint failed')
+                    print('PASS: legacy ODM association backfilled; Account and ProductSku fingerprints preserved; many-to-many links accepted; duplicates and Special SKU links rejected', flush=True)
                 if odm_before is not None:
                     after = {table: sql_values('backfill', f'''SELECT count(*) || ':' || md5(COALESCE(jsonb_agg({"to_jsonb(t) - 'odmCustomerAccountId' - 'odmCustomerSourceName' - 'baseSkuId' - 'odmDescription'" if table == 'ProductSku' else 'to_jsonb(t)'} ORDER BY ({"to_jsonb(t) - 'odmCustomerAccountId' - 'odmCustomerSourceName' - 'baseSkuId' - 'odmDescription'" if table == 'ProductSku' else 'to_jsonb(t)'})::text)::text,'[]')) FROM "{table}" t;''')[0]
                              for table in ('Account', 'Product', 'ProductSku')}
