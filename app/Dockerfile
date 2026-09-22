@@ -42,7 +42,7 @@ COPY prisma.config.ts ./
 COPY scripts/prisma-generate.mjs ./scripts/prisma-generate.mjs
 RUN npm ci
 COPY . .
-RUN npm run build
+RUN npm run build && rm -rf .next/cache
 
 FROM production-base AS production
 ENV NODE_ENV=production \

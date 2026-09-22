@@ -1,14 +1,205 @@
 'use client';
+
 import { useState } from 'react';
 import { TableScroll } from '@/components/table-scroll';
 import { previewTradeShowAction, confirmTradeShowAction } from './actions';
 import type { ImportChoice } from '@/lib/trade-show-import';
-type Plan=NonNullable<Awaited<ReturnType<typeof previewTradeShowAction>>['plan']>;
-function Picker({value,onChange,items,label}:{value:number|null;onChange:(id:number|null)=>void;items:{id:number;name:string}[];label:string}){const [search,setSearch]=useState('');const filtered=search?items.filter(i=>i.name.toLowerCase().includes(search.toLowerCase())).slice(0,30):items.slice(0,30);const selected=items.find(i=>i.id===value);return <div className="min-w-40"><input aria-label={`Search ${label}`} className="input mb-1 w-full text-xs" value={search} onChange={e=>setSearch(e.target.value)} placeholder={`Search ${label}`}/><select aria-label={label} className="input w-full text-xs" value={value??''} onChange={e=>onChange(e.target.value?Number(e.target.value):null)}><option value="">Unresolved</option>{selected&&!filtered.some(i=>i.id===selected.id)&&<option value={selected.id}>{selected.name}</option>}{filtered.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</select></div>}
-export function TradeShowImportWorkflow({showId,timezone}:{showId:number;timezone:string|null}){const [file,setFile]=useState<File|null>(null),[plan,setPlan]=useState<Plan|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[result,setResult]=useState<Awaited<ReturnType<typeof confirmTradeShowAction>>['result']>(null),[defaultRep,setDefaultRep]=useState<number|null>(null),[choices,setChoices]=useState<ImportChoice[]>([]);
-const fileForm=()=>{const form=new FormData();if(file)form.set('file',file);return form};
-async function preview(){if(!file)return;setBusy(true);setMessage('');setResult(null);try{const response=await previewTradeShowAction(showId,fileForm());if(response.error){setPlan(null);setMessage(response.error)}else if(response.plan){setPlan(response.plan);setChoices(response.plan.rows.map(row=>({sourceKey:row.sourceKey,repId:null,accountId:row.matches.accountSuggestion,contactId:row.matches.contactSuggestion,refresh:false})));setDefaultRep(null)}}finally{setBusy(false)}}
-function change(index:number,patch:Partial<ImportChoice>){setChoices(old=>old.map((choice,i)=>i===index?{...choice,...patch}:choice))}
-async function confirm(){if(!plan||!defaultRep)return;setBusy(true);setMessage('');try{const response=await confirmTradeShowAction(showId,fileForm(),plan.parsed.sha256,defaultRep,choices);if(response.error)setMessage(response.error);else{setResult(response.result);setPlan(null)}}finally{setBusy(false)}}
-const repItems=plan?.reps.map(r=>({id:r.id,name:`${r.firstName} ${r.lastName}`}))??[];const accountItems=plan?.accounts.map(a=>({id:a.id,name:a.name}))??[];const contactItems=plan?.contacts.map(c=>({id:c.id,name:`${c.firstName} ${c.lastName}${c.email?` · ${c.email}`:''}${c.account?.name?` · ${c.account.name}`:''}`}))??[];
-return <div className="min-w-0 max-w-full space-y-5"><section className="panel p-5"><h2 className="text-lg font-semibold">1. Upload and preview</h2><p className="mt-2 text-sm text-slate-600">Known NRA, NRF, and MODEX binary .xls exports only. Maximum 2 MB and 1,000 rows. Capture times use {timezone??'the Trade Show timezone (missing — review required)'}. No CRM records change during preview.</p><input className="mt-4 block text-sm" type="file" accept=".xls,application/vnd.ms-excel" onChange={e=>{setFile(e.target.files?.[0]??null);setPlan(null);setResult(null)}}/><button className="btn-primary mt-4" disabled={!file||busy} onClick={()=>void preview()}>Preview workbook</button></section>{message&&<p role="alert" className="rounded border border-red-300 bg-red-50 p-4 text-sm text-red-900">{message}</p>}{result&&<section className="panel p-5"><h2 className="font-semibold">Import complete</h2><p className="text-sm">{result.created} new · {result.existing} existing · {result.skipped} skipped. <a className="text-orange-800 underline" href={`/trade-shows/${showId}`}>View Trade Show</a></p></section>}{plan&&<><section className="panel p-5"><h2 className="text-lg font-semibold">2. Review</h2><p className="mt-2 text-sm">{plan.parsed.format} · {plan.filename} · {plan.parsed.sheet}</p>{plan.priorExactFile&&<p className="mt-2 font-semibold text-amber-800">This exact file has already been confirmed for this Trade Show.</p>}<div className="mt-4 flex flex-wrap gap-3">{Object.entries(plan.summary).map(([key,value])=><div className="rounded border px-3 py-2 text-sm" key={key}><strong>{value}</strong> {key.replace(/([A-Z])/g,' $1').toLowerCase()}</div>)}</div><label className="mt-5 block text-sm font-semibold">Default Sales Rep <select className="input mt-1 block min-w-64" value={defaultRep??''} onChange={e=>setDefaultRep(e.target.value?Number(e.target.value):null)}><option value="">Select active rep</option>{repItems.map(rep=><option key={rep.id} value={rep.id}>{rep.name}</option>)}</select></label></section><section className="panel min-w-0 max-w-full"><TableScroll label="Trade Show lead preview"><table className="w-[2060px] table-fixed text-left text-sm"><colgroup>{[104,184,184,176,208,240,184,240,256,284].map((width,index)=><col key={index} style={{width}}/>)}</colgroup><thead className="sticky top-0 z-10 bg-slate-50"><tr>{['Row / State','Captured source / UTC','Name / Title','Company','Email / Phone','Notes','Assigned rep','Account','Contact','Warnings / Refresh'].map(h=><th className="border-b p-2" key={h}>{h}</th>)}</tr></thead><tbody className="divide-y">{plan.rows.map((row,i)=><tr key={i} className="align-top"><td className="p-2">{row.sourceRow}<br/><strong>{row.state.replace('_',' ')}</strong></td><td className="p-2 whitespace-nowrap">{row.capturedSource}<br/>{row.capturedAt??'Needs review'}</td><td className="p-2">{row.firstName} {row.lastName}<br/>{row.title}</td><td className="whitespace-pre-wrap break-words p-2">{row.sourceCompany}</td><td className="break-all p-2">{row.email}<br/><span className="break-words">{row.phone}</span></td><td className="whitespace-pre-wrap break-words p-2">{row.sourceNotes}</td><td className="p-2"><Picker label={`row ${row.sourceRow} rep override`} value={choices[i]?.repId??null} onChange={id=>change(i,{repId:id})} items={repItems}/><span className="text-slate-500">{choices[i]?.repId?'Override':'Default: '+(repItems.find(r=>r.id===defaultRep)?.name??'none')}</span></td><td className="break-words p-2"><Picker label={`row ${row.sourceRow} Account`} value={choices[i]?.accountId??null} onChange={id=>change(i,{accountId:id})} items={accountItems}/>{row.matches.exactAccounts.length>0&&<span>Exact name: {row.matches.exactAccounts.map(a=>a.name).join(', ')}</span>}{row.matches.domainAccounts.length>0&&<span> · Website: {row.matches.domainAccounts.map(a=>a.name).join(', ')}</span>}{row.matches.possibleAccounts.length>0&&<span> · Possible: {row.matches.possibleAccounts.map(a=>a.name).join(', ')}</span>}</td><td className="break-words p-2"><Picker label={`row ${row.sourceRow} Contact`} value={choices[i]?.contactId??null} onChange={id=>change(i,{contactId:id})} items={contactItems}/>{row.matches.contactMatches.length>0&&<span>Email matches: {row.matches.contactMatches.map(c=>`${c.firstName} ${c.lastName}${c.accountId?` (Account #${c.accountId})`:''}`).join(', ')}</span>}</td><td className="whitespace-normal break-words p-2 text-amber-800">{row.warnings.join(' ')}{row.changedSourceFields.map(change=><div className="mt-2" key={change.header}><strong>{change.header}:</strong> <span className="line-through">{change.before||'(blank)'}</span> → {change.after||'(blank)'}</div>)}{row.state==='SOURCE_CHANGED'&&<label className="mt-2 block"><input type="checkbox" checked={choices[i]?.refresh??false} onChange={e=>change(i,{refresh:e.target.checked})}/> Refresh source fields (preserves CRM work)</label>}</td></tr>)}</tbody></table></TableScroll></section><section className="panel p-5"><h2 className="font-semibold">3. Confirm import</h2><p className="mt-1 text-sm text-slate-600">New scans become separate leads. Existing scans stay unchanged unless source refresh is checked. Invalid rows are skipped. Account and Contact records are never edited.</p><button className="btn-primary mt-4" disabled={busy||!defaultRep} onClick={()=>void confirm()}>Confirm import</button></section></>}</div>}
+
+type Plan = NonNullable<Awaited<ReturnType<typeof previewTradeShowAction>>['plan']>;
+
+function Picker({ value, onChange, items, label }: { value: number | null; onChange: (id: number | null) => void; items: { id: number; name: string }[]; label: string }) {
+  const [search, setSearch] = useState('');
+  const filtered = search ? items.filter(item => item.name.toLowerCase().includes(search.toLowerCase())).slice(0, 30) : items.slice(0, 30);
+  const selected = items.find(item => item.id === value);
+
+  return <div className="min-w-40">
+    <input aria-label={`Search ${label}`} className="input mb-1 w-full text-xs" value={search} onChange={event => setSearch(event.target.value)} placeholder={`Search ${label}`} />
+    <select aria-label={label} className="input w-full text-xs" value={value ?? ''} onChange={event => onChange(event.target.value ? Number(event.target.value) : null)}>
+      <option value="">Unresolved</option>
+      {selected && !filtered.some(item => item.id === selected.id) && <option value={selected.id}>{selected.name}</option>}
+      {filtered.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+    </select>
+  </div>;
+}
+
+function WorkflowSteps({ current }: { current: 1 | 2 | 3 }) {
+  const steps = ['Upload', 'Review & Assign', 'Import'];
+
+  return <nav aria-label="Import progress" className="max-w-3xl">
+    <ol className="grid grid-cols-3 gap-2">
+      {steps.map((step, index) => {
+        const number = index + 1;
+        const active = number === current;
+        const complete = number < current;
+        return <li key={step} aria-current={active ? 'step' : undefined} className={`flex min-w-0 items-center gap-2 border-t-2 pt-2 text-xs font-medium sm:text-sm ${active ? 'border-orange-600 text-orange-800' : complete ? 'border-orange-200 text-slate-700' : 'border-slate-200 text-slate-400'}`}>
+          <span aria-hidden="true" className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${active ? 'bg-orange-600 text-white' : complete ? 'bg-orange-100 text-orange-800' : 'bg-slate-100 text-slate-500'}`}>{number}</span>
+          <span className="min-w-0 leading-tight">{step}</span>
+        </li>;
+      })}
+    </ol>
+  </nav>;
+}
+
+export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; timezone: string | null }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [message, setMessage] = useState('');
+  const [result, setResult] = useState<Awaited<ReturnType<typeof confirmTradeShowAction>>['result']>(null);
+  const [defaultRep, setDefaultRep] = useState<number | null>(null);
+  const [choices, setChoices] = useState<ImportChoice[]>([]);
+
+  const fileForm = () => {
+    const form = new FormData();
+    if (file) form.set('file', file);
+    return form;
+  };
+
+  async function preview() {
+    if (!file) return;
+    setBusy(true);
+    setPreviewing(true);
+    setMessage('');
+    setResult(null);
+    try {
+      const response = await previewTradeShowAction(showId, fileForm());
+      if (response.error) {
+        setPlan(null);
+        setMessage(response.error);
+      } else if (response.plan) {
+        setPlan(response.plan);
+        setChoices(response.plan.rows.map(row => ({ sourceKey: row.sourceKey, repId: null, accountId: row.matches.accountSuggestion, contactId: row.matches.contactSuggestion, refresh: false })));
+        setDefaultRep(null);
+      }
+    } finally {
+      setPreviewing(false);
+      setBusy(false);
+    }
+  }
+
+  function change(index: number, patch: Partial<ImportChoice>) {
+    setChoices(old => old.map((choice, itemIndex) => itemIndex === index ? { ...choice, ...patch } : choice));
+  }
+
+  async function confirm() {
+    if (!plan || !defaultRep) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      const response = await confirmTradeShowAction(showId, fileForm(), plan.parsed.sha256, defaultRep, choices);
+      if (response.error) setMessage(response.error);
+      else {
+        setResult(response.result);
+        setPlan(null);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const repItems = plan?.reps.map(rep => ({ id: rep.id, name: `${rep.firstName} ${rep.lastName}` })) ?? [];
+  const accountItems = plan?.accounts.map(account => ({ id: account.id, name: account.name })) ?? [];
+  const contactItems = plan?.contacts.map(contact => ({ id: contact.id, name: `${contact.firstName} ${contact.lastName}${contact.email ? ` · ${contact.email}` : ''}${contact.account?.name ? ` · ${contact.account.name}` : ''}` })) ?? [];
+  const currentStep: 1 | 2 | 3 = result ? 3 : plan ? 2 : 1;
+
+  return <div className="min-w-0 max-w-full space-y-5">
+    <WorkflowSteps current={currentStep} />
+
+    <section className="panel max-w-3xl p-4 sm:p-5">
+      <h2 className="text-lg font-semibold">1. Upload and preview</h2>
+      <ul id="file-requirements" className="mt-2 flex flex-col gap-1 text-sm text-slate-600 sm:flex-row sm:flex-wrap sm:gap-x-5">
+        <li>Supported formats: NRA, NRF, and MODEX .xls exports.</li>
+        <li>Maximum 2 MB and 1,000 leads.</li>
+        <li>Previewing does not change CRM data.</li>
+      </ul>
+      {!timezone && <p id="timezone-warning" role="status" className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <span className="font-semibold">Trade Show timezone is missing.</span> Capture times require review before import.
+      </p>}
+
+      <div className="mt-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <label htmlFor="trade-show-workbook" className="relative inline-flex cursor-pointer items-center justify-center overflow-hidden rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-orange-600">
+          <input
+            id="trade-show-workbook"
+            className="absolute inset-0 cursor-pointer opacity-0"
+            type="file"
+            accept=".xls,application/vnd.ms-excel"
+            aria-describedby={`file-requirements file-selection-status${!timezone ? ' timezone-warning' : ''}`}
+            onChange={event => {
+              setFile(event.target.files?.[0] ?? null);
+              setPlan(null);
+              setResult(null);
+            }}
+          />
+          Choose .xls file
+        </label>
+        <p id="file-selection-status" aria-live="polite" className={`min-w-0 break-all text-sm ${file ? 'font-medium text-slate-800' : 'text-slate-500'}`}>
+          {file?.name ?? 'No file selected'}
+        </p>
+      </div>
+
+      <button
+        className="btn-primary mt-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+        type="button"
+        disabled={!file || busy}
+        aria-busy={previewing}
+        onClick={() => void preview()}
+      >
+        {previewing ? 'Generating preview…' : 'Preview workbook'}
+      </button>
+    </section>
+
+    {message && <p role="alert" className="rounded border border-red-300 bg-red-50 p-4 text-sm text-red-900">{message}</p>}
+
+    {result && <section className="panel max-w-3xl p-5">
+      <h2 className="font-semibold">Import complete</h2>
+      <p className="text-sm">{result.created} new · {result.existing} existing · {result.skipped} skipped. <a className="text-orange-800 underline" href={`/trade-shows/${showId}`}>View Trade Show</a></p>
+    </section>}
+
+    {plan && <>
+      <section className="panel p-5">
+        <h2 className="text-lg font-semibold">2. Review &amp; Assign</h2>
+        <p className="mt-2 text-sm">{plan.parsed.format} · {plan.filename} · {plan.parsed.sheet}</p>
+        {plan.priorExactFile && <p className="mt-2 font-semibold text-amber-800">This exact file has already been confirmed for this Trade Show.</p>}
+        <div className="mt-4 flex flex-wrap gap-3">
+          {Object.entries(plan.summary).map(([key, value]) => <div className="rounded border px-3 py-2 text-sm" key={key}><strong>{value}</strong> {key.replace(/([A-Z])/g, ' $1').toLowerCase()}</div>)}
+        </div>
+        <label className="mt-5 block text-sm font-semibold">Default Sales Rep
+          <select className="input mt-1 block w-full max-w-sm" value={defaultRep ?? ''} onChange={event => setDefaultRep(event.target.value ? Number(event.target.value) : null)}>
+            <option value="">Select active rep</option>
+            {repItems.map(rep => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
+          </select>
+        </label>
+      </section>
+
+      <section className="panel min-w-0 max-w-full">
+        <TableScroll label="Trade Show lead preview">
+          <table className="w-[2060px] table-fixed text-left text-sm">
+            <colgroup>{[104, 184, 184, 176, 208, 240, 184, 240, 256, 284].map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
+            <thead className="sticky top-0 z-10 bg-slate-50"><tr>{['Row / State', 'Captured source / UTC', 'Name / Title', 'Company', 'Email / Phone', 'Notes', 'Assigned rep', 'Account', 'Contact', 'Warnings / Refresh'].map(heading => <th className="border-b p-2" key={heading}>{heading}</th>)}</tr></thead>
+            <tbody className="divide-y">
+              {plan.rows.map((row, index) => <tr key={index} className="align-top">
+                <td className="p-2">{row.sourceRow}<br /><strong>{row.state.replace('_', ' ')}</strong></td>
+                <td className="whitespace-nowrap p-2">{row.capturedSource}<br />{row.capturedAt ?? 'Needs review'}</td>
+                <td className="p-2">{row.firstName} {row.lastName}<br />{row.title}</td>
+                <td className="whitespace-pre-wrap break-words p-2">{row.sourceCompany}</td>
+                <td className="break-all p-2">{row.email}<br /><span className="break-words">{row.phone}</span></td>
+                <td className="whitespace-pre-wrap break-words p-2">{row.sourceNotes}</td>
+                <td className="p-2"><Picker label={`row ${row.sourceRow} rep override`} value={choices[index]?.repId ?? null} onChange={id => change(index, { repId: id })} items={repItems} /><span className="text-slate-500">{choices[index]?.repId ? 'Override' : 'Default: ' + (repItems.find(rep => rep.id === defaultRep)?.name ?? 'none')}</span></td>
+                <td className="break-words p-2"><Picker label={`row ${row.sourceRow} Account`} value={choices[index]?.accountId ?? null} onChange={id => change(index, { accountId: id })} items={accountItems} />{row.matches.exactAccounts.length > 0 && <span>Exact name: {row.matches.exactAccounts.map(account => account.name).join(', ')}</span>}{row.matches.domainAccounts.length > 0 && <span> · Website: {row.matches.domainAccounts.map(account => account.name).join(', ')}</span>}{row.matches.possibleAccounts.length > 0 && <span> · Possible: {row.matches.possibleAccounts.map(account => account.name).join(', ')}</span>}</td>
+                <td className="break-words p-2"><Picker label={`row ${row.sourceRow} Contact`} value={choices[index]?.contactId ?? null} onChange={id => change(index, { contactId: id })} items={contactItems} />{row.matches.contactMatches.length > 0 && <span>Email matches: {row.matches.contactMatches.map(contact => `${contact.firstName} ${contact.lastName}${contact.accountId ? ` (Account #${contact.accountId})` : ''}`).join(', ')}</span>}</td>
+                <td className="whitespace-normal break-words p-2 text-amber-800">{row.warnings.join(' ')}{row.changedSourceFields.map(sourceChange => <div className="mt-2" key={sourceChange.header}><strong>{sourceChange.header}:</strong> <span className="line-through">{sourceChange.before || '(blank)'}</span> → {sourceChange.after || '(blank)'}</div>)}{row.state === 'SOURCE_CHANGED' && <label className="mt-2 block"><input type="checkbox" checked={choices[index]?.refresh ?? false} onChange={event => change(index, { refresh: event.target.checked })} /> Refresh source fields (preserves CRM work)</label>}</td>
+              </tr>)}
+            </tbody>
+          </table>
+        </TableScroll>
+      </section>
+
+      <section className="panel p-5">
+        <h2 className="font-semibold">3. Confirm import</h2>
+        <p className="mt-1 text-sm text-slate-600">New scans become separate leads. Existing scans stay unchanged unless source refresh is checked. Invalid rows are skipped. Account and Contact records are never edited.</p>
+        <button className="btn-primary mt-4" disabled={busy || !defaultRep} onClick={() => void confirm()}>Confirm import</button>
+      </section>
+    </>}
+  </div>;
+}
