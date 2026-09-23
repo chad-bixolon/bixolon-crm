@@ -18,19 +18,20 @@ const account=(id,name)=>({accountId:id,account:{id,name,industry:null,industryC
 const row=(id,currency='USD',overrides={})=>({id,name:`Deal ${id}`,currencyCode:currency,probability:null,expectedCloseDate:new Date('2026-09-30T00:00:00Z'),createdAt:new Date('2026-09-01T00:00:00Z'),ownerId:7,stageId:1,stage:{id:1,name:'Qualified',probability:25,sortOrder:1,isClosed:false,isWon:false,active:true,createdAt:new Date(),updatedAt:new Date()},owner:{id:7,firstName:'Sales',lastName:'Rep'},participants:[account(1,'End User')],products:[{id:id*10,quantity:2,estimatedUnitPrice:new Prisma.Decimal('50.00'),archivedAt:null,productId:3,skuId:9,product:{id:3,name:'Printer',categoryId:4,category:{id:4,name:'POS'}},sku:{id:9,partNumber:'SKU-9'}}],projects:[],...overrides});
 
 test('report discovery follows runnable type and built-in authorization',()=>{
- const salesBuiltIns=['MY_OPEN_PIPELINE','PIPELINE_THIS_QUARTER','PIPELINE_BY_SALES_REP','ACCOUNT_ENGAGEMENT','PRODUCT_THIS_QUARTER','PIPELINE_BY_PRODUCT','PIPELINE_BY_PARTNER','PIPELINE_BY_PARTNER_TYPE','MEDIA_PARTNER_PIPELINE','ACTIVE_PROJECTS','PIPELINE_BY_PROJECT','PROJECTS_NEAR_TARGET','PE_USAGE_THIS_QUARTER','PE_USAGE_BY_SALES_REP','PE_USAGE_BY_PRODUCT','PRICE_OVERRIDES','PES_BELOW_MOQ'];
+ const tradeShowBuiltIns=['TRADE_SHOW_CURRENT_YEAR','LEADS_BY_TRADE_SHOW','LEADS_BY_SALES_REP','TRADE_SHOW_CONVERSION_FUNNEL','TRADE_SHOW_PIPELINE','TRADE_SHOW_FOLLOW_UP_NEEDED'];
+ const salesBuiltIns=['MY_OPEN_PIPELINE','PIPELINE_THIS_QUARTER','PIPELINE_BY_SALES_REP','ACCOUNT_ENGAGEMENT','PRODUCT_THIS_QUARTER','PIPELINE_BY_PRODUCT','PIPELINE_BY_PARTNER','PIPELINE_BY_PARTNER_TYPE','MEDIA_PARTNER_PIPELINE','ACTIVE_PROJECTS','PIPELINE_BY_PROJECT','PROJECTS_NEAR_TARGET','PE_USAGE_THIS_QUARTER','PE_USAGE_BY_SALES_REP','PE_USAGE_BY_PRODUCT','PRICE_OVERRIDES','PES_BELOW_MOQ',...tradeShowBuiltIns];
  for(const role of ['ADMIN','SALES_MANAGER','SALES']){
   assert.deepEqual(reporting.getVisibleBuiltInReports(actor(role)),salesBuiltIns);
-  assert.deepEqual(reporting.getVisibleReportTypes(actor(role)),['PIPELINE','ACCOUNT_ACTIVITY','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE']);
-  assert.deepEqual(reporting.getCreatableReportTypes(actor(role)),['PIPELINE','ACCOUNT_ACTIVITY','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE']);
+  assert.deepEqual(reporting.getVisibleReportTypes(actor(role)),['PIPELINE','ACCOUNT_ACTIVITY','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE','TRADE_SHOW']);
+  assert.deepEqual(reporting.getCreatableReportTypes(actor(role)),['PIPELINE','ACCOUNT_ACTIVITY','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE','TRADE_SHOW']);
   assert.equal(reporting.canAccessReports(actor(role)),true);
  }
- assert.deepEqual(reporting.getVisibleBuiltInReports(actor('MARKETING_MANAGER')),[]);
- assert.deepEqual(reporting.getVisibleReportTypes(actor('MARKETING_MANAGER')),[]);
- assert.deepEqual(reporting.getCreatableReportTypes(actor('MARKETING_MANAGER')),[]);
- assert.equal(reporting.canAccessReports(actor('MARKETING_MANAGER')),false);
- assert.deepEqual(reporting.getVisibleBuiltInReports(actor('READ_ONLY')),[]);
- assert.deepEqual(reporting.getVisibleReportTypes(actor('READ_ONLY')),['PIPELINE','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE']);
+ assert.deepEqual(reporting.getVisibleBuiltInReports(actor('MARKETING_MANAGER')),tradeShowBuiltIns);
+ assert.deepEqual(reporting.getVisibleReportTypes(actor('MARKETING_MANAGER')),['TRADE_SHOW']);
+ assert.deepEqual(reporting.getCreatableReportTypes(actor('MARKETING_MANAGER')),['TRADE_SHOW']);
+ assert.equal(reporting.canAccessReports(actor('MARKETING_MANAGER')),true);
+ assert.deepEqual(reporting.getVisibleBuiltInReports(actor('READ_ONLY')),tradeShowBuiltIns);
+ assert.deepEqual(reporting.getVisibleReportTypes(actor('READ_ONLY')),['PIPELINE','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE','TRADE_SHOW']);
  assert.deepEqual(reporting.getCreatableReportTypes(actor('READ_ONLY')),[]);
  assert.equal(reporting.canAccessReports(actor('READ_ONLY')),true);
  assert.equal(reporting.canRunReportType(actor('ADMIN'),'PRICE_EXCEPTION_USAGE'),true);
@@ -84,7 +85,7 @@ test('Sales scope is always applied even when a shared report requests another o
  assert.equal(reporting.canViewReportDefinition(actor('SALES',7),{ownerId:99,visibility:'SHARED',reportType:'PIPELINE',archivedAt:null}),true);
  let where;const config={...base(),filters:[...base().filters,{field:'ownerId',operator:'eq',value:99}]};await reporting.executePipelineReport({opportunity:{findMany:async args=>{where=args.where;return[];}}},actor('SALES',7),config);
  assert.ok(where.AND.some(clause=>clause.ownerId===7));assert.ok(where.AND.some(clause=>clause.ownerId===99));
- assert.deepEqual(reporting.savedReportWhere(actor('SALES',7)),{archivedAt:null,reportType:{in:['PIPELINE','ACCOUNT_ACTIVITY','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE']},OR:[{ownerId:7},{visibility:'SHARED'}]});
+ assert.deepEqual(reporting.savedReportWhere(actor('SALES',7)),{archivedAt:null,reportType:{in:['PIPELINE','ACCOUNT_ACTIVITY','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE','TRADE_SHOW']},OR:[{ownerId:7},{visibility:'SHARED'}]});
 });
 
 test('shared saved reports remain subject to report-type authorization',async()=>{
@@ -94,7 +95,7 @@ test('shared saved reports remain subject to report-type authorization',async()=
  assert.equal(reporting.canViewReportDefinition(actor('READ_ONLY'),sharedPipeline),true);
  assert.equal(reporting.canViewReportDefinition(actor('MARKETING_MANAGER'),sharedPipeline),false);
  assert.equal(reporting.canViewReportDefinition(actor('ADMIN'),sharedFuture),true);
- assert.deepEqual(reporting.savedReportWhere(actor('MARKETING_MANAGER')).reportType,{in:[]});
+ assert.deepEqual(reporting.savedReportWhere(actor('MARKETING_MANAGER')).reportType,{in:['TRADE_SHOW']});
  await assert.rejects(reporting.executePipelineReport({opportunity:{findMany:async()=>[]}},actor('MARKETING_MANAGER'),base()),/Access denied/);
 });
 

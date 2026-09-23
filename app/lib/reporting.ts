@@ -1,4 +1,4 @@
-import { ForecastCategory, ProductCatalogSource, Prisma, type PrismaClient } from '@prisma/client';
+import { ForecastCategory, ProductCatalogSource, Prisma, type PrismaClient, type TradeShowLeadStatus } from '@prisma/client';
 import { can, opportunityScope, type Actor } from './authorization';
 import { lineTotal, opportunityTotal, weightedValue } from './opportunities';
 import { daysSince, engagementAccountWhere, hasNoActivityInDays, latestAccountActivityOrder } from './engagement';
@@ -7,7 +7,7 @@ import { projectReadWhere } from './projects';
 import { projectStatusLabels } from './project-labels';
 import { canViewPriceException } from './price-exception-visibility';
 
-export const reportTypes = ['PIPELINE','ACCOUNT_ACTIVITY','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE'] as const;
+export const reportTypes = ['PIPELINE','ACCOUNT_ACTIVITY','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE','TRADE_SHOW'] as const;
 export type CuratedReportType = typeof reportTypes[number];
 export const reportVisibilities = ['PERSONAL','SHARED'] as const;
 export type ReportVisibilityValue = typeof reportVisibilities[number];
@@ -71,6 +71,16 @@ const priceExceptionUsageDefinition: ReportTypeDefinition = {
   sorts:{lineValue:'Line Value',quantity:'Quantity',opportunity:'Opportunity',product:'Product',peCode:'Price Exception',closeDate:'Expected Close Date',owner:'Sales Rep'},
 };
 
+const tradeShowDefinition: ReportTypeDefinition = {
+  label:'Trade Show Performance',description:'Review Trade Show leads, follow-up, conversions, and the sales pipeline generated from each event.',grain:'Trade Show Lead',implemented:true,
+  semanticNote:'Trade Show attribution uses only the originating converted lead. Opportunity values are counted once, use active product lines, and remain separated by currency.',
+  filters:{tradeShowId:{label:'Trade Show',operators:['eq']},showDate:{label:'Trade Show date',operators:['preset','between']},ownerId:{label:'Assigned Sales Rep',operators:['eq']},leadStatus:{label:'Lead Status',operators:['eq']},converted:{label:'Converted',operators:['eq']},accountLinked:{label:'Account Linked',operators:['eq']},contactLinked:{label:'Contact Linked',operators:['eq']},followUpStatus:{label:'Follow-Up Status',operators:['eq']},competitorId:{label:'Resolved Competitor',operators:['eq']},productInterest:{label:'Product Interest',operators:['contains']},search:{label:'Lead, company, or email',operators:['contains']},stageId:{label:'Opportunity Stage',operators:['eq']},forecastCategory:{label:'Forecast Category',operators:['eq']},currency:{label:'Currency',operators:['eq']}},
+  columns:{tradeShow:'Trade Show',lead:'Lead',company:'Company',assignedRep:'Assigned Rep',leadStatus:'Lead Status',account:'Account',contact:'Contact',capturedDate:'Captured Date',followUp:'Follow-Up',competitor:'Competitor',competitorSourceText:'Competitor Source Text',productInterest:'Product Interest',opportunity:'Converted Opportunity',opportunityOwner:'Opportunity Owner',opportunityStage:'Opportunity Stage',opportunityValue:'Opportunity Value',weightedValue:'Weighted Value',conversionDate:'Conversion Date',currency:'Currency'},
+  groupings:{tradeShow:'Trade Show',assignedRep:'Assigned Sales Rep',leadStatus:'Lead Status',competitor:'Resolved Competitor',opportunityStage:'Opportunity Stage',forecastCategory:'Forecast Category',currency:'Currency'},
+  metrics:{totalLeads:'Total Leads',assignedLeads:'Assigned Leads',newLeads:'New',contactedLeads:'Contacted',qualifiedLeads:'Qualified',convertedLeads:'Converted',disqualifiedLeads:'Disqualified',conversionRate:'Conversion Rate',opportunityCount:'Opportunities Created',pipeline:'Open Pipeline',weightedPipeline:'Weighted Pipeline',commit:'Commit',closedWonValue:'Closed Won Value',closedWonOpportunityCount:'Closed Won Opportunity Count'},
+  sorts:{tradeShow:'Trade Show',lead:'Lead',company:'Company',assignedRep:'Assigned Rep',leadStatus:'Lead Status',capturedDate:'Captured Date',followUp:'Follow-Up Date',opportunityStage:'Opportunity Stage',opportunityValue:'Opportunity Value',conversionDate:'Conversion Date'},
+};
+
 export const reportRegistry: Record<CuratedReportType, ReportTypeDefinition> = {
   PIPELINE: pipelineDefinition,
   ACCOUNT_ACTIVITY: accountActivityDefinition,
@@ -94,18 +104,19 @@ export const reportRegistry: Record<CuratedReportType, ReportTypeDefinition> = {
     sorts:{project:'Project',projectOwner:'Project Owner',projectStatus:'Project Status',targetEndDate:'Target End Date',pipeline:'Pipeline',opportunityCount:'Opportunity Count'},
   },
   PRICE_EXCEPTION_USAGE: priceExceptionUsageDefinition,
+  TRADE_SHOW: tradeShowDefinition,
 };
 
-export const builtInReportTypes = ['MY_OPEN_PIPELINE','PIPELINE_THIS_QUARTER','PIPELINE_BY_SALES_REP','ACCOUNT_ENGAGEMENT','PRODUCT_THIS_QUARTER','PIPELINE_BY_PRODUCT','PIPELINE_BY_PARTNER','PIPELINE_BY_PARTNER_TYPE','MEDIA_PARTNER_PIPELINE','ACTIVE_PROJECTS','PIPELINE_BY_PROJECT','PROJECTS_NEAR_TARGET','PE_USAGE_THIS_QUARTER','PE_USAGE_BY_SALES_REP','PE_USAGE_BY_PRODUCT','PRICE_OVERRIDES','PES_BELOW_MOQ'] as const;
+export const builtInReportTypes = ['MY_OPEN_PIPELINE','PIPELINE_THIS_QUARTER','PIPELINE_BY_SALES_REP','ACCOUNT_ENGAGEMENT','PRODUCT_THIS_QUARTER','PIPELINE_BY_PRODUCT','PIPELINE_BY_PARTNER','PIPELINE_BY_PARTNER_TYPE','MEDIA_PARTNER_PIPELINE','ACTIVE_PROJECTS','PIPELINE_BY_PROJECT','PROJECTS_NEAR_TARGET','PE_USAGE_THIS_QUARTER','PE_USAGE_BY_SALES_REP','PE_USAGE_BY_PRODUCT','PRICE_OVERRIDES','PES_BELOW_MOQ','TRADE_SHOW_CURRENT_YEAR','LEADS_BY_TRADE_SHOW','LEADS_BY_SALES_REP','TRADE_SHOW_CONVERSION_FUNNEL','TRADE_SHOW_PIPELINE','TRADE_SHOW_FOLLOW_UP_NEEDED'] as const;
 export type BuiltInReportType = typeof builtInReportTypes[number];
 
 export function canRunReportType(actor: Actor, reportType: unknown) {
-  return reportTypes.includes(reportType as CuratedReportType) && reportRegistry[reportType as CuratedReportType].implemented && can(actor,reportType === 'ACCOUNT_ACTIVITY' ? 'sales.write' : 'sales.read');
+  return reportTypes.includes(reportType as CuratedReportType) && reportRegistry[reportType as CuratedReportType].implemented && can(actor,reportType === 'TRADE_SHOW' ? 'trade-shows.read' : reportType === 'ACCOUNT_ACTIVITY' ? 'sales.write' : 'sales.read');
 }
 export function getVisibleReportTypes(actor: Actor) { return reportTypes.filter(reportType=>canRunReportType(actor,reportType)); }
-export function getCreatableReportTypes(actor: Actor) { return can(actor,'sales.write') ? getVisibleReportTypes(actor) : []; }
+export function getCreatableReportTypes(actor: Actor) { return getVisibleReportTypes(actor).filter(reportType=>reportType==='TRADE_SHOW'?actor.role!=='READ_ONLY':can(actor,'sales.write')); }
 export function canViewBuiltInReport(actor: Actor, reportType: BuiltInReportType) {
-  return reportType === 'ACCOUNT_ENGAGEMENT' ? canRunReportType(actor,'ACCOUNT_ACTIVITY') : ['PE_USAGE_THIS_QUARTER','PE_USAGE_BY_SALES_REP','PE_USAGE_BY_PRODUCT','PRICE_OVERRIDES','PES_BELOW_MOQ'].includes(reportType) ? getCreatableReportTypes(actor).includes('PRICE_EXCEPTION_USAGE') : ['ACTIVE_PROJECTS','PIPELINE_BY_PROJECT','PROJECTS_NEAR_TARGET'].includes(reportType) ? getCreatableReportTypes(actor).includes('PROJECT_INITIATIVE') : ['PIPELINE_BY_PARTNER','PIPELINE_BY_PARTNER_TYPE','MEDIA_PARTNER_PIPELINE'].includes(reportType) ? getCreatableReportTypes(actor).includes('CHANNEL_PARTNER') : reportType === 'PRODUCT_THIS_QUARTER' || reportType === 'PIPELINE_BY_PRODUCT' ? getCreatableReportTypes(actor).includes('PRODUCT_PERFORMANCE') : getCreatableReportTypes(actor).includes('PIPELINE');
+  return reportType.startsWith('TRADE_SHOW_') || reportType.startsWith('LEADS_BY_') ? canRunReportType(actor,'TRADE_SHOW') : reportType === 'ACCOUNT_ENGAGEMENT' ? canRunReportType(actor,'ACCOUNT_ACTIVITY') : ['PE_USAGE_THIS_QUARTER','PE_USAGE_BY_SALES_REP','PE_USAGE_BY_PRODUCT','PRICE_OVERRIDES','PES_BELOW_MOQ'].includes(reportType) ? getCreatableReportTypes(actor).includes('PRICE_EXCEPTION_USAGE') : ['ACTIVE_PROJECTS','PIPELINE_BY_PROJECT','PROJECTS_NEAR_TARGET'].includes(reportType) ? getCreatableReportTypes(actor).includes('PROJECT_INITIATIVE') : ['PIPELINE_BY_PARTNER','PIPELINE_BY_PARTNER_TYPE','MEDIA_PARTNER_PIPELINE'].includes(reportType) ? getCreatableReportTypes(actor).includes('CHANNEL_PARTNER') : reportType === 'PRODUCT_THIS_QUARTER' || reportType === 'PIPELINE_BY_PRODUCT' ? getCreatableReportTypes(actor).includes('PRODUCT_PERFORMANCE') : getCreatableReportTypes(actor).includes('PIPELINE');
 }
 export function getVisibleBuiltInReports(actor: Actor) { return builtInReportTypes.filter(reportType=>canViewBuiltInReport(actor,reportType)); }
 export function canAccessReports(actor: Actor) { return getVisibleReportTypes(actor).length > 0 || getVisibleBuiltInReports(actor).length > 0; }
@@ -122,7 +133,7 @@ export const channelPartnerAccountRoles = ['DISTRIBUTOR','VAR','ISV','OEM','PART
 export const channelPartnerParticipantRoles = ['DISTRIBUTOR','VAR_RESELLER','ISV_PARTNER','OEM','MEDIA_PARTNER','SERVICE_PARTNER'] as const;
 
 function validFilterValue(filter: ReportFilter) {
-  if (['ownerId','stageId','competitorId','accountId','accountOwnerId','productCategoryId','productId','skuId','odmCustomerAccountId','projectId','minDays','opportunityId','priceExceptionId','peSalespersonId'].includes(filter.field)) return positiveInteger(filter.value);
+  if (['ownerId','stageId','competitorId','accountId','accountOwnerId','productCategoryId','productId','skuId','odmCustomerAccountId','projectId','minDays','opportunityId','priceExceptionId','peSalespersonId','tradeShowId'].includes(filter.field)) return positiveInteger(filter.value);
   if (filter.field === 'moqStatus') return ['MET','NOT_MET','UNKNOWN'].includes(String(filter.value));
   if (filter.field === 'overrideStatus') return ['APPLIED','NONE'].includes(String(filter.value));
   if (['projectOwnerId','primaryAccountId','participantAccountId'].includes(filter.field)) return positiveInteger(filter.value);
@@ -130,6 +141,10 @@ function validFilterValue(filter: ReportFilter) {
   if (filter.field === 'projectStatus') return ['PLANNING','ACTIVE','ON_HOLD','COMPLETED','CANCELLED'].includes(String(filter.value));
   if (filter.field === 'targetEndDate' && filter.operator === 'attention') return ['OVERDUE','NEXT_30_DAYS','NO_DATE'].includes(String(filter.value));
   if (filter.field === 'hasActivity') return typeof filter.value === 'boolean';
+  if (['converted','accountLinked','contactLinked'].includes(filter.field)) return typeof filter.value === 'boolean';
+  if (filter.field === 'leadStatus') return ['NEW','CONTACTED','QUALIFIED','CONVERTED','DISQUALIFIED'].includes(String(filter.value));
+  if (filter.field === 'followUpStatus') return ['OVERDUE','SCHEDULED','MISSING','NEW_NOT_CONTACTED','QUALIFIED_NOT_CONVERTED'].includes(String(filter.value));
+  if (['productInterest','search'].includes(filter.field)) return typeof filter.value === 'string' && filter.value.trim().length > 0 && filter.value.length <= 200;
   if (filter.field === 'businessRole') return ['END_USER','DISTRIBUTOR','VAR','ISV','OEM','PARTNER','MEDIA_PARTNER'].includes(String(filter.value));
   if (filter.field === 'activityType') return typeof filter.value === 'string' && filter.value.length > 0 && filter.value.length <= 100;
   if (filter.field === 'strategicAccount') return typeof filter.value === 'boolean';
@@ -142,12 +157,13 @@ function validFilterValue(filter: ReportFilter) {
   if (filter.field === 'accountBusinessRole') return channelPartnerAccountRoles.includes(filter.value as typeof channelPartnerAccountRoles[number]);
   if (['industry','territory'].includes(filter.field)) return typeof filter.value === 'string' && filter.value.length > 0 && filter.value.length <= 100;
   if (filter.field === 'currency') return typeof filter.value === 'string' && /^[A-Z]{3}$/.test(filter.value);
-  if (['closeDate','createdDate','startDate','targetEndDate'].includes(filter.field) && filter.operator === 'preset') return presets.includes(filter.value as typeof presets[number]);
-  if (['closeDate','createdDate','startDate','targetEndDate'].includes(filter.field) && filter.operator === 'between') return object(filter.value) && exactKeys(filter.value, ['from','to']) && dateString(filter.value.from) && dateString(filter.value.to) && String(filter.value.from) <= String(filter.value.to);
+  if (['closeDate','createdDate','startDate','targetEndDate','showDate'].includes(filter.field) && filter.operator === 'preset') return presets.includes(filter.value as typeof presets[number]);
+  if (['closeDate','createdDate','startDate','targetEndDate','showDate'].includes(filter.field) && filter.operator === 'between') return object(filter.value) && exactKeys(filter.value, ['from','to']) && dateString(filter.value.from) && dateString(filter.value.to) && String(filter.value.from) <= String(filter.value.to);
   return false;
 }
 
 export function defaultReportConfiguration(reportType: CuratedReportType): ReportConfiguration {
+  if (reportType === 'TRADE_SHOW') return {filters:[],groupBy:'tradeShow',sort:[{field:'capturedDate',direction:'desc'}],columns:['tradeShow','lead','company','assignedRep','leadStatus','account','contact','followUp','opportunity','opportunityStage','opportunityValue','weightedValue','currency'],metrics:['totalLeads','assignedLeads','contactedLeads','qualifiedLeads','convertedLeads','conversionRate','opportunityCount','pipeline','weightedPipeline','commit','closedWonValue']};
   if (reportType === 'PRICE_EXCEPTION_USAGE') return {filters:[],groupBy:'priceException',sort:[{field:'lineValue',direction:'desc'}],columns:['opportunity','account','owner','product','sku','productCategory','quantity','peCode','peSalesperson','peMoq','approvedUnitPrice','unitPrice','overrideAmount','overridePercent','lineValue','moqStatus','stage','forecastCategory','closeDate','currency'],metrics:['lineValue','quantity','opportunityCount','productLineCount','priceExceptionCount','averageApprovedUnitPrice','averageActualUnitPrice']};
   if (reportType === 'PROJECT_INITIATIVE') return {filters:[{field:'status',operator:'eq',value:'OPEN'}],groupBy:'project',sort:[{field:'pipeline',direction:'desc'}],columns:['project','projectOwner','projectStatus','primaryAccount','participantAccounts','startDate','targetEndDate','opportunityCount','pipeline','weightedPipeline','commit','currency','linkedOpportunities'],metrics:['projectCount','pipeline','weightedPipeline','commit','opportunityCount']};
   if (reportType === 'CHANNEL_PARTNER') return {filters:[{field:'status',operator:'eq',value:'OPEN'}],groupBy:'partner',sort:[{field:'value',direction:'desc'}],columns:['opportunity','partner','participantRoles','owner','stage','closeDate','value','weightedValue','currency'],metrics:['pipeline','weightedPipeline','opportunityCount','partnerCount']};
@@ -163,7 +179,7 @@ export function validateReportConfiguration(reportType: unknown, input: unknown)
   if (!definition.implemented) throw new Error(`${definition.label} reports are not available.`);
   if (!object(input) || !exactKeys(input, configKeys)) throw new Error('Report configuration has unsupported fields.');
   if (!Array.isArray(input.filters) || !Array.isArray(input.sort) || !Array.isArray(input.columns) || !Array.isArray(input.metrics)) throw new Error('Report configuration is malformed.');
-  if (input.filters.length > 30 || input.sort.length > 3 || input.columns.length > 20 || input.metrics.length > 10) throw new Error('Report configuration is too large.');
+  if (input.filters.length > 30 || input.sort.length > 3 || input.columns.length > 20 || input.metrics.length > 20) throw new Error('Report configuration is too large.');
   const filters = input.filters.map(raw => {
     if (!object(raw) || !exactKeys(raw, ['field','operator','value']) || typeof raw.field !== 'string' || typeof raw.operator !== 'string') throw new Error('Report filter is malformed.');
     const supported = definition.filters[raw.field];
@@ -184,7 +200,7 @@ export function validateReportConfiguration(reportType: unknown, input: unknown)
 }
 
 export function canCreateReport(actor: Actor) { return getCreatableReportTypes(actor).length > 0; }
-export function canShareReport(actor: Actor) { return canCreateReport(actor) && ['ADMIN','SALES_MANAGER'].includes(actor.role); }
+export function canShareReport(actor: Actor) { return canCreateReport(actor) && ['ADMIN','SALES_MANAGER','MARKETING_MANAGER'].includes(actor.role); }
 export function canViewReportDefinition(actor: Actor, report: { ownerId: number; visibility: ReportVisibilityValue; reportType: CuratedReportType; archivedAt?: Date | null }) { return !report.archivedAt && canRunReportType(actor,report.reportType) && (actor.role === 'ADMIN' || report.ownerId === actor.id || report.visibility === 'SHARED'); }
 export function canEditReportDefinition(actor: Actor, report: { ownerId: number; visibility: ReportVisibilityValue; reportType: CuratedReportType }) { return canRunReportType(actor,report.reportType) && (actor.role === 'ADMIN' || (report.ownerId === actor.id && canCreateReport(actor))); }
 export function savedReportWhere(actor: Actor): Prisma.ReportDefinitionWhereInput { return { archivedAt: null, reportType: { in: getVisibleReportTypes(actor) }, ...(actor.role === 'ADMIN' ? {} : { OR: [{ ownerId: actor.id }, { visibility: 'SHARED' }] }) }; }
@@ -517,6 +533,87 @@ export async function executeAccountActivityReport(client:PrismaClient, actor:Ac
   return {reportType:'ACCOUNT_ACTIVITY',summary:summarize(enriched),groups:[...groups.values()].sort((a,b)=>a.label.localeCompare(b.label)).map(group=>({key:group.key,label:group.label,metrics:summarize(group.items),accountIds:group.items.map(x=>x.row.id)})),rows:enriched.map(({row,latest,days})=>({id:row.id,account:row.name,owner:row.owner?`${row.owner.firstName} ${row.owner.lastName}`:'Unassigned',industry:row.industryCategory?.name??row.industry??'—',territory:row.territoryCategory?.name??row.territory??'—',businessRoles:row.businessRoles.map(x=>x.role.replaceAll('_',' ')).join(', ')||'—',strategicAccount:row.strategicAccount,lastActivity:latest?.activityDate.toISOString().slice(0,16).replace('T',' ')??null,daysSinceLastActivity:days,activityStatus:activityStatus(days),latestActivityType:latest?.activityType.name??'—',latestActivityBy:latest?.user?`${latest.user.firstName} ${latest.user.lastName}`:'—',activityCount:row.activities.length,groupKeys:[accountGroup(row,latest,days,config.groupBy)?.key].filter((x):x is string=>!!x)})),filterCount:config.filters.length,semanticNote:accountActivityDefinition.semanticNote,staleThresholdDays};
 }
 
+const tradeShowReportInclude = {
+  tradeShow:true,assignedSalesRep:true,account:true,contact:true,competitor:true,
+  convertedOpportunity:{include:{owner:true,stage:true,products:{where:{archivedAt:null}}}},
+} as const;
+type TradeShowReportDbRow = Prisma.TradeShowLeadGetPayload<{include:typeof tradeShowReportInclude}>;
+export type TradeShowLeadMetrics = {totalLeads:number;assignedLeads:number;newLeads:number;contactedLeads:number;qualifiedLeads:number;convertedLeads:number;disqualifiedLeads:number;conversionRate:number|null};
+export type TradeShowCurrencyMetrics = {currency:string;opportunityCount:number;pipeline:string;weightedPipeline:string;commit:string;closedWonValue:string;closedWonOpportunityCount:number};
+export type TradeShowMetrics = {leads:TradeShowLeadMetrics;amounts:TradeShowCurrencyMetrics[]};
+export type TradeShowDetailRow = {id:number;tradeShowId:number;tradeShow:string;lead:string;company:string;assignedRep:string;leadStatus:string;account:{id:number;name:string}|null;contact:{id:number;name:string}|null;capturedDate:string|null;followUp:string|null;competitor:string;competitorSourceText:string;productInterest:string;opportunity:{id:number;name:string}|null;opportunityOwner:string;opportunityStage:string;forecastCategory:string;opportunityValue:string|null;weightedValue:string|null;conversionDate:string|null;currency:string|null;canOpenOpportunity:boolean;groupKeys:string[]};
+export type TradeShowReportResult = {reportType:'TRADE_SHOW';summary:TradeShowMetrics;groups:{key:string;label:string;metrics:TradeShowMetrics;leadIds:number[]}[];rows:TradeShowDetailRow[];currencies:string[];filterCount:number;semanticNote:string};
+
+function tradeShowLeadMetrics(rows:TradeShowReportDbRow[]):TradeShowLeadMetrics {
+  const converted=rows.filter(row=>row.status==='CONVERTED').length;
+  return {totalLeads:rows.length,assignedLeads:rows.filter(row=>row.assignedSalesRepUserId!==null).length,newLeads:rows.filter(row=>row.status==='NEW').length,contactedLeads:rows.filter(row=>['CONTACTED','QUALIFIED','CONVERTED'].includes(row.status)).length,qualifiedLeads:rows.filter(row=>['QUALIFIED','CONVERTED'].includes(row.status)).length,convertedLeads:converted,disqualifiedLeads:rows.filter(row=>row.status==='DISQUALIFIED').length,conversionRate:rows.length?Math.round(converted/rows.length*1000)/10:null};
+}
+function distinctTradeShowOpportunities(rows:TradeShowReportDbRow[]) {
+  return [...new Map(rows.flatMap(row=>row.convertedOpportunity&&row.convertedOpportunity.archivedAt===null?[[row.convertedOpportunity.id,row.convertedOpportunity] as const]:[])).values()];
+}
+function tradeShowCurrencyMetrics(rows:TradeShowReportDbRow[]):TradeShowCurrencyMetrics[] {
+  const opportunities=distinctTradeShowOpportunities(rows);
+  return [...new Set(opportunities.map(item=>item.currencyCode))].sort().map(currency=>{
+    const selected=opportunities.filter(item=>item.currencyCode===currency);
+    const amount=(kind:'pipeline'|'weightedPipeline'|'commit'|'closedWonValue')=>selected.reduce((sum,item)=>{
+      const value=opportunityTotal(item.products);
+      const open=!item.stage.isClosed&&['PIPELINE','BEST_CASE','COMMIT'].includes(item.forecastCategory);
+      if(kind==='pipeline')return sum.add(open?value:0);
+      if(kind==='weightedPipeline')return sum.add(open?weightedValue(value,item.probability??item.stage.probability):0);
+      if(kind==='commit')return sum.add(open&&item.forecastCategory==='COMMIT'?value:0);
+      return sum.add(item.stage.isClosed&&item.stage.isWon?value:0);
+    },new Prisma.Decimal(0)).toFixed(2);
+    return {currency,opportunityCount:selected.length,pipeline:amount('pipeline'),weightedPipeline:amount('weightedPipeline'),commit:amount('commit'),closedWonValue:amount('closedWonValue'),closedWonOpportunityCount:selected.filter(item=>item.stage.isClosed&&item.stage.isWon).length};
+  });
+}
+function tradeShowMetrics(rows:TradeShowReportDbRow[]):TradeShowMetrics {return {leads:tradeShowLeadMetrics(rows),amounts:tradeShowCurrencyMetrics(rows)};}
+function tradeShowGroup(row:TradeShowReportDbRow,groupBy:string|null){
+  const one=(key:string,label:string)=>({key,label});
+  if(groupBy==='tradeShow')return one(String(row.tradeShowId),row.tradeShow.name);
+  if(groupBy==='assignedRep')return one(String(row.assignedSalesRepUserId??'none'),row.assignedSalesRep?`${row.assignedSalesRep.firstName} ${row.assignedSalesRep.lastName}`:'Unassigned');
+  if(groupBy==='leadStatus')return one(row.status,row.status.charAt(0)+row.status.slice(1).toLowerCase());
+  if(groupBy==='competitor')return one(String(row.competitorId??'none'),row.competitor?.name??'No resolved competitor');
+  if(groupBy==='opportunityStage')return one(String(row.convertedOpportunity?.stageId??'none'),row.convertedOpportunity?.stage.name??'No Opportunity');
+  if(groupBy==='forecastCategory')return one(row.convertedOpportunity?.forecastCategory??'none',row.convertedOpportunity?.forecastCategory.replaceAll('_',' ')??'No Opportunity');
+  if(groupBy==='currency')return one(row.convertedOpportunity?.currencyCode??'none',row.convertedOpportunity?.currencyCode??'No Opportunity currency');
+  return null;
+}
+function tradeShowDateBounds(filter:ReportFilter,now:Date){return filter.operator==='preset'?reportDatePreset(filter.value as typeof presets[number],now):{gte:new Date(`${(filter.value as {from:string}).from}T00:00:00Z`),lt:new Date(new Date(`${(filter.value as {to:string}).to}T00:00:00Z`).getTime()+86400000)};}
+export async function executeTradeShowReport(client:PrismaClient,actor:Actor,rawConfig:unknown,now=new Date()):Promise<TradeShowReportResult>{
+  if(!canRunReportType(actor,'TRADE_SHOW'))throw new Error('Access denied');
+  const config=validateReportConfiguration('TRADE_SHOW',rawConfig),clauses:Prisma.TradeShowLeadWhereInput[]=[];
+  if(actor.role==='SALES')clauses.push({assignedSalesRepUserId:actor.id});
+  for(const filter of config.filters){const value=filter.value;
+    if(filter.field==='tradeShowId')clauses.push({tradeShowId:value as number});
+    else if(filter.field==='showDate')clauses.push({tradeShow:{startDate:tradeShowDateBounds(filter,now)}});
+    else if(filter.field==='ownerId')clauses.push({assignedSalesRepUserId:value as number});
+    else if(filter.field==='leadStatus')clauses.push({status:value as TradeShowLeadStatus});
+    else if(filter.field==='converted')clauses.push({convertedOpportunityId:value?{not:null}:null});
+    else if(filter.field==='accountLinked')clauses.push({accountId:value?{not:null}:null});
+    else if(filter.field==='contactLinked')clauses.push({contactId:value?{not:null}:null});
+    else if(filter.field==='competitorId')clauses.push({competitorId:value as number});
+    else if(filter.field==='productInterest')clauses.push({productInterest:{contains:String(value),mode:'insensitive'}});
+    else if(filter.field==='search')clauses.push({OR:[{firstName:{contains:String(value),mode:'insensitive'}},{lastName:{contains:String(value),mode:'insensitive'}},{sourceCompany:{contains:String(value),mode:'insensitive'}},{email:{contains:String(value),mode:'insensitive'}}]});
+    else if(filter.field==='stageId')clauses.push({convertedOpportunity:{stageId:value as number}});
+    else if(filter.field==='forecastCategory')clauses.push({convertedOpportunity:{forecastCategory:value as ForecastCategory}});
+    else if(filter.field==='currency')clauses.push({convertedOpportunity:{currencyCode:value as string}});
+    else if(filter.field==='followUpStatus'){
+      if(value==='OVERDUE')clauses.push({followUpAt:{lt:now},status:{notIn:['CONVERTED','DISQUALIFIED']}});
+      else if(value==='SCHEDULED')clauses.push({followUpAt:{not:null},status:{notIn:['CONVERTED','DISQUALIFIED']}});
+      else if(value==='MISSING')clauses.push({followUpAt:null,status:{notIn:['CONVERTED','DISQUALIFIED']}});
+      else if(value==='NEW_NOT_CONTACTED')clauses.push({status:'NEW',lastContactedAt:null});
+      else clauses.push({status:'QUALIFIED',convertedOpportunityId:null});
+    }
+  }
+  const rows=await client.tradeShowLead.findMany({where:clauses.length?{AND:clauses}:{},include:tradeShowReportInclude});
+  const read=(row:TradeShowReportDbRow,field:string):string|number=>field==='tradeShow'?row.tradeShow.name:field==='lead'?`${row.lastName} ${row.firstName}`:field==='company'?row.sourceCompany??'':field==='assignedRep'?row.assignedSalesRep?.lastName??'':field==='leadStatus'?row.status:field==='capturedDate'?row.capturedAt?.getTime()??0:field==='followUp'?row.followUpAt?.getTime()??0:field==='opportunityStage'?row.convertedOpportunity?.stage.name??'':field==='opportunityValue'?(row.convertedOpportunity?opportunityTotal(row.convertedOpportunity.products).toNumber():0):field==='conversionDate'?row.convertedAt?.getTime()??0:row.id;
+  rows.sort((a,b)=>{for(const spec of config.sort){const x=read(a,spec.field),y=read(b,spec.field),cmp=x<y?-1:x>y?1:0;if(cmp)return spec.direction==='asc'?cmp:-cmp;}return a.id-b.id;});
+  const groups=new Map<string,{key:string;label:string;rows:TradeShowReportDbRow[]}>();
+  for(const row of rows){const group=tradeShowGroup(row,config.groupBy);if(group){const found=groups.get(group.key)??{...group,rows:[]};found.rows.push(row);groups.set(group.key,found);}}
+  const detail=rows.map(row=>{const opportunity=row.convertedOpportunity,value=opportunity&&opportunity.archivedAt===null?opportunityTotal(opportunity.products):null;return {id:row.id,tradeShowId:row.tradeShowId,tradeShow:row.tradeShow.name,lead:`${row.firstName} ${row.lastName}`,company:row.sourceCompany??'—',assignedRep:row.assignedSalesRep?`${row.assignedSalesRep.firstName} ${row.assignedSalesRep.lastName}`:'Unassigned',leadStatus:row.status.charAt(0)+row.status.slice(1).toLowerCase(),account:row.account?{id:row.account.id,name:row.account.name}:null,contact:row.contact?{id:row.contact.id,name:`${row.contact.firstName} ${row.contact.lastName}`}:null,capturedDate:row.capturedAt?.toISOString().slice(0,10)??null,followUp:row.followUpAt?.toISOString().slice(0,10)??null,competitor:row.competitor?.name??'—',competitorSourceText:row.competitorSourceText??'—',productInterest:row.productInterest??'—',opportunity:opportunity?{id:opportunity.id,name:opportunity.name}:null,opportunityOwner:opportunity?.owner?`${opportunity.owner.firstName} ${opportunity.owner.lastName}`:'—',opportunityStage:opportunity?.stage.name??'—',forecastCategory:opportunity?.forecastCategory.replaceAll('_',' ')??'—',opportunityValue:value?.toFixed(2)??null,weightedValue:value&&opportunity?weightedValue(value,opportunity.probability??opportunity.stage.probability).toFixed(2):null,conversionDate:row.convertedAt?.toISOString().slice(0,10)??null,currency:opportunity?.currencyCode??null,canOpenOpportunity:!!opportunity&&can(actor,'sales.read')&&(actor.role!=='SALES'||opportunity.ownerId===actor.id),groupKeys:[tradeShowGroup(row,config.groupBy)?.key].filter((item):item is string=>!!item)};});
+  return {reportType:'TRADE_SHOW',summary:tradeShowMetrics(rows),groups:[...groups.values()].sort((a,b)=>a.label.localeCompare(b.label)).map(group=>({key:group.key,label:group.label,metrics:tradeShowMetrics(group.rows),leadIds:group.rows.map(row=>row.id)})),rows:detail,currencies:[...new Set(distinctTradeShowOpportunities(rows).map(item=>item.currencyCode))].sort(),filterCount:config.filters.length,semanticNote:tradeShowDefinition.semanticNote};
+}
+
 export async function executeReport(client: PrismaClient, actor: Actor, reportType: unknown, rawConfig: unknown, now = new Date()) {
   if (!canRunReportType(actor,reportType)) throw new Error('Access denied');
   if (reportType === 'ACCOUNT_ACTIVITY') return executeAccountActivityReport(client,actor,rawConfig,now);
@@ -524,6 +621,7 @@ export async function executeReport(client: PrismaClient, actor: Actor, reportTy
   if (reportType === 'PRICE_EXCEPTION_USAGE') return executePriceExceptionUsageReport(client,actor,rawConfig,now);
   if (reportType === 'CHANNEL_PARTNER') return executeChannelPartnerReport(client,actor,rawConfig,now);
   if (reportType === 'PROJECT_INITIATIVE') return executeProjectInitiativeReport(client,actor,rawConfig,now);
+  if (reportType === 'TRADE_SHOW') return executeTradeShowReport(client,actor,rawConfig,now);
   if (reportType !== 'PIPELINE') { validateReportConfiguration(reportType,rawConfig); throw new Error('Report execution is not implemented.'); }
   return executePipelineReport(client,actor,rawConfig,now);
 }

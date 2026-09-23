@@ -16,6 +16,17 @@ type BuiltInCard = {
 
 const builtInGroups: { title: string; cards: BuiltInCard[] }[] = [
   {
+    title: 'Trade Shows',
+    cards: [
+      { id: 'TRADE_SHOW_CURRENT_YEAR', title: 'Trade Show Performance — Current Year', description: 'Current-year leads, conversions, pipeline, and won outcomes.', href: '/reports/trade-shows?configured=1&showDatePreset=THIS_YEAR&groupBy=tradeShow' },
+      { id: 'LEADS_BY_TRADE_SHOW', title: 'Leads by Trade Show', description: 'Compare lead follow-up and conversion across events.', href: '/reports/trade-shows?configured=1&groupBy=tradeShow' },
+      { id: 'LEADS_BY_SALES_REP', title: 'Leads by Sales Rep', description: 'Compare assigned leads and outcomes by sales rep.', href: '/reports/trade-shows?configured=1&groupBy=assignedRep' },
+      { id: 'TRADE_SHOW_CONVERSION_FUNNEL', title: 'Trade Show Conversion Funnel', description: 'Review contacted, qualified, converted, and disqualified lead counts.', href: '/reports/trade-shows?configured=1&groupBy=leadStatus&metrics=totalLeads&metrics=contactedLeads&metrics=qualifiedLeads&metrics=convertedLeads&metrics=disqualifiedLeads&metrics=conversionRate' },
+      { id: 'TRADE_SHOW_PIPELINE', title: 'Trade Show Pipeline', description: 'Pipeline, weighted pipeline, commit, and wins attributed to event conversions.', href: '/reports/trade-shows?configured=1&groupBy=tradeShow&metrics=opportunityCount&metrics=pipeline&metrics=weightedPipeline&metrics=commit&metrics=closedWonValue&metrics=closedWonOpportunityCount' },
+      { id: 'TRADE_SHOW_FOLLOW_UP_NEEDED', title: 'Trade Show Follow-Up Needed', description: 'Open leads whose follow-up date is overdue.', href: '/reports/trade-shows?configured=1&followUpStatus=OVERDUE&groupBy=assignedRep' },
+    ],
+  },
+  {
     title: 'Pipeline & Forecast',
     cards: [
       { id: 'MY_OPEN_PIPELINE', title: 'My Open Pipeline', description: 'Your open Opportunities.', href: actorId => `/reports/new?configured=1&status=OPEN&ownerId=${actorId}&metrics=pipeline&metrics=weightedPipeline&metrics=opportunityCount&columns=opportunity&columns=account&columns=owner&columns=stage&columns=closeDate&columns=value&columns=weightedValue&columns=currency` },
@@ -70,13 +81,13 @@ export default async function ReportsPage() {
   const shared = reports.filter(report => report.visibility === 'SHARED' && report.ownerId !== actor.id);
 
   return <Content>
-    <PageHeader eyebrow="Management reporting" title="Reports" description="Create, save, and review reports using current SalesHub data." action={creatableReportTypes.includes('PIPELINE') ? <Link className="btn-primary" href="/reports/new">Create Report</Link> : undefined} />
-    <section className="-mt-1 mb-6">
+    <PageHeader eyebrow="Management reporting" title="Reports" description="Create, save, and review reports using current SalesHub data." action={creatableReportTypes.length ? <Link className="btn-primary" href={creatableReportTypes.includes('PIPELINE')?'/reports/new':'/reports/new?reportType=TRADE_SHOW'}>Create Report</Link> : undefined} />
+    {visibleReportTypes.includes('PIPELINE')&&<section className="-mt-1 mb-6">
       <Link className="group flex flex-col gap-3 rounded-lg border border-orange-200 bg-orange-50/70 p-4 transition-colors hover:border-orange-400 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600 sm:flex-row sm:items-center sm:justify-between" href="/reports/forecast">
         <div className="min-w-0"><h2 className="text-lg font-semibold text-slate-950">Quarterly Forecast</h2><p className="mt-1 text-sm leading-6 text-slate-600">View targets, open pipeline, commit, and coverage by sales rep and currency.</p></div>
         <span className="shrink-0 text-sm font-semibold text-orange-800">View forecast <span aria-hidden="true">→</span></span>
       </Link>
-    </section>
+    </section>}
     {!!builtIns.size && <section className="panel mb-8 p-5 md:p-6">
       <h2 className="text-lg font-semibold">Built-in Reports</h2>
       <p className="mt-1 text-sm text-slate-600">Open common report views instantly.</p>

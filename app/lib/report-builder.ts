@@ -70,3 +70,15 @@ export function projectInitiativeConfigFromParams(params:Params,fallback?:unknow
   const defaults=defaultReportConfiguration('PROJECT_INITIATIVE'),metrics=many(params.metrics),columns=many(params.columns);
   return validateReportConfiguration('PROJECT_INITIATIVE',{filters,groupBy:one(params.groupBy)||null,sort:[{field:one(params.sortField)||'pipeline',direction:one(params.sortDirection)||'desc'}],metrics:metrics.length?metrics:defaults.metrics,columns:columns.length?columns:defaults.columns});
 }
+export function tradeShowConfigFromParams(params:Params,fallback?:unknown):ReportConfiguration {
+  if(one(params.configured)!=='1')return validateReportConfiguration('TRADE_SHOW',fallback??defaultReportConfiguration('TRADE_SHOW'));
+  const filters:ReportConfiguration['filters']=[];
+  for(const field of ['tradeShowId','ownerId','competitorId','stageId'] as const){const value=number(one(params[field]));if(value)filters.push({field,operator:'eq',value});}
+  for(const field of ['leadStatus','followUpStatus','forecastCategory','currency'] as const){const value=one(params[field]);if(value)filters.push({field,operator:'eq',value});}
+  for(const field of ['converted','accountLinked','contactLinked'] as const){const value=one(params[field]);if(value==='true'||value==='false')filters.push({field,operator:'eq',value:value==='true'});}
+  for(const field of ['productInterest','search'] as const){const value=one(params[field])?.trim();if(value)filters.push({field,operator:'contains',value});}
+  const preset=one(params.showDatePreset);if(preset&&preset!=='CUSTOM'&&preset!=='ANY')filters.push({field:'showDate',operator:'preset',value:preset});
+  else if(preset==='CUSTOM'){const from=one(params.showDateFrom),to=one(params.showDateTo);if(from&&to)filters.push({field:'showDate',operator:'between',value:{from,to}});}
+  const defaults=defaultReportConfiguration('TRADE_SHOW'),metrics=many(params.metrics),columns=many(params.columns);
+  return validateReportConfiguration('TRADE_SHOW',{filters,groupBy:one(params.groupBy)||null,sort:[{field:one(params.sortField)||'capturedDate',direction:one(params.sortDirection)||'desc'}],metrics:metrics.length?metrics:defaults.metrics,columns:columns.length?columns:defaults.columns});
+}

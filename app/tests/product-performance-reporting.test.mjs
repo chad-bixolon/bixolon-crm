@@ -67,7 +67,7 @@ test('saved config, discovery, and read only report consumption follow current p
  await saved.saveReportDefinition(client,actor('SALES_MANAGER'),{name:'Products',description:null,reportType:'PRODUCT_PERFORMANCE',visibility:'SHARED',configuration:cfg});assert.deepEqual(record.configuration,cfg);
  assert.equal(reporting.canViewReportDefinition(actor('READ_ONLY'),{...record,archivedAt:null}),true);
  assert.equal(reporting.canRunReportType(actor('MARKETING_MANAGER'),'PRODUCT_PERFORMANCE'),false);
- assert.deepEqual(reporting.getVisibleReportTypes(actor('READ_ONLY')),['PIPELINE','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE']);
+ assert.deepEqual(reporting.getVisibleReportTypes(actor('READ_ONLY')),['PIPELINE','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE','TRADE_SHOW']);
  await assert.rejects(run([],config(),'MARKETING_MANAGER'),/Access denied/);
 });
 test('ODM Catalog Source and Customer filter/group preserve Opportunity line values',async()=>{

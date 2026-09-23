@@ -134,6 +134,7 @@ enum ReportType {
   CHANNEL_PARTNER
   PROJECT_INITIATIVE
   PRICE_EXCEPTION_USAGE
+  TRADE_SHOW
 }
 
 enum ReportVisibility {
