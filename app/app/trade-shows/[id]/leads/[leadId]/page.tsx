@@ -6,10 +6,11 @@ import { currentUser } from '@/lib/current-user';
 import { can } from '@/lib/authorization';
 import { canEditTradeShowLead, tradeShowLeadReadWhere } from '@/lib/trade-shows';
 import { canConvertTradeShowLead } from '@/lib/trade-show-conversion';
-import type { TradeShowImportFormat, TradeShowLeadStatus } from '@prisma/client';
+import type { TradeShowImportFormat, TradeShowLeadRouting, TradeShowLeadStatus } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 const statusLabels: Record<TradeShowLeadStatus, string> = { NEW: 'New', CONTACTED: 'Contacted', QUALIFIED: 'Qualified', CONVERTED: 'Converted', DISQUALIFIED: 'Disqualified' };
+const routingLabels:Record<TradeShowLeadRouting,string>={UNREVIEWED:'Unreviewed',BIXOLON_SALES:'BIXOLON Sales',REFERRED_TO_PARTNER:'Referred to Partner',MARKETING_FOLLOW_UP:'Marketing Follow-Up'};
 const sourceFormatLabels: Record<TradeShowImportFormat, string> = { NRA_NRF: 'NRA / NRF', XPRESSLEADS_MODEX: 'MODEX / XPressLeads', CUSTOM_MAPPING: 'Custom mapping' };
 export default async function TradeShowLeadPage({ params }: { params: Promise<{ id: string; leadId: string }> }) {
   const actor = await currentUser();
@@ -22,6 +23,7 @@ export default async function TradeShowLeadPage({ params }: { params: Promise<{ 
       tradeShow: { select: { name: true, archivedAt: true } }, assignedSalesRep: { select: { firstName: true, lastName: true } },
       firstImport: { select: { format: true, mappingName: true } },
       competitor: { select: { name: true } }, account: { select: { id: true, name: true } },
+      routedPartnerAccount:{select:{id:true,name:true}}, referredBy:{select:{firstName:true,lastName:true}},
       contact: { select: { id: true, firstName: true, lastName: true } },
       convertedOpportunity: { select: { id: true, name: true, ownerId: true, owner: { select: { firstName: true, lastName: true } }, stage: { select: { name: true } } } },
     },
@@ -35,7 +37,7 @@ export default async function TradeShowLeadPage({ params }: { params: Promise<{ 
     <div className="grid gap-5 lg:grid-cols-2">
       <section className="panel p-5"><h2 className="mb-4 text-lg font-semibold">Lead</h2><dl className="grid gap-4 sm:grid-cols-2">{row('Name', `${lead.firstName} ${lead.lastName}`)}{row('Title', lead.title)}{row('Email', lead.email)}{row('Phone', lead.phone)}</dl></section>
       <section className="panel p-5"><h2 className="mb-4 text-lg font-semibold">Company</h2><dl className="grid gap-4 sm:grid-cols-2">{row('Source Company', lead.sourceCompany)}{row('Website', lead.sourceCompanyWebsite)}{row('Address', [lead.addressLine1, lead.addressLine2].filter(Boolean).join(', '))}{row('Location', [lead.city, lead.stateProvince, lead.postalCode, lead.country].filter(Boolean).join(', '))}</dl></section>
-      <section className="panel p-5"><h2 className="mb-4 text-lg font-semibold">Assigned Sales Rep</h2><p className="text-sm">{lead.assignedSalesRep ? `${lead.assignedSalesRep.firstName} ${lead.assignedSalesRep.lastName}` : 'Unassigned'}</p></section>
+      <section className="panel border-orange-200 p-5"><h2 className="mb-4 text-lg font-semibold">Lead Routing</h2><dl className="grid gap-4 sm:grid-cols-2">{row('Routing',routingLabels[lead.routing])}{row('Assigned Sales Rep',lead.assignedSalesRep ? `${lead.assignedSalesRep.firstName} ${lead.assignedSalesRep.lastName}` : 'Unassigned')}{row('Partner Account',lead.routedPartnerAccount?<Link className="text-orange-800 underline" href={`/accounts/${lead.routedPartnerAccount.id}`}>{lead.routedPartnerAccount.name}</Link>:'—')}{row('Referral Date',when(lead.referredAt))}{row('Referred By',lead.referredBy?`${lead.referredBy.firstName} ${lead.referredBy.lastName}`:'—')}{row('Referral Notes',lead.referralNotes,true)}</dl></section>
       <section className="panel p-5"><h2 className="mb-4 text-lg font-semibold">Status &amp; Follow-Up</h2><dl className="grid gap-4 sm:grid-cols-2">{row('Status', statusLabels[lead.status])}{row('Follow-Up Date', when(lead.followUpAt))}{row('Last Contacted Date', when(lead.lastContactedAt))}{row('Sales Notes', lead.salesNotes, true)}</dl></section>
       <section className="panel p-5"><h2 className="mb-4 text-lg font-semibold">Customer Context</h2><dl className="grid gap-4 sm:grid-cols-2">{row('Product Interest', lead.productInterest, true)}{row('Competitor Mentioned', lead.competitorSourceText)}{row('Resolved Competitor', lead.competitor?.name)}{row('Current Product Being Used', lead.currentProductBeingUsed, true)}{row('Customer Pain Points', lead.customerPainPoints, true)}</dl></section>
       <section className="panel p-5"><h2 className="mb-4 text-lg font-semibold">CRM Links</h2><dl className="grid gap-4">{row('Account', lead.account ? <Link className="text-orange-800 underline" href={`/accounts/${lead.account.id}`}>{lead.account.name}</Link> : 'Not linked')}{row('Contact', lead.contact ? <Link className="text-orange-800 underline" href={`/contacts/${lead.contact.id}`}>{lead.contact.firstName} {lead.contact.lastName}</Link> : 'Not linked')}</dl></section>

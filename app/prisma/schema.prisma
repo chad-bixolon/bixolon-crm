@@ -150,6 +150,13 @@ enum TradeShowLeadStatus {
   DISQUALIFIED
 }
 
+enum TradeShowLeadRouting {
+  UNREVIEWED
+  BIXOLON_SALES
+  REFERRED_TO_PARTNER
+  MARKETING_FOLLOW_UP
+}
+
 enum TradeShowImportFormat {
   NRA_NRF
   XPRESSLEADS_MODEX
@@ -207,6 +214,7 @@ model User {
   createdTradeShowImportMappings TradeShowImportMapping[] @relation("TradeShowImportMappingCreator")
   updatedTradeShowImportMappings TradeShowImportMapping[] @relation("TradeShowImportMappingUpdater")
   assignedTradeShowLeads  TradeShowLead[]    @relation("TradeShowLeadSalesRep")
+  referredTradeShowLeads  TradeShowLead[]    @relation("TradeShowLeadReferrer")
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
 }
@@ -273,7 +281,8 @@ model Account {
   owner                      User?                 @relation("AccountOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   businessRoles              AccountBusinessRole[]
   contacts                   Contact[]
-  tradeShowLeads             TradeShowLead[]
+  tradeShowLeads             TradeShowLead[] @relation("TradeShowLeadAccount")
+  routedTradeShowLeads       TradeShowLead[] @relation("TradeShowLeadRoutedPartner")
   /// Legacy direct opportunity relationships retained for compatibility only.
   opportunities              Opportunity[]         @relation("LegacyOpportunityAccount")
   opportunityMemberships     OpportunityAccount[]
@@ -1103,11 +1112,18 @@ model TradeShowLead {
   assignedSalesRepUserId  Int?
   assignedSalesRep        User?               @relation("TradeShowLeadSalesRep", fields: [assignedSalesRepUserId], references: [id], onDelete: Restrict)
   status                  TradeShowLeadStatus @default(NEW)
+  routing                 TradeShowLeadRouting @default(UNREVIEWED)
+  routedPartnerAccountId  Int?
+  routedPartnerAccount    Account?             @relation("TradeShowLeadRoutedPartner", fields: [routedPartnerAccountId], references: [id], onDelete: Restrict)
+  referredAt              DateTime?
+  referredByUserId        Int?
+  referredBy              User?                @relation("TradeShowLeadReferrer", fields: [referredByUserId], references: [id], onDelete: Restrict)
+  referralNotes           String?              @db.Text
   followUpAt              DateTime?
   lastContactedAt         DateTime?
   salesNotes              String?             @db.Text
   accountId               Int?
-  account                 Account?            @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  account                 Account?            @relation("TradeShowLeadAccount", fields: [accountId], references: [id], onDelete: Restrict)
   contactId               Int?
   contact                 Contact?            @relation(fields: [contactId], references: [id], onDelete: Restrict)
   convertedOpportunityId  Int?                 @unique
@@ -1118,7 +1134,10 @@ model TradeShowLead {
 
   @@unique([tradeShowId, sourceKey])
   @@index([tradeShowId, status])
+  @@index([tradeShowId, routing])
   @@index([assignedSalesRepUserId, status])
+  @@index([routedPartnerAccountId, routing])
+  @@index([referredByUserId])
   @@index([email])
   @@index([accountId])
   @@index([contactId])

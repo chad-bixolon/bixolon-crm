@@ -1,8 +1,9 @@
-import { TradeShowLeadStatus, type PrismaClient } from '@prisma/client';
+import { TradeShowLeadRouting, TradeShowLeadStatus, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { field, optional, positiveId, type Errors } from './crm-validation';
 import { dateField } from './work';
 import { canEditTradeShowLead } from './trade-shows';
+import { canRouteTradeShowLead, referralData, TRADE_SHOW_ROUTINGS, validateTradeShowRouting } from './trade-show-routing';
 
 const statuses = Object.values(TradeShowLeadStatus);
 export function parseTradeShowLeadUpdate(form: FormData) {
@@ -23,13 +24,18 @@ export function parseTradeShowLeadUpdate(form: FormData) {
     return id;
   };
   const assignedSalesRepUserId = reference('assignedSalesRepUserId');
+  const routingRaw = field(form,'routing');
+  const routing = TRADE_SHOW_ROUTINGS.includes(routingRaw as TradeShowLeadRouting) ? routingRaw as TradeShowLeadRouting : null;
+  if (form.has('routing') && !routing) errors.routing = 'Choose a valid lead routing.';
+  const routedPartnerAccountId = reference('routedPartnerAccountId');
+  const referralNotes = optional(form,'referralNotes',20000,errors);
   const accountId = reference('accountId');
   const contactId = reference('contactId');
   const competitorId = reference('competitorId');
   return { errors, value: Object.keys(errors).length ? undefined : {
     status: status!, followUpAt, lastContactedAt, salesNotes, productInterest,
     competitorSourceText, competitorId, currentProductBeingUsed, customerPainPoints,
-    assignedSalesRepUserId, accountId, contactId,
+    assignedSalesRepUserId, routing, routedPartnerAccountId, referralNotes, accountId, contactId,
   } };
 }
 
@@ -54,6 +60,12 @@ export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId:
       const rep = await tx.user.findFirst({ where: { id: repId, active: true, archivedAt: null, role: { in: ['SALES', 'SALES_MANAGER'] } } });
       if (!rep && repId !== lead.assignedSalesRepUserId) throw new Error('Choose an active Sales rep.');
     }
+    const routing = form.has('routing') ? input.routing! : lead.routing;
+    if (form.has('routing') && !canRouteTradeShowLead(actor,lead)) throw new Error('Access denied to lead routing.');
+    const requestedPartnerAccountId = form.has('routedPartnerAccountId') ? input.routedPartnerAccountId : lead.routedPartnerAccountId;
+    const partnerAccountId = routing==='REFERRED_TO_PARTNER' ? requestedPartnerAccountId : lead.routedPartnerAccountId;
+    const notes = routing==='REFERRED_TO_PARTNER'&&form.has('referralNotes') ? input.referralNotes : lead.referralNotes;
+    if (form.has('routing') || form.has('routedPartnerAccountId')) await validateTradeShowRouting(tx,routing,repId,partnerAccountId);
     if (!can(actor, 'trade-shows.resolve') && (form.has('accountId') || form.has('contactId'))) throw new Error('Access denied to CRM resolution.');
     const accountId = can(actor, 'trade-shows.resolve') ? input.accountId : lead.accountId;
     const contactId = can(actor, 'trade-shows.resolve') ? input.contactId : lead.contactId;
@@ -76,7 +88,8 @@ export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId:
       salesNotes: input.salesNotes, productInterest: input.productInterest,
       competitorSourceText: input.competitorSourceText, competitorId: input.competitorId,
       currentProductBeingUsed: input.currentProductBeingUsed, customerPainPoints: input.customerPainPoints,
-      assignedSalesRepUserId: repId, accountId, contactId,
+      assignedSalesRepUserId: repId, routing, routedPartnerAccountId:partnerAccountId,
+      ...referralData(routing,lead.routing,actor.id,notes,lead.referredAt), accountId, contactId,
     } });
     return { errors: {} };
   });

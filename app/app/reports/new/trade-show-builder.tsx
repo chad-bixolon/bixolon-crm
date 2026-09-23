@@ -7,18 +7,20 @@ import {filterValue,tradeShowConfigFromParams} from '@/lib/report-builder';
 import {canCreateReport,canShareReport,executeTradeShowReport,reportRegistry} from '@/lib/reporting';
 import {tradeShowReadWhere} from '@/lib/trade-shows';
 import {saveReportAction} from '../actions';
+import {eligiblePartnerAccountWhere} from '@/lib/trade-show-routing';
 
 type Params=Record<string,string|string[]|undefined>;
 type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|'SHARED';configuration:unknown}|null;
 export async function TradeShowBuilder({params,actor,saved}:{params:Params;actor:Actor;saved:Saved}){
   const config=tradeShowConfigFromParams(params,saved?.configuration),definition=reportRegistry.TRADE_SHOW;
-  const [result,shows,reps,stages,competitors,currencies]=await Promise.all([
+  const [result,shows,reps,stages,competitors,currencies,partners]=await Promise.all([
     executeTradeShowReport(prisma,actor,config),
     prisma.tradeShow.findMany({where:tradeShowReadWhere(actor),select:{id:true,name:true},orderBy:[{startDate:'desc'},{name:'asc'}]}),
     prisma.user.findMany({where:{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']},...(actor.role==='SALES'?{id:actor.id}:{})},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
     prisma.salesStage.findMany({orderBy:[{sortOrder:'asc'},{id:'asc'}]}),
     prisma.competitorOption.findMany({where:{OR:[{active:true},...(Number(filterValue(config,'competitorId'))?[{id:Number(filterValue(config,'competitorId'))}]:[])]},orderBy:[{sortOrder:'asc'},{name:'asc'}]}),
     prisma.currency.findMany({where:{active:true},orderBy:{code:'asc'}}),
+    prisma.account.findMany({where:eligiblePartnerAccountWhere,select:{id:true,name:true},orderBy:{name:'asc'}}),
   ]);
   const selected=(field:string)=>String(filterValue(config,field)??'');
   const select=(name:string,label:string,items:{value:string|number;label:string}[],empty='All')=><label className="label">{label}<select className="field" name={name} defaultValue={selected(name)}><option value="">{empty}</option>{items.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</select></label>;
@@ -29,6 +31,8 @@ export async function TradeShowBuilder({params,actor,saved}:{params:Params;actor
         {select('tradeShowId','Trade Show',shows.map(show=>({value:show.id,label:show.name})))}
         {select('ownerId','Assigned Sales Rep',reps.map(rep=>({value:rep.id,label:`${rep.firstName} ${rep.lastName}`})),'All permitted')}
         {select('leadStatus','Lead Status',['NEW','CONTACTED','QUALIFIED','CONVERTED','DISQUALIFIED'].map(value=>({value,label:value.charAt(0)+value.slice(1).toLowerCase()})))}
+        {select('routing','Routing',[{value:'UNREVIEWED',label:'Unreviewed'},{value:'BIXOLON_SALES',label:'BIXOLON Sales'},{value:'REFERRED_TO_PARTNER',label:'Referred to Partner'},{value:'MARKETING_FOLLOW_UP',label:'Marketing Follow-Up'}])}
+        {select('referralPartnerId','Referral Partner',partners.map(item=>({value:item.id,label:item.name})))}
         {select('converted','Conversion',[{value:'true',label:'Converted'},{value:'false',label:'Not Converted'}])}
         {select('accountLinked','Account Resolution',[{value:'true',label:'Linked'},{value:'false',label:'Unresolved'}])}
         {select('contactLinked','Contact Resolution',[{value:'true',label:'Linked'},{value:'false',label:'Unresolved'}])}

@@ -1,4 +1,4 @@
-import { Prisma, TradeShowLeadStatus, type PrismaClient } from '@prisma/client';
+import { Prisma, TradeShowLeadStatus, type TradeShowLeadRouting, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { field, optional, positiveId, required, type Errors } from './crm-validation';
 import { isApprovedTradeShowTimezone } from './trade-show-timezones';
@@ -45,13 +45,19 @@ export function canEditTradeShowLead(actor: Actor, lead: { assignedSalesRepUserI
   return can(actor, 'trade-shows.leads.write') && (actor.role !== 'SALES' || lead.assignedSalesRepUserId === actor.id);
 }
 
-export function tradeShowKpis(leads: { assignedSalesRepUserId: number | null; status: TradeShowLeadStatus }[]) {
+export function tradeShowKpis(leads: { assignedSalesRepUserId: number | null; status: TradeShowLeadStatus; routing?:TradeShowLeadRouting }[]) {
   return {
     total: leads.length,
     assigned: leads.filter(lead => lead.assignedSalesRepUserId !== null).length,
     contacted: leads.filter(lead => ['CONTACTED', 'QUALIFIED', 'CONVERTED'].includes(lead.status)).length,
     qualified: leads.filter(lead => ['QUALIFIED', 'CONVERTED'].includes(lead.status)).length,
     converted: leads.filter(lead => lead.status === 'CONVERTED').length,
+    routing:{
+      UNREVIEWED:leads.filter(lead=>(lead.routing??'UNREVIEWED')==='UNREVIEWED').length,
+      BIXOLON_SALES:leads.filter(lead=>lead.routing==='BIXOLON_SALES').length,
+      REFERRED_TO_PARTNER:leads.filter(lead=>lead.routing==='REFERRED_TO_PARTNER').length,
+      MARKETING_FOLLOW_UP:leads.filter(lead=>lead.routing==='MARKETING_FOLLOW_UP').length,
+    },
   };
 }
 

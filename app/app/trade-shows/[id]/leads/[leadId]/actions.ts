@@ -14,7 +14,7 @@ export async function submitTradeShowLead(tradeShowId: number, leadId: number, _
     revalidatePath(`/trade-shows/${tradeShowId}`); revalidatePath(`/trade-shows/${tradeShowId}/leads/${leadId}`);
     return { errors: {}, redirectTo: `/trade-shows/${tradeShowId}/leads/${leadId}` };
   } catch (error) {
-    const message = error instanceof Error && /^(Access denied|Trade Show Lead not found|Only Opportunity conversion|Converted lead status|Choose an active|Contact belongs)/.test(error.message) ? error.message : 'Lead could not be saved.';
+    const message = error instanceof Error && /^(Access denied|Trade Show Lead not found|Only Opportunity conversion|Converted lead status|Choose an active|Contact belongs|Select an active|Select a Partner)/.test(error.message) ? error.message : 'Lead could not be saved.';
     return tradeShowLeadFailureState(form, {}, message);
   }
 }

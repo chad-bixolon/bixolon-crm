@@ -35,7 +35,7 @@ test('Opportunity parser supports multiple optional Contacts and one reviewed pr
 
 function fixture({convertedOpportunityId=null,contactAccountId=10,failCreate=false}={}){
   let converted=null,created=0,links=[];
-  const lead={id:2,tradeShowId:1,assignedSalesRepUserId:7,convertedOpportunityId,accountId:10,contactId:20,tradeShow:{archivedAt:null},contact:{accountId:contactAccountId,active:true,archivedAt:null}};
+  const lead={id:2,tradeShowId:1,routing:'REFERRED_TO_PARTNER',routedPartnerAccountId:30,referredAt:new Date('2026-09-01'),referredByUserId:6,referralNotes:'Prior referral',assignedSalesRepUserId:7,convertedOpportunityId,accountId:10,contactId:20,tradeShow:{archivedAt:null},contact:{accountId:contactAccountId,active:true,archivedAt:null}};
   const tx={
     $queryRaw:async()=>[],tradeShowLead:{findFirst:async()=>lead,updateMany:async({data})=>{converted=data;return{count:1};}},
     salesStage:{findUnique:async()=>({id:1,active:true,isClosed:false,isWon:false})},currency:{findUnique:async()=>({code:'USD',active:true})},user:{findUnique:async()=>({id:7,active:true,archivedAt:null})},
@@ -54,6 +54,7 @@ test('conversion is atomic in one transaction, attributes the Opportunity, links
   assert.equal(await conversion.convertTradeShowLead(db.client,1,2,input,actor('SALES')),55);
   assert.equal(db.created,1);assert.deepEqual(db.links,[{opportunityId:55,contactId:20,isPrimary:true}]);
   assert.equal(db.converted.convertedOpportunityId,55);assert.equal(db.converted.status,'CONVERTED');assert.ok(db.converted.convertedAt instanceof Date);
+  for(const field of ['routing','routedPartnerAccountId','referredAt','referredByUserId','referralNotes'])assert.equal(Object.hasOwn(db.converted,field),false);
 });
 
 test('conversion permissions, duplicate protection, Account/Contact consistency, and failure ordering are enforced server-side',async()=>{

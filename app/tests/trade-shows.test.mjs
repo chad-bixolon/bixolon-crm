@@ -116,14 +116,14 @@ test('Trade Show create/edit validates eligible owner and archive stays reversib
 });
 
 test('KPI counts are zero for empty shows and cumulative through conversion', () => {
-  assert.deepEqual(shows.tradeShowKpis([]), { total: 0, assigned: 0, contacted: 0, qualified: 0, converted: 0 });
+  assert.deepEqual(shows.tradeShowKpis([]), { total: 0, assigned: 0, contacted: 0, qualified: 0, converted: 0, routing:{UNREVIEWED:0,BIXOLON_SALES:0,REFERRED_TO_PARTNER:0,MARKETING_FOLLOW_UP:0} });
   assert.deepEqual(shows.tradeShowKpis([
     { assignedSalesRepUserId: null, status: 'NEW' },
     { assignedSalesRepUserId: 7, status: 'CONTACTED' },
     { assignedSalesRepUserId: 7, status: 'QUALIFIED' },
     { assignedSalesRepUserId: 8, status: 'CONVERTED' },
     { assignedSalesRepUserId: null, status: 'DISQUALIFIED' },
-  ]), { total: 5, assigned: 3, contacted: 3, qualified: 2, converted: 1 });
+  ]), { total: 5, assigned: 3, contacted: 3, qualified: 2, converted: 1, routing:{UNREVIEWED:5,BIXOLON_SALES:0,REFERRED_TO_PARTNER:0,MARKETING_FOLLOW_UP:0} });
 });
 
 test('schema reserves source ID but keeps Badge ID only in raw provenance', () => {

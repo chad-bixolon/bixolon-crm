@@ -1,10 +1,10 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useActionState, useEffect } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { submitTradeShowLead, type TradeShowLeadFormState } from '@/app/trade-shows/[id]/leads/[leadId]/actions';
 import { useSubmitGuard } from '@/lib/submit-guard';
-import type { TradeShowLeadStatus } from '@prisma/client';
+import type { TradeShowLeadRouting, TradeShowLeadStatus } from '@prisma/client';
 
 type Option = { id: number; name: string };
 type Lead = {
@@ -12,6 +12,7 @@ type Lead = {
   productInterest: string | null; competitorSourceText: string | null; competitorId: number | null;
   currentProductBeingUsed: string | null; customerPainPoints: string | null;
   assignedSalesRepUserId: number | null; accountId: number | null; contactId: number | null;
+  routing: TradeShowLeadRouting; routedPartnerAccountId: number|null; referralNotes:string|null;
 };
 const statuses: TradeShowLeadStatus[] = ['NEW','CONTACTED','QUALIFIED','CONVERTED','DISQUALIFIED'];
 const statusLabels: Record<TradeShowLeadStatus, string> = {
@@ -21,12 +22,15 @@ const statusLabels: Record<TradeShowLeadStatus, string> = {
   CONVERTED: 'Converted',
   DISQUALIFIED: 'Disqualified',
 };
-export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, accounts, contacts, competitors, canAssign, canResolve }: {
-  tradeShowId: number; leadId: number; initial: Lead; reps: Option[]; accounts: Option[]; contacts: Option[]; competitors: Option[]; canAssign: boolean; canResolve: boolean;
+const tradeShowRoutingLabels:Record<TradeShowLeadRouting,string>={UNREVIEWED:'Unreviewed',BIXOLON_SALES:'BIXOLON Sales',REFERRED_TO_PARTNER:'Referred to Partner',MARKETING_FOLLOW_UP:'Marketing Follow-Up'};
+export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, partnerAccounts, accounts, contacts, competitors, canAssign, canResolve, canRoute }: {
+  tradeShowId: number; leadId: number; initial: Lead; reps: Option[]; partnerAccounts:Option[]; accounts: Option[]; contacts: Option[]; competitors: Option[]; canAssign: boolean; canResolve: boolean; canRoute:boolean;
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(submitTradeShowLead.bind(null, tradeShowId, leadId), { errors: {} } as TradeShowLeadFormState);
   const guard = useSubmitGuard(state);
+  const [routing,setRouting]=useState<TradeShowLeadRouting>((state.values?.routing as TradeShowLeadRouting|undefined)??initial.routing);
+  const [partnerSearch,setPartnerSearch]=useState('');
   useEffect(() => { if (state.redirectTo) router.push(state.redirectTo); }, [state.redirectTo, router]);
   const val = (key: string, fallback = '') => state.values?.[key] ?? fallback;
   const error = (key: string) => state.errors[key] && <p className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
@@ -36,11 +40,16 @@ export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, accounts
     {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     <section><h2 className="mb-3 text-lg font-semibold">Status &amp; Follow-Up</h2><div className="grid min-w-0 gap-5 sm:grid-cols-2">
       <div className="min-w-0"><label className="label" htmlFor="status">Status</label><select className="field h-11 min-w-0" id="status" name="status" defaultValue={val('status', initial.status)}>{statuses.filter(status => initial.status === 'CONVERTED' ? status === 'CONVERTED' : status !== 'CONVERTED').map(status => <option key={status} value={status}>{statusLabels[status]}</option>)}</select>{error('status')}</div>
-      {canAssign && select('assignedSalesRepUserId', 'Assigned Sales Rep', initial.assignedSalesRepUserId, reps, 'Unassigned', 'Current sales rep (inactive)')}
       <div className="min-w-0"><label className="label" htmlFor="followUpAt">Follow-Up Date</label><input className="field h-11 min-w-0" type="date" id="followUpAt" name="followUpAt" defaultValue={val('followUpAt', initial.followUpAt?.toISOString().slice(0,10) ?? '')}/>{error('followUpAt')}</div>
       <div className="min-w-0"><label className="label" htmlFor="lastContactedAt">Last Contacted Date</label><input className="field h-11 min-w-0" type="date" id="lastContactedAt" name="lastContactedAt" defaultValue={val('lastContactedAt', initial.lastContactedAt?.toISOString().slice(0,10) ?? '')}/>{error('lastContactedAt')}</div>
       <div className="min-w-0 sm:col-span-2">{textarea('salesNotes', 'Sales Notes', initial.salesNotes, 20000, 4)}</div>
     </div></section>
+    {canRoute && <section className="rounded-md border border-orange-200 bg-orange-50/40 p-4"><h2 className="mb-1 text-lg font-semibold">Lead Routing</h2><p className="mb-4 text-sm text-slate-600">Routing identifies who handles the lead; it does not change lifecycle status.</p><div className="grid min-w-0 gap-5 sm:grid-cols-2">
+      <div><label className="label" htmlFor="routing">Routing</label><select className="field h-11" id="routing" name="routing" value={routing} onChange={event=>setRouting(event.target.value as TradeShowLeadRouting)}>{(Object.keys(tradeShowRoutingLabels) as TradeShowLeadRouting[]).map(value=><option value={value} key={value}>{tradeShowRoutingLabels[value]}</option>)}</select>{error('routing')}</div>
+      {canAssign&&select('assignedSalesRepUserId',routing==='BIXOLON_SALES'?'Assigned Sales Rep (required)':'Assigned Sales Rep (optional)',initial.assignedSalesRepUserId,reps,'Unassigned','Current sales rep (inactive)')}
+      <div className="min-w-0"><label className="label" htmlFor="partner-search">Partner Account {routing==='REFERRED_TO_PARTNER'?'(required)':'(historical / optional)'}</label><input className="field mb-1 h-9" id="partner-search" type="search" placeholder="Search eligible partner Accounts" value={partnerSearch} onChange={event=>setPartnerSearch(event.target.value)}/><select className="field h-11" name="routedPartnerAccountId" defaultValue={val('routedPartnerAccountId',initial.routedPartnerAccountId?.toString()??'')}><option value="">No partner selected</option>{partnerAccounts.filter(item=>!partnerSearch||item.name.toLowerCase().includes(partnerSearch.toLowerCase())).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select>{error('routedPartnerAccountId')}</div>
+      <div className="min-w-0">{textarea('referralNotes','Referral Notes',initial.referralNotes,20000,3)}</div>
+    </div></section>}
     <section><h2 className="mb-3 text-lg font-semibold">Customer Context</h2><div className="grid min-w-0 gap-5 sm:grid-cols-2">
       <div className="min-w-0 sm:col-span-2">{textarea('productInterest', 'Product Interest', initial.productInterest, 5000)}</div>
       <div className="min-w-0"><label className="label" htmlFor="competitorSourceText">Competitor Mentioned</label><input className="field h-11 min-w-0" id="competitorSourceText" name="competitorSourceText" maxLength={500} defaultValue={val('competitorSourceText', initial.competitorSourceText ?? '')}/>{error('competitorSourceText')}</div>

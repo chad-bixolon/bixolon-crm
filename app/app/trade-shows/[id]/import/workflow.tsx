@@ -5,12 +5,13 @@ import { TableScroll } from '@/components/table-scroll';
 import { previewTradeShowAction, previewMappedTradeShowAction, reviewTradeShowCorrectionsAction, confirmTradeShowAction } from './actions';
 import type { ImportChoice } from '@/lib/trade-show-import';
 import { MAPPING_DESTINATIONS, REVIEWABLE_LEAD_FIELDS, type MappingDefinition, type MappingDestination, type ReviewableLeadField } from '@/lib/trade-show-import-fields';
-import type { TradeShowImportFormat } from '@prisma/client';
+import type { TradeShowImportFormat, TradeShowLeadRouting } from '@prisma/client';
 
 type Plan = NonNullable<Awaited<ReturnType<typeof previewTradeShowAction>>['plan']>;
 type MappingRequest = NonNullable<Awaited<ReturnType<typeof previewTradeShowAction>>['mappingRequired']>;
 
-function initialChoice(row:Plan['rows'][number]):ImportChoice{return {sourceKey:row.sourceKey,originalSourceKey:row.originalSourceKey,reviewedOverrides:row.reviewedOverrides,repId:null,accountId:row.matches.accountSuggestion,contactId:row.matches.contactSuggestion,refresh:false};}
+function initialChoice(row:Plan['rows'][number]):ImportChoice{return {sourceKey:row.sourceKey,originalSourceKey:row.originalSourceKey,reviewedOverrides:row.reviewedOverrides,routing:null,repId:null,partnerAccountId:null,accountId:row.matches.accountSuggestion,contactId:row.matches.contactSuggestion,refresh:false};}
+const routingLabels:Record<TradeShowLeadRouting,string>={UNREVIEWED:'Unreviewed',BIXOLON_SALES:'BIXOLON Sales',REFERRED_TO_PARTNER:'Referred to Partner',MARKETING_FOLLOW_UP:'Marketing Follow-Up'};
 
 function CorrectionFields({row,disabled,onApply}:{row:Plan['rows'][number];disabled:boolean;onApply:(field:ReviewableLeadField,value:string)=>Promise<boolean>}){
   const [editing,setEditing]=useState<ReviewableLeadField|null>(null),[value,setValue]=useState('');
@@ -85,6 +86,8 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
   const [confirmError, setConfirmError] = useState('');
   const [result, setResult] = useState<Awaited<ReturnType<typeof confirmTradeShowAction>>['result']>(null);
   const [defaultRep, setDefaultRep] = useState<number | null>(null);
+  const [defaultRouting,setDefaultRouting]=useState<TradeShowLeadRouting>('UNREVIEWED');
+  const [defaultPartner,setDefaultPartner]=useState<number|null>(null);
   const [choices, setChoices] = useState<ImportChoice[]>([]);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [repOverrideRow, setRepOverrideRow] = useState<number | null>(null);
@@ -114,6 +117,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
         setMappingRequired(null);
         setChoices(response.plan.rows.map(initialChoice));
         setDefaultRep(null);
+        setDefaultRouting('UNREVIEWED');setDefaultPartner(null);
         setExpandedRow(null);
         setRepOverrideRow(null);
       } else if(response.mappingRequired){
@@ -135,7 +139,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
 
   async function mappedPreview(){
     if(!file||!mappingDefinition)return;setBusy(true);setPreviewing(true);setMessage('');setConfirmError('');
-    try{const response=await previewMappedTradeShowAction(showId,fileForm(),mappingDefinition,saveMapping?mappingName:null);if(response.error)setMessage(response.error);else if(response.plan){setPlan(response.plan);setMappingRequired(null);setChoices(response.plan.rows.map(initialChoice));setDefaultRep(null);setExpandedRow(null);setRepOverrideRow(null);}}
+    try{const response=await previewMappedTradeShowAction(showId,fileForm(),mappingDefinition,saveMapping?mappingName:null);if(response.error)setMessage(response.error);else if(response.plan){setPlan(response.plan);setMappingRequired(null);setChoices(response.plan.rows.map(initialChoice));setDefaultRep(null);setDefaultRouting('UNREVIEWED');setDefaultPartner(null);setExpandedRow(null);setRepOverrideRow(null);}}
     finally{setPreviewing(false);setBusy(false);}
   }
 
@@ -146,16 +150,16 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
   async function applyCorrection(index:number,field:ReviewableLeadField,value:string){
     if(!plan)return false;setCorrectingRow(index);setMessage('');
     const reviews=plan.rows.map((row,itemIndex)=>({originalSourceKey:row.originalSourceKey,reviewedOverrides:itemIndex===index?{...(choices[itemIndex]?.reviewedOverrides??row.reviewedOverrides),[field]:value}:choices[itemIndex]?.reviewedOverrides??row.reviewedOverrides}));
-    try{const response=await reviewTradeShowCorrectionsAction(showId,fileForm(),plan.mapping,reviews);if(response.error||!response.plan){setMessage(response.error??'Correction could not be reviewed.');return false;}const prior=choices;setPlan(response.plan);setChoices(response.plan.rows.map((row,itemIndex)=>({...initialChoice(row),repId:prior[itemIndex]?.repId??null,refresh:prior[itemIndex]?.refresh??false})));return true;}finally{setCorrectingRow(null);}
+    try{const response=await reviewTradeShowCorrectionsAction(showId,fileForm(),plan.mapping,reviews);if(response.error||!response.plan){setMessage(response.error??'Correction could not be reviewed.');return false;}const prior=choices;setPlan(response.plan);setChoices(response.plan.rows.map((row,itemIndex)=>({...initialChoice(row),...prior[itemIndex],sourceKey:row.sourceKey,originalSourceKey:row.originalSourceKey,reviewedOverrides:row.reviewedOverrides})));return true;}finally{setCorrectingRow(null);}
   }
 
   async function confirm() {
-    if (!plan || !defaultRep) return;
+    if (!plan) return;
     setBusy(true);
     setMessage('');
     setConfirmError('');
     try {
-      const response = await confirmTradeShowAction(showId, fileForm(), plan.parsed.sha256, defaultRep, choices, plan.mapping);
+      const response = await confirmTradeShowAction(showId, fileForm(), plan.parsed.sha256, defaultRouting, defaultRep, defaultPartner, choices, plan.mapping);
       if (response.error) setConfirmError(response.error);
       else {
         setResult(response.result);
@@ -168,6 +172,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
 
   const repItems = plan?.reps.map(rep => ({ id: rep.id, name: `${rep.firstName} ${rep.lastName}` })) ?? [];
   const accountItems = plan?.accounts.map(account => ({ id: account.id, name: account.name })) ?? [];
+  const partnerItems = plan?.partnerAccounts.map(account=>({id:account.id,name:account.name}))??[];
   const contactItems = plan?.contacts.map(contact => ({ id: contact.id, name: `${contact.firstName} ${contact.lastName}${contact.email ? ` · ${contact.email}` : ''}${contact.account?.name ? ` · ${contact.account.name}` : ''}` })) ?? [];
   const mappingFlow=!!mappingRequired||plan?.parsed.format==='CUSTOM_MAPPING';
   const currentStep = result ? (mappingFlow?4:3) : plan ? (mappingFlow?3:2) : mappingRequired ? 2 : 1;
@@ -247,12 +252,14 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
         <div className="mt-4 flex flex-wrap gap-2" aria-label="Import summary">
           {summaryMetrics.map(([key, label], index) => <div className={index < 3 ? 'rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-slate-800' : 'rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600'} key={key}><strong className={index < 3 ? 'text-base text-slate-950' : 'text-sm text-slate-800'}>{plan.summary[key]}</strong> {label}</div>)}
         </div>
-        <label className="mt-5 block text-sm font-semibold">Default Sales Rep
+        <div className="mt-5 grid max-w-4xl gap-3 sm:grid-cols-3"><label className="block text-sm font-semibold">Default Routing
+          <select className="field mt-1 block h-11 w-full" value={defaultRouting} onChange={event=>{setDefaultRouting(event.target.value as TradeShowLeadRouting);setConfirmError('')}}><option value="UNREVIEWED">Unreviewed</option><option value="BIXOLON_SALES">BIXOLON Sales</option><option value="MARKETING_FOLLOW_UP">Marketing Follow-Up</option><option value="REFERRED_TO_PARTNER" disabled={!defaultPartner}>Referred to Partner</option></select>
+        </label><label className="block text-sm font-semibold">Default Sales Rep {defaultRouting==='BIXOLON_SALES'?'(required)':'(optional)'}
           <select className="field mt-1 block h-11 w-full max-w-sm" value={defaultRep ?? ''} onChange={event => { setDefaultRep(event.target.value ? Number(event.target.value) : null); setConfirmError(''); }}>
-            <option value="">Select active rep</option>
+            <option value="">No default rep</option>
             {repItems.map(rep => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
           </select>
-        </label>
+        </label><div><span className="block text-sm font-semibold">Default Partner Account</span><Picker label="default Partner Account" value={defaultPartner} onChange={id=>{setDefaultPartner(id);if(!id&&defaultRouting==='REFERRED_TO_PARTNER')setDefaultRouting('UNREVIEWED');setConfirmError('')}} items={partnerItems} emptyLabel="No default partner"/></div></div>
       </section>
 
       <section className="panel min-w-0 max-w-full">
@@ -266,6 +273,8 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
                 const expanded = expandedRow === index;
                 const overrideRep = repItems.find(rep => rep.id === choice?.repId);
                 const assignedRep = overrideRep ?? repItems.find(rep => rep.id === defaultRep);
+                const effectiveRouting=choice?.routing??defaultRouting;
+                const partner=partnerItems.find(item=>item.id===(choice?.partnerAccountId??defaultPartner));
                 const account = accountItems.find(item => item.id === choice?.accountId);
                 const contact = plan.contacts.find(item => item.id === choice?.contactId);
                 const warnings = rowWarnings(row.warnings);
@@ -276,14 +285,16 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
                   <td className="p-2 leading-5"><div className="line-clamp-2 break-all">{row.email||'—'}</div>{row.phone && <div className="break-words text-slate-600">{row.phone}</div>}</td>
                   <td className="p-2">
                     {!expanded ? <div className="space-y-1 text-xs leading-5">
-                      <div className="min-w-0"><span className="font-semibold text-slate-600">Assigned Rep</span> <span className="break-words text-slate-900">{assignedRep?.name ?? 'Not selected'}</span> <span className="text-slate-500">· {overrideRep ? 'Override' : 'Default'}</span></div>
+                      <div className="min-w-0"><span className="font-semibold text-slate-600">Routing</span> <span className="break-words text-slate-900">{routingLabels[effectiveRouting]}</span>{partner&&effectiveRouting==='REFERRED_TO_PARTNER'?<span className="text-slate-500"> · {partner.name}</span>:null}</div><div className="min-w-0"><span className="font-semibold text-slate-600">Assigned Rep</span> <span className="break-words text-slate-900">{assignedRep?.name ?? 'Not selected'}</span> <span className="text-slate-500">· {overrideRep ? 'Override' : 'Default'}</span></div>
                       <div><span className="font-semibold text-slate-600">Account</span> <span className={account ? 'text-slate-900' : 'text-amber-700'}>{account?.name ?? 'Not linked'}</span></div>
                       <div><span className="font-semibold text-slate-600">Contact</span> <span className={contact ? 'text-slate-900' : 'text-amber-700'}>{contact ? `${contact.firstName} ${contact.lastName}` : 'Not linked'}</span></div>
                       <button className="font-semibold text-orange-800 underline underline-offset-2" type="button" aria-expanded="false" onClick={() => { setExpandedRow(index); setRepOverrideRow(choice?.repId ? index : null); }}>Review</button>
                     </div> : <div className="space-y-3">
+                      <div><span className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">Routing</span><select className="field h-8 px-2 py-1 text-xs" value={choice?.routing??''} onChange={event=>change(index,{routing:(event.target.value||null) as TradeShowLeadRouting|null})}><option value="">Use default ({routingLabels[defaultRouting]})</option>{(Object.keys(routingLabels) as TradeShowLeadRouting[]).map(value=><option key={value} value={value}>{routingLabels[value]}</option>)}</select><div className="mt-1 text-xs text-slate-600">Effective: {routingLabels[effectiveRouting]}{partner&&effectiveRouting==='REFERRED_TO_PARTNER'?` · ${partner.name}`:''}</div></div>
                       <div><div className="flex items-center justify-between gap-2"><span className="text-[11px] font-semibold uppercase text-slate-500">Assigned Rep</span><span className="text-xs text-slate-500">{choice?.repId ? 'Override' : 'Default'}</span></div>
                         {repOverrideRow === index || choice?.repId ? <Picker label="rep override" value={choice?.repId ?? null} onChange={id => change(index, { repId: id })} items={repItems} emptyLabel="Use default rep" /> : <div className="mt-0.5 text-sm"><span className="break-words">{assignedRep?.name ?? 'Not selected'}</span><button className="ml-2 text-xs font-semibold text-orange-800 underline underline-offset-2" type="button" onClick={() => setRepOverrideRow(index)}>Override rep</button></div>}
                       </div>
+                      {effectiveRouting==='REFERRED_TO_PARTNER'&&<div><span className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">Partner Account</span><Picker label="Partner Account" value={choice?.partnerAccountId??null} onChange={id=>change(index,{partnerAccountId:id})} items={partnerItems} emptyLabel={defaultPartner?'Use default partner':'Select partner'}/></div>}
                       <div><span className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">Account</span><Picker label="Account" value={choice?.accountId ?? null} onChange={id => change(index, { accountId: id })} items={accountItems} />{row.matches.exactAccounts.length > 0 && <span className="mt-1 block break-words text-xs">Exact: {row.matches.exactAccounts.map(item => item.name).join(', ')}</span>}{row.matches.domainAccounts.length > 0 && <span className="block break-words text-xs">Website: {row.matches.domainAccounts.map(item => item.name).join(', ')}</span>}{row.matches.possibleAccounts.length > 0 && <span className="block break-words text-xs">Possible: {row.matches.possibleAccounts.map(item => item.name).join(', ')}</span>}</div>
                       <div><span className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">Contact</span><Picker label="Contact" value={choice?.contactId ?? null} onChange={id => change(index, { contactId: id })} items={contactItems} />{row.matches.contactMatches.length > 0 && <span className="mt-1 block break-words text-xs">Email: {row.matches.contactMatches.map(item => `${item.firstName} ${item.lastName}${item.accountId ? ` (#${item.accountId})` : ''}`).join(', ')}</span>}</div>
                       <CorrectionFields row={row} disabled={correctingRow!==null} onApply={(field,value)=>applyCorrection(index,field,value)}/>
@@ -301,9 +312,10 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
       <section className="panel p-5">
         <h2 className="font-semibold">{mappingFlow?'4':'3'}. Confirm Import</h2>
         <p className="mt-1 text-sm text-slate-600">New scans become separate leads. Existing scans stay unchanged unless source refresh is checked. Invalid rows are skipped. Account and Contact records are never edited.</p>
-        {!defaultRep && <p id="default-rep-required" className="mt-3 text-sm font-medium text-amber-800">Select a Default Sales Rep before importing these leads.</p>}
+        {defaultRouting==='BIXOLON_SALES'&&!defaultRep && <p id="default-rep-required" className="mt-3 text-sm font-medium text-amber-800">Select a Default Sales Rep before importing these leads.</p>}
+        {defaultRouting==='REFERRED_TO_PARTNER'&&!defaultPartner&&<p id="default-partner-required" className="mt-3 text-sm font-medium text-amber-800">Select a Partner Account before importing these leads.</p>}
         {confirmError && <p id="confirm-import-error" role="alert" className="mt-3 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900">{confirmError}</p>}
-        <button className="btn-primary mt-4" type="button" disabled={busy || correctingRow!==null || !defaultRep || plan.rows.some(row=>row.correctionErrors.length>0)} aria-describedby={!defaultRep ? 'default-rep-required' : confirmError ? 'confirm-import-error' : undefined} onClick={() => void confirm()}>Confirm Import</button>
+        <button className="btn-primary mt-4" type="button" disabled={busy || correctingRow!==null || (defaultRouting==='BIXOLON_SALES'&&!defaultRep) || (defaultRouting==='REFERRED_TO_PARTNER'&&!defaultPartner) || plan.rows.some(row=>row.correctionErrors.length>0)} aria-describedby={defaultRouting==='BIXOLON_SALES'&&!defaultRep?'default-rep-required':defaultRouting==='REFERRED_TO_PARTNER'&&!defaultPartner?'default-partner-required':confirmError?'confirm-import-error':undefined} onClick={() => void confirm()}>Confirm Import</button>
       </section>
     </>}
   </div>;

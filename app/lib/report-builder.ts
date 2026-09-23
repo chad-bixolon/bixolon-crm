@@ -73,8 +73,8 @@ export function projectInitiativeConfigFromParams(params:Params,fallback?:unknow
 export function tradeShowConfigFromParams(params:Params,fallback?:unknown):ReportConfiguration {
   if(one(params.configured)!=='1')return validateReportConfiguration('TRADE_SHOW',fallback??defaultReportConfiguration('TRADE_SHOW'));
   const filters:ReportConfiguration['filters']=[];
-  for(const field of ['tradeShowId','ownerId','competitorId','stageId'] as const){const value=number(one(params[field]));if(value)filters.push({field,operator:'eq',value});}
-  for(const field of ['leadStatus','followUpStatus','forecastCategory','currency'] as const){const value=one(params[field]);if(value)filters.push({field,operator:'eq',value});}
+  for(const field of ['tradeShowId','ownerId','competitorId','stageId','referralPartnerId'] as const){const value=number(one(params[field]));if(value)filters.push({field,operator:'eq',value});}
+  for(const field of ['leadStatus','routing','followUpStatus','forecastCategory','currency'] as const){const value=one(params[field]);if(value)filters.push({field,operator:'eq',value});}
   for(const field of ['converted','accountLinked','contactLinked'] as const){const value=one(params[field]);if(value==='true'||value==='false')filters.push({field,operator:'eq',value:value==='true'});}
   for(const field of ['productInterest','search'] as const){const value=one(params[field])?.trim();if(value)filters.push({field,operator:'contains',value});}
   const preset=one(params.showDatePreset);if(preset&&preset!=='CUSTOM'&&preset!=='ANY')filters.push({field:'showDate',operator:'preset',value:preset});

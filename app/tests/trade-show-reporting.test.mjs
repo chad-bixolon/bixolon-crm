@@ -16,14 +16,14 @@ const actor=(role,id=7)=>({id,role,active:true,archivedAt:null});
 const product=(id,amount,archivedAt=null)=>({id,quantity:1,estimatedUnitPrice:new Prisma.Decimal(amount),archivedAt});
 const opportunity=(id,amount,currency='USD',overrides={})=>({id,name:`Opportunity ${id}`,archivedAt:null,ownerId:7,owner:{firstName:'Sales',lastName:'Rep'},stageId:1,stage:{name:'Qualified',probability:25,isClosed:false,isWon:false},forecastCategory:'PIPELINE',probability:null,currencyCode:currency,products:[product(id,amount),product(id+100,'999',new Date())],...overrides});
 const show=(id=1,name='MODEX 2026')=>({id,name,startDate:new Date('2026-03-01')});
-const lead=(id,status='NEW',opportunity=null,overrides={})=>({id,tradeShowId:1,tradeShow:show(),firstName:`Lead${id}`,lastName:'Person',sourceCompany:`Company ${id}`,email:`lead${id}@example.com`,capturedAt:new Date('2026-03-02'),assignedSalesRepUserId:7,assignedSalesRep:{firstName:'Sales',lastName:'Rep'},status,followUpAt:null,lastContactedAt:null,accountId:null,account:null,contactId:null,contact:null,competitorId:null,competitor:null,competitorSourceText:null,productInterest:null,convertedOpportunityId:opportunity?.id??null,convertedOpportunity:opportunity,convertedAt:opportunity?new Date('2026-03-10'):null,...overrides});
+const lead=(id,status='NEW',opportunity=null,overrides={})=>({id,tradeShowId:1,tradeShow:show(),firstName:`Lead${id}`,lastName:'Person',sourceCompany:`Company ${id}`,email:`lead${id}@example.com`,capturedAt:new Date('2026-03-02'),assignedSalesRepUserId:7,assignedSalesRep:{firstName:'Sales',lastName:'Rep'},status,routing:'UNREVIEWED',routedPartnerAccountId:null,routedPartnerAccount:null,followUpAt:null,lastContactedAt:null,accountId:null,account:null,contactId:null,contact:null,competitorId:null,competitor:null,competitorSourceText:null,productInterest:null,convertedOpportunityId:opportunity?.id??null,convertedOpportunity:opportunity,convertedAt:opportunity?new Date('2026-03-10'):null,...overrides});
 const config=()=>reporting.defaultReportConfiguration('TRADE_SHOW');
 const run=async(rows,cfg=config(),role='ADMIN',now=new Date('2026-09-23T12:00:00Z'))=>{let args;const result=await reporting.executeTradeShowReport({tradeShowLead:{findMany:async input=>{args=input;return rows;}}},actor(role),cfg,now);return {result,args};};
 
 test('Trade Show lead metrics include every status, cumulative funnel counts, and a safe zero denominator',async()=>{
   const rows=[lead(1),lead(2,'CONTACTED'),lead(3,'QUALIFIED'),lead(4,'CONVERTED',opportunity(1,'100')),lead(5,'DISQUALIFIED',null,{assignedSalesRepUserId:null,assignedSalesRep:null})];
   const {result}=await run(rows);
-  assert.deepEqual(result.summary.leads,{totalLeads:5,assignedLeads:4,newLeads:1,contactedLeads:3,qualifiedLeads:2,convertedLeads:1,disqualifiedLeads:1,conversionRate:20});
+  assert.deepEqual(result.summary.leads,{totalLeads:5,assignedLeads:4,unreviewedLeads:5,bixolonSalesLeads:0,partnerReferredLeads:0,marketingFollowUpLeads:0,referralRate:0,newLeads:1,contactedLeads:3,qualifiedLeads:2,convertedLeads:1,disqualifiedLeads:1,conversionRate:20});
   const empty=(await run([])).result.summary.leads;
   assert.equal(empty.totalLeads,0);assert.equal(empty.conversionRate,null);
 });
@@ -41,6 +41,13 @@ test('attributed Opportunity metrics deduplicate, use active products, effective
     {currency:'USD',opportunityCount:3,pipeline:'100.00',weightedPipeline:'50.00',commit:'0.00',closedWonValue:'300.00',closedWonOpportunityCount:1},
   ]);
   assert.equal(result.rows.find(row=>row.id===1).opportunityValue,'100.00');
+});
+
+test('routing metrics, referral rate, grouping, and filters use current routing and Account relation',async()=>{
+  const partner={id:20,name:'BlueStar'},rows=[lead(1,'NEW',null,{routing:'BIXOLON_SALES'}),lead(2,'NEW',null,{routing:'REFERRED_TO_PARTNER',routedPartnerAccountId:20,routedPartnerAccount:partner}),lead(3,'NEW',null,{routing:'MARKETING_FOLLOW_UP'}),lead(4)];
+  const {result}=await run(rows);assert.equal(result.summary.leads.unreviewedLeads,1);assert.equal(result.summary.leads.bixolonSalesLeads,1);assert.equal(result.summary.leads.partnerReferredLeads,1);assert.equal(result.summary.leads.marketingFollowUpLeads,1);assert.equal(result.summary.leads.referralRate,25);
+  for(const groupBy of ['routing','referralPartner'])assert.ok((await run(rows,{...config(),groupBy})).result.groups.length>0);
+  const cfg=builder.tradeShowConfigFromParams({configured:'1',routing:'REFERRED_TO_PARTNER',referralPartnerId:'20'}),query=JSON.stringify((await run([],cfg)).args.where);assert.match(query,/REFERRED_TO_PARTNER/);assert.match(query,/routedPartnerAccountId/);
 });
 
 test('Trade Show attribution is queried only from originating leads and SALES scope is enforced at the lead query',async()=>{
@@ -65,6 +72,7 @@ test('follow-up filters cover overdue, missing, new not contacted, and qualified
     const cfg=builder.tradeShowConfigFromParams({configured:'1',followUpStatus:status});
     const {args}=await run([],cfg);
     const json=JSON.stringify(args.where);
+    assert.match(json,/BIXOLON_SALES/);
     if(status==='OVERDUE')assert.match(json,/followUpAt/);
     if(status==='MISSING')assert.match(json,/"followUpAt":null/);
     if(status==='NEW_NOT_CONTACTED'){assert.match(json,/"status":"NEW"/);assert.match(json,/"lastContactedAt":null/);}
