@@ -153,6 +153,7 @@ enum TradeShowLeadStatus {
 enum TradeShowImportFormat {
   NRA_NRF
   XPRESSLEADS_MODEX
+  CUSTOM_MAPPING
 }
 
 model User {
@@ -203,6 +204,8 @@ model User {
   updatedTradeShows       TradeShow[]        @relation("TradeShowUpdatedBy")
   archivedTradeShows      TradeShow[]        @relation("TradeShowArchivedBy")
   tradeShowImports        TradeShowImport[]  @relation("TradeShowImportUploader")
+  createdTradeShowImportMappings TradeShowImportMapping[] @relation("TradeShowImportMappingCreator")
+  updatedTradeShowImportMappings TradeShowImportMapping[] @relation("TradeShowImportMappingUpdater")
   assignedTradeShowLeads  TradeShowLead[]    @relation("TradeShowLeadSalesRep")
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
@@ -1022,6 +1025,9 @@ model TradeShowImport {
   fileSha256     String
   uploadedById   Int
   uploadedBy     User                  @relation("TradeShowImportUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  mappingId       Int?
+  mapping         TradeShowImportMapping? @relation(fields: [mappingId], references: [id], onDelete: Restrict)
+  mappingName     String?
   uploadedAt     DateTime              @default(now())
   rowCount       Int                   @default(0)
   createdCount   Int                   @default(0)
@@ -1032,6 +1038,27 @@ model TradeShowImport {
 
   @@unique([id, tradeShowId])
   @@index([tradeShowId, uploadedAt])
+  @@index([mappingId])
+}
+
+/// Reusable header-to-normalized-field template. Mapping JSON contains no lead row data.
+model TradeShowImportMapping {
+  id                Int               @id @default(autoincrement())
+  name              String
+  headerFingerprint String
+  mappings          Json
+  createdById       Int
+  createdBy         User              @relation("TradeShowImportMappingCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById       Int?
+  updatedBy         User?             @relation("TradeShowImportMappingUpdater", fields: [updatedById], references: [id], onDelete: Restrict)
+  lastUsedAt        DateTime?
+  archivedAt        DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  imports           TradeShowImport[]
+
+  @@index([headerFingerprint, archivedAt])
+  @@index([archivedAt, name])
 }
 
 model TradeShowLead {

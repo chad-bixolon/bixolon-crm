@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { TableScroll } from '@/components/table-scroll';
-import { previewTradeShowAction, confirmTradeShowAction } from './actions';
+import { previewTradeShowAction, previewMappedTradeShowAction, confirmTradeShowAction } from './actions';
 import type { ImportChoice } from '@/lib/trade-show-import';
+import { MAPPING_DESTINATIONS, type MappingDefinition, type MappingDestination } from '@/lib/trade-show-import-fields';
 import type { TradeShowImportFormat } from '@prisma/client';
 
 type Plan = NonNullable<Awaited<ReturnType<typeof previewTradeShowAction>>['plan']>;
+type MappingRequest = NonNullable<Awaited<ReturnType<typeof previewTradeShowAction>>['mappingRequired']>;
 
 function Picker({ value, onChange, items, label, emptyLabel = 'Not linked' }: { value: number | null; onChange: (id: number | null) => void; items: { id: number; name: string }[]; label: string; emptyLabel?: string }) {
   const [search, setSearch] = useState('');
@@ -32,21 +34,23 @@ const summaryMetrics = [
   ['invalid', 'Invalid'],
   ['usableEmail', 'Usable Email'],
   ['duplicateEmailGroups', 'Duplicate Email Groups'],
+  ['fallbackIdentityRows', 'Fallback Identity Rows'],
+  ['fallbackCollisionGroups', 'Fallback Identity Collisions'],
   ['unresolvedAccounts', 'Accounts Not Linked'],
   ['unresolvedContacts', 'Contacts Not Linked'],
   ['placeholderRows', 'Placeholder Rows'],
 ] as const;
 
-const sourceFormatLabels: Record<TradeShowImportFormat, string> = { NRA_NRF: 'NRA / NRF', XPRESSLEADS_MODEX: 'MODEX / XPressLeads' };
+const sourceFormatLabels: Record<TradeShowImportFormat, string> = { NRA_NRF: 'NRA / NRF', XPRESSLEADS_MODEX: 'MODEX / XPressLeads', CUSTOM_MAPPING: 'Custom column mapping' };
 
 const rowStateLabel = (state: string) => state.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ');
 const rowWarnings = (warnings: string[]) => warnings.filter(warning => warning !== 'Trade Show timezone is missing.');
 
-function WorkflowSteps({ current }: { current: 1 | 2 | 3 }) {
-  const steps = ['Upload', 'Review & Assign', 'Import'];
+function WorkflowSteps({ current, mapping }: { current: number; mapping: boolean }) {
+  const steps = mapping ? ['Upload', 'Map Columns', 'Preview / Review & Assign', 'Import'] : ['Upload', 'Review & Assign', 'Import'];
 
   return <nav aria-label="Import progress" className="max-w-3xl">
-    <ol className="grid grid-cols-3 gap-2">
+    <ol className={`grid ${mapping?'grid-cols-4':'grid-cols-3'} gap-2`}>
       {steps.map((step, index) => {
         const number = index + 1;
         const active = number === current;
@@ -63,6 +67,10 @@ function WorkflowSteps({ current }: { current: 1 | 2 | 3 }) {
 export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; timezone: string | null }) {
   const [file, setFile] = useState<File | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [mappingRequired, setMappingRequired] = useState<MappingRequest | null>(null);
+  const [mappingDefinition, setMappingDefinition] = useState<MappingDefinition | null>(null);
+  const [saveMapping, setSaveMapping] = useState(false);
+  const [mappingName, setMappingName] = useState('');
   const [busy, setBusy] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [message, setMessage] = useState('');
@@ -88,18 +96,36 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
       const response = await previewTradeShowAction(showId, fileForm());
       if (response.error) {
         setPlan(null);
+        setMappingRequired(null);
         setMessage(response.error);
       } else if (response.plan) {
         setPlan(response.plan);
+        setMappingRequired(null);
         setChoices(response.plan.rows.map(row => ({ sourceKey: row.sourceKey, repId: null, accountId: row.matches.accountSuggestion, contactId: row.matches.contactSuggestion, refresh: false })));
         setDefaultRep(null);
         setExpandedRow(null);
         setRepOverrideRow(null);
+      } else if(response.mappingRequired){
+        setPlan(null);
+        setMappingRequired(response.mappingRequired);
+        setMappingDefinition(response.mappingRequired.definition);
+        setSaveMapping(false);
+        setMappingName(response.mappingRequired.suggested?.name ?? '');
       }
     } finally {
       setPreviewing(false);
       setBusy(false);
     }
+  }
+
+  function mapColumn(sourceHeader:string,destination:MappingDestination|null){
+    setMappingDefinition(old=>old?{...old,columns:old.columns.map(column=>column.sourceHeader===sourceHeader?{...column,destination}:column)}:old);
+  }
+
+  async function mappedPreview(){
+    if(!file||!mappingDefinition)return;setBusy(true);setPreviewing(true);setMessage('');
+    try{const response=await previewMappedTradeShowAction(showId,fileForm(),mappingDefinition,saveMapping?mappingName:null);if(response.error)setMessage(response.error);else if(response.plan){setPlan(response.plan);setMappingRequired(null);setChoices(response.plan.rows.map(row=>({sourceKey:row.sourceKey,repId:null,accountId:row.matches.accountSuggestion,contactId:row.matches.contactSuggestion,refresh:false})));setDefaultRep(null);setExpandedRow(null);setRepOverrideRow(null);}}
+    finally{setPreviewing(false);setBusy(false);}
   }
 
   function change(index: number, patch: Partial<ImportChoice>) {
@@ -111,7 +137,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
     setBusy(true);
     setMessage('');
     try {
-      const response = await confirmTradeShowAction(showId, fileForm(), plan.parsed.sha256, defaultRep, choices);
+      const response = await confirmTradeShowAction(showId, fileForm(), plan.parsed.sha256, defaultRep, choices, plan.mapping);
       if (response.error) setMessage(response.error);
       else {
         setResult(response.result);
@@ -125,15 +151,16 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
   const repItems = plan?.reps.map(rep => ({ id: rep.id, name: `${rep.firstName} ${rep.lastName}` })) ?? [];
   const accountItems = plan?.accounts.map(account => ({ id: account.id, name: account.name })) ?? [];
   const contactItems = plan?.contacts.map(contact => ({ id: contact.id, name: `${contact.firstName} ${contact.lastName}${contact.email ? ` · ${contact.email}` : ''}${contact.account?.name ? ` · ${contact.account.name}` : ''}` })) ?? [];
-  const currentStep: 1 | 2 | 3 = result ? 3 : plan ? 2 : 1;
+  const mappingFlow=!!mappingRequired||plan?.parsed.format==='CUSTOM_MAPPING';
+  const currentStep = result ? (mappingFlow?4:3) : plan ? (mappingFlow?3:2) : mappingRequired ? 2 : 1;
 
   return <div className="min-w-0 max-w-full space-y-5">
-    <WorkflowSteps current={currentStep} />
+    <WorkflowSteps current={currentStep} mapping={mappingFlow} />
 
     <section className="panel max-w-3xl p-4 sm:p-5">
-      <h2 className="text-lg font-semibold">1. Upload &amp; Preview</h2>
+      <h2 className="text-lg font-semibold">1. Upload</h2>
       <ul id="file-requirements" className="mt-2 flex flex-col gap-1 text-sm text-slate-600 sm:flex-row sm:flex-wrap sm:gap-x-5">
-        <li>Supported Trade Show exports: NRA/NRF and MODEX/XPressLeads formats (.xls or .xlsx).</li>
+        <li>Trade Show lead exports only (.xls or .xlsx); known formats map automatically.</li>
         <li>Maximum 2 MB and 1,000 leads.</li>
         <li>Previewing does not change CRM data.</li>
       </ul>
@@ -152,6 +179,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
             onChange={event => {
               setFile(event.target.files?.[0] ?? null);
               setPlan(null);
+              setMappingRequired(null);
               setResult(null);
             }}
           />
@@ -169,7 +197,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
         aria-busy={previewing}
         onClick={() => void preview()}
       >
-        {previewing ? 'Generating preview…' : 'Preview Workbook'}
+        {previewing ? 'Reading workbook…' : 'Continue'}
       </button>
     </section>
 
@@ -180,10 +208,23 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
       <p className="text-sm">{result.created} new · {result.existing} existing · {result.skipped} skipped. <a className="text-orange-800 underline" href={`/trade-shows/${showId}`}>View Trade Show</a></p>
     </section>}
 
+    {mappingRequired&&mappingDefinition&&<section className="panel min-w-0 max-w-5xl p-5">
+      <h2 className="text-lg font-semibold">Column Mapping Required</h2>
+      <p className="mt-1 text-sm text-slate-600">{mappingRequired.helper}</p>
+      <p className="mt-2 text-xs text-slate-500">First worksheet: {mappingRequired.sheet} · {mappingRequired.columns.length} source columns · 2–3 nonblank samples shown per column.</p>
+      {mappingRequired.suggested&&<p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">Suggested saved mapping: <strong>{mappingRequired.suggested.name}</strong>. Headers changed, so review is required before continuing.</p>}
+      <div className="mt-4 min-w-0 max-w-full"><TableScroll label="Trade Show column mapping" bounded><table className="w-full min-w-[700px] table-fixed text-left text-sm"><colgroup><col className="w-1/4"/><col className="w-2/5"/><col className="w-[35%]"/></colgroup><thead className="bg-slate-50"><tr>{['Source Column','Sample Data','SalesHub Field'].map(label=><th className="border-b p-2" key={label}>{label}</th>)}</tr></thead><tbody className="divide-y">{mappingRequired.columns.map(column=>{const selected=mappingDefinition.columns.find(item=>item.sourceHeader===column.header)?.destination??null;return <tr className="align-top" key={column.header}><td className="break-words p-2 font-medium">{column.header}</td><td className="p-2 text-xs text-slate-600">{column.samples.length?column.samples.map((sample,index)=><div className="max-h-16 overflow-hidden whitespace-pre-wrap break-words" key={index}>{sample}</div>):<span className="italic">No nonblank samples</span>}</td><td className="p-2"><select className="field h-9 w-full min-w-0 px-2 py-1 text-sm" aria-label={`SalesHub field for ${column.header}`} value={selected??''} onChange={event=>mapColumn(column.header,(event.target.value||null) as MappingDestination|null)}><option value="">Preserve as source data only</option>{MAPPING_DESTINATIONS.map(([value,label])=><option value={value} key={value}>{label}</option>)}</select>{selected==='sourceLeadId'&&<span className="mt-1 block text-xs text-amber-800">Optional stable attendee/scan ID only. Do not use booth staff, app user, badge/operator, or access-code fields unless they truly identify the lead scan.</span>}</td></tr>})}</tbody></table></TableScroll></div>
+      <p className="mt-4 text-sm text-slate-600"><strong>Required:</strong> First Name, Last Name, Company, and at least one of Email or Phone. Captured Date / Time is preferred; a deliberately mapped Source Lead / Scan ID is the next strongest identity. Without either, re-import matching uses normalized attendee fields. Every unmapped column is retained in raw source data.</p>
+      <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={saveMapping} onChange={event=>setSaveMapping(event.target.checked)}/> Save this mapping for future imports</label>
+      {saveMapping&&<label className="mt-2 block max-w-sm text-sm font-semibold">Mapping name<input className="field mt-1 block w-full" maxLength={100} value={mappingName} onChange={event=>setMappingName(event.target.value)} placeholder="FSTEC Lead Export"/></label>}
+      <button className="btn-primary mt-4" disabled={busy||!mappingDefinition||saveMapping&&!mappingName.trim()} onClick={()=>void mappedPreview()}>{previewing?'Generating preview…':'Preview Leads'}</button>
+    </section>}
+
     {plan && <>
       <section className="panel p-5">
-        <h2 className="text-lg font-semibold">2. Review &amp; Assign</h2>
+        <h2 className="text-lg font-semibold">{mappingFlow?'3':'2'}. Review &amp; Assign</h2>
         <p className="mt-2 break-words text-sm">{sourceFormatLabels[plan.parsed.format]} · <span className="break-all">{plan.filename}</span> · {plan.parsed.sheet}</p>
+        {plan.mapping?.name&&<p className="mt-2 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-900">Saved mapping detected: <strong>{plan.mapping.name}</strong></p>}
         {plan.priorExactFile && <p className="mt-2 font-semibold text-amber-800">This exact file has already been confirmed for this Trade Show.</p>}
         <div className="mt-4 flex flex-wrap gap-2" aria-label="Import summary">
           {summaryMetrics.map(([key, label], index) => <div className={index < 3 ? 'rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-slate-800' : 'rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600'} key={key}><strong className={index < 3 ? 'text-base text-slate-950' : 'text-sm text-slate-800'}>{plan.summary[key]}</strong> {label}</div>)}
@@ -212,7 +253,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
                 const warnings = rowWarnings(row.warnings);
                 const hasStatusIssue = warnings.length > 0 || row.state !== 'NEW';
                 return <tr key={`${row.sourceKey}-${index}`} className={`align-top ${expanded ? 'bg-orange-50/30' : ''}`}>
-                  <td className="p-2"><div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500"><span>Row {row.sourceRow}</span>{row.state === 'NEW' && <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">New</span>}</div><strong className="block break-words leading-5">{row.firstName} {row.lastName}</strong>{row.title && <div className="line-clamp-1 break-words leading-5 text-slate-600">{row.title}</div>}<div className="truncate text-xs leading-5 text-slate-500" title={row.capturedAt ?? row.capturedSource ?? 'Capture time needs review'}>{row.capturedAt ?? row.capturedSource ?? 'Capture time needs review'}</div></td>
+                  <td className="p-2"><div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500"><span>Row {row.sourceRow}</span>{row.state === 'NEW' && <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">New</span>}{row.identityStrategy==='ATTENDEE_FIELDS'&&<span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800">Fallback identity</span>}{row.identityStrategy==='SOURCE_LEAD_ID'&&<span className="rounded bg-blue-50 px-1.5 py-0.5 font-medium text-blue-800">Source ID identity</span>}</div><strong className="block break-words leading-5">{row.firstName} {row.lastName}</strong>{row.title && <div className="line-clamp-1 break-words leading-5 text-slate-600">{row.title}</div>}<div className="truncate text-xs leading-5 text-slate-500" title={row.capturedAt ?? row.capturedSource ?? 'No captured time'}>{row.capturedAt ?? row.capturedSource ?? 'No captured time'}</div></td>
                   <td className="whitespace-pre-wrap break-words p-2 leading-5"><div className="line-clamp-3">{row.sourceCompany || '—'}</div>{row.sourceNotes&&<details className="text-xs text-slate-600"><summary className="cursor-pointer">Source notes</summary><div className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words">{row.sourceNotes}</div></details>}</td>
                   <td className="p-2 leading-5"><div className="line-clamp-2 break-all">{row.email||'—'}</div>{row.phone && <div className="break-words text-slate-600">{row.phone}</div>}</td>
                   <td className="p-2">
@@ -239,7 +280,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
       </section>
 
       <section className="panel p-5">
-        <h2 className="font-semibold">3. Confirm Import</h2>
+        <h2 className="font-semibold">{mappingFlow?'4':'3'}. Confirm Import</h2>
         <p className="mt-1 text-sm text-slate-600">New scans become separate leads. Existing scans stay unchanged unless source refresh is checked. Invalid rows are skipped. Account and Contact records are never edited.</p>
         <button className="btn-primary mt-4" disabled={busy || !defaultRep} onClick={() => void confirm()}>Confirm Import</button>
       </section>

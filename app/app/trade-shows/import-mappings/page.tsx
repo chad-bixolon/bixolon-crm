@@ -1,0 +1,17 @@
+import Link from 'next/link';
+import { Content, PageHeader } from '@/components/shell';
+import { TableScroll } from '@/components/table-scroll';
+import { requirePermission } from '@/lib/current-user';
+import { prisma } from '@/lib/prisma';
+import { MAPPING_DESTINATIONS, type MappingDefinition } from '@/lib/trade-show-import-fields';
+import { archiveMappingAction, renameMappingAction } from './actions';
+
+export const dynamic='force-dynamic';
+export default async function TradeShowImportMappingsPage(){
+  await requirePermission('trade-shows.manage');
+  const mappings=await prisma.tradeShowImportMapping.findMany({include:{createdBy:{select:{firstName:true,lastName:true}},_count:{select:{imports:true}}},orderBy:[{archivedAt:'asc'},{name:'asc'}]});
+  const labels=new Map<string,string>(MAPPING_DESTINATIONS);
+  return <Content><PageHeader eyebrow="Trade Shows" title="Import Mappings" description="Reusable column mappings for Trade Show lead exports." action={<Link className="btn-secondary" href="/trade-shows">Back to Trade Shows</Link>}/>
+    <div className="panel min-w-0 max-w-full"><TableScroll label="Saved Trade Show import mappings" bounded><table className="w-full min-w-[850px] table-fixed text-left text-sm"><colgroup><col className="w-64"/><col/><col className="w-36"/><col className="w-44"/></colgroup><thead className="bg-slate-50"><tr>{['Mapping','Source → SalesHub','Usage','Status'].map(label=><th className="border-b p-3" key={label}>{label}</th>)}</tr></thead><tbody className="divide-y">{mappings.map(mapping=>{const definition=mapping.mappings as unknown as MappingDefinition;return <tr className="align-top" key={mapping.id}><td className="p-3"><form action={renameMappingAction} className="space-y-2"><input type="hidden" name="id" value={mapping.id}/><input aria-label={`Name for mapping ${mapping.id}`} className="field w-full" name="name" defaultValue={mapping.name} maxLength={100}/><button className="text-xs font-semibold text-orange-800 underline" type="submit">Rename</button></form><div className="mt-2 text-xs text-slate-500">Created by {mapping.createdBy.firstName} {mapping.createdBy.lastName}</div></td><td className="p-3"><ul className="space-y-1">{definition.columns.filter(column=>column.destination).map(column=><li className="break-words" key={column.sourceHeader}><span className="font-medium">{column.sourceHeader}</span> → {labels.get(column.destination!)}</li>)}</ul><details className="mt-2 text-xs text-slate-500"><summary className="cursor-pointer">Source-only columns</summary><div className="mt-1 break-words">{definition.columns.filter(column=>!column.destination).map(column=>column.sourceHeader).join(', ')||'None'}</div></details></td><td className="p-3 text-xs">{mapping._count.imports} confirmed imports<br/>{mapping.lastUsedAt?`Last used ${mapping.lastUsedAt.toLocaleDateString('en-US')}`:'Not used yet'}</td><td className="p-3"><span className="block text-xs font-semibold">{mapping.archivedAt?'Archived':'Active'}</span><form action={archiveMappingAction} className="mt-2"><input type="hidden" name="id" value={mapping.id}/><input type="hidden" name="archived" value={mapping.archivedAt?'false':'true'}/><button className="text-xs font-semibold text-orange-800 underline" type="submit">{mapping.archivedAt?'Activate':'Archive'}</button></form></td></tr>})}</tbody></table></TableScroll>{!mappings.length&&<p className="p-8 text-center text-sm text-slate-500">No saved mappings yet. Save one while mapping an unknown Trade Show export.</p>}</div>
+  </Content>;
+}

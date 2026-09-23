@@ -1,20 +1,26 @@
 import { createHash } from 'node:crypto';
 import { inflateRawSync } from 'node:zlib';
 import * as XLSX from 'xlsx';
+import { MAPPING_DESTINATIONS, type MappingDefinition, type MappingDestination } from './trade-show-import-fields';
+export { MAPPING_DESTINATIONS } from './trade-show-import-fields';
+export type { MappingDefinition, MappingDestination } from './trade-show-import-fields';
 
 export const MAX_TRADE_SHOW_FILE_BYTES = 2_000_000;
 export const MAX_TRADE_SHOW_ROWS = 1000;
 export const MAX_TRADE_SHOW_COLUMNS = 100;
-export type ImportFormat = 'NRA_NRF' | 'XPRESSLEADS_MODEX';
+export type ImportFormat = 'NRA_NRF' | 'XPRESSLEADS_MODEX' | 'CUSTOM_MAPPING';
+export type WorkbookColumn = { header: string; samples: string[] };
+export type InspectedWorkbook = { sheet: string; sha256: string; headers: string[]; headerFingerprint: string; columns: WorkbookColumn[]; rows: { sourceRow: number; rawSourceData: Record<string,string>; warnings:string[] }[]; builtInFormat: Exclude<ImportFormat,'CUSTOM_MAPPING'> | null };
 export type ParsedLead = {
   sourceRow: number; sourceKey: string; rawSourceData: Record<string, string>;
-  capturedSource: string; capturedAt: string | null; warnings: string[]; invalid: boolean;
+  capturedSource: string; capturedAt: string | null; identityStrategy: 'CAPTURE_TIME'|'SOURCE_LEAD_ID'|'ATTENDEE_FIELDS'; warnings: string[]; invalid: boolean;
   firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null;
   sourceCompany: string | null; sourceCompanyWebsite: string | null; addressLine1: string | null;
   addressLine2: string | null; city: string | null; stateProvince: string | null;
-  postalCode: string | null; country: string | null; sourceNotes: string | null;
+  postalCode: string | null; country: string | null; sourceNotes: string | null; sourceLeadId: string | null;
+  productInterest: string | null; competitorSourceText: string | null; currentProductBeingUsed: string | null; customerPainPoints: string | null;
 };
-export type ParsedWorkbook = { format: ImportFormat; sheet: string; sha256: string; rows: ParsedLead[] };
+export type ParsedWorkbook = { format: ImportFormat; sheet: string; sha256: string; headerFingerprint: string; rows: ParsedLead[] };
 const key = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 const norm = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
 const pick = (raw: Record<string, string>, names: string[]) => {
@@ -124,10 +130,10 @@ export function parseCaptureTime(text: string, timezone: string | null): { iso: 
   let year: number, month: number, day: number, hour: number, minute: number, second: number, milli: number;
   if (match) { [, year, month, day, hour, minute, second, milli] = match as unknown as [string, number, number, number, number, number, number, number]; year=Number(year);month=Number(month);day=Number(day);hour=Number(hour);minute=Number(minute);second=Number(second||0);milli=Number(String(milli||'').padEnd(3,'0')); }
   else {
-    match = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)$/i.exec(value);
+    match = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?$/i.exec(value);
     if (!match) return { iso: null, warning: 'Capture time could not be parsed.' };
     month=Number(match[1]);day=Number(match[2]);year=Number(match[3]);if(year<100)year+=2000;
-    hour=Number(match[4])%12+(match[7].toUpperCase()==='PM'?12:0);minute=Number(match[5]);second=Number(match[6]||0);milli=0;
+    hour=Number(match[4]);if(match[7])hour=hour%12+(match[7].toUpperCase()==='PM'?12:0);minute=Number(match[5]);second=Number(match[6]||0);milli=0;
   }
   const target=Date.UTC(year,month-1,day,hour,minute,second,milli);
   const check=new Date(target);
@@ -145,11 +151,26 @@ export function parseCaptureTime(text: string, timezone: string | null): { iso: 
   if(matches.length!==1)return {iso:null,warning:matches.length?'Capture time is ambiguous at a daylight-saving transition.':'Capture time does not exist in the Trade Show timezone.'};
   return {iso:matches[0].toISOString()};
 }
+function parseMappedCaptureTime(text:string,timezone:string|null){
+  if(/^\d{4,6}(?:\.\d+)?$/.test(text.trim())){const decoded=XLSX.SSF.parse_date_code(Number(text));if(decoded&&decoded.y>=1900&&decoded.y<=2200){const local=`${decoded.y}-${String(decoded.m).padStart(2,'0')}-${String(decoded.d).padStart(2,'0')} ${String(decoded.H).padStart(2,'0')}:${String(decoded.M).padStart(2,'0')}`;return parseCaptureTime(local,timezone);}}
+  return parseCaptureTime(text,timezone);
+}
 // v1 identity: show ID + normalized source timestamp + person + company + email. Badge ID, file and row are excluded.
 export function sourceKeyV1(showId: number, row: Pick<ParsedLead,'capturedSource'|'firstName'|'lastName'|'sourceCompany'|'email'>) {
   return 'v1:' + createHash('sha256').update(JSON.stringify([showId,norm(row.capturedSource),norm(row.firstName),norm(row.lastName),norm(row.sourceCompany??''),norm(row.email??'')])).digest('hex');
 }
-export function parseTradeShowWorkbook(buffer: Buffer, filename: string, showId: number, timezone: string | null): ParsedWorkbook {
+export function sourceLeadIdKeyV1(showId:number,sourceLeadId:string){return 'v1:source-id:'+createHash('sha256').update(JSON.stringify([showId,norm(sourceLeadId)])).digest('hex');}
+const normalizedPhone=(value:string|null)=>norm(value??'').replace(/[^a-z0-9]/g,'');
+export function attendeeFieldsKeyV1(showId:number,row:Pick<ParsedLead,'firstName'|'lastName'|'sourceCompany'|'email'|'phone'>){return 'v1:attendee:'+createHash('sha256').update(JSON.stringify([showId,norm(row.firstName),norm(row.lastName),norm(row.sourceCompany??''),norm(row.email??''),normalizedPhone(row.phone)])).digest('hex');}
+
+// Fingerprint recipe: trim/collapse/lowercase each header, remove punctuation,
+// sort the normalized names, JSON encode, then SHA-256. It intentionally ignores
+// filename, container (.xls/.xlsx), row count, and column order.
+export function headerFingerprint(headers: string[]) {
+  return createHash('sha256').update(JSON.stringify(headers.map(key).sort())).digest('hex');
+}
+
+export function inspectTradeShowWorkbook(buffer: Buffer, filename: string): InspectedWorkbook {
   const extension = workbookExtension(filename);
   if (!buffer.length||buffer.length>MAX_TRADE_SHOW_FILE_BYTES) throw new Error('Workbook must be nonempty and at most 2 MB.');
   // Validate the declared container before invoking SheetJS. HTML, text, generic ZIPs and format mismatches are rejected.
@@ -165,26 +186,69 @@ export function parseTradeShowWorkbook(buffer: Buffer, filename: string, showId:
   if(bounds.e.r>MAX_TRADE_SHOW_ROWS)throw new Error(`Workbook exceeds ${MAX_TRADE_SHOW_ROWS} source rows.`);
   if(bounds.e.c+1>MAX_TRADE_SHOW_COLUMNS)throw new Error(`Workbook exceeds ${MAX_TRADE_SHOW_COLUMNS} source columns.`);
   const headers=Array.from({length:bounds.e.c+1},(_,c)=>String(ws[XLSX.utils.encode_cell({r:0,c})]?.w??ws[XLSX.utils.encode_cell({r:0,c})]?.v??'').trim());
-  const has=(name:string)=>headers.some(header=>key(header)===key(name));
-  const format: ImportFormat = has('DeviceLabel')&&has('Scan Date/Time')&&has('First Name')&&has('Last Name')&&has('Company')&&key(sheet)==='downloads'?'XPRESSLEADS_MODEX':has('Captured Date')&&has('FirstName')&&has('LastName')&&has('Company')&&key(sheet)==='exportextensionsflatfile1'?'NRA_NRF':(() => {throw new Error('Unsupported Trade Show worksheet or headers.');})();
+  if(headers.some(header=>!header))throw new Error('Every source column must have a heading.');
   if(headers.filter(Boolean).length!==new Set(headers.filter(Boolean).map(key)).size)throw new Error('Duplicate source headers are unsupported.');
-  const rows:ParsedLead[]=[];
+  const has=(name:string)=>headers.some(header=>key(header)===key(name));
+  const builtInFormat:InspectedWorkbook['builtInFormat']=has('DeviceLabel')&&has('Scan Date/Time')&&has('First Name')&&has('Last Name')&&has('Company')&&key(sheet)==='downloads'?'XPRESSLEADS_MODEX':has('Captured Date')&&has('FirstName')&&has('LastName')&&has('Company')&&key(sheet)==='exportextensionsflatfile1'?'NRA_NRF':null;
+  const rows:InspectedWorkbook['rows']=[];
   for(let r=1;r<=bounds.e.r;r++){
     const raw:Record<string,string>={};let any=false;const warnings:string[]=[];
-    headers.forEach((header,c)=>{if(!header)return;const cell=ws[XLSX.utils.encode_cell({r,c})];const value=cell?String(cell.w??cell.v??''):'';raw[header]=value;if(value.trim())any=true;
-      if(cell?.t==='n'&&/^(phone|phoneextension|ext|zipcode|zipcode|postalcode)$/i.test(key(header))&&cell.v!==undefined){const digits=String(cell.v);if(/^0/.test(value)&&!/^0/.test(digits))warnings.push(`${header}: numeric cell may have lost a leading zero.`);else if(/^(phone|zipcode|postalcode)$/.test(key(header))&&digits.length<5)warnings.push(`${header}: numeric cell may have lost a leading zero.`);}
+    headers.forEach((header,c)=>{const cell=ws[XLSX.utils.encode_cell({r,c})];const value=cell?String(cell.w??cell.v??''):'';raw[header]=value;if(value.trim())any=true;
+      if(cell?.t==='n'&&/^(phone|phoneextension|ext|zipcode|postalcode|zippostalcode)$/i.test(key(header))&&cell.v!==undefined){const digits=String(cell.v);if(/^0/.test(value)&&!/^0/.test(digits))warnings.push(`${header}: numeric cell may have lost a leading zero.`);else if(/^(phone|zipcode|postalcode|zippostalcode)$/.test(key(header))&&digits.length<5)warnings.push(`${header}: numeric cell may have lost a leading zero.`);}
     });
     if(!any)continue;
-    const value=(names:string[],label:string)=>{const v=pick(raw,names);if(placeholder(v)){warnings.push(`${label} contains a placeholder.`);return null;}return v.trim()||null;};
-    const capturedSource=pick(raw,['Captured Date','Scan Date/Time']);const time=parseCaptureTime(capturedSource,timezone);if(time.warning)warnings.push(time.warning);
-    const firstName=value(['FirstName','First Name'],'First name')??'';const lastName=value(['LastName','Last Name'],'Last name')??'';
-    const email=value(['Email'],'Email');const usableEmail=email&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)?email.toLowerCase():null;
-    if(email&&!usableEmail)warnings.push('Email is invalid.');
-    const lead:ParsedLead={sourceRow:r+1,sourceKey:'',rawSourceData:raw,capturedSource,capturedAt:time.iso,warnings,invalid:!capturedSource.trim()||!(firstName||lastName||usableEmail||pick(raw,['Company']).trim()),firstName,lastName,
-      title:value(['Title'],'Title'),email:usableEmail,phone:value(['Phone'],'Phone'),sourceCompany:value(['Company'],'Company'),sourceCompanyWebsite:value(['Company Website'],'Website'),
-      addressLine1:value(['Address','Address 1'],'Address'),addressLine2:value(['Address2','Address 2'],'Address 2'),city:value(['City'],'City'),stateProvince:value(['StateCode','State/Province'],'State'),postalCode:value(['ZipCode','Zipcode'],'Postal code'),country:value(['CountryCode','Country'],'Country'),sourceNotes:pick(raw,['Notes'])||null};
-    if(lead.invalid)warnings.push('Missing capture time or usable identity.');
-    lead.sourceKey=sourceKeyV1(showId,lead);rows.push(lead);
+    rows.push({sourceRow:r+1,rawSourceData:raw,warnings});
   }
-  return {format,sheet,sha256:createHash('sha256').update(buffer).digest('hex'),rows};
+  const columns=headers.map(header=>({header,samples:[...new Set(rows.map(row=>row.rawSourceData[header].trim()).filter(Boolean))].slice(0,3)}));
+  return {sheet,sha256:createHash('sha256').update(buffer).digest('hex'),headers,headerFingerprint:headerFingerprint(headers),columns,rows,builtInFormat};
+}
+
+const requiredDestinations: MappingDestination[]=['firstName','lastName','sourceCompany'];
+export function validateMapping(headers:string[],mapping:MappingDefinition){
+  if(mapping?.version!==1||!Array.isArray(mapping.columns))throw new Error('Mapping definition is invalid.');
+  const normalizedHeaders=new Map(headers.map(header=>[key(header),header]));
+  const missing:string[]=[];const destinations=new Set<MappingDestination>();
+  for(const column of mapping.columns){
+    if(!column||typeof column.sourceHeader!=='string'||(column.destination!==null&&!MAPPING_DESTINATIONS.some(([value])=>value===column.destination)))throw new Error('Mapping definition is invalid.');
+    if(!normalizedHeaders.has(key(column.sourceHeader))&&column.destination)missing.push(column.sourceHeader);
+    if(column.destination){if(destinations.has(column.destination))throw new Error(`SalesHub field “${MAPPING_DESTINATIONS.find(([value])=>value===column.destination)?.[1]}” may only be mapped once.`);destinations.add(column.destination);}
+  }
+  if(missing.length)throw new Error(`Mapping review required. Missing mapped source column${missing.length===1?'':'s'}: ${missing.join(', ')}.`);
+  const absent:string[]=requiredDestinations.filter(destination=>!destinations.has(destination)).map(destination=>MAPPING_DESTINATIONS.find(([value])=>value===destination)![1]);
+  if(!destinations.has('email')&&!destinations.has('phone'))absent.push('Email or Phone');
+  if(absent.length)throw new Error(`Map the following before preview: ${absent.join(', ')}.`);
+  return mapping;
+}
+
+export function mappingCompatibility(headers:string[],mapping:MappingDefinition){
+  try{validateMapping(headers,mapping);return 'COMPATIBLE' as const;}catch(error){return error instanceof Error&&error.message.startsWith('Mapping review required.')?'MISSING_HEADERS' as const:'INVALID' as const;}
+}
+
+export function parseTradeShowWorkbook(buffer: Buffer, filename: string, showId: number, timezone: string | null, customMapping?:MappingDefinition): ParsedWorkbook {
+  const inspected=inspectTradeShowWorkbook(buffer,filename);
+  if(!inspected.builtInFormat&&!customMapping)throw new Error('Column Mapping Required');
+  if(!inspected.builtInFormat)validateMapping(inspected.headers,customMapping!);
+  const mappedByDestination=new Map<MappingDestination,string>();
+  if(customMapping)for(const column of customMapping.columns)if(column.destination)mappedByDestination.set(column.destination,inspected.headers.find(header=>key(header)===key(column.sourceHeader))!);
+  const rows:ParsedLead[]=[];
+  for(const source of inspected.rows){
+    const raw=source.rawSourceData,warnings=[...source.warnings];
+    const value=(names:string[],label:string)=>{const v=pick(raw,names);if(placeholder(v)){warnings.push(`${label} contains a placeholder.`);return null;}return v.trim()||null;};
+    const names=(destination:MappingDestination,builtIn:string[])=>inspected.builtInFormat?builtIn:[mappedByDestination.get(destination)!].filter(Boolean);
+    const capturedSource=pick(raw,names('capturedAt',['Captured Date','Scan Date/Time']));const time=inspected.builtInFormat?parseCaptureTime(capturedSource,timezone):capturedSource.trim()?parseMappedCaptureTime(capturedSource,timezone):{iso:null};if(time.warning)warnings.push(time.warning);
+    const firstName=value(names('firstName',['FirstName','First Name']),'First name')??'';const lastName=value(names('lastName',['LastName','Last Name']),'Last name')??'';
+    const email=value(names('email',['Email']),'Email');const usableEmail=email&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)?email.toLowerCase():null;
+    if(email&&!usableEmail)warnings.push('Email is invalid.');
+    const phone=value(names('phone',['Phone']),'Phone'),sourceCompany=value(names('sourceCompany',['Company']),'Company'),sourceLeadId=value(names('sourceLeadId',[]),'Source lead ID');
+    const identityStrategy:ParsedLead['identityStrategy']=capturedSource.trim()?'CAPTURE_TIME':sourceLeadId?'SOURCE_LEAD_ID':'ATTENDEE_FIELDS';
+    const fallbackValid=!!firstName&&!!lastName&&!!sourceCompany&&!!(usableEmail||phone);
+    const lead:ParsedLead={sourceRow:source.sourceRow,sourceKey:'',rawSourceData:raw,capturedSource,capturedAt:time.iso,identityStrategy,warnings,invalid:inspected.builtInFormat?(!capturedSource.trim()||!(firstName||lastName||usableEmail||sourceCompany)):identityStrategy==='ATTENDEE_FIELDS'?!fallbackValid:!(firstName||lastName||usableEmail||sourceCompany),firstName,lastName,
+      title:value(names('title',['Title']),'Title'),email:usableEmail,phone,sourceCompany,sourceCompanyWebsite:value(names('sourceCompanyWebsite',['Company Website']),'Website'),
+      addressLine1:value(names('addressLine1',['Address','Address 1']),'Address'),addressLine2:value(names('addressLine2',['Address2','Address 2']),'Address 2'),city:value(names('city',['City']),'City'),stateProvince:value(names('stateProvince',['StateCode','State/Province']),'State'),postalCode:value(names('postalCode',['ZipCode','Zipcode']),'Postal code'),country:value(names('country',['CountryCode','Country']),'Country'),sourceNotes:value(names('sourceNotes',['Notes']),'Source notes'),
+      sourceLeadId,productInterest:value(names('productInterest',[]),'Product interest'),competitorSourceText:value(names('competitorSourceText',[]),'Competitor'),currentProductBeingUsed:value(names('currentProductBeingUsed',[]),'Current product'),customerPainPoints:value(names('customerPainPoints',[]),'Customer pain points')};
+    if(lead.invalid)warnings.push(identityStrategy==='ATTENDEE_FIELDS'?'Fallback identity requires First Name, Last Name, Company, and Email or Phone.':'Missing capture time or usable identity.');
+    if(identityStrategy==='ATTENDEE_FIELDS')warnings.push("This export does not include a captured time or stable lead ID. Re-import matching will use the attendee's identifying fields. Identical repeat scans may be treated as the same lead.");
+    lead.sourceKey=inspected.builtInFormat?sourceKeyV1(showId,lead):identityStrategy==='CAPTURE_TIME'?sourceKeyV1(showId,{...lead,capturedSource:lead.capturedAt??lead.capturedSource}):identityStrategy==='SOURCE_LEAD_ID'?sourceLeadIdKeyV1(showId,sourceLeadId!):attendeeFieldsKeyV1(showId,lead);rows.push(lead);
+  }
+  return {format:inspected.builtInFormat??'CUSTOM_MAPPING',sheet:inspected.sheet,sha256:inspected.sha256,headerFingerprint:inspected.headerFingerprint,rows};
 }
