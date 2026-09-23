@@ -80,5 +80,7 @@ test('Stage 2 review polish uses five bounded columns and shared synchronized sc
   const workflow=fs.readFileSync(path.join(root,'app/trade-shows/[id]/import/workflow.tsx'),'utf8');
   assert.match(workflow,/\['Lead', 'Company', 'Contact Info', 'Review', 'Status'\]/);
   assert.match(workflow,/TableScroll label="Trade Show lead preview" topControl bounded/);
-  assert.match(workflow,/Using default:/);assert.match(workflow,/label="rep"/);assert.doesNotMatch(workflow,/row \$\{row\.sourceRow\} rep override/);
+  assert.match(workflow,/Override rep/);assert.match(workflow,/label="rep override"/);assert.match(workflow,/expandedRow === index/);
+  assert.match(workflow,/warnings\.filter\(warning => warning !== 'Trade Show timezone is missing\.'/);
+  assert.doesNotMatch(workflow,/row \$\{row\.sourceRow\} rep override/);
 });

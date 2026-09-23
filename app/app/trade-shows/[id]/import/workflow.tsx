@@ -4,23 +4,43 @@ import { useState } from 'react';
 import { TableScroll } from '@/components/table-scroll';
 import { previewTradeShowAction, confirmTradeShowAction } from './actions';
 import type { ImportChoice } from '@/lib/trade-show-import';
+import type { TradeShowImportFormat } from '@prisma/client';
 
 type Plan = NonNullable<Awaited<ReturnType<typeof previewTradeShowAction>>['plan']>;
 
-function Picker({ value, onChange, items, label }: { value: number | null; onChange: (id: number | null) => void; items: { id: number; name: string }[]; label: string }) {
+function Picker({ value, onChange, items, label, emptyLabel = 'Not linked' }: { value: number | null; onChange: (id: number | null) => void; items: { id: number; name: string }[]; label: string; emptyLabel?: string }) {
   const [search, setSearch] = useState('');
   const filtered = search ? items.filter(item => item.name.toLowerCase().includes(search.toLowerCase())).slice(0, 30) : items.slice(0, 30);
   const selected = items.find(item => item.id === value);
 
   return <div className="min-w-0">
-    <input aria-label={`Search ${label}`} className="input mb-1 h-8 w-full px-2 py-1 text-xs" value={search} onChange={event => setSearch(event.target.value)} placeholder={`Search ${label}`} />
-    <select aria-label={label} className="input h-8 w-full px-2 py-1 text-xs" value={value ?? ''} onChange={event => onChange(event.target.value ? Number(event.target.value) : null)}>
-      <option value="">Unresolved</option>
+    <input aria-label={`Search ${label}`} className="field mb-1 h-8 min-w-0 px-2 py-1 text-xs" value={search} onChange={event => setSearch(event.target.value)} placeholder={`Search ${label}`} />
+    <select aria-label={label} className="field h-8 min-w-0 px-2 py-1 text-xs" value={value ?? ''} onChange={event => onChange(event.target.value ? Number(event.target.value) : null)}>
+      <option value="">{emptyLabel}</option>
       {selected && !filtered.some(item => item.id === selected.id) && <option value={selected.id}>{selected.name}</option>}
       {filtered.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
     </select>
   </div>;
 }
+
+const summaryMetrics = [
+  ['total', 'Total'],
+  ['new', 'New'],
+  ['needsReview', 'Needs Review'],
+  ['alreadyImported', 'Already Imported'],
+  ['changedSource', 'Changed Source'],
+  ['invalid', 'Invalid'],
+  ['usableEmail', 'Usable Email'],
+  ['duplicateEmailGroups', 'Duplicate Email Groups'],
+  ['unresolvedAccounts', 'Accounts Not Linked'],
+  ['unresolvedContacts', 'Contacts Not Linked'],
+  ['placeholderRows', 'Placeholder Rows'],
+] as const;
+
+const sourceFormatLabels: Record<TradeShowImportFormat, string> = { NRA_NRF: 'NRA / NRF', XPRESSLEADS_MODEX: 'MODEX / XPressLeads' };
+
+const rowStateLabel = (state: string) => state.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ');
+const rowWarnings = (warnings: string[]) => warnings.filter(warning => warning !== 'Trade Show timezone is missing.');
 
 function WorkflowSteps({ current }: { current: 1 | 2 | 3 }) {
   const steps = ['Upload', 'Review & Assign', 'Import'];
@@ -49,6 +69,8 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
   const [result, setResult] = useState<Awaited<ReturnType<typeof confirmTradeShowAction>>['result']>(null);
   const [defaultRep, setDefaultRep] = useState<number | null>(null);
   const [choices, setChoices] = useState<ImportChoice[]>([]);
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [repOverrideRow, setRepOverrideRow] = useState<number | null>(null);
 
   const fileForm = () => {
     const form = new FormData();
@@ -71,6 +93,8 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
         setPlan(response.plan);
         setChoices(response.plan.rows.map(row => ({ sourceKey: row.sourceKey, repId: null, accountId: row.matches.accountSuggestion, contactId: row.matches.contactSuggestion, refresh: false })));
         setDefaultRep(null);
+        setExpandedRow(null);
+        setRepOverrideRow(null);
       }
     } finally {
       setPreviewing(false);
@@ -107,7 +131,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
     <WorkflowSteps current={currentStep} />
 
     <section className="panel max-w-3xl p-4 sm:p-5">
-      <h2 className="text-lg font-semibold">1. Upload and preview</h2>
+      <h2 className="text-lg font-semibold">1. Upload &amp; Preview</h2>
       <ul id="file-requirements" className="mt-2 flex flex-col gap-1 text-sm text-slate-600 sm:flex-row sm:flex-wrap sm:gap-x-5">
         <li>Supported Trade Show exports: NRA/NRF and MODEX/XPressLeads formats (.xls).</li>
         <li>Maximum 2 MB and 1,000 leads.</li>
@@ -118,7 +142,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
       </p>}
 
       <div className="mt-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
-        <label htmlFor="trade-show-workbook" className="relative inline-flex cursor-pointer items-center justify-center overflow-hidden rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-orange-600">
+        <label htmlFor="trade-show-workbook" className="btn-secondary relative cursor-pointer overflow-hidden focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-orange-600">
           <input
             id="trade-show-workbook"
             className="absolute inset-0 cursor-pointer opacity-0"
@@ -145,27 +169,27 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
         aria-busy={previewing}
         onClick={() => void preview()}
       >
-        {previewing ? 'Generating preview…' : 'Preview workbook'}
+        {previewing ? 'Generating preview…' : 'Preview Workbook'}
       </button>
     </section>
 
     {message && <p role="alert" className="rounded border border-red-300 bg-red-50 p-4 text-sm text-red-900">{message}</p>}
 
     {result && <section className="panel max-w-3xl p-5">
-      <h2 className="font-semibold">Import complete</h2>
+      <h2 className="font-semibold">Import Complete</h2>
       <p className="text-sm">{result.created} new · {result.existing} existing · {result.skipped} skipped. <a className="text-orange-800 underline" href={`/trade-shows/${showId}`}>View Trade Show</a></p>
     </section>}
 
     {plan && <>
       <section className="panel p-5">
         <h2 className="text-lg font-semibold">2. Review &amp; Assign</h2>
-        <p className="mt-2 text-sm">{plan.parsed.format} · {plan.filename} · {plan.parsed.sheet}</p>
+        <p className="mt-2 break-words text-sm">{sourceFormatLabels[plan.parsed.format]} · <span className="break-all">{plan.filename}</span> · {plan.parsed.sheet}</p>
         {plan.priorExactFile && <p className="mt-2 font-semibold text-amber-800">This exact file has already been confirmed for this Trade Show.</p>}
-        <div className="mt-4 flex flex-wrap gap-3">
-          {Object.entries(plan.summary).map(([key, value]) => <div className="rounded border px-3 py-2 text-sm" key={key}><strong>{value}</strong> {key.replace(/([A-Z])/g, ' $1').toLowerCase()}</div>)}
+        <div className="mt-4 flex flex-wrap gap-2" aria-label="Import summary">
+          {summaryMetrics.map(([key, label], index) => <div className={index < 3 ? 'rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-slate-800' : 'rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600'} key={key}><strong className={index < 3 ? 'text-base text-slate-950' : 'text-sm text-slate-800'}>{plan.summary[key]}</strong> {label}</div>)}
         </div>
         <label className="mt-5 block text-sm font-semibold">Default Sales Rep
-          <select className="input mt-1 block w-full max-w-sm" value={defaultRep ?? ''} onChange={event => setDefaultRep(event.target.value ? Number(event.target.value) : null)}>
+          <select className="field mt-1 block h-11 w-full max-w-sm" value={defaultRep ?? ''} onChange={event => setDefaultRep(event.target.value ? Number(event.target.value) : null)}>
             <option value="">Select active rep</option>
             {repItems.map(rep => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
           </select>
@@ -178,22 +202,46 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
             <colgroup>{[230, 210, 250, 360, 270].map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
             <thead className="sticky top-0 z-10 bg-slate-50"><tr>{['Lead', 'Company', 'Contact Info', 'Review', 'Status'].map(heading => <th className="border-b p-2" key={heading}>{heading}</th>)}</tr></thead>
             <tbody className="divide-y">
-              {plan.rows.map((row, index) => <tr key={index} className="align-top">
-                <td className="p-2"><div className="text-xs text-slate-500">Row {row.sourceRow} · {row.state.replace('_', ' ')}</div><strong className="mt-1 block break-words">{row.firstName} {row.lastName}</strong><div className="line-clamp-3 break-words text-slate-600">{row.title}</div><div className="mt-1 text-xs text-slate-500">{row.capturedAt ?? row.capturedSource ?? 'Capture time needs review'}</div></td>
-                <td className="whitespace-pre-wrap break-words p-2">{row.sourceCompany || '—'}{row.sourceNotes&&<details className="mt-2 text-xs text-slate-600"><summary className="cursor-pointer">Source notes</summary><div className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words">{row.sourceNotes}</div></details>}</td>
-                <td className="p-2"><div className="break-all">{row.email||'—'}</div><div className="mt-1 break-words text-slate-600">{row.phone||'—'}</div></td>
-                <td className="space-y-2 p-2"><div><span className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">Assigned Rep</span><Picker label="rep" value={choices[index]?.repId ?? null} onChange={id => change(index, { repId: id })} items={repItems} /><span className="mt-1 block text-xs text-slate-500">{choices[index]?.repId ? 'Row override' : `Using default: ${repItems.find(rep => rep.id === defaultRep)?.name ?? 'not selected'}`}</span></div><div><span className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">Account</span><Picker label="Account" value={choices[index]?.accountId ?? null} onChange={id => change(index, { accountId: id })} items={accountItems} />{row.matches.exactAccounts.length > 0 && <span className="mt-1 block break-words text-xs">Exact: {row.matches.exactAccounts.map(account => account.name).join(', ')}</span>}{row.matches.domainAccounts.length > 0 && <span className="block break-words text-xs">Website: {row.matches.domainAccounts.map(account => account.name).join(', ')}</span>}{row.matches.possibleAccounts.length > 0 && <span className="block break-words text-xs">Possible: {row.matches.possibleAccounts.map(account => account.name).join(', ')}</span>}</div><div><span className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">Contact</span><Picker label="Contact" value={choices[index]?.contactId ?? null} onChange={id => change(index, { contactId: id })} items={contactItems} />{row.matches.contactMatches.length > 0 && <span className="mt-1 block break-words text-xs">Email: {row.matches.contactMatches.map(contact => `${contact.firstName} ${contact.lastName}${contact.accountId ? ` (#${contact.accountId})` : ''}`).join(', ')}</span>}</div></td>
-                <td className="whitespace-normal break-words p-2 text-amber-800"><strong className="block text-xs text-slate-700">{row.state.replace('_',' ')}</strong>{row.warnings.join(' ')}{row.changedSourceFields.map(sourceChange => <div className="mt-2 text-xs" key={sourceChange.header}><strong>{sourceChange.header}:</strong> <span className="line-through">{sourceChange.before || '(blank)'}</span> → {sourceChange.after || '(blank)'}</div>)}{row.state === 'SOURCE_CHANGED' && <label className="mt-2 block text-xs"><input type="checkbox" checked={choices[index]?.refresh ?? false} onChange={event => change(index, { refresh: event.target.checked })} /> Refresh source fields (preserves CRM work)</label>}</td>
-              </tr>)}
+              {plan.rows.map((row, index) => {
+                const choice = choices[index];
+                const expanded = expandedRow === index;
+                const overrideRep = repItems.find(rep => rep.id === choice?.repId);
+                const assignedRep = overrideRep ?? repItems.find(rep => rep.id === defaultRep);
+                const account = accountItems.find(item => item.id === choice?.accountId);
+                const contact = plan.contacts.find(item => item.id === choice?.contactId);
+                const warnings = rowWarnings(row.warnings);
+                const hasStatusIssue = warnings.length > 0 || row.state !== 'NEW';
+                return <tr key={`${row.sourceKey}-${index}`} className={`align-top ${expanded ? 'bg-orange-50/30' : ''}`}>
+                  <td className="p-2"><div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500"><span>Row {row.sourceRow}</span>{row.state === 'NEW' && <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">New</span>}</div><strong className="block break-words leading-5">{row.firstName} {row.lastName}</strong>{row.title && <div className="line-clamp-1 break-words leading-5 text-slate-600">{row.title}</div>}<div className="truncate text-xs leading-5 text-slate-500" title={row.capturedAt ?? row.capturedSource ?? 'Capture time needs review'}>{row.capturedAt ?? row.capturedSource ?? 'Capture time needs review'}</div></td>
+                  <td className="whitespace-pre-wrap break-words p-2 leading-5"><div className="line-clamp-3">{row.sourceCompany || '—'}</div>{row.sourceNotes&&<details className="text-xs text-slate-600"><summary className="cursor-pointer">Source notes</summary><div className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words">{row.sourceNotes}</div></details>}</td>
+                  <td className="p-2 leading-5"><div className="line-clamp-2 break-all">{row.email||'—'}</div>{row.phone && <div className="break-words text-slate-600">{row.phone}</div>}</td>
+                  <td className="p-2">
+                    {!expanded ? <div className="space-y-1 text-xs leading-5">
+                      <div className="min-w-0"><span className="font-semibold text-slate-600">Assigned Rep</span> <span className="break-words text-slate-900">{assignedRep?.name ?? 'Not selected'}</span> <span className="text-slate-500">· {overrideRep ? 'Override' : 'Default'}</span></div>
+                      <div><span className="font-semibold text-slate-600">Account</span> <span className={account ? 'text-slate-900' : 'text-amber-700'}>{account?.name ?? 'Not linked'}</span></div>
+                      <div><span className="font-semibold text-slate-600">Contact</span> <span className={contact ? 'text-slate-900' : 'text-amber-700'}>{contact ? `${contact.firstName} ${contact.lastName}` : 'Not linked'}</span></div>
+                      <button className="font-semibold text-orange-800 underline underline-offset-2" type="button" aria-expanded="false" onClick={() => { setExpandedRow(index); setRepOverrideRow(choice?.repId ? index : null); }}>Review</button>
+                    </div> : <div className="space-y-3">
+                      <div><div className="flex items-center justify-between gap-2"><span className="text-[11px] font-semibold uppercase text-slate-500">Assigned Rep</span><span className="text-xs text-slate-500">{choice?.repId ? 'Override' : 'Default'}</span></div>
+                        {repOverrideRow === index || choice?.repId ? <Picker label="rep override" value={choice?.repId ?? null} onChange={id => change(index, { repId: id })} items={repItems} emptyLabel="Use default rep" /> : <div className="mt-0.5 text-sm"><span className="break-words">{assignedRep?.name ?? 'Not selected'}</span><button className="ml-2 text-xs font-semibold text-orange-800 underline underline-offset-2" type="button" onClick={() => setRepOverrideRow(index)}>Override rep</button></div>}
+                      </div>
+                      <div><span className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">Account</span><Picker label="Account" value={choice?.accountId ?? null} onChange={id => change(index, { accountId: id })} items={accountItems} />{row.matches.exactAccounts.length > 0 && <span className="mt-1 block break-words text-xs">Exact: {row.matches.exactAccounts.map(item => item.name).join(', ')}</span>}{row.matches.domainAccounts.length > 0 && <span className="block break-words text-xs">Website: {row.matches.domainAccounts.map(item => item.name).join(', ')}</span>}{row.matches.possibleAccounts.length > 0 && <span className="block break-words text-xs">Possible: {row.matches.possibleAccounts.map(item => item.name).join(', ')}</span>}</div>
+                      <div><span className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">Contact</span><Picker label="Contact" value={choice?.contactId ?? null} onChange={id => change(index, { contactId: id })} items={contactItems} />{row.matches.contactMatches.length > 0 && <span className="mt-1 block break-words text-xs">Email: {row.matches.contactMatches.map(item => `${item.firstName} ${item.lastName}${item.accountId ? ` (#${item.accountId})` : ''}`).join(', ')}</span>}</div>
+                      <button className="text-xs font-semibold text-orange-800 underline underline-offset-2" type="button" aria-expanded="true" onClick={() => { setExpandedRow(null); setRepOverrideRow(null); }}>Done</button>
+                    </div>}
+                  </td>
+                  <td className="whitespace-normal break-words p-2 text-amber-800">{hasStatusIssue ? <>{row.state !== 'NEW' && <strong className={`block text-xs ${row.state === 'INVALID' ? 'text-red-700' : 'text-slate-700'}`}>{rowStateLabel(row.state)}</strong>}{warnings.map(warning => <div className="text-xs leading-5" key={warning}>{warning}</div>)}</> : <span className="text-xs text-slate-500">Ready</span>}{row.changedSourceFields.map(sourceChange => <div className="mt-2 text-xs" key={sourceChange.header}><strong>{sourceChange.header}:</strong> <span className="line-through">{sourceChange.before || '(blank)'}</span> → {sourceChange.after || '(blank)'}</div>)}{row.state === 'SOURCE_CHANGED' && <label className="mt-2 block text-xs"><input type="checkbox" checked={choice?.refresh ?? false} onChange={event => change(index, { refresh: event.target.checked })} /> Refresh source fields (preserves CRM work)</label>}</td>
+                </tr>;
+              })}
             </tbody>
           </table>
         </TableScroll>
       </section>
 
       <section className="panel p-5">
-        <h2 className="font-semibold">3. Confirm import</h2>
+        <h2 className="font-semibold">3. Confirm Import</h2>
         <p className="mt-1 text-sm text-slate-600">New scans become separate leads. Existing scans stay unchanged unless source refresh is checked. Invalid rows are skipped. Account and Contact records are never edited.</p>
-        <button className="btn-primary mt-4" disabled={busy || !defaultRep} onClick={() => void confirm()}>Confirm import</button>
+        <button className="btn-primary mt-4" disabled={busy || !defaultRep} onClick={() => void confirm()}>Confirm Import</button>
       </section>
     </>}
   </div>;

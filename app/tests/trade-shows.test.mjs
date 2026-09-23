@@ -15,16 +15,46 @@ const { can, routeAccess } = require(path.join(root, 'lib/authorization.ts'));
 const actor = (role, id = 7) => ({ id, role, active: true, archivedAt: null });
 const form = entries => { const result = new FormData(); for (const [key, value] of entries) result.append(key, value); return result; };
 
-test('Trade Show parser validates dates and IANA timezone while preserving submitted values', () => {
-  const good = shows.parseTradeShow(form([['name','NRF 2026'],['startDate','2026-01-11'],['endDate','2026-01-13'],['timezone','America/New_York']]));
-  assert.deepEqual(good.errors, {});
-  assert.equal(good.value.name, 'NRF 2026');
-  const bad = form([['name','  '],['startDate','2026-01-13'],['endDate','2026-01-11'],['timezone','Not/A_Zone'],['location','New York']]);
+test('Trade Show parser requires an approved US, Canadian, or Mexican timezone and preserves submitted values', () => {
+  for (const timezone of ['America/New_York', 'America/Halifax', 'America/Mexico_City']) {
+    const good = shows.parseTradeShow(form([['name','NRF 2026'],['startDate','2026-01-11'],['endDate','2026-01-13'],['timezone',timezone]]));
+    assert.deepEqual(good.errors, {});
+    assert.equal(good.value.name, 'NRF 2026');
+    assert.equal(good.value.timezone, timezone);
+  }
+  const missing = shows.parseTradeShow(form([['name','No timezone'],['timezone','']]));
+  assert.match(missing.errors.timezone, /required/);
+  const bad = form([['name','  '],['startDate','2026-01-13'],['endDate','2026-01-11'],['timezone','Europe/London'],['location','New York']]);
   const parsed = shows.parseTradeShow(bad);
   assert.match(parsed.errors.name, /required/);
   assert.match(parsed.errors.endDate, /on or after/);
-  assert.match(parsed.errors.timezone, /IANA/);
-  assert.equal(shows.tradeShowFailureState(bad, parsed.errors).values.location, 'New York');
+  assert.match(parsed.errors.timezone, /approved/);
+  const failure = shows.tradeShowFailureState(bad, parsed.errors);
+  assert.equal(failure.values.location, 'New York');
+  assert.equal(failure.values.timezone, 'Europe/London');
+});
+
+test('Trade Show form uses the shared required timezone dropdown and safely represents historical nulls', () => {
+  const component = fs.readFileSync(path.join(root, 'components/trade-show-form.tsx'), 'utf8');
+  const schema = fs.readFileSync(path.join(root, 'prisma/schema.prisma'), 'utf8');
+  assert.match(component, /<select[^>]+id="timezone"[^>]+required/);
+  assert.match(component, /initial\?\.timezone \?\? ''/);
+  assert.match(component, /TRADE_SHOW_TIMEZONE_GROUPS\.map/);
+  assert.match(component, /grid gap-4 sm:grid-cols-2[\s\S]*htmlFor="timezone"[\s\S]*htmlFor="marketingOwnerId"/);
+  assert.match(component, /Used for imported lead timestamps\./);
+  assert.match(schema, /timezone\s+String\?/);
+});
+
+test('Trade Show Event Leads uses compact responsive filters and six combined table columns', () => {
+  const page = fs.readFileSync(path.join(root, 'app/trade-shows/[id]/page.tsx'), 'utf8');
+  assert.match(page, /bg-orange-50\/60/);
+  assert.match(page, /grid-cols-1[^"']*sm:grid-cols-2[^"']*lg:grid-cols-3[^"']*2xl:grid-cols-4/);
+  assert.match(page, /TableScroll label="Trade Show leads"/);
+  assert.match(page, /\['Lead','Company','Contact','Assigned Sales Rep','Status','CRM \/ Follow-Up'\]/);
+  assert.match(page, /min-w-\[960px\][^"']*table-fixed/);
+  assert.match(page, /even:bg-slate-50\/60[^"']*hover:bg-orange-50\/50[^"']*focus-within:bg-orange-50\/50/);
+  assert.match(page, /title: true/);
+  assert.match(page, /phone: true/);
 });
 
 test('Trade Show roles and row scopes preserve Marketing and Sales boundaries', () => {
@@ -64,11 +94,14 @@ test('Trade Show create/edit validates eligible owner and archive stays reversib
     user: { findFirst: async ({ where }) => owner?.id === where.id && owner.role === where.role && owner.active && !owner.archivedAt ? owner : null },
   };
   const client = { $transaction: async callback => callback(tx), tradeShow: tx.tradeShow };
-  const input = shows.parseTradeShow(form([['name','MODEX 2026'],['marketingOwnerId','8']])).value;
+  const input = shows.parseTradeShow(form([['name','MODEX 2026'],['timezone','America/Chicago'],['marketingOwnerId','8']])).value;
   assert.equal(await shows.saveTradeShow(client, input, actor('MARKETING_MANAGER')), 3);
   assert.equal(saved.createdById, 7);
   assert.equal(await shows.saveTradeShow(client, { ...input, location: 'Atlanta' }, actor('MARKETING_MANAGER'), 3), 3);
   assert.equal(saved.location, 'Atlanta');
+  await assert.rejects(shows.saveTradeShow(client, { ...input, timezone: '' }, actor('ADMIN')), /approved event timezone/);
+  await assert.rejects(shows.saveTradeShow(client, { ...input, timezone: '' }, actor('ADMIN'), 3), /approved event timezone/);
+  await assert.rejects(shows.saveTradeShow(client, { ...input, timezone: 'Europe/London' }, actor('ADMIN'), 3), /approved event timezone/);
   owner = { ...owner, active: false };
   await assert.rejects(shows.saveTradeShow(client, input, actor('ADMIN'), 3), /active Marketing Manager/);
   await assert.rejects(shows.saveTradeShow(client, input, actor('READ_ONLY')), /Access denied/);

@@ -1,17 +1,13 @@
 import { Prisma, TradeShowLeadStatus, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { field, optional, positiveId, required, type Errors } from './crm-validation';
+import { isApprovedTradeShowTimezone } from './trade-show-timezones';
 import { dateField } from './work';
 
 export type TradeShowInput = {
   name: string; startDate: Date | null; endDate: Date | null; location: string | null;
-  timezone: string | null; description: string | null; marketingOwnerId: number | null;
+  timezone: string; description: string | null; marketingOwnerId: number | null;
 };
-
-export function validIanaTimezone(value: string) {
-  try { new Intl.DateTimeFormat('en-US', { timeZone: value }).format(); return true; }
-  catch { return false; }
-}
 
 export function parseTradeShow(form: FormData) {
   const errors: Errors = {};
@@ -20,8 +16,8 @@ export function parseTradeShow(form: FormData) {
   const endDate = dateField(field(form, 'endDate'), 'endDate', errors);
   if (startDate && endDate && endDate < startDate) errors.endDate = 'End date must be on or after the start date.';
   const location = optional(form, 'location', 300, errors);
-  const timezone = optional(form, 'timezone', 100, errors);
-  if (timezone && !validIanaTimezone(timezone)) errors.timezone = 'Choose a valid IANA timezone.';
+  const timezone = required(form, 'timezone', 'Event timezone', 100, errors);
+  if (timezone && !isApprovedTradeShowTimezone(timezone)) errors.timezone = 'Choose an approved event timezone.';
   const description = optional(form, 'description', 5000, errors);
   const ownerRaw = field(form, 'marketingOwnerId');
   const marketingOwnerId = ownerRaw ? positiveId(ownerRaw) : null;
@@ -63,7 +59,7 @@ export async function saveTradeShow(client: PrismaClient, input: TradeShowInput,
   if (!can(actor, 'trade-shows.manage')) throw new Error('Access denied');
   if (!input.name.trim() || input.name.length > 200) throw new Error('Trade Show name is required and must be 200 characters or fewer.');
   if (input.endDate && input.startDate && input.endDate < input.startDate) throw new Error('End date must be on or after the start date.');
-  if (input.timezone && !validIanaTimezone(input.timezone)) throw new Error('Choose a valid IANA timezone.');
+  if (!input.timezone || !isApprovedTradeShowTimezone(input.timezone)) throw new Error('Choose an approved event timezone.');
   return client.$transaction(async tx => {
     const existing = id ? await tx.tradeShow.findUnique({ where: { id } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Trade Show not found or archived.');

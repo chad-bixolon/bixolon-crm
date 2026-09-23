@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useActionState, useEffect } from 'react';
 import { changeTradeShowArchive, submitTradeShow, type TradeShowFormState } from '@/app/trade-shows/actions';
 import { useSubmitGuard } from '@/lib/submit-guard';
+import { isApprovedTradeShowTimezone, TRADE_SHOW_TIMEZONE_GROUPS } from '@/lib/trade-show-timezones';
 
 type Owner = { id: number; firstName: string; lastName: string };
 type Initial = { name: string; startDate: Date | null; endDate: Date | null; location: string | null; timezone: string | null; description: string | null; marketingOwnerId: number | null };
@@ -16,19 +17,23 @@ export function TradeShowForm({ id, initial, owners }: { id?: number; initial?: 
   const error = (key: string) => state.errors[key] && <p className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
   useEffect(() => { if (state.redirectTo) router.push(state.redirectTo); }, [state.redirectTo, router]);
   const ownerOptions = [...owners];
+  const selectedTimezone = val('timezone', initial?.timezone ?? '');
+  const unsupportedTimezone = selectedTimezone && !isApprovedTradeShowTimezone(selectedTimezone) ? selectedTimezone : null;
   if (initial?.marketingOwnerId && !ownerOptions.some(owner => owner.id === initial.marketingOwnerId)) ownerOptions.push({ id: initial.marketingOwnerId, firstName: 'Current owner', lastName: '(inactive)' });
-  return <form key={JSON.stringify(state.values ?? {})} action={action} onSubmit={guard} className="panel max-w-3xl space-y-5 p-6" aria-label={id ? 'Edit Trade Show' : 'Create Trade Show'}>
+  return <form key={JSON.stringify(state.values ?? {})} action={action} onSubmit={guard} className="panel max-w-3xl space-y-4 p-5 sm:p-6" aria-label={id ? 'Edit Trade Show' : 'Create Trade Show'}>
     {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
-    <div><label className="label" htmlFor="name">Name *</label><input className="field" id="name" name="name" required maxLength={200} defaultValue={val('name', initial?.name ?? '')}/>{error('name')}</div>
+    <div className="min-w-0"><label className="label" htmlFor="name">Name *</label><input className="field h-11 min-w-0" id="name" name="name" required maxLength={200} defaultValue={val('name', initial?.name ?? '')}/>{error('name')}</div>
     <div className="grid gap-4 sm:grid-cols-2">
-      <div><label className="label" htmlFor="startDate">Start Date</label><input className="field" type="date" id="startDate" name="startDate" defaultValue={val('startDate', initial?.startDate?.toISOString().slice(0,10) ?? '')}/>{error('startDate')}</div>
-      <div><label className="label" htmlFor="endDate">End Date</label><input className="field" type="date" id="endDate" name="endDate" defaultValue={val('endDate', initial?.endDate?.toISOString().slice(0,10) ?? '')}/>{error('endDate')}</div>
+      <div className="min-w-0"><label className="label" htmlFor="startDate">Start Date</label><input className="field h-11 min-w-0" type="date" id="startDate" name="startDate" defaultValue={val('startDate', initial?.startDate?.toISOString().slice(0,10) ?? '')}/>{error('startDate')}</div>
+      <div className="min-w-0"><label className="label" htmlFor="endDate">End Date</label><input className="field h-11 min-w-0" type="date" id="endDate" name="endDate" defaultValue={val('endDate', initial?.endDate?.toISOString().slice(0,10) ?? '')}/>{error('endDate')}</div>
     </div>
-    <div><label className="label" htmlFor="location">Location</label><input className="field" id="location" name="location" maxLength={300} defaultValue={val('location', initial?.location ?? '')}/>{error('location')}</div>
-    <div><label className="label" htmlFor="timezone">Event Timezone</label><input className="field" id="timezone" name="timezone" maxLength={100} placeholder="America/New_York" defaultValue={val('timezone', initial?.timezone ?? '')}/><p className="mt-1 text-xs text-slate-500">Use an IANA timezone. Capture timestamps will be interpreted using this timezone when import is added.</p>{error('timezone')}</div>
-    <div><label className="label" htmlFor="marketingOwnerId">Marketing Owner</label><select className="field" id="marketingOwnerId" name="marketingOwnerId" defaultValue={val('marketingOwnerId', initial?.marketingOwnerId?.toString() ?? '')}><option value="">Unassigned</option>{ownerOptions.map(owner => <option key={owner.id} value={owner.id}>{owner.firstName} {owner.lastName}</option>)}</select>{error('marketingOwnerId')}</div>
-    <div><label className="label" htmlFor="description">Description / Notes</label><textarea className="field min-h-28" id="description" name="description" maxLength={5000} defaultValue={val('description', initial?.description ?? '')}/>{error('description')}</div>
-    <div className="flex justify-end gap-2"><Link className="btn-secondary" href={id ? `/trade-shows/${id}` : '/trade-shows'}>Cancel</Link><button className="btn-primary" type="submit" disabled={pending}>{pending ? 'Saving…' : id ? 'Save Trade Show' : 'Create Trade Show'}</button></div>
+    <div className="min-w-0"><label className="label" htmlFor="location">Location</label><input className="field h-11 min-w-0" id="location" name="location" maxLength={300} defaultValue={val('location', initial?.location ?? '')}/>{error('location')}</div>
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="min-w-0"><label className="label" htmlFor="timezone">Event Timezone *</label><select className="field h-11 min-w-0" id="timezone" name="timezone" required defaultValue={selectedTimezone}><option value="">Select event timezone</option>{unsupportedTimezone && <option value={unsupportedTimezone} disabled>Unsupported timezone: {unsupportedTimezone} — select another</option>}{TRADE_SHOW_TIMEZONE_GROUPS.map(group => <optgroup key={group.label} label={group.label}>{group.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</optgroup>)}</select><p className="mt-1 text-xs text-slate-500">Used for imported lead timestamps.</p>{error('timezone')}</div>
+      <div className="min-w-0"><label className="label" htmlFor="marketingOwnerId">Marketing Owner</label><select className="field h-11 min-w-0" id="marketingOwnerId" name="marketingOwnerId" defaultValue={val('marketingOwnerId', initial?.marketingOwnerId?.toString() ?? '')}><option value="">Unassigned</option>{ownerOptions.map(owner => <option key={owner.id} value={owner.id}>{owner.firstName} {owner.lastName}</option>)}</select>{error('marketingOwnerId')}</div>
+    </div>
+    <div className="min-w-0"><label className="label" htmlFor="description">Description / Notes</label><textarea className="field min-h-24 resize-y" rows={3} id="description" name="description" maxLength={5000} defaultValue={val('description', initial?.description ?? '')}/>{error('description')}</div>
+    <div className="flex flex-wrap justify-end gap-2"><Link className="btn-secondary" href={id ? `/trade-shows/${id}` : '/trade-shows'}>Cancel</Link><button className="btn-primary" type="submit" disabled={pending}>{pending ? 'Saving…' : id ? 'Save Trade Show' : 'Create Trade Show'}</button></div>
   </form>;
 }
 
