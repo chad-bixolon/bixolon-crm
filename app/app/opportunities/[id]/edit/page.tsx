@@ -5,7 +5,7 @@ import { opportunityOptions } from "@/lib/opportunities";
 import { prisma } from "@/lib/prisma";
 import { getLabels } from "@/lib/configuration";
 import { currentUser } from "@/lib/current-user";
-import { canViewPriceException } from "@/lib/price-exception-visibility";
+import { serializeOpportunityForForm } from "@/lib/opportunity-serialization";
 export const dynamic = "force-dynamic";
 export default async function EditOpportunityPage({ params }: { params: Promise<{ id: string }> }) {
   const id = Number((await params).id); if (!Number.isSafeInteger(id) || id <= 0) notFound();
@@ -13,13 +13,13 @@ export default async function EditOpportunityPage({ params }: { params: Promise<
   const [opportunity, options, labels] = await Promise.all([prisma.opportunity.findUnique({ where: { id }, include: { projects: true, contacts: true, participants: { include: { roles: true } }, products: { where: { archivedAt: null }, include: { priceExceptionLine: { select: { priceException: { select: { distributorAccountId: true, varAccountId: true, endUserAccountId: true, assignedSalesRepUserId:true, sourceType:true } } } } } } } }), opportunityOptions(prisma), getLabels(prisma)]);
   if (!opportunity || (actor.role === 'SALES' && opportunity.ownerId !== actor.id)) notFound();
   if (!options.stages.some(stage => stage.id === opportunity.stageId)) {
-    const currentStage = await prisma.salesStage.findUnique({ where: { id: opportunity.stageId } });
+    const currentStage = await prisma.salesStage.findUnique({ where: { id: opportunity.stageId }, select: { id: true, name: true, probability: true, isClosed: true, isWon: true } });
     if (currentStage) options.stages.push(currentStage);
   }
   if (opportunity.competitorId && !options.competitors.some(option => option.id === opportunity.competitorId)) {
     const currentCompetitor = await prisma.competitorOption.findUnique({ where: { id: opportunity.competitorId }, select: { id: true, name: true, active: true } });
     if (currentCompetitor) options.competitors.push(currentCompetitor);
   }
-  const initial = { ...opportunity, projectIds: opportunity.projects.map(link => link.projectId), contacts: opportunity.contacts.map(link => ({contactId:link.contactId,isPrimary:link.isPrimary})), participants: opportunity.participants.map((p) => ({ accountId: p.accountId, roles: p.roles.map((r) => r.role) })), lines: opportunity.products.map((line) => ({ id: line.id, productId: line.productId, skuId: line.skuId, quantity: line.quantity, price: line.estimatedUnitPrice.toFixed(2), priceSource: line.priceSource, catalogPriceTier: line.catalogPriceTier, priceExceptionLineId: line.priceExceptionLineId, priceExceptionCode: line.priceExceptionCode, priceExceptionUnitPrice: line.priceExceptionUnitPrice?.toFixed(2) ?? null, priceExceptionCurrencyCode: line.priceExceptionCurrencyCode, priceExceptionSourceQty: line.priceExceptionSourceQty, odmCustomerPriceId: line.odmCustomerPriceId, odmCustomerAccountId: line.odmCustomerAccountId, odmCustomerBasePrice: line.odmCustomerBasePrice?.toFixed(2) ?? null, odmCustomerTariffPercent: line.odmCustomerTariffPercent?.toString() ?? null, odmCustomerTariffAmount: line.odmCustomerTariffAmount?.toFixed(2) ?? null, odmCustomerFinalUnitPrice: line.odmCustomerFinalUnitPrice?.toFixed(2) ?? null, priceExceptionAccountIds: line.priceExceptionLine&&canViewPriceException(actor,line.priceExceptionLine.priceException) ? [line.priceExceptionLine.priceException.distributorAccountId, line.priceExceptionLine.priceException.varAccountId, line.priceExceptionLine.priceException.endUserAccountId].filter((accountId): accountId is number => accountId !== null) : [] })) };
+  const initial = serializeOpportunityForForm(opportunity, actor);
   return <Content><PageHeader eyebrow="Opportunities" title={`Edit ${opportunity.name}`}/>{opportunity.archivedAt ? <div className="panel p-6">Reactivate this opportunity before editing it.</div> : <OpportunityForm key={id} id={id} initial={initial} {...options} owners={actor.role === 'SALES' ? options.owners.filter(owner => owner.id === actor.id) : options.owners} labels={labels}/>}</Content>;
 }

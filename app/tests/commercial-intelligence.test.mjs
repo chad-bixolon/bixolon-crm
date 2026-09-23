@@ -50,15 +50,17 @@ test('opportunity fields parse, clear, and filter without changing ownership sco
 });
 
 test('new Opportunity options request only active competitors', async () => {
-  let competitorQuery;
+  let competitorQuery, stageQuery, currencyQuery;
   const client = {
-    account: { findMany: async () => [] }, user: { findMany: async () => [] }, salesStage: { findMany: async () => [] },
-    currency: { findMany: async () => [] }, product: { count: async () => 0 }, project: { findMany: async () => [] },
+    account: { findMany: async () => [] }, user: { findMany: async () => [] }, salesStage: { findMany: async query => { stageQuery = query; return []; } },
+    currency: { findMany: async query => { currencyQuery = query; return []; } }, product: { count: async () => 0 }, project: { findMany: async () => [] },
     productCategory: { findMany: async () => [] }, competitorOption: { findMany: async query => { competitorQuery = query; return [{ id: 1, name: 'Zebra', active: true }]; } },
   };
   const options = await opportunities.opportunityOptions(client);
   assert.deepEqual(competitorQuery.where, { active: true });
   assert.deepEqual(options.competitors.map(option => option.name), ['Zebra']);
+  assert.deepEqual(stageQuery.select, { id: true, name: true, probability: true, isClosed: true, isWon: true });
+  assert.deepEqual(currencyQuery.select, { code: true, name: true });
 });
 
 test('new selection requires active competitor; an existing inactive selection can be retained or cleared', async () => {

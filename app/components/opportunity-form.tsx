@@ -3,7 +3,7 @@ import { useSubmitGuard } from "@/lib/submit-guard";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
-import { ForecastCategory, OpportunityPartyRole, OpportunityProductPriceSource, ProductPriceTier } from "@prisma/client";
+import { ForecastCategory, OpportunityPartyRole } from "@prisma/client";
 import { submitOpportunity, type FormState } from "@/app/opportunities/actions";
 import { forecastLabels, partyLabels } from "@/lib/crm-validation";
 import type { LabelMap } from "@/lib/configuration";
@@ -11,13 +11,14 @@ import { opportunityPartyLabels } from "@/lib/crm-validation";
 import { addParticipant, clearDraft, draftKey as opportunityDraftKey, persistDraft, removeParticipant, restoreDraft, setParticipantRoles, type OpportunityDraft } from "@/lib/opportunity-draft";
 import { formatCurrency } from "@/lib/display-format";
 import { ProductPicker } from "@/components/product-picker";
+import type { OpportunityFormInitial } from "@/lib/opportunity-serialization";
 
 type Option = { id: number; name: string };
-type Initial = { name: string; description: string | null; competitorId: number | null; currentProductBeingUsed: string | null; customerPainPoints: string | null; ownerId: number | null; projectIds: number[]; stageId: number; expectedCloseDate: Date | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: { accountId: number; roles: OpportunityPartyRole[] }[]; contacts: { contactId: number; isPrimary: boolean }[]; lines: { id: number; productId: number; skuId: number | null; quantity: number; price: string; priceSource: OpportunityProductPriceSource; catalogPriceTier: ProductPriceTier | null; priceExceptionLineId: number | null; priceExceptionCode: string | null; priceExceptionUnitPrice: string | null; priceExceptionCurrencyCode: string | null; priceExceptionSourceQty: string | null; priceExceptionAccountIds: number[]; odmCustomerPriceId: number | null; odmCustomerAccountId: number | null; odmCustomerBasePrice: string | null; odmCustomerTariffPercent: string | null; odmCustomerTariffAmount: string | null; odmCustomerFinalUnitPrice: string | null }[] };
+type Initial = OpportunityFormInitial;
 type ContactOption = { id: number; firstName: string; lastName: string; email: string | null; accountId: number | null };
 type Props = { id?: number; conversion?: { tradeShowId: number; leadId: number; tradeShowName: string; productInterest: string | null; sourceNotes: string | null }; conversionAction?: (state: FormState, form: FormData) => Promise<FormState>; initial?: Initial; defaultOwnerId?: number; labels?: LabelMap; accounts: Option[]; contacts: ContactOption[]; projects: Option[]; productCategories: Option[]; competitors: { id: number; name: string; active: boolean }[]; owners: { id: number; firstName: string; lastName: string }[]; stages: { id: number; name: string; probability: number; isClosed: boolean; isWon: boolean }[]; currencies: { code: string; name: string }[]; productCount: number };
 function initialDraft(initial?: Initial, defaultOwnerId?: number): OpportunityDraft {
-  return { name: initial?.name ?? "", description: initial?.description ?? "", competitorId: initial?.competitorId?.toString() ?? "", currentProductBeingUsed: initial?.currentProductBeingUsed ?? "", customerPainPoints: initial?.customerPainPoints ?? "", ownerId: initial?.ownerId?.toString() ?? defaultOwnerId?.toString() ?? "", projectIds: initial?.projectIds ?? [], stageId: initial?.stageId?.toString() ?? "", expectedCloseDate: initial?.expectedCloseDate?.toISOString().slice(0, 10) ?? "", probability: initial?.probability?.toString() ?? "", forecastCategory: initial?.forecastCategory ?? ForecastCategory.PIPELINE, currencyCode: initial?.currencyCode ?? "USD", participants: initial?.participants ?? [], contacts: initial?.contacts ?? [], lines: initial?.lines.map((line) => ({ ...line, quantity: String(line.quantity) })) ?? [] };
+  return { name: initial?.name ?? "", description: initial?.description ?? "", competitorId: initial?.competitorId?.toString() ?? "", currentProductBeingUsed: initial?.currentProductBeingUsed ?? "", customerPainPoints: initial?.customerPainPoints ?? "", ownerId: initial?.ownerId?.toString() ?? defaultOwnerId?.toString() ?? "", projectIds: initial?.projectIds ?? [], stageId: initial?.stageId?.toString() ?? "", expectedCloseDate: initial?.expectedCloseDate ?? "", probability: initial?.probability?.toString() ?? "", forecastCategory: initial?.forecastCategory ?? ForecastCategory.PIPELINE, currencyCode: initial?.currencyCode ?? "USD", participants: initial?.participants ?? [], contacts: initial?.contacts ?? [], lines: initial?.lines.map((line) => ({ ...line, quantity: String(line.quantity) })) ?? [] };
 }
 export function OpportunityForm({ id, conversion, conversionAction, initial, defaultOwnerId, accounts, contacts = [], projects, productCategories, competitors = [], owners, stages, currencies, productCount, labels }: Props) {
   const participantLabels = labels ? opportunityPartyLabels(labels) : partyLabels;
