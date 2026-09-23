@@ -13,6 +13,7 @@ const grants: Record<UserRole, readonly Permission[]> = {
 export function can(actor: Actor | null | undefined, permission: Permission) { return !!actor?.active && !actor.archivedAt && grants[actor.role]?.includes(permission) === true; }
 export function assertPermission(actor: Actor | null | undefined, permission: Permission) { if (!can(actor,permission)) throw new Error('Access denied'); }
 export function permissionForPath(path: string): Permission | null {
+  if (path.startsWith('/marketing')) return 'marketing.read';
   if (path.startsWith('/trade-shows')) return 'trade-shows.read';
   if (path.startsWith('/reports/engagement') || path.startsWith('/reports/new')) return 'sales.write';
   if (path.startsWith('/reports')) return 'sales.read';
@@ -49,7 +50,7 @@ export function routeAccess(path: string, actor: Actor | null): 'sign-in' | 'den
   if (/^\/trade-shows\/\d+\/import$/.test(path) && !can(actor, 'trade-shows.manage')) return 'denied';
   if (path.startsWith('/trade-shows')) return 'allowed';
   if (path.endsWith('/new') || path.endsWith('/edit')) {
-    const write: Permission = path.startsWith('/accounts') ? 'accounts.write' : path.startsWith('/contacts') ? 'contacts.write' : path.startsWith('/opportunities') ? 'sales.write' : path.startsWith('/projects') ? 'projects.write' : path.startsWith('/products') ? 'products.write' : path.startsWith('/administration') ? 'users.manage' : 'tasks.write';
+    const write: Permission = path.startsWith('/accounts') ? 'accounts.write' : path.startsWith('/contacts') ? 'contacts.write' : path.startsWith('/marketing') ? 'marketing.write' : path.startsWith('/opportunities') ? 'sales.write' : path.startsWith('/projects') ? 'projects.write' : path.startsWith('/products') ? 'products.write' : path.startsWith('/administration') ? 'users.manage' : 'tasks.write';
     if (!can(actor, write)) return 'denied';
   }
   return 'allowed';

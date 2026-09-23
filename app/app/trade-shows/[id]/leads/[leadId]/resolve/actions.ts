@@ -10,7 +10,8 @@ import { checkAccountReferences, findAccountNameMatches, saveAccount } from '@/l
 import { parseContact, saveContact } from '@/lib/contacts';
 import { friendlyError } from '@/lib/crm-validation';
 
-type State={errors:Record<string,string>;message?:string};
+type State={errors:Record<string,string>;message?:string;values?:Record<string,string>};
+function retainedValues(form:FormData){const values=Object.fromEntries([...form.entries()].filter((entry):entry is [string,string]=>typeof entry[1]==='string'));values.isPrimary=form.has('isPrimary')?'true':'false';return values;}
 async function editableLead(tradeShowId:number,leadId:number) {
   const actor=await currentUser();
   const lead=await prisma.tradeShowLead.findFirst({where:{id:leadId,tradeShowId},include:{tradeShow:{select:{archivedAt:true}}}});
@@ -36,14 +37,15 @@ export async function createAccountForTradeShowLead(tradeShowId:number,leadId:nu
 export async function createContactForTradeShowLead(tradeShowId:number,leadId:number,_state:State,form:FormData):Promise<State> {
   const {actor,lead}=await editableLead(tradeShowId,leadId);
   if(!can(actor,'contacts.write')) throw new Error('Access denied');
-  const parsed=parseContact(form); if(!parsed.value)return {errors:parsed.errors,message:'Please correct the highlighted fields.'};
-  if(lead.accountId&&parsed.value.accountId&&lead.accountId!==parsed.value.accountId)return {errors:{accountId:'Choose the resolved Lead Account, or return and resolve the Account first.'},message:'Account and Contact must be consistent.'};
+  const values=retainedValues(form),parsed=parseContact(form); if(!parsed.value)return {errors:parsed.errors,message:'Please correct the highlighted fields.',values};
+  if(lead.accountId&&parsed.value.accountId&&lead.accountId!==parsed.value.accountId)return {errors:{accountId:'Choose the resolved Lead Account, or return and resolve the Account first.'},message:'Account and Contact must be consistent.',values};
   const matches=parsed.value.email?await prisma.contact.findMany({where:{email:{equals:parsed.value.email,mode:'insensitive'},archivedAt:null},select:{id:true}}):[];
-  if(matches.length&&!form.has('confirmDuplicate'))return {errors:{email:'An exact email match exists. Link the existing Contact from the Lead editor, or explicitly confirm a new Contact.'},message:'Duplicate review is required.'};
+  if(matches.length&&!form.has('confirmDuplicate'))return {errors:{email:'An exact email match exists. Link the existing Contact from the Lead editor, or explicitly confirm a new Contact.'},message:'Duplicate review is required.',values};
   try {
-    const contactId=await saveContact(prisma,parsed.value);
+    // Trade Show resolution never infers consent; the new Contact remains UNKNOWN.
+    const contactId=await saveContact(prisma,{...parsed.value,marketingPreference:'UNKNOWN'},undefined,actor);
     await prisma.tradeShowLead.update({where:{id:leadId},data:{contactId}});
     revalidatePath(`/trade-shows/${tradeShowId}/leads/${leadId}`);
-  } catch(error) { return {errors:{},message:friendlyError(error,'Contact could not be created.')}; }
+  } catch(error) { return {errors:{},message:friendlyError(error,'Contact could not be created.'),values}; }
   redirect(`/trade-shows/${tradeShowId}/leads/${leadId}/edit`);
 }

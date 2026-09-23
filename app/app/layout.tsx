@@ -11,5 +11,5 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const session = await auth();
   const user = session?.crmUser;
   const labels = user ? await getLabels(prisma) : undefined;
-  return <html lang="en"><body><Shell user={user ? { name: user.name, role: user.role, canManageUsers: can(user, 'users.manage'), canViewReports: canAccessReports(user) } : null} labels={labels}>{children}</Shell></body></html>;
+  return <html lang="en"><body><Shell user={user ? { name: user.name, role: user.role, canManageUsers: can(user, 'users.manage'), canViewReports: canAccessReports(user), canViewMarketing:can(user,'marketing.read') } : null} labels={labels}>{children}</Shell></body></html>;
 }
