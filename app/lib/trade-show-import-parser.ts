@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { inflateRawSync } from 'node:zlib';
 import * as XLSX from 'xlsx';
-import { MAPPING_DESTINATIONS, type MappingDefinition, type MappingDestination } from './trade-show-import-fields';
+import { MAPPING_DESTINATIONS, REVIEWABLE_LEAD_FIELDS, type MappingDefinition, type MappingDestination, type ReviewedOverrides, type ReviewableLeadField } from './trade-show-import-fields';
 export { MAPPING_DESTINATIONS } from './trade-show-import-fields';
 export type { MappingDefinition, MappingDestination } from './trade-show-import-fields';
 
@@ -13,7 +13,8 @@ export type WorkbookColumn = { header: string; samples: string[] };
 export type InspectedWorkbook = { sheet: string; sha256: string; headers: string[]; headerFingerprint: string; columns: WorkbookColumn[]; rows: { sourceRow: number; rawSourceData: Record<string,string>; warnings:string[] }[]; builtInFormat: Exclude<ImportFormat,'CUSTOM_MAPPING'> | null };
 export type ParsedLead = {
   sourceRow: number; sourceKey: string; rawSourceData: Record<string, string>;
-  capturedSource: string; capturedAt: string | null; identityStrategy: 'CAPTURE_TIME'|'SOURCE_LEAD_ID'|'ATTENDEE_FIELDS'; warnings: string[]; invalid: boolean;
+  capturedSource: string; capturedAt: string | null; identityStrategy: 'CAPTURE_TIME'|'SOURCE_LEAD_ID'|'ATTENDEE_FIELDS'; warnings: string[]; correctionErrors: string[]; invalid: boolean;
+  sourceValues: Record<ReviewableLeadField,string|null>;
   firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null;
   sourceCompany: string | null; sourceCompanyWebsite: string | null; addressLine1: string | null;
   addressLine2: string | null; city: string | null; stateProvince: string | null;
@@ -163,6 +164,35 @@ export function sourceLeadIdKeyV1(showId:number,sourceLeadId:string){return 'v1:
 const normalizedPhone=(value:string|null)=>norm(value??'').replace(/[^a-z0-9]/g,'');
 export function attendeeFieldsKeyV1(showId:number,row:Pick<ParsedLead,'firstName'|'lastName'|'sourceCompany'|'email'|'phone'>){return 'v1:attendee:'+createHash('sha256').update(JSON.stringify([showId,norm(row.firstName),norm(row.lastName),norm(row.sourceCompany??''),norm(row.email??''),normalizedPhone(row.phone)])).digest('hex');}
 
+const reviewFieldLabels=new Map<ReviewableLeadField,string>(REVIEWABLE_LEAD_FIELDS);
+const reviewWarningPrefixes:Record<ReviewableLeadField,string[]>={firstName:['First name contains a placeholder.'],lastName:['Last name contains a placeholder.'],title:['Title contains a placeholder.'],sourceCompany:['Company contains a placeholder.'],email:['Email contains a placeholder.','Email is invalid.'],phone:['Phone contains a placeholder.'],sourceCompanyWebsite:['Website contains a placeholder.'],addressLine1:['Address contains a placeholder.'],addressLine2:['Address 2 contains a placeholder.'],city:['City contains a placeholder.'],stateProvince:['State contains a placeholder.'],postalCode:['Postal code contains a placeholder.'],country:['Country contains a placeholder.'],productInterest:['Product interest contains a placeholder.'],sourceNotes:['Source notes contains a placeholder.'],competitorSourceText:['Competitor contains a placeholder.'],currentProductBeingUsed:['Current product contains a placeholder.'],customerPainPoints:['Customer pain points contains a placeholder.']};
+const longReviewFields=new Set<ReviewableLeadField>(['productInterest','sourceNotes','customerPainPoints']);
+export function validateReviewedOverrides(value:unknown):ReviewedOverrides{
+  if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('Reviewed corrections are invalid. Preview again.');
+  const allowed=new Set(REVIEWABLE_LEAD_FIELDS.map(([field])=>field));const result:ReviewedOverrides={};
+  for(const [field,input] of Object.entries(value)){if(!allowed.has(field as ReviewableLeadField)||typeof input!=='string')throw new Error('Reviewed corrections are invalid. Preview again.');const key=field as ReviewableLeadField,max=longReviewFields.has(key)?10_000:500;if(input.length>max)throw new Error(`${reviewFieldLabels.get(key)} correction is too long.`);result[key]=input;}
+  return result;
+}
+export function applyReviewedOverrides(showId:number,format:ImportFormat,row:ParsedLead,value:unknown):ParsedLead{
+  const overrides=validateReviewedOverrides(value),next={...row,warnings:[...row.warnings],correctionErrors:[]} as ParsedLead;
+  for(const [field,input] of Object.entries(overrides) as [ReviewableLeadField,string][]) {
+    next.warnings=next.warnings.filter(warning=>!reviewWarningPrefixes[field].includes(warning));
+    const trimmed=input.trim();
+    if(placeholder(trimmed)){next.correctionErrors.push(`${reviewFieldLabels.get(field)} correction cannot be a placeholder.`);(next as unknown as Record<string,unknown>)[field]=field==='firstName'||field==='lastName'?'':null;continue;}
+    if(field==='email'){
+      const valid=!trimmed||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+      if(!valid){next.warnings.push('Email is invalid.');next.correctionErrors.push('Email correction is invalid.');next.email=null;}else next.email=trimmed?trimmed.toLowerCase():null;
+    }else (next as unknown as Record<string,unknown>)[field]=field==='firstName'||field==='lastName'?trimmed:(trimmed||null);
+  }
+  next.warnings=next.warnings.filter(warning=>warning!=='Fallback identity requires First Name, Last Name, Company, and Email or Phone.'&&warning!=='Missing capture time or usable identity.');
+  const fallbackValid=!!next.firstName&&!!next.lastName&&!!next.sourceCompany&&!!(next.email||next.phone);
+  const sourceInvalid=format!=='CUSTOM_MAPPING'?(!next.capturedSource.trim()||!(next.firstName||next.lastName||next.email||next.sourceCompany)):next.identityStrategy==='ATTENDEE_FIELDS'?!fallbackValid:!(next.firstName||next.lastName||next.email||next.sourceCompany);
+  next.invalid=sourceInvalid||next.correctionErrors.length>0;
+  if(sourceInvalid)next.warnings.push(next.identityStrategy==='ATTENDEE_FIELDS'?'Fallback identity requires First Name, Last Name, Company, and Email or Phone.':'Missing capture time or usable identity.');
+  next.sourceKey=format!=='CUSTOM_MAPPING'?sourceKeyV1(showId,next):next.identityStrategy==='CAPTURE_TIME'?sourceKeyV1(showId,{...next,capturedSource:next.capturedAt??next.capturedSource}):next.identityStrategy==='SOURCE_LEAD_ID'?sourceLeadIdKeyV1(showId,next.sourceLeadId!):attendeeFieldsKeyV1(showId,next);
+  return next;
+}
+
 // Fingerprint recipe: trim/collapse/lowercase each header, remove punctuation,
 // sort the normalized names, JSON encode, then SHA-256. It intentionally ignores
 // filename, container (.xls/.xlsx), row count, and column order.
@@ -242,7 +272,8 @@ export function parseTradeShowWorkbook(buffer: Buffer, filename: string, showId:
     const phone=value(names('phone',['Phone']),'Phone'),sourceCompany=value(names('sourceCompany',['Company']),'Company'),sourceLeadId=value(names('sourceLeadId',[]),'Source lead ID');
     const identityStrategy:ParsedLead['identityStrategy']=capturedSource.trim()?'CAPTURE_TIME':sourceLeadId?'SOURCE_LEAD_ID':'ATTENDEE_FIELDS';
     const fallbackValid=!!firstName&&!!lastName&&!!sourceCompany&&!!(usableEmail||phone);
-    const lead:ParsedLead={sourceRow:source.sourceRow,sourceKey:'',rawSourceData:raw,capturedSource,capturedAt:time.iso,identityStrategy,warnings,invalid:inspected.builtInFormat?(!capturedSource.trim()||!(firstName||lastName||usableEmail||sourceCompany)):identityStrategy==='ATTENDEE_FIELDS'?!fallbackValid:!(firstName||lastName||usableEmail||sourceCompany),firstName,lastName,
+    const sourceValues=Object.fromEntries(REVIEWABLE_LEAD_FIELDS.map(([destination])=>[destination,pick(raw,names(destination,({firstName:['FirstName','First Name'],lastName:['LastName','Last Name'],title:['Title'],sourceCompany:['Company'],email:['Email'],phone:['Phone'],sourceCompanyWebsite:['Company Website'],addressLine1:['Address','Address 1'],addressLine2:['Address2','Address 2'],city:['City'],stateProvince:['StateCode','State/Province'],postalCode:['ZipCode','Zipcode'],country:['CountryCode','Country'],sourceNotes:['Notes'],productInterest:[],competitorSourceText:[],currentProductBeingUsed:[],customerPainPoints:[]})[destination]))||null])) as Record<ReviewableLeadField,string|null>;
+    const lead:ParsedLead={sourceRow:source.sourceRow,sourceKey:'',rawSourceData:raw,capturedSource,capturedAt:time.iso,identityStrategy,warnings,correctionErrors:[],sourceValues,invalid:inspected.builtInFormat?(!capturedSource.trim()||!(firstName||lastName||usableEmail||sourceCompany)):identityStrategy==='ATTENDEE_FIELDS'?!fallbackValid:!(firstName||lastName||usableEmail||sourceCompany),firstName,lastName,
       title:value(names('title',['Title']),'Title'),email:usableEmail,phone,sourceCompany,sourceCompanyWebsite:value(names('sourceCompanyWebsite',['Company Website']),'Website'),
       addressLine1:value(names('addressLine1',['Address','Address 1']),'Address'),addressLine2:value(names('addressLine2',['Address2','Address 2']),'Address 2'),city:value(names('city',['City']),'City'),stateProvince:value(names('stateProvince',['StateCode','State/Province']),'State'),postalCode:value(names('postalCode',['ZipCode','Zipcode']),'Postal code'),country:value(names('country',['CountryCode','Country']),'Country'),sourceNotes:value(names('sourceNotes',['Notes']),'Source notes'),
       sourceLeadId,productInterest:value(names('productInterest',[]),'Product interest'),competitorSourceText:value(names('competitorSourceText',[]),'Competitor'),currentProductBeingUsed:value(names('currentProductBeingUsed',[]),'Current product'),customerPainPoints:value(names('customerPainPoints',[]),'Customer pain points')};

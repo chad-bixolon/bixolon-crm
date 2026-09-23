@@ -1076,6 +1076,10 @@ model TradeShowLead {
   capturedAt              DateTime?
   importedAt              DateTime            @default(now())
   rawSourceData           Json
+  /// Explicitly approved preview corrections; rawSourceData always remains untouched.
+  reviewedOverrides       Json?
+  /// Uncorrected row identity retained when reviewed values change sourceKey.
+  sourceOriginalKey       String?
   firstName               String
   lastName                String
   title                   String?
@@ -1120,4 +1124,5 @@ model TradeShowLead {
   @@index([contactId])
   @@index([convertedOpportunityId])
   @@index([firstImportId])
+  @@index([tradeShowId, sourceOriginalKey])
 }

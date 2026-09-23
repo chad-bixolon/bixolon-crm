@@ -1,8 +1,10 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
-import { inspectTradeShowWorkbook, mappingCompatibility, parseTradeShowWorkbook, validateMapping, type MappingDefinition, type ParsedLead, type ParsedWorkbook } from './trade-show-import-parser';
+import { applyReviewedOverrides, inspectTradeShowWorkbook, mappingCompatibility, parseTradeShowWorkbook, validateMapping, validateReviewedOverrides, type MappingDefinition, type ParsedLead, type ParsedWorkbook } from './trade-show-import-parser';
+import type { ReviewedOverrides } from './trade-show-import-fields';
 
-export type ImportChoice = { sourceKey: string; repId: number | null; accountId: number | null; contactId: number | null; refresh: boolean };
+export type ReviewedRow = { originalSourceKey:string; reviewedOverrides:ReviewedOverrides };
+export type ImportChoice = ReviewedRow & { sourceKey: string; repId: number | null; accountId: number | null; contactId: number | null; refresh: boolean };
 export type CustomMappingSelection = { definition: MappingDefinition; id: number | null; name: string | null };
 const clean = (value: string | null | undefined) => (value??'').trim().replace(/\s+/g,' ').toLowerCase();
 function stableJson(value:unknown):string{return JSON.stringify(value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.entries(value as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b)).map(([key,item])=>[key,item&&typeof item==='object'?JSON.parse(stableJson(item)):item])):value);}
@@ -15,18 +17,27 @@ export function suggestMatches(row:ParsedLead, accounts:{id:number;name:string;w
   const possibleAccounts=row.sourceCompany?accounts.filter(a=>!exactAccounts.some(x=>x.id===a.id)&&clean(a.name).includes(clean(row.sourceCompany!))&&clean(row.sourceCompany).length>=5).slice(0,5):[];
   return {contactMatches,exactAccounts,domainAccounts,possibleAccounts,contactSuggestion:contactMatches.length===1?contactMatches[0].id:null,accountSuggestion:exactAccounts.length===1?exactAccounts[0].id:!exactAccounts.length&&domainAccounts.length===1?domainAccounts[0].id:null};
 }
-async function previewParsedTradeShowImport(client:PrismaClient,showId:number,filename:string,parsed:ParsedWorkbook,mapping:CustomMappingSelection|null){
-  const [existing,accounts,contacts,reps,prior]=await Promise.all([
-    client.tradeShowLead.findMany({where:{tradeShowId:showId,sourceKey:{in:parsed.rows.map(r=>r.sourceKey)}},select:{sourceKey:true,rawSourceData:true}}),
+type ExistingLead={sourceKey:string;sourceOriginalKey?:string|null;rawSourceData:unknown;reviewedOverrides?:unknown};
+const storedOverrides=(value:unknown):ReviewedOverrides=>value&&typeof value==='object'&&!Array.isArray(value)?validateReviewedOverrides(value):{};
+async function previewParsedTradeShowImport(client:PrismaClient,showId:number,filename:string,parsed:ParsedWorkbook,mapping:CustomMappingSelection|null,reviews:ReviewedRow[]|null){
+  const originalKeys=parsed.rows.map(row=>row.sourceKey);
+  if(reviews&&(reviews.length!==parsed.rows.length||reviews.some((review,index)=>review.originalSourceKey!==originalKeys[index])))throw new Error('Reviewed corrections changed. Preview again.');
+  const [originalExisting,accounts,contacts,reps,prior]=await Promise.all([
+    client.tradeShowLead.findMany({where:{tradeShowId:showId,OR:[{sourceKey:{in:originalKeys}},{sourceOriginalKey:{in:originalKeys}}]},select:{sourceKey:true,sourceOriginalKey:true,rawSourceData:true,reviewedOverrides:true}}),
     client.account.findMany({where:{status:'ACTIVE',archivedAt:null},select:{id:true,name:true,website:true},take:10000}),
     client.contact.findMany({where:{active:true,archivedAt:null},select:{id:true,firstName:true,lastName:true,email:true,accountId:true,account:{select:{name:true}}},take:10000}),
     client.user.findMany({where:{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true,firstName:true,lastName:true},orderBy:[{firstName:'asc'},{lastName:'asc'}]}),
     client.tradeShowImport.count({where:{tradeShowId:showId,fileSha256:parsed.sha256}}),
   ]);
-  const byKey=new Map(existing.map(e=>[e.sourceKey,e]));const seen=new Set<string>();const emailCount=new Map<string,number>(),fallbackKeyCount=new Map<string,number>();
-  parsed.rows.forEach(row=>{if(row.email)emailCount.set(row.email,(emailCount.get(row.email)??0)+1);if(row.identityStrategy==='ATTENDEE_FIELDS')fallbackKeyCount.set(row.sourceKey,(fallbackKeyCount.get(row.sourceKey)??0)+1)});
-  const rows=parsed.rows.map(row=>{
-    const old=byKey.get(row.sourceKey);const repeated=seen.has(row.sourceKey);seen.add(row.sourceKey);
+  const originalByKey=new Map<string,ExistingLead>();for(const lead of originalExisting as ExistingLead[]){originalByKey.set(lead.sourceKey,lead);if(lead.sourceOriginalKey)originalByKey.set(lead.sourceOriginalKey,lead);}
+  const effectiveRows=parsed.rows.map((row,index)=>{const old=originalByKey.get(row.sourceKey),reviewedOverrides={...storedOverrides(old?.reviewedOverrides),...storedOverrides(reviews?.[index]?.reviewedOverrides)};return {...applyReviewedOverrides(showId,parsed.format,row,reviewedOverrides),originalSourceKey:row.sourceKey,reviewedOverrides};});
+  const changedKeys=effectiveRows.filter(row=>row.sourceKey!==row.originalSourceKey).map(row=>row.sourceKey);
+  const effectiveExisting=changedKeys.length?await client.tradeShowLead.findMany({where:{tradeShowId:showId,sourceKey:{in:changedKeys}},select:{sourceKey:true,sourceOriginalKey:true,rawSourceData:true,reviewedOverrides:true}}):[];
+  const byKey=new Map<string,ExistingLead>();for(const lead of [...originalExisting,...effectiveExisting] as ExistingLead[]){byKey.set(lead.sourceKey,lead);if(lead.sourceOriginalKey)byKey.set(lead.sourceOriginalKey,lead);}
+  const seen=new Set<string>();const emailCount=new Map<string,number>(),fallbackKeyCount=new Map<string,number>();
+  effectiveRows.forEach(row=>{if(row.email)emailCount.set(row.email,(emailCount.get(row.email)??0)+1);if(row.identityStrategy==='ATTENDEE_FIELDS')fallbackKeyCount.set(row.sourceKey,(fallbackKeyCount.get(row.sourceKey)??0)+1)});
+  const rows=effectiveRows.map(row=>{
+    const old=byKey.get(row.sourceKey)??byKey.get(row.originalSourceKey);const repeated=seen.has(row.sourceKey);seen.add(row.sourceKey);
     const state=row.invalid?'INVALID':repeated?'ALREADY_IMPORTED':old?stableJson(old.rawSourceData)===stableJson(row.rawSourceData)?'ALREADY_IMPORTED':'SOURCE_CHANGED':'NEW';
     const oldRaw=(old?.rawSourceData&&typeof old.rawSourceData==='object'&&!Array.isArray(old.rawSourceData)?old.rawSourceData:{}) as Record<string,unknown>;
     const changedSourceFields=state==='SOURCE_CHANGED'?[...new Set([...Object.keys(oldRaw),...Object.keys(row.rawSourceData)])].filter(header=>String(oldRaw[header]??'')!==String(row.rawSourceData[header]??'')).map(header=>({header,before:String(oldRaw[header]??''),after:String(row.rawSourceData[header]??'')})):[];
@@ -39,16 +50,18 @@ async function previewParsedTradeShowImport(client:PrismaClient,showId:number,fi
     return {...row,state,warnings,matches,changedSourceFields};
   });
   const summary={total:rows.length,new:rows.filter(r=>r.state==='NEW').length,alreadyImported:rows.filter(r=>r.state==='ALREADY_IMPORTED').length,changedSource:rows.filter(r=>r.state==='SOURCE_CHANGED').length,invalid:rows.filter(r=>r.state==='INVALID').length,needsReview:rows.filter(r=>r.warnings.length||r.matches.contactMatches.length>1||r.matches.exactAccounts.length>1).length,usableEmail:rows.filter(r=>r.email).length,duplicateEmailGroups:[...emailCount.values()].filter(n=>n>1).length,fallbackIdentityRows:rows.filter(r=>r.identityStrategy==='ATTENDEE_FIELDS').length,fallbackCollisionGroups:[...fallbackKeyCount.values()].filter(n=>n>1).length,unresolvedAccounts:rows.filter(r=>r.sourceCompany&&!r.matches.accountSuggestion).length,unresolvedContacts:rows.filter(r=>r.email&&!r.matches.contactSuggestion).length,placeholderRows:rows.filter(r=>r.warnings.some(w=>w.includes('placeholder'))).length};
-  return {parsed,filename,rows,summary,reps,accounts,contacts,priorExactFile:prior>0,mapping};
+  return {parsed:{...parsed,rows:effectiveRows},filename,rows,summary,reps,accounts,contacts,priorExactFile:prior>0,mapping};
 }
 
-export async function previewTradeShowImport(client:PrismaClient,showId:number,buffer:Buffer,filename:string,actor:Actor,mapping:CustomMappingSelection|null=null){
+export async function previewTradeShowImport(client:PrismaClient,showId:number,buffer:Buffer,filename:string,actor:Actor,mapping:CustomMappingSelection|null=null,reviews:ReviewedRow[]|null=null){
   if(!can(actor,'trade-shows.manage'))throw new Error('Access denied');
   const show=await client.tradeShow.findUnique({where:{id:showId},select:{timezone:true,archivedAt:true}});
   if(!show||show.archivedAt)throw new Error('Trade Show not found or archived.');
   const parsed=parseTradeShowWorkbook(buffer,filename,showId,show.timezone,mapping?.definition);
-  return previewParsedTradeShowImport(client,showId,filename,parsed,mapping);
+  return previewParsedTradeShowImport(client,showId,filename,parsed,mapping,reviews);
 }
+
+export async function reviewTradeShowImport(client:PrismaClient,showId:number,buffer:Buffer,filename:string,actor:Actor,mapping:CustomMappingSelection|null,reviews:ReviewedRow[]){return previewTradeShowImport(client,showId,buffer,filename,actor,mapping,reviews);}
 
 function storedDefinition(value:Prisma.JsonValue):MappingDefinition{return value as unknown as MappingDefinition;}
 export async function prepareTradeShowImport(client:PrismaClient,showId:number,buffer:Buffer,filename:string,actor:Actor){
@@ -79,7 +92,10 @@ export async function confirmTradeShowImport(client:PrismaClient,showId:number,b
   if(!show||show.archivedAt)throw new Error('Trade Show not found or archived.');
   const parsed:ParsedWorkbook=parseTradeShowWorkbook(buffer,filename,showId,show.timezone,mapping?.definition);
   if(parsed.sha256!==sha256)throw new Error('Workbook changed. Preview again.');
-  if(choices.length!==parsed.rows.length||choices.some((c,i)=>c.sourceKey!==parsed.rows[i].sourceKey))throw new Error('Preview choices changed. Preview again.');
+  if(choices.length!==parsed.rows.length||choices.some((choice,index)=>(choice.originalSourceKey??parsed.rows[index].sourceKey)!==parsed.rows[index].sourceKey))throw new Error('Preview choices changed. Preview again.');
+  const rows=parsed.rows.map((row,index)=>applyReviewedOverrides(showId,parsed.format,row,choices[index].reviewedOverrides??{}));
+  if(choices.some((choice,index)=>choice.sourceKey!==rows[index].sourceKey))throw new Error('Preview choices changed. Preview again.');
+  if(rows.some((row,index)=>Object.keys(choices[index].reviewedOverrides??{}).length&&row.correctionErrors.length))throw new Error('Correct invalid reviewed values before importing.');
   return client.$transaction(async tx=>{
     if(mapping?.id){const saved=await tx.tradeShowImportMapping.findFirst({where:{id:mapping.id,archivedAt:null},select:{name:true,mappings:true}});if(!saved||stableJson(saved.mappings)!==stableJson(mapping.definition))throw new Error('Saved mapping changed. Preview again.');mapping.name=saved.name;}
     const reps=await tx.user.findMany({where:{id:{in:[defaultRepId,...choices.map(c=>c.repId).filter((id):id is number=>id!==null)]},active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true}});
@@ -93,15 +109,19 @@ export async function confirmTradeShowImport(client:PrismaClient,showId:number,b
     const validAccounts=new Set(accounts.map(a=>a.id)),validContacts=new Map(contacts.map(c=>[c.id,c]));
     if(accountIds.some(id=>!validAccounts.has(id))||contactIds.some(id=>!validContacts.has(id)))throw new Error('Selected Account or Contact is unavailable.');
     for(const choice of choices){const contact=choice.contactId?validContacts.get(choice.contactId):null;if(contact?.accountId&&choice.accountId&&contact.accountId!==choice.accountId)throw new Error('Selected Contact belongs to a different Account.');}
-    const record=await tx.tradeShowImport.create({data:{tradeShowId:showId,format:parsed.format,sourceFileName:filename,sourceSheet:parsed.sheet,fileSha256:parsed.sha256,uploadedById:actor.id,rowCount:parsed.rows.length,mappingId:mapping?.id??null,mappingName:mapping?.name??null}});
+    const record=await tx.tradeShowImport.create({data:{tradeShowId:showId,format:parsed.format,sourceFileName:filename,sourceSheet:parsed.sheet,fileSha256:parsed.sha256,uploadedById:actor.id,rowCount:rows.length,mappingId:mapping?.id??null,mappingName:mapping?.name??null}});
     let created=0,existing=0,skipped=0;const seen=new Set<string>();
-    for(let i=0;i<parsed.rows.length;i++){
-      const row=parsed.rows[i],choice=choices[i];if(row.invalid){skipped++;continue;}
+    for(let i=0;i<rows.length;i++){
+      const row=rows[i],rawRow=parsed.rows[i],choice=choices[i],reviewedOverrides=validateReviewedOverrides(choice.reviewedOverrides??{});if(row.invalid){skipped++;continue;}
       if(seen.has(row.sourceKey)){existing++;continue;}seen.add(row.sourceKey);
-      const old=await tx.tradeShowLead.findUnique({where:{tradeShowId_sourceKey:{tradeShowId:showId,sourceKey:row.sourceKey}},select:{id:true,rawSourceData:true}});
-      const source={rawSourceData:row.rawSourceData,capturedAt:row.capturedAt?new Date(row.capturedAt):null,firstName:row.firstName,lastName:row.lastName,title:row.title,email:row.email,phone:row.phone,sourceCompany:row.sourceCompany,sourceCompanyWebsite:row.sourceCompanyWebsite,addressLine1:row.addressLine1,addressLine2:row.addressLine2,city:row.city,stateProvince:row.stateProvince,postalCode:row.postalCode,country:row.country,sourceNotes:row.sourceNotes,sourceLeadId:row.sourceLeadId,productInterest:row.productInterest,competitorSourceText:row.competitorSourceText,currentProductBeingUsed:row.currentProductBeingUsed,customerPainPoints:row.customerPainPoints};
-      if(old){existing++;if(choice.refresh&&stableJson(old.rawSourceData)!==stableJson(row.rawSourceData))await tx.tradeShowLead.update({where:{id:old.id},data:source});continue;}
-      await tx.tradeShowLead.create({data:{tradeShowId:showId,firstImportId:record.id,sourceKey:row.sourceKey,sourceFileName:filename,sourceSheet:parsed.sheet,sourceRow:row.sourceRow,...source,assignedSalesRepUserId:choice.repId??defaultRepId,accountId:choice.accountId,contactId:choice.contactId,status:'NEW'}});created++;
+      let old=await tx.tradeShowLead.findUnique({where:{tradeShowId_sourceKey:{tradeShowId:showId,sourceKey:row.sourceKey}},select:{id:true,sourceKey:true,rawSourceData:true,reviewedOverrides:true}});
+      if(!old&&row.sourceKey!==rawRow.sourceKey)old=await tx.tradeShowLead.findUnique({where:{tradeShowId_sourceKey:{tradeShowId:showId,sourceKey:rawRow.sourceKey}},select:{id:true,sourceKey:true,rawSourceData:true,reviewedOverrides:true}});
+      if(!old&&row.sourceKey!==rawRow.sourceKey)old=await tx.tradeShowLead.findFirst({where:{tradeShowId:showId,sourceOriginalKey:rawRow.sourceKey},select:{id:true,sourceKey:true,rawSourceData:true,reviewedOverrides:true}});
+      const correctionData={sourceKey:row.sourceKey,sourceOriginalKey:row.sourceKey===rawRow.sourceKey?null:rawRow.sourceKey,reviewedOverrides:Object.keys(reviewedOverrides).length?reviewedOverrides as Prisma.InputJsonValue:Prisma.DbNull};
+      const source={rawSourceData:rawRow.rawSourceData,capturedAt:row.capturedAt?new Date(row.capturedAt):null,firstName:row.firstName,lastName:row.lastName,title:row.title,email:row.email,phone:row.phone,sourceCompany:row.sourceCompany,sourceCompanyWebsite:row.sourceCompanyWebsite,addressLine1:row.addressLine1,addressLine2:row.addressLine2,city:row.city,stateProvince:row.stateProvince,postalCode:row.postalCode,country:row.country,sourceNotes:row.sourceNotes,sourceLeadId:row.sourceLeadId,productInterest:row.productInterest,competitorSourceText:row.competitorSourceText,currentProductBeingUsed:row.currentProductBeingUsed,customerPainPoints:row.customerPainPoints,...correctionData};
+      const correctionsChanged=old&&stableJson(storedOverrides(old.reviewedOverrides))!==stableJson(reviewedOverrides);
+      if(old){existing++;if(correctionsChanged||choice.refresh&&stableJson(old.rawSourceData)!==stableJson(rawRow.rawSourceData))await tx.tradeShowLead.update({where:{id:old.id},data:source});continue;}
+      await tx.tradeShowLead.create({data:{tradeShowId:showId,firstImportId:record.id,sourceFileName:filename,sourceSheet:parsed.sheet,sourceRow:row.sourceRow,...source,assignedSalesRepUserId:choice.repId??defaultRepId,accountId:choice.accountId,contactId:choice.contactId,status:'NEW'}});created++;
     }
     await tx.tradeShowImport.update({where:{id:record.id},data:{createdCount:created,existingCount:existing,skippedCount:skipped}});
     if(mapping?.id)await tx.tradeShowImportMapping.update({where:{id:mapping.id},data:{lastUsedAt:new Date()}});
