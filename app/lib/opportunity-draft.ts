@@ -1,11 +1,12 @@
 import type { ForecastCategory, OpportunityPartyRole, OpportunityProductPriceSource, ProductPriceTier } from "@prisma/client";
 
 export type ParticipantDraft = { accountId: number; roles: OpportunityPartyRole[] };
+export type ContactDraft = { contactId: number; isPrimary: boolean };
 export type LineDraft = { id: number; productId: number; skuId?: number | null; quantity: string; price: string; priceSource: OpportunityProductPriceSource; catalogPriceTier: ProductPriceTier | null; priceExceptionLineId: number | null; priceExceptionCode: string | null; priceExceptionUnitPrice: string | null; priceExceptionCurrencyCode: string | null; priceExceptionSourceQty: string | null; priceExceptionAccountIds: number[]; odmCustomerPriceId?: number | null; odmCustomerAccountId?: number | null; odmCustomerBasePrice?: string | null; odmCustomerTariffPercent?: string | null; odmCustomerTariffAmount?: string | null; odmCustomerFinalUnitPrice?: string | null };
 export type OpportunityDraft = {
   name: string; description: string; competitorId: string; currentProductBeingUsed: string; customerPainPoints: string; ownerId: string; stageId: string; expectedCloseDate: string;
   probability: string; forecastCategory: ForecastCategory | ""; currencyCode: string; projectIds: number[];
-  participants: ParticipantDraft[]; lines: LineDraft[];
+  participants: ParticipantDraft[]; contacts: ContactDraft[]; lines: LineDraft[];
 };
 type DraftStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 const forecastCategories = ["OMITTED", "PIPELINE", "BEST_CASE", "COMMIT", "CLOSED"];
@@ -41,6 +42,8 @@ export function readDraft(raw: string | null, fallback: OpportunityDraft): Oppor
     }
     if (!Array.isArray(value.projectIds) || !value.projectIds.every(isId) || new Set(value.projectIds).size !== value.projectIds.length) return fallback;
     if (!Array.isArray(value.participants) || !value.participants.every((p: unknown) => isRecord(p) && isId(p.accountId) && Array.isArray(p.roles) && p.roles.every((role: unknown) => typeof role === "string" && partyRoles.includes(role)))) return fallback;
+    if (value.contacts === undefined && fallback.contacts !== undefined) value.contacts = fallback.contacts;
+    if (value.contacts !== undefined && (!Array.isArray(value.contacts) || !value.contacts.every((c: unknown) => isRecord(c) && isId(c.contactId) && typeof c.isPrimary === "boolean") || value.contacts.filter((c: ContactDraft) => c.isPrimary).length > 1)) return fallback;
     if (!Array.isArray(value.lines) || !value.lines.every((line: unknown) => isRecord(line) && isLineId(line.id) && isLineId(line.productId) && (line.skuId === undefined || line.skuId === null || isLineId(line.skuId)) && typeof line.quantity === "string" && typeof line.price === "string")) return fallback;
     for (const line of value.lines as Record<string, unknown>[]) {
       // Drafts saved before Stage 5 remain usable; the form supplies manual provenance when submitted.

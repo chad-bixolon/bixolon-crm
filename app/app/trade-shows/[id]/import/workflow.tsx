@@ -12,9 +12,9 @@ function Picker({ value, onChange, items, label }: { value: number | null; onCha
   const filtered = search ? items.filter(item => item.name.toLowerCase().includes(search.toLowerCase())).slice(0, 30) : items.slice(0, 30);
   const selected = items.find(item => item.id === value);
 
-  return <div className="min-w-40">
-    <input aria-label={`Search ${label}`} className="input mb-1 w-full text-xs" value={search} onChange={event => setSearch(event.target.value)} placeholder={`Search ${label}`} />
-    <select aria-label={label} className="input w-full text-xs" value={value ?? ''} onChange={event => onChange(event.target.value ? Number(event.target.value) : null)}>
+  return <div className="min-w-0">
+    <input aria-label={`Search ${label}`} className="input mb-1 h-8 w-full px-2 py-1 text-xs" value={search} onChange={event => setSearch(event.target.value)} placeholder={`Search ${label}`} />
+    <select aria-label={label} className="input h-8 w-full px-2 py-1 text-xs" value={value ?? ''} onChange={event => onChange(event.target.value ? Number(event.target.value) : null)}>
       <option value="">Unresolved</option>
       {selected && !filtered.some(item => item.id === selected.id) && <option value={selected.id}>{selected.name}</option>}
       {filtered.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -109,7 +109,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
     <section className="panel max-w-3xl p-4 sm:p-5">
       <h2 className="text-lg font-semibold">1. Upload and preview</h2>
       <ul id="file-requirements" className="mt-2 flex flex-col gap-1 text-sm text-slate-600 sm:flex-row sm:flex-wrap sm:gap-x-5">
-        <li>Supported formats: NRA, NRF, and MODEX .xls exports.</li>
+        <li>Supported Trade Show exports: NRA/NRF and MODEX/XPressLeads formats (.xls).</li>
         <li>Maximum 2 MB and 1,000 leads.</li>
         <li>Previewing does not change CRM data.</li>
       </ul>
@@ -131,7 +131,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
               setResult(null);
             }}
           />
-          Choose .xls file
+          Choose Excel file
         </label>
         <p id="file-selection-status" aria-live="polite" className={`min-w-0 break-all text-sm ${file ? 'font-medium text-slate-800' : 'text-slate-500'}`}>
           {file?.name ?? 'No file selected'}
@@ -173,22 +173,17 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
       </section>
 
       <section className="panel min-w-0 max-w-full">
-        <TableScroll label="Trade Show lead preview">
-          <table className="w-[2060px] table-fixed text-left text-sm">
-            <colgroup>{[104, 184, 184, 176, 208, 240, 184, 240, 256, 284].map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
-            <thead className="sticky top-0 z-10 bg-slate-50"><tr>{['Row / State', 'Captured source / UTC', 'Name / Title', 'Company', 'Email / Phone', 'Notes', 'Assigned rep', 'Account', 'Contact', 'Warnings / Refresh'].map(heading => <th className="border-b p-2" key={heading}>{heading}</th>)}</tr></thead>
+        <TableScroll label="Trade Show lead preview" topControl bounded>
+          <table className="w-[1320px] table-fixed text-left text-sm xl:w-full">
+            <colgroup>{[230, 210, 250, 360, 270].map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
+            <thead className="sticky top-0 z-10 bg-slate-50"><tr>{['Lead', 'Company', 'Contact Info', 'Review', 'Status'].map(heading => <th className="border-b p-2" key={heading}>{heading}</th>)}</tr></thead>
             <tbody className="divide-y">
               {plan.rows.map((row, index) => <tr key={index} className="align-top">
-                <td className="p-2">{row.sourceRow}<br /><strong>{row.state.replace('_', ' ')}</strong></td>
-                <td className="whitespace-nowrap p-2">{row.capturedSource}<br />{row.capturedAt ?? 'Needs review'}</td>
-                <td className="p-2">{row.firstName} {row.lastName}<br />{row.title}</td>
-                <td className="whitespace-pre-wrap break-words p-2">{row.sourceCompany}</td>
-                <td className="break-all p-2">{row.email}<br /><span className="break-words">{row.phone}</span></td>
-                <td className="whitespace-pre-wrap break-words p-2">{row.sourceNotes}</td>
-                <td className="p-2"><Picker label={`row ${row.sourceRow} rep override`} value={choices[index]?.repId ?? null} onChange={id => change(index, { repId: id })} items={repItems} /><span className="text-slate-500">{choices[index]?.repId ? 'Override' : 'Default: ' + (repItems.find(rep => rep.id === defaultRep)?.name ?? 'none')}</span></td>
-                <td className="break-words p-2"><Picker label={`row ${row.sourceRow} Account`} value={choices[index]?.accountId ?? null} onChange={id => change(index, { accountId: id })} items={accountItems} />{row.matches.exactAccounts.length > 0 && <span>Exact name: {row.matches.exactAccounts.map(account => account.name).join(', ')}</span>}{row.matches.domainAccounts.length > 0 && <span> · Website: {row.matches.domainAccounts.map(account => account.name).join(', ')}</span>}{row.matches.possibleAccounts.length > 0 && <span> · Possible: {row.matches.possibleAccounts.map(account => account.name).join(', ')}</span>}</td>
-                <td className="break-words p-2"><Picker label={`row ${row.sourceRow} Contact`} value={choices[index]?.contactId ?? null} onChange={id => change(index, { contactId: id })} items={contactItems} />{row.matches.contactMatches.length > 0 && <span>Email matches: {row.matches.contactMatches.map(contact => `${contact.firstName} ${contact.lastName}${contact.accountId ? ` (Account #${contact.accountId})` : ''}`).join(', ')}</span>}</td>
-                <td className="whitespace-normal break-words p-2 text-amber-800">{row.warnings.join(' ')}{row.changedSourceFields.map(sourceChange => <div className="mt-2" key={sourceChange.header}><strong>{sourceChange.header}:</strong> <span className="line-through">{sourceChange.before || '(blank)'}</span> → {sourceChange.after || '(blank)'}</div>)}{row.state === 'SOURCE_CHANGED' && <label className="mt-2 block"><input type="checkbox" checked={choices[index]?.refresh ?? false} onChange={event => change(index, { refresh: event.target.checked })} /> Refresh source fields (preserves CRM work)</label>}</td>
+                <td className="p-2"><div className="text-xs text-slate-500">Row {row.sourceRow} · {row.state.replace('_', ' ')}</div><strong className="mt-1 block break-words">{row.firstName} {row.lastName}</strong><div className="line-clamp-3 break-words text-slate-600">{row.title}</div><div className="mt-1 text-xs text-slate-500">{row.capturedAt ?? row.capturedSource ?? 'Capture time needs review'}</div></td>
+                <td className="whitespace-pre-wrap break-words p-2">{row.sourceCompany || '—'}{row.sourceNotes&&<details className="mt-2 text-xs text-slate-600"><summary className="cursor-pointer">Source notes</summary><div className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words">{row.sourceNotes}</div></details>}</td>
+                <td className="p-2"><div className="break-all">{row.email||'—'}</div><div className="mt-1 break-words text-slate-600">{row.phone||'—'}</div></td>
+                <td className="space-y-2 p-2"><div><span className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">Assigned Rep</span><Picker label="rep" value={choices[index]?.repId ?? null} onChange={id => change(index, { repId: id })} items={repItems} /><span className="mt-1 block text-xs text-slate-500">{choices[index]?.repId ? 'Row override' : `Using default: ${repItems.find(rep => rep.id === defaultRep)?.name ?? 'not selected'}`}</span></div><div><span className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">Account</span><Picker label="Account" value={choices[index]?.accountId ?? null} onChange={id => change(index, { accountId: id })} items={accountItems} />{row.matches.exactAccounts.length > 0 && <span className="mt-1 block break-words text-xs">Exact: {row.matches.exactAccounts.map(account => account.name).join(', ')}</span>}{row.matches.domainAccounts.length > 0 && <span className="block break-words text-xs">Website: {row.matches.domainAccounts.map(account => account.name).join(', ')}</span>}{row.matches.possibleAccounts.length > 0 && <span className="block break-words text-xs">Possible: {row.matches.possibleAccounts.map(account => account.name).join(', ')}</span>}</div><div><span className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">Contact</span><Picker label="Contact" value={choices[index]?.contactId ?? null} onChange={id => change(index, { contactId: id })} items={contactItems} />{row.matches.contactMatches.length > 0 && <span className="mt-1 block break-words text-xs">Email: {row.matches.contactMatches.map(contact => `${contact.firstName} ${contact.lastName}${contact.accountId ? ` (#${contact.accountId})` : ''}`).join(', ')}</span>}</div></td>
+                <td className="whitespace-normal break-words p-2 text-amber-800"><strong className="block text-xs text-slate-700">{row.state.replace('_',' ')}</strong>{row.warnings.join(' ')}{row.changedSourceFields.map(sourceChange => <div className="mt-2 text-xs" key={sourceChange.header}><strong>{sourceChange.header}:</strong> <span className="line-through">{sourceChange.before || '(blank)'}</span> → {sourceChange.after || '(blank)'}</div>)}{row.state === 'SOURCE_CHANGED' && <label className="mt-2 block text-xs"><input type="checkbox" checked={choices[index]?.refresh ?? false} onChange={event => change(index, { refresh: event.target.checked })} /> Refresh source fields (preserves CRM work)</label>}</td>
               </tr>)}
             </tbody>
           </table>

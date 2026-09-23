@@ -8,12 +8,14 @@ import type { LabelMap } from "@/lib/configuration";
 import { AddressFields } from "@/components/address-fields";
 import type { Address } from "@/lib/address";
 import { submitAccount, type FormState } from "@/app/accounts/actions";
+import { createAccountForTradeShowLead } from "@/app/trade-shows/[id]/leads/[leadId]/resolve/actions";
 
 type Option = { code: string; name: string; active?: boolean };
 type Owner = { id: number; firstName: string; lastName: string };
 type Initial = Address & { name: string; status: AccountStatus; strategicAccount: boolean; industry: string | null; territory: string | null; ownerId: number | null; website: string | null; phone: string | null; roles: AccountBusinessRoleCode[] };
-export function AccountForm({ id, initial, industries, territories, owners, labels }: { id?: number; initial?: Initial; industries: Option[]; territories: Option[]; owners: Owner[]; labels?: LabelMap }) {
-  const [state, action, pending] = useActionState(submitAccount.bind(null, id ?? null), { errors: {} } as FormState);
+export function AccountForm({ id, initial, industries, territories, owners, labels, leadContext }: { id?: number; initial?: Initial; industries: Option[]; territories: Option[]; owners: Owner[]; labels?: LabelMap; leadContext?: {tradeShowId:number;leadId:number} }) {
+  const submit = leadContext ? createAccountForTradeShowLead.bind(null,leadContext.tradeShowId,leadContext.leadId) : submitAccount.bind(null, id ?? null);
+  const [state, action, pending] = useActionState(submit, { errors: {} } as FormState);
   const guard = useSubmitGuard(state);
   const error = (key: string) => state.errors[key] && <p id={`${key}-error`} className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
   return <form action={action} onSubmit={guard} className="panel max-w-4xl p-6 lg:p-8" aria-label={id ? "Edit account" : "Create account"}>
@@ -29,7 +31,8 @@ export function AccountForm({ id, initial, industries, territories, owners, labe
       <div><label className="label" htmlFor="phone">Phone</label><input className="field" id="phone" name="phone" type="tel" maxLength={50} defaultValue={initial?.phone ?? ""} aria-invalid={!!state.errors.phone}/>{error("phone")}</div>
       <label className="flex items-center gap-3 text-sm font-medium text-slate-700 sm:col-span-2"><input type="checkbox" name="strategicAccount" defaultChecked={initial?.strategicAccount} className="accent-orange-700"/>{labels?.STRATEGIC_ACCOUNT ?? "Strategic Account"}</label>
       <AddressFields initial={initial} errors={state.errors}/>
+      {leadContext && <label className="sm:col-span-2 flex items-start gap-2 rounded bg-amber-50 p-3 text-sm"><input className="mt-1" type="checkbox" name="confirmDuplicate"/>I reviewed the possible duplicate Accounts shown above and explicitly want to create a new Account.</label>}
     </div>
-    <div className="mt-8 flex justify-end gap-3"><Link className="btn-secondary" href={id ? `/accounts/${id}` : "/accounts"}>Cancel</Link><button className="btn-primary disabled:opacity-60" type="submit" disabled={pending}>{pending ? "Saving…" : id ? "Save changes" : "Create account"}</button></div>
+    <div className="mt-8 flex justify-end gap-3"><Link className="btn-secondary" href={leadContext ? `/trade-shows/${leadContext.tradeShowId}/leads/${leadContext.leadId}/edit` : id ? `/accounts/${id}` : "/accounts"}>Cancel</Link><button className="btn-primary disabled:opacity-60" type="submit" disabled={pending}>{pending ? "Saving…" : id ? "Save changes" : "Create account"}</button></div>
   </form>;
 }

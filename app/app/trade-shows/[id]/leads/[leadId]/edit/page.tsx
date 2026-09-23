@@ -15,12 +15,12 @@ export default async function EditTradeShowLeadPage({ params }: { params: Promis
   const lead = await prisma.tradeShowLead.findFirst({ where: { AND: [{ id: leadId, tradeShowId }, tradeShowLeadReadWhere(actor)] }, include: { tradeShow: { select: { archivedAt: true } } } });
   if (!lead) notFound();
   if (!canEditTradeShowLead(actor, lead)) redirect('/access-denied');
-  const canAssign = can(actor, 'trade-shows.assign'), canResolve = can(actor, 'trade-shows.resolve');
+  const canAssign = can(actor, 'trade-shows.assign') && !lead.convertedOpportunityId, canResolve = can(actor, 'trade-shows.resolve') && !lead.convertedOpportunityId;
   const [reps, accounts, contacts, competitors] = await Promise.all([
     canAssign ? prisma.user.findMany({ where: { active: true, archivedAt: null, role: { in: ['SALES', 'SALES_MANAGER'] } }, select: { id: true, firstName: true, lastName: true }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }) : Promise.resolve([]),
     canResolve ? prisma.account.findMany({ where: { status: 'ACTIVE', archivedAt: null }, select: { id: true, name: true }, orderBy: { name: 'asc' } }) : Promise.resolve([]),
-    canResolve ? prisma.contact.findMany({ where: { active: true, archivedAt: null }, select: { id: true, firstName: true, lastName: true, email: true }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }) : Promise.resolve([]),
+    canResolve ? prisma.contact.findMany({ where: { active: true, archivedAt: null }, select: { id: true, firstName: true, lastName: true, email: true, account: { select: { name: true } } }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }) : Promise.resolve([]),
     prisma.competitorOption.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
   ]);
-  return <Content><PageHeader eyebrow="Trade Show Lead" title={`Edit ${lead.firstName} ${lead.lastName}`}/>{lead.tradeShow.archivedAt ? <div className="panel p-6">Reactivate this Trade Show before editing its leads.</div> : <TradeShowLeadForm tradeShowId={tradeShowId} leadId={leadId} initial={lead} canAssign={canAssign} canResolve={canResolve} reps={reps.map(rep => ({ id: rep.id, name: `${rep.firstName} ${rep.lastName}` }))} accounts={accounts} contacts={contacts.map(contact => ({ id: contact.id, name: `${contact.firstName} ${contact.lastName}${contact.email ? ` · ${contact.email}` : ''}` }))} competitors={competitors}/>}</Content>;
+  return <Content><PageHeader eyebrow="Trade Show Lead" title={`Edit ${lead.firstName} ${lead.lastName}`}/>{lead.tradeShow.archivedAt ? <div className="panel p-6">Reactivate this Trade Show before editing its leads.</div> : <TradeShowLeadForm tradeShowId={tradeShowId} leadId={leadId} initial={lead} canAssign={canAssign} canResolve={canResolve} reps={reps.map(rep => ({ id: rep.id, name: `${rep.firstName} ${rep.lastName}` }))} accounts={accounts} contacts={contacts.map(contact => ({ id: contact.id, name: `${contact.firstName} ${contact.lastName}${contact.email ? ` · ${contact.email}` : ''}${contact.account ? ` · ${contact.account.name}` : ' · Unassigned'}` }))} competitors={competitors}/>}</Content>;
 }

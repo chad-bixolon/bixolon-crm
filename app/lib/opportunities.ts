@@ -6,8 +6,9 @@ import type { Actor } from "./authorization";
 import { canViewPriceException } from "./price-exception-visibility";
 import { odmCustomerSnapshot } from './opportunity-odm-pricing';
 export type Participant = { accountId: number; roles: OpportunityPartyRole[] };
+export type OpportunityContactInput = { contactId: number; isPrimary: boolean };
 export type Line = { id?: number; productId: number; skuId?: number | null; quantity: number; price: string; priceSource?: OpportunityProductPriceSource; catalogPriceTier?: ProductPriceTier | null; priceExceptionLineId?: number | null; odmCustomerPriceId?: number | null; odmCustomerAccountId?: number | null };
-export type OpportunityInput = { name: string; description: string | null; competitorId?: number | null; currentProductBeingUsed?: string | null; customerPainPoints?: string | null; ownerId: number | null; projectIds: number[]; stageId: number; expectedCloseDate: Date | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: Participant[]; lines: Line[] };
+export type OpportunityInput = { name: string; description: string | null; competitorId?: number | null; currentProductBeingUsed?: string | null; customerPainPoints?: string | null; ownerId: number | null; projectIds: number[]; stageId: number; expectedCloseDate: Date | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: Participant[]; contacts: OpportunityContactInput[]; lines: Line[] };
 export function categoryForStage(stage: { isClosed: boolean; isWon: boolean }, requested: ForecastCategory | null, previous?: { stageId: number; forecastCategory: ForecastCategory } | null, stageId?: number): ForecastCategory {
   if (stage.isClosed) return stage.isWon ? ForecastCategory.CLOSED : ForecastCategory.OMITTED;
   if (requested === ForecastCategory.CLOSED) {
@@ -49,6 +50,15 @@ export function parseOpportunity(form: FormData) {
     participants.push({ accountId, roles: [...new Set(roles)] as OpportunityPartyRole[] });
   }
   if (!participants.length) errors.participants = "Add at least one participating account with a role.";
+  const contactIds = form.getAll("contactId").map(String);
+  const primaryContactId = field(form, "primaryContactId");
+  const contacts: OpportunityContactInput[] = [];
+  for (const raw of contactIds) {
+    const contactId = positiveId(raw);
+    if (!contactId || contacts.some(contact => contact.contactId === contactId)) { errors.contacts = "Choose each valid Contact only once."; continue; }
+    contacts.push({ contactId, isPrimary: raw === primaryContactId });
+  }
+  if (primaryContactId && !contacts.some(contact => String(contact.contactId) === primaryContactId)) errors.contacts = "Primary Contact must be one of the selected Contacts.";
   const productIds = form.getAll("productId").map(String);
   const skuIds = form.getAll("skuId").map(String);
   const quantities = form.getAll("quantity").map(String);
@@ -75,14 +85,15 @@ export function parseOpportunity(form: FormData) {
     lines.push({ id: id ?? undefined, productId, ...(skuId ? { skuId } : {}), quantity, price, ...(priceSources[i] ? { priceSource: priceSource!, catalogPriceTier, priceExceptionLineId: priceExceptionLineId ?? null, odmCustomerPriceId, odmCustomerAccountId } : {}) });
   }
   if (new Set(lines.map((line) => line.id).filter(Boolean)).size !== lines.filter((line) => line.id).length) errors.lines = "Duplicate line item.";
-  return { errors, value: Object.keys(errors).length ? undefined : { name, description, competitorId, currentProductBeingUsed, customerPainPoints, ownerId, projectIds: projectIds as number[], stageId: stageId!, expectedCloseDate, probability, forecastCategory, currencyCode, participants, lines } satisfies OpportunityInput };
+  return { errors, value: Object.keys(errors).length ? undefined : { name, description, competitorId, currentProductBeingUsed, customerPainPoints, ownerId, projectIds: projectIds as number[], stageId: stageId!, expectedCloseDate, probability, forecastCategory, currencyCode, participants, contacts, lines } satisfies OpportunityInput };
 }
 export function lineTotal(line: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number }) { return new Prisma.Decimal(line.estimatedUnitPrice).mul(line.quantity); }
 export function opportunityTotal(lines: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number; archivedAt?: Date | null }[]) { return lines.reduce((sum, line) => line.archivedAt ? sum : sum.add(lineTotal(line)), new Prisma.Decimal(0)); }
 export function weightedValue(total: Prisma.Decimal, probability: number) { return total.mul(probability).div(100); }
 export async function opportunityOptions(client: PrismaClient) {
-  const [accounts, owners, stages, currencies, productCount, projects, productCategories, competitors] = await Promise.all([
+  const [accounts, contacts, owners, stages, currencies, productCount, projects, productCategories, competitors] = await Promise.all([
     client.account.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    client.contact ? client.contact.findMany({ where: { active: true, archivedAt: null }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true, email: true, accountId: true } }) : Promise.resolve([]),
     client.user.findMany({ where: { active: true, archivedAt: null }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
     client.salesStage.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
     client.currency.findMany({ where: { active: true }, orderBy: { code: "asc" } }),
@@ -91,18 +102,19 @@ export async function opportunityOptions(client: PrismaClient) {
     client.productCategory.findMany({ where: { OR: [{ active: true }, { products: { some: {} } }] }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
     client.competitorOption.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true, active: true } }),
   ]);
-  return { accounts, owners, stages, currencies, productCount, projects, productCategories, competitors };
+  return { accounts, contacts, owners, stages, currencies, productCount, projects, productCategories, competitors };
 }
 export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number, actor?: Actor) {
-  input = { ...input, lines: input.lines.map(line => ({ ...line, priceSource: line.priceSource ?? "MANUAL", catalogPriceTier: line.catalogPriceTier ?? null, priceExceptionLineId: line.priceExceptionLineId ?? null, odmCustomerPriceId: line.odmCustomerPriceId ?? null, odmCustomerAccountId: line.odmCustomerAccountId ?? null })) };
-  return client.$transaction(async (tx) => {
+  input = { ...input, contacts: input.contacts ?? [], lines: input.lines.map(line => ({ ...line, priceSource: line.priceSource ?? "MANUAL", catalogPriceTier: line.catalogPriceTier ?? null, priceExceptionLineId: line.priceExceptionLineId ?? null, odmCustomerPriceId: line.odmCustomerPriceId ?? null, odmCustomerAccountId: line.odmCustomerAccountId ?? null })) };
+  const run = async (tx: Prisma.TransactionClient) => {
     const existing = id ? await tx.opportunity.findUnique({ where: { id }, include: { projects: true } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Opportunity not found or archived.');
     const existingLines = id ? await tx.opportunityProduct.findMany({ where: { opportunityId: id, archivedAt: null } }) : [];
-    const [stage, currency, owner, accounts, products, projects, skus, catalogPrices, peLines, odmPrices] = await Promise.all([
+    const [stage, currency, owner, accounts, contacts, products, projects, skus, catalogPrices, peLines, odmPrices] = await Promise.all([
       tx.salesStage.findUnique({ where: { id: input.stageId } }), tx.currency.findUnique({ where: { code: input.currencyCode } }),
       input.ownerId ? tx.user.findUnique({ where: { id: input.ownerId } }) : null,
       tx.account.findMany({ where: { id: { in: input.participants.map((p) => p.accountId) }, status: "ACTIVE" }, select: { id: true } }),
+      input.contacts.length ? tx.contact.findMany({ where: { id: { in: input.contacts.map(contact => contact.contactId) }, active: true, archivedAt: null }, select: { id: true, accountId: true } }) : Promise.resolve([]),
       tx.product.findMany({ where: { id: { in: input.lines.map((l) => l.productId) }, active: true, archivedAt: null }, select: { id: true } }),
       tx.project.findMany({ where: { id: { in: input.projectIds } }, select: { id: true, archivedAt: true } }),
       input.lines.some(line => line.skuId) ? tx.productSku.findMany({ where: { id: { in: input.lines.flatMap(line => line.skuId ? [line.skuId] : []) } }, select: { id: true, productId: true, active: true, catalogSource: true, odmSubtype: true } }) : Promise.resolve([]),
@@ -120,6 +132,10 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
     if (input.ownerId && (!owner?.active || owner.archivedAt)) throw new Error("Choose an active owner.");
     if (new Set(input.projectIds).size !== input.projectIds.length || projects.length !== input.projectIds.length || projects.some(project => project.archivedAt && !existing?.projects.some(link => link.projectId === project.id))) throw new Error("Choose each active Project only once.");
     if (accounts.length !== input.participants.length) throw new Error("Choose active accounts for all participants.");
+    if (contacts.length !== input.contacts.length) throw new Error("Choose active Contacts.");
+    const participantIds = new Set(input.participants.map(participant => participant.accountId));
+    if (contacts.some(contact => contact.accountId && !participantIds.has(contact.accountId))) throw new Error("Each selected Contact must belong to a participating Account, or be unassigned.");
+    if (input.contacts.filter(contact => contact.isPrimary).length > 1) throw new Error("Choose at most one Primary Contact.");
     if (products.length !== new Set(input.lines.map((l) => l.productId)).size) throw new Error("Choose active products for all line items.");
     for (const line of input.lines) if (line.skuId && !skus.some(sku => sku.id === line.skuId && sku.productId === line.productId && (sku.active || existingLines.some(old => old.id === line.id && old.productId === line.productId && old.skuId === line.skuId)))) throw new Error("Choose an active SKU belonging to the selected product.");
     for (const line of input.lines) {
@@ -165,6 +181,13 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       const old = existingMemberships.find((m) => m.accountId === participant.accountId)?.roles.map((r) => r.role) ?? [];
       for (const role of participant.roles.filter((r) => !old.includes(r))) await tx.opportunityAccountRole.create({ data: { opportunityId, accountId: participant.accountId, role } });
     }
+    if (tx.opportunityContact) {
+      const existingContacts = await tx.opportunityContact.findMany({ where: { opportunityId } });
+      for (const link of existingContacts.filter(link => !input.contacts.some(contact => contact.contactId === link.contactId))) await tx.opportunityContact.delete({ where: { opportunityId_contactId: { opportunityId, contactId: link.contactId } } });
+      // Clear first so switching primaries cannot transiently violate the partial unique index.
+      await tx.opportunityContact.updateMany({ where: { opportunityId, isPrimary: true }, data: { isPrimary: false } });
+      for (const contact of input.contacts) await tx.opportunityContact.upsert({ where: { opportunityId_contactId: { opportunityId, contactId: contact.contactId } }, create: { opportunityId, ...contact }, update: { isPrimary: contact.isPrimary } });
+    }
     for (const line of existingLines.filter((line) => !input.lines.some((item) => item.id === line.id))) await tx.opportunityProduct.update({ where: { id: line.id }, data: { archivedAt: new Date() } });
     for (const line of input.lines) {
       const old = existingLines.find(candidate => candidate.id === line.id);
@@ -183,7 +206,11 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       else await tx.opportunityProduct.create({ data: { opportunityId, ...lineData } });
     }
     return opportunityId;
-  });
+  };
+  // Transaction clients intentionally omit $transaction. This permits conversion to
+  // compose the normal Opportunity save inside its larger atomic transaction.
+  if ('$transaction' in client && typeof client.$transaction === 'function') return client.$transaction(run);
+  return run(client as unknown as Prisma.TransactionClient);
 }
 export async function setOpportunityArchived(client: PrismaClient, id: number, archived: boolean, actor?: Actor) {
   const row = await client.opportunity.findUnique({ where: { id } }); if (!row) throw new Error("Opportunity not found.");

@@ -49,6 +49,7 @@ export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId:
     if (lead.convertedOpportunityId && input.status !== 'CONVERTED') throw new Error('Converted lead status cannot be changed here.');
     if (!can(actor, 'trade-shows.assign') && form.has('assignedSalesRepUserId')) throw new Error('Access denied to rep assignment.');
     const repId = can(actor, 'trade-shows.assign') ? input.assignedSalesRepUserId : lead.assignedSalesRepUserId;
+    if (lead.convertedOpportunityId && repId !== lead.assignedSalesRepUserId) throw new Error('Converted lead ownership cannot be changed.');
     if (repId) {
       const rep = await tx.user.findFirst({ where: { id: repId, active: true, archivedAt: null, role: { in: ['SALES', 'SALES_MANAGER'] } } });
       if (!rep && repId !== lead.assignedSalesRepUserId) throw new Error('Choose an active Sales rep.');
@@ -56,6 +57,7 @@ export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId:
     if (!can(actor, 'trade-shows.resolve') && (form.has('accountId') || form.has('contactId'))) throw new Error('Access denied to CRM resolution.');
     const accountId = can(actor, 'trade-shows.resolve') ? input.accountId : lead.accountId;
     const contactId = can(actor, 'trade-shows.resolve') ? input.contactId : lead.contactId;
+    if (lead.convertedOpportunityId && (accountId !== lead.accountId || contactId !== lead.contactId)) throw new Error('Converted lead CRM links cannot be changed.');
     if (accountId) {
       const account = await tx.account.findFirst({ where: { id: accountId, status: 'ACTIVE', archivedAt: null } });
       if (!account && accountId !== lead.accountId) throw new Error('Choose an active Account.');

@@ -3,11 +3,13 @@ import { useSubmitGuard } from "@/lib/submit-guard";
 import Link from "next/link";
 import { useActionState } from "react";
 import { submitContact, type FormState } from "@/app/contacts/actions";
+import { createContactForTradeShowLead } from "@/app/trade-shows/[id]/leads/[leadId]/resolve/actions";
 import { AddressFields } from "@/components/address-fields";
 import type { Address } from "@/lib/address";
 type Initial = Address & { accountId: number | null; firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null; mobile: string | null; active: boolean; isPrimary: boolean };
-export function ContactForm({ id, initial, accounts, accountId }: { id?: number; initial?: Initial; accounts: { id: number; name: string }[]; accountId?: number }) {
-  const [state, action, pending] = useActionState(submitContact.bind(null, id ?? null), { errors: {} } as FormState);
+export function ContactForm({ id, initial, accounts, accountId, leadContext }: { id?: number; initial?: Initial; accounts: { id: number; name: string }[]; accountId?: number; leadContext?: {tradeShowId:number;leadId:number} }) {
+  const submit = leadContext ? createContactForTradeShowLead.bind(null,leadContext.tradeShowId,leadContext.leadId) : submitContact.bind(null, id ?? null);
+  const [state, action, pending] = useActionState(submit, { errors: {} } as FormState);
   const guard = useSubmitGuard(state);
   const error = (key: string) => state.errors[key] && <p className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
   return <form action={action} onSubmit={guard} className="panel max-w-4xl p-6" aria-label={id ? "Edit contact" : "Create contact"}>
@@ -18,6 +20,7 @@ export function ContactForm({ id, initial, accounts, accountId }: { id?: number;
       <div><label className="label" htmlFor="active">Status</label><select className="field" id="active" name="active" defaultValue={initial?.active === false ? "false" : "true"}><option value="true">Active</option><option value="false">Inactive</option></select></div>
       <label className="flex items-center gap-2 text-sm font-medium text-slate-700"><input type="checkbox" name="isPrimary" defaultChecked={initial?.isPrimary} className="accent-orange-700"/>Primary contact for selected account</label>{error("isPrimary")}
       <AddressFields initial={initial} errors={state.errors}/>
-    </div><div className="mt-7 flex justify-end gap-2"><Link href={id ? `/contacts/${id}` : "/contacts"} className="btn-secondary">Cancel</Link><button type="submit" className="btn-primary disabled:opacity-60" disabled={pending}>{pending ? "Saving…" : id ? "Save contact" : "Create contact"}</button></div>
+      {leadContext && <label className="sm:col-span-2 flex items-start gap-2 rounded bg-amber-50 p-3 text-sm"><input className="mt-1" type="checkbox" name="confirmDuplicate"/>I reviewed the exact-email matches shown above and explicitly want to create a new Contact.</label>}
+    </div><div className="mt-7 flex justify-end gap-2"><Link href={leadContext ? `/trade-shows/${leadContext.tradeShowId}/leads/${leadContext.leadId}/edit` : id ? `/contacts/${id}` : "/contacts"} className="btn-secondary">Cancel</Link><button type="submit" className="btn-primary disabled:opacity-60" disabled={pending}>{pending ? "Saving…" : id ? "Save contact" : "Create contact"}</button></div>
   </form>;
 }
