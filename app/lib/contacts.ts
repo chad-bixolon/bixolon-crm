@@ -4,6 +4,7 @@ import { field, optional, pageNumber, phone, positiveId, required, type Errors }
 import { parseAddress, type Address } from "./address";
 export const marketingPreferenceLabels: Record<MarketingPreference,string> = { UNKNOWN: "Unknown / Not Confirmed", OPTED_IN: "Opted In", OPTED_OUT: "Opted Out" };
 export type ContactInput = Address & { accountId: number | null; firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null; mobile: string | null; active: boolean; isPrimary: boolean; marketingPreference: MarketingPreference };
+type ContactWriteClient = Pick<Prisma.TransactionClient,"account"|"contact">;
 export function parseContact(form: FormData) {
   const errors: Errors = {};
   const rawAccountId = field(form, "accountId");
@@ -24,8 +25,7 @@ export function parseContact(form: FormData) {
   if (isPrimary && !accountId) errors.isPrimary = "Choose an account for a primary contact.";
   return { errors, value: Object.keys(errors).length ? undefined : { accountId, firstName, lastName, title, email, phone: office, mobile, active, isPrimary, marketingPreference, ...address } satisfies ContactInput };
 }
-export async function saveContact(client: PrismaClient, input: ContactInput, id?: number, actor?: Actor) {
-  return client.$transaction(async (tx) => {
+export async function saveContactRecord(tx: ContactWriteClient, input: ContactInput, id?: number, actor?: Actor) {
     if (input.accountId !== null) {
       const account = await tx.account.findUnique({ where: { id: input.accountId }, select: { status: true } });
       if (!account || account.status !== "ACTIVE") throw new Error("Choose an active account.");
@@ -38,7 +38,9 @@ export async function saveContact(client: PrismaClient, input: ContactInput, id?
     const audit = preferenceChanged ? { marketingPreferenceUpdatedAt: new Date(), marketingPreferenceUpdatedByUserId: actor!.id } : {};
     const record = id ? await tx.contact.update({ where: { id }, data: {...input,...audit} }) : await tx.contact.create({ data: {...input,...audit} });
     return record.id;
-  });
+}
+export async function saveContact(client: PrismaClient, input: ContactInput, id?: number, actor?: Actor) {
+  return client.$transaction(tx => saveContactRecord(tx, input, id, actor));
 }
 export async function setContactState(client: PrismaClient, id: number, state: "active" | "inactive" | "archived") {
   const existing = await client.contact.findUnique({ where: { id } });
