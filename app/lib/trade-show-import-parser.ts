@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { inflateRawSync } from 'node:zlib';
 import * as XLSX from 'xlsx';
 
 export const MAX_TRADE_SHOW_FILE_BYTES = 2_000_000;
@@ -21,6 +22,95 @@ const pick = (raw: Record<string, string>, names: string[]) => {
   return found?.[1] ?? '';
 };
 const placeholder = (value: string) => /^\s*\([^()]+\)\s*$/.test(value);
+const OLE_SIGNATURE = 'd0cf11e0a1b11ae1';
+const MAX_TRADE_SHOW_XLSX_UNCOMPRESSED_BYTES = 20_000_000;
+type ZipEntry = { compressedSize: number; flags: number; localOffset: number; method: number; name: string; uncompressedSize: number };
+
+function workbookExtension(filename: string) {
+  const extension = /\.([^.]+)$/.exec(filename.toLowerCase())?.[1];
+  if (extension !== 'xls' && extension !== 'xlsx') throw new Error('Choose a supported .xls or .xlsx Trade Show workbook.');
+  return extension;
+}
+
+function zipEntries(buffer: Buffer) {
+  let end = -1;
+  for (let offset = Math.max(0, buffer.length - 65_557); offset <= buffer.length - 22; offset++) {
+    if (buffer.readUInt32LE(offset) === 0x06054b50 && offset + 22 + buffer.readUInt16LE(offset + 20) === buffer.length) end = offset;
+  }
+  if (end < 0) throw new Error('Unsupported or corrupt .xlsx workbook package.');
+  const disk = buffer.readUInt16LE(end + 4), centralDisk = buffer.readUInt16LE(end + 6);
+  const diskEntries = buffer.readUInt16LE(end + 8), entryCount = buffer.readUInt16LE(end + 10);
+  const centralSize = buffer.readUInt32LE(end + 12), centralOffset = buffer.readUInt32LE(end + 16);
+  if (disk || centralDisk || diskEntries !== entryCount || entryCount === 0xffff || centralSize === 0xffffffff || centralOffset === 0xffffffff || centralOffset + centralSize > end) {
+    throw new Error('Unsupported or corrupt .xlsx workbook package.');
+  }
+  const entries = new Map<string, ZipEntry>();
+  let totalUncompressedSize = 0;
+  let offset = centralOffset;
+  for (let index = 0; index < entryCount; index++) {
+    if (offset + 46 > end || buffer.readUInt32LE(offset) !== 0x02014b50) throw new Error('Unsupported or corrupt .xlsx workbook package.');
+    const flags = buffer.readUInt16LE(offset + 8), method = buffer.readUInt16LE(offset + 10);
+    const compressedSize = buffer.readUInt32LE(offset + 20), uncompressedSize = buffer.readUInt32LE(offset + 24);
+    const nameLength = buffer.readUInt16LE(offset + 28), extraLength = buffer.readUInt16LE(offset + 30), commentLength = buffer.readUInt16LE(offset + 32);
+    const localOffset = buffer.readUInt32LE(offset + 42), next = offset + 46 + nameLength + extraLength + commentLength;
+    if (next > end || compressedSize === 0xffffffff || uncompressedSize === 0xffffffff || localOffset === 0xffffffff) throw new Error('Unsupported or corrupt .xlsx workbook package.');
+    const name = buffer.subarray(offset + 46, offset + 46 + nameLength).toString('utf8');
+    if (!name || name.includes('\0') || name.includes('\\') || name.startsWith('/') || name.split('/').includes('..') || entries.has(name)) throw new Error('Unsupported or corrupt .xlsx workbook package.');
+    if (flags & 0x0001) throw new Error('Encrypted or password-protected .xlsx workbooks are unsupported.');
+    if (method !== 0 && method !== 8) throw new Error('Unsupported .xlsx compression method.');
+    totalUncompressedSize += uncompressedSize;
+    if (totalUncompressedSize > MAX_TRADE_SHOW_XLSX_UNCOMPRESSED_BYTES) throw new Error('The .xlsx workbook expands beyond the safe import limit.');
+    entries.set(name, { compressedSize, flags, localOffset, method, name, uncompressedSize });
+    offset = next;
+  }
+  if (offset !== centralOffset + centralSize) throw new Error('Unsupported or corrupt .xlsx workbook package.');
+  return entries;
+}
+
+function zipText(buffer: Buffer, entry: ZipEntry) {
+  if (entry.uncompressedSize > MAX_TRADE_SHOW_FILE_BYTES) throw new Error('Unsupported or corrupt .xlsx workbook package.');
+  const offset = entry.localOffset;
+  if (offset + 30 > buffer.length || buffer.readUInt32LE(offset) !== 0x04034b50) throw new Error('Unsupported or corrupt .xlsx workbook package.');
+  const nameLength = buffer.readUInt16LE(offset + 26), extraLength = buffer.readUInt16LE(offset + 28);
+  const dataOffset = offset + 30 + nameLength + extraLength, dataEnd = dataOffset + entry.compressedSize;
+  if (dataEnd > buffer.length || buffer.subarray(offset + 30, offset + 30 + nameLength).toString('utf8') !== entry.name) throw new Error('Unsupported or corrupt .xlsx workbook package.');
+  try {
+    const data = buffer.subarray(dataOffset, dataEnd);
+    const output = entry.method === 0 ? data : inflateRawSync(data, { maxOutputLength: MAX_TRADE_SHOW_FILE_BYTES });
+    if (output.length !== entry.uncompressedSize) throw new Error();
+    return output.toString('utf8');
+  } catch { throw new Error('Unsupported or corrupt .xlsx workbook package.'); }
+}
+
+function xmlElements(xml: string, element: string) {
+  return [...xml.matchAll(new RegExp(`<(?:[A-Za-z_][\\w.-]*:)?${element}\\b([^>]*)>`, 'gi'))].map(match => {
+    const attributes: Record<string, string> = {};
+    for (const attribute of match[1].matchAll(/([A-Za-z_:][\w:.-]*)\s*=\s*(["'])(.*?)\2/g)) attributes[attribute[1].toLowerCase()] = attribute[3];
+    return attributes;
+  });
+}
+
+function validateXlsxPackage(buffer: Buffer) {
+  if (buffer.subarray(0, 4).toString('hex') !== '504b0304') {
+    if (buffer.subarray(0, 8).toString('hex') === OLE_SIGNATURE) throw new Error('Encrypted, password-protected, or legacy .xls content cannot be opened as .xlsx.');
+    throw new Error('Unsupported or corrupt .xlsx workbook package.');
+  }
+  const entries = zipEntries(buffer);
+  const required = ['[Content_Types].xml', '_rels/.rels', 'xl/workbook.xml', 'xl/_rels/workbook.xml.rels'];
+  if (required.some(name => !entries.has(name)) || ![...entries].some(([name]) => /^xl\/worksheets\/[^/]+\.xml$/i.test(name))) throw new Error('Unsupported or corrupt .xlsx workbook package.');
+  if ([...entries].some(([name]) => /(^|\/)vbaProject\.bin$/i.test(name))) throw new Error('Macro-enabled workbooks are unsupported.');
+  const contentTypes = xmlElements(zipText(buffer, entries.get('[Content_Types].xml')!), 'Override');
+  if (!contentTypes.some(attributes => attributes.partname === '/xl/workbook.xml' && attributes.contenttype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml')) {
+    throw new Error('Unsupported or corrupt .xlsx workbook package.');
+  }
+  const rootRelationships = xmlElements(zipText(buffer, entries.get('_rels/.rels')!), 'Relationship');
+  if (!rootRelationships.some(attributes => attributes.type?.endsWith('/officeDocument') && attributes.target?.replace(/^\//, '') === 'xl/workbook.xml')) {
+    throw new Error('Unsupported or corrupt .xlsx workbook package.');
+  }
+  const workbookRelationships = xmlElements(zipText(buffer, entries.get('xl/_rels/workbook.xml.rels')!), 'Relationship');
+  const worksheetTargets = workbookRelationships.filter(attributes => attributes.type?.endsWith('/worksheet')).map(attributes => attributes.target?.replace(/^\/?xl\//, '').replace(/^\//, ''));
+  if (!worksheetTargets.some(target => target && entries.has(`xl/${target}`))) throw new Error('Unsupported or corrupt .xlsx workbook package.');
+}
 function zonedParts(date: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(date);
   return Object.fromEntries(parts.map(part => [part.type, Number(part.value)]));
@@ -60,10 +150,12 @@ export function sourceKeyV1(showId: number, row: Pick<ParsedLead,'capturedSource
   return 'v1:' + createHash('sha256').update(JSON.stringify([showId,norm(row.capturedSource),norm(row.firstName),norm(row.lastName),norm(row.sourceCompany??''),norm(row.email??'')])).digest('hex');
 }
 export function parseTradeShowWorkbook(buffer: Buffer, filename: string, showId: number, timezone: string | null): ParsedWorkbook {
-  if (!filename.toLowerCase().endsWith('.xls')) throw new Error('Choose a supported .xls workbook.');
+  const extension = workbookExtension(filename);
   if (!buffer.length||buffer.length>MAX_TRADE_SHOW_FILE_BYTES) throw new Error('Workbook must be nonempty and at most 2 MB.');
-  // OLE compound document signature. XLSX, HTML and renamed text files are rejected.
-  if (buffer.subarray(0,8).toString('hex')!=='d0cf11e0a1b11ae1') throw new Error('Unsupported or corrupt binary .xls workbook.');
+  // Validate the declared container before invoking SheetJS. HTML, text, generic ZIPs and format mismatches are rejected.
+  if (extension === 'xls') {
+    if (buffer.subarray(0,8).toString('hex')!==OLE_SIGNATURE) throw new Error('Unsupported or corrupt binary .xls workbook.');
+  } else validateXlsxPackage(buffer);
   let workbook: XLSX.WorkBook;
   try { workbook=XLSX.read(buffer,{type:'buffer',sheets:0,cellText:true,cellDates:false,cellFormula:false,cellHTML:false,cellNF:false,cellStyles:false,sheetStubs:false,bookDeps:false,bookVBA:false,bookFiles:false,WTF:true}); }
   catch { throw new Error('Workbook is corrupt, encrypted, or unsupported.'); }

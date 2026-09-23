@@ -133,7 +133,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
     <section className="panel max-w-3xl p-4 sm:p-5">
       <h2 className="text-lg font-semibold">1. Upload &amp; Preview</h2>
       <ul id="file-requirements" className="mt-2 flex flex-col gap-1 text-sm text-slate-600 sm:flex-row sm:flex-wrap sm:gap-x-5">
-        <li>Supported Trade Show exports: NRA/NRF and MODEX/XPressLeads formats (.xls).</li>
+        <li>Supported Trade Show exports: NRA/NRF and MODEX/XPressLeads formats (.xls or .xlsx).</li>
         <li>Maximum 2 MB and 1,000 leads.</li>
         <li>Previewing does not change CRM data.</li>
       </ul>
@@ -147,7 +147,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
             id="trade-show-workbook"
             className="absolute inset-0 cursor-pointer opacity-0"
             type="file"
-            accept=".xls,application/vnd.ms-excel"
+            accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             aria-describedby={`file-requirements file-selection-status${!timezone ? ' timezone-warning' : ''}`}
             onChange={event => {
               setFile(event.target.files?.[0] ?? null);
