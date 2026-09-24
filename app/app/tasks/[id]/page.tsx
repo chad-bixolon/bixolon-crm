@@ -5,10 +5,12 @@ import { prisma } from '@/lib/prisma';
 import { taskTiming } from '@/lib/work';
 import { currentUser } from '@/lib/current-user';
 import { can } from '@/lib/authorization';
+import { SaveSuccess } from '@/components/save-success';
+import { saveFeedbackMessage } from '@/lib/save-feedback';
 
 export const dynamic = 'force-dynamic';
 
-export default async function TaskPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ created?: string }> }) {
+export default async function TaskPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string }> }) {
   const id = Number((await params).id);
   if (!Number.isSafeInteger(id) || id < 1) notFound();
   const [task, query, actor] = await Promise.all([
@@ -25,7 +27,7 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
   ];
   return <Content>
     <PageHeader eyebrow="Tasks" title={task.subject} action={<div className="flex gap-2"><Link className="btn-secondary" href="/tasks">All tasks</Link>{can(actor, 'tasks.write') && <Link className="btn-primary" href={`/tasks/${id}/edit`}>Edit task</Link>}</div>}/>
-    {query.created === '1' && <p role="status" className="mb-5 rounded border border-green-300 bg-green-50 p-4 text-sm font-semibold text-green-900">Task created successfully.</p>}
+    {saveFeedbackMessage(query.saved, 'Task') && <SaveSuccess message={saveFeedbackMessage(query.saved, 'Task')!}/>}
     <section className="panel space-y-5 p-6">
       {task.archivedAt && <span className="inline-block rounded bg-slate-100 px-3 py-1 text-sm font-semibold">Archived</span>}
       {taskTiming(task) && !task.archivedAt && <p className="text-sm font-semibold text-red-700">{taskTiming(task)}</p>}

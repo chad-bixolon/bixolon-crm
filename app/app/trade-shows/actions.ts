@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { requireMutation } from '@/lib/current-user';
 import { parseTradeShow, saveTradeShow, setTradeShowArchived, tradeShowFailureState } from '@/lib/trade-shows';
 import { friendlyError } from '@/lib/crm-validation';
+import { saveFeedbackPath } from '@/lib/save-feedback';
 
 export type TradeShowFormState = { errors: Record<string, string>; message?: string; redirectTo?: string; values?: Record<string, string> };
 
@@ -14,7 +15,7 @@ export async function submitTradeShow(id: number | null, _old: TradeShowFormStat
   try {
     const showId = await saveTradeShow(prisma, parsed.value, actor, id ?? undefined);
     revalidatePath('/trade-shows'); revalidatePath(`/trade-shows/${showId}`);
-    return { errors: {}, redirectTo: `/trade-shows/${showId}` };
+    return { errors: {}, redirectTo: saveFeedbackPath(`/trade-shows/${showId}`, id ? 'updated' : 'created') };
   } catch (error) {
     return tradeShowFailureState(form, {}, friendlyError(error, 'Trade Show could not be saved.'));
   }

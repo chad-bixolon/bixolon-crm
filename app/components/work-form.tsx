@@ -5,6 +5,7 @@ import { submitActivity } from '@/app/activities/actions';
 import { submitNote, archiveNote, reactivateNote } from '@/app/notes/actions';
 import { useSubmitGuard } from '@/lib/submit-guard';
 import { activityChoices, retainedActivitySelections, type RelatedOption } from '@/lib/activity-relations';
+import { SaveSuccessFromQuery } from '@/components/save-success';
 type Option = { id: number; name: string };
 type Props = { kind: 'task'|'activity'|'note'; id?: number; createKey?: string; initial?: Record<string, string | number | null>; accounts: Option[]; opportunities: RelatedOption[]; projects: RelatedOption[]; users: Option[]; contacts?: (Option & { accountId: number | null; active: boolean })[]; linkedContactIds?: number[]; activityTypes?: { code: string; name: string }[]; lockAccountId?: number; lockOpportunityId?: number; lockProjectId?: number };
 export function WorkForm({ kind, id, createKey, initial = {}, accounts, opportunities, projects, users, contacts = [], linkedContactIds = [], activityTypes = [], lockAccountId, lockOpportunityId, lockProjectId }: Props) {
@@ -44,7 +45,7 @@ export function WorkForm({ kind, id, createKey, initial = {}, accounts, opportun
     setSelectedOpportunityId(kept.opportunityId); setSelectedProjectId(kept.projectId);
   }
   const activitySelect = (key: 'opportunityId'|'projectId', label: string, items: RelatedOption[], selected: number, change: (id: number) => void) => <div><label className="label" htmlFor={key}>{label}</label><select className="field" id={key} name={key} value={selected || ''} onChange={event => change(Number(event.target.value))}><option value="">None</option>{state.errors[key] && selected && !items.some(item => item.id === selected) && <option value={selected}>{label} #{selected} (review relationship)</option>}{items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{state.errors[key] && <p className="text-sm text-red-700">{state.errors[key]}</p>}</div>;
-  return <><form key={JSON.stringify(state.values ?? {})} action={action} onSubmit={guard} className="panel grid gap-4 p-6 sm:grid-cols-2">
+  return <>{kind==='task'&&id&&<SaveSuccessFromQuery recordName="Task"/>}<form key={JSON.stringify(state.values ?? {})} action={action} onSubmit={guard} className="panel grid gap-4 p-6 sm:grid-cols-2">
     {createKey && !id && <input type="hidden" name="createKey" value={createKey}/>}
     {kind !== 'note' && <div className="sm:col-span-2"><label className="label" htmlFor="subject">Subject</label><input className="field" id="subject" name="subject" defaultValue={val('subject')} required maxLength={200}/>{state.errors.subject && <p className="text-sm text-red-700">{state.errors.subject}</p>}</div>}
     {kind === 'note' ? <div className="sm:col-span-2"><label className="label" htmlFor="body">Note</label><textarea className="field min-h-32" id="body" name="body" defaultValue={val('body')} required maxLength={10000}/>{state.errors.body && <p className="text-sm text-red-700">{state.errors.body}</p>}</div> : <div className="sm:col-span-2"><label className="label" htmlFor="description">Description</label><textarea className="field min-h-24" id="description" name="description" defaultValue={val('description')} maxLength={5000}/>{state.errors.description && <p className="text-sm text-red-700">{state.errors.description}</p>}</div>}

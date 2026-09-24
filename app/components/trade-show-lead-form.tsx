@@ -5,6 +5,7 @@ import { useActionState, useEffect, useState } from 'react';
 import { submitTradeShowLead, type TradeShowLeadFormState } from '@/app/trade-shows/[id]/leads/[leadId]/actions';
 import { useSubmitGuard } from '@/lib/submit-guard';
 import type { TradeShowLeadRouting, TradeShowLeadStatus } from '@prisma/client';
+import { SaveSuccess, useQueryValue } from '@/components/save-success';
 
 type Option = { id: number; name: string };
 type Lead = {
@@ -32,11 +33,13 @@ export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, partnerA
   const [routing,setRouting]=useState<TradeShowLeadRouting>((state.values?.routing as TradeShowLeadRouting|undefined)??initial.routing);
   const [partnerSearch,setPartnerSearch]=useState('');
   useEffect(() => { if (state.redirectTo) router.push(state.redirectTo); }, [state.redirectTo, router]);
+  const saved=useQueryValue('saved'),savedId=Number(useQueryValue('savedId'));
+  const createdRecord=Number.isSafeInteger(savedId)&&savedId>0&&saved==='account'?{name:'Account',path:'accounts',id:savedId}:Number.isSafeInteger(savedId)&&savedId>0&&saved==='contact'?{name:'Contact',path:'contacts',id:savedId}:null;
   const val = (key: string, fallback = '') => state.values?.[key] ?? fallback;
   const error = (key: string) => state.errors[key] && <p className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
   const textarea = (key: string, label: string, current: string | null, limit: number, rows = 3) => <div className="min-w-0"><label className="label" htmlFor={key}>{label}</label><textarea className="field min-h-20 resize-y" rows={rows} id={key} name={key} maxLength={limit} defaultValue={val(key, current ?? '')}/>{error(key)}</div>;
   const select = (key: string, label: string, current: number | null, options: Option[], emptyLabel: string, inactiveLabel: string) => <div className="min-w-0"><label className="label" htmlFor={key}>{label}</label><select className="field h-11 min-w-0" id={key} name={key} defaultValue={val(key, current?.toString() ?? '')}><option value="">{emptyLabel}</option>{options.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}{current && !options.some(option => option.id === current) && <option value={current}>{inactiveLabel}</option>}</select>{error(key)}</div>;
-  return <form key={JSON.stringify(state.values ?? {})} action={action} onSubmit={guard} className="panel max-w-5xl space-y-7 p-5 sm:p-6" aria-label="Edit Trade Show Lead">
+  return <>{createdRecord&&<SaveSuccess message={`${createdRecord.name} created successfully.`} action={{href:`/${createdRecord.path}/${createdRecord.id}`,label:`Open ${createdRecord.name}`}}/>}<form key={JSON.stringify(state.values ?? {})} action={action} onSubmit={guard} className="panel max-w-5xl space-y-7 p-5 sm:p-6" aria-label="Edit Trade Show Lead">
     {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     <section><h2 className="mb-3 text-lg font-semibold">Status &amp; Follow-Up</h2><div className="grid min-w-0 gap-5 sm:grid-cols-2">
       <div className="min-w-0"><label className="label" htmlFor="status">Status</label><select className="field h-11 min-w-0" id="status" name="status" defaultValue={val('status', initial.status)}>{statuses.filter(status => initial.status === 'CONVERTED' ? status === 'CONVERTED' : status !== 'CONVERTED').map(status => <option key={status} value={status}>{statusLabels[status]}</option>)}</select>{error('status')}</div>
@@ -59,5 +62,5 @@ export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, partnerA
     </div></section>
     {canResolve && <section><h2 className="mb-1 text-lg font-semibold">CRM Resolution</h2><p className="mb-4 text-sm text-slate-600">Link this lead to existing CRM records or create reviewed records from the source data.</p><div className="grid min-w-0 gap-5 sm:grid-cols-2"><div className="min-w-0">{select('accountId', 'Account', initial.accountId, accounts, 'Not linked', 'Current account (inactive)')}<Link className="mt-2 inline-flex text-sm font-medium text-orange-800 underline" href={`/trade-shows/${tradeShowId}/leads/${leadId}/account/new`}>Create Account</Link></div><div className="min-w-0">{select('contactId', 'Contact', initial.contactId, contacts, 'Not linked', 'Current contact (inactive)')}<Link className="mt-2 inline-flex text-sm font-medium text-orange-800 underline" href={`/trade-shows/${tradeShowId}/leads/${leadId}/contact/new`}>Create Contact</Link></div><p className="text-xs text-slate-600 sm:col-span-2">A Contact assigned to another Account cannot be linked here. This workflow never reassigns a Contact automatically.</p></div></section>}
     <div className="flex flex-wrap justify-end gap-2"><Link className="btn-secondary" href={`/trade-shows/${tradeShowId}/leads/${leadId}`}>Cancel</Link><button className="btn-primary" type="submit" disabled={pending}>{pending ? 'Saving…' : 'Save Lead'}</button></div>
-  </form>;
+  </form></>;
 }

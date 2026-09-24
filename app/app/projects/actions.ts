@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { requireMutation } from '@/lib/current-user';
 import { parseProject, projectFailureState, saveProject, setProjectArchived } from '@/lib/projects';
 import { friendlyError } from '@/lib/crm-validation';
+import { saveFeedbackPath } from '@/lib/save-feedback';
 
 export type ProjectFormState = { errors: Record<string, string>; message?: string; redirectTo?: string; values?: Record<string, string> };
 export async function submitProject(id: number | null, _old: ProjectFormState, form: FormData): Promise<ProjectFormState> {
@@ -14,7 +15,7 @@ export async function submitProject(id: number | null, _old: ProjectFormState, f
     const projectId = await saveProject(prisma, parsed.value, actor, id ?? undefined);
     revalidatePath('/projects'); revalidatePath('/accounts'); revalidatePath('/opportunities'); revalidatePath('/pipeline');
     revalidatePath(`/projects/${projectId}`);
-    return { errors: {}, redirectTo: `/projects/${projectId}` };
+    return { errors: {}, redirectTo: saveFeedbackPath(`/projects/${projectId}`, id ? 'updated' : 'created') };
   } catch (error) { return projectFailureState(form, {}, friendlyError(error, 'Project could not be saved.')); }
 }
 export async function changeProjectArchive(id: number, archive: boolean, _old: ProjectFormState): Promise<ProjectFormState> {

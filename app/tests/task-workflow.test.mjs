@@ -26,6 +26,8 @@ Module._load=function(name,parent,isMain){
  if(name==='@/lib/authorization') return {can:()=>true};
  if(name==='@/components/shell') return {Content:({children})=>React.createElement('main',null,children),PageHeader:({title,action})=>React.createElement('header',null,React.createElement('h1',null,title),action)};
  if(name==='@/components/work-form') return {WorkForm:()=>React.createElement('form'),ReactivateTask:()=>React.createElement('button',null,'Reactivate task')};
+ if(name==='@/components/save-success') return {SaveSuccess:({message})=>React.createElement('p',{role:'status'},message)};
+ if(name==='@/lib/save-feedback') return require(path.join(root,'lib/save-feedback.ts'));
  if(name==='@/lib/work-options') return {workOptions:async()=>({accounts:[],opportunities:[],users:[]})};
  return originalLoad.call(this,name,parent,isMain);
 };
@@ -40,8 +42,8 @@ test('successful create redirects to Task detail with visible success feedback',
  prisma.task.create=async({data})=>{creates++;row={id:7,...data};return row;};
  prisma.$transaction=async(fn)=>fn({task:prisma.task});
  const data=form([['subject','Follow up'],['status','OPEN'],['priority','NORMAL'],['createKey','d7054358-5d57-4398-8550-506157266184']]);
- await assert.rejects(actions.submitTask(null,{errors:{}},data),error=>error.destination==='/tasks/7?created=1');
- const html=renderToStaticMarkup(await taskPage.default({params:Promise.resolve({id:'7'}),searchParams:Promise.resolve({created:'1'})}));
+ await assert.rejects(actions.submitTask(null,{errors:{}},data),error=>error.destination==='/tasks/7?saved=created');
+ const html=renderToStaticMarkup(await taskPage.default({params:Promise.resolve({id:'7'}),searchParams:Promise.resolve({saved:'created'})}));
  assert.match(html,/Task created successfully\./);
  assert.match(html,/role="status"/);
  assert.match(html,/Follow up/);
@@ -62,7 +64,7 @@ test('repeated Task submission with the same create key produces one Task',async
  prisma.task.findUnique=async({where})=>row && (row.createKey===where.createKey || row.id===where.id)?row:null;
  prisma.task.create=async({data})=>{creates++;row={id:7,...data};return row;};
  const data=form([['subject','Follow up'],['status','OPEN'],['priority','NORMAL'],['createKey','d7054358-5d57-4398-8550-506157266184']]);
- for(let i=0;i<2;i++) await assert.rejects(actions.submitTask(null,{errors:{}},data),error=>error.destination==='/tasks/7?created=1');
+ for(let i=0;i<2;i++) await assert.rejects(actions.submitTask(null,{errors:{}},data),error=>error.destination==='/tasks/7?saved=created');
  assert.equal(creates,1);
 });
 test('editing an existing Task still returns to its edit page',async()=>{
@@ -71,7 +73,7 @@ test('editing an existing Task still returns to its edit page',async()=>{
  prisma.task.update=async({data})=>(row={...row,...data});
  prisma.$transaction=async(fn)=>fn({task:prisma.task});
  const data=form([['subject','After'],['status','OPEN'],['priority','NORMAL']]);
- await assert.rejects(actions.submitTask(7,{errors:{}},data),error=>error.destination==='/tasks/7/edit');
+ await assert.rejects(actions.submitTask(7,{errors:{}},data),error=>error.destination==='/tasks/7/edit?saved=updated');
  assert.equal(row.subject,'After');
 });
 test('archive redirects to tasks, and direct archived detail renders reactivation',async()=>{

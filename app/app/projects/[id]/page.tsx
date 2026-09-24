@@ -9,9 +9,11 @@ import { can } from '@/lib/authorization';
 import { canEditProject, projectOpportunitiesWhere, projectReadWhere, projectRoleLabels, projectStatusLabels } from '@/lib/projects';
 import { ProjectOpportunityLinks } from '@/components/project-opportunity-links';
 import { changeProjectOpportunity } from './opportunity-actions';
+import { SaveSuccess } from '@/components/save-success';
+import { saveFeedbackMessage } from '@/lib/save-feedback';
 export const dynamic = 'force-dynamic';
 const tabs = ['Overview', 'Participants', 'Opportunities', 'Tasks', 'Activities', 'Notes', 'Products'] as const;
-export default async function ProjectPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; tasksView?: string; activitiesView?: string; notesView?: string }> }) {
+export default async function ProjectPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; tasksView?: string; activitiesView?: string; notesView?: string; saved?: string }> }) {
   const actor = await currentUser(), id = Number((await params).id), query = await searchParams;
   if (!Number.isSafeInteger(id) || id < 1) notFound();
   const project = await prisma.project.findFirst({ where: { AND: [{ id }, projectReadWhere(actor)] }, include: {
@@ -29,7 +31,9 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   const productRows = opportunities.flatMap(o => o.products.map(line => ({ opportunity: o, line })));
   const editable = canEditProject(actor, project);
   const visibleTabs = tabs.filter(t => !(['Opportunities', 'Products'].includes(t) && !canSeeSales) && !(['Tasks', 'Activities', 'Notes'].includes(t) && !canSeeWork));
+  const saveMessage = saveFeedbackMessage(query.saved, 'Project');
   return <Content><PageHeader eyebrow="Projects" title={project.name} description={`Project #${id}`} action={<div className="flex gap-2"><Link className="btn-secondary" href="/projects">All Projects</Link>{editable && !project.archivedAt && <Link className="btn-primary" href={`/projects/${id}/edit`}>Edit Project</Link>}</div>}/>
+    {saveMessage && <SaveSuccess message={saveMessage}/>}
     <div className="panel mb-5 flex flex-wrap items-center justify-between gap-3 p-5"><div className="flex gap-2"><span className="rounded bg-slate-100 px-3 py-1 text-sm">{projectStatusLabels[project.status]}</span>{project.archivedAt && <span className="rounded bg-slate-100 px-3 py-1 text-sm">Archived</span>}</div>{editable && <ProjectArchiveControl id={id} archived={!!project.archivedAt}/>}</div>
     <nav aria-label="Project sections" className="mb-5 flex gap-1 overflow-x-auto border-b">{visibleTabs.map(t => <Link key={t} href={`/projects/${id}?tab=${t.toLowerCase()}`} aria-current={tab === t ? 'page' : undefined} className={`whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium ${tab === t ? 'border-orange-600 text-orange-800' : 'border-transparent text-slate-600'}`}>{t}</Link>)}</nav>
     {tab === 'Overview' && <div className="panel p-6"><h2 className="mb-4 text-lg font-semibold">Overview</h2><dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">

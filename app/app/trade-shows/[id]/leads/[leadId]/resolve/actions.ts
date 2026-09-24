@@ -27,12 +27,13 @@ export async function createAccountForTradeShowLead(tradeShowId:number,leadId:nu
   const refs=await checkAccountReferences(prisma,parsed.value); if(Object.keys(refs).length)return {errors:refs,message:'Please correct the highlighted fields.'};
   const matches=(await findAccountNameMatches(prisma,parsed.value.name)).filter(match=>!match.archivedAt);
   if(matches.length&&!form.has('confirmDuplicate')) return {errors:{name:'A likely duplicate exists. Review the matches above, link one from the Lead editor, or explicitly confirm a new Account.'},message:'Duplicate review is required.'};
+  let accountId:number;
   try {
-    const accountId=await saveAccount(prisma,parsed.value,undefined,actor.id);
+    accountId=await saveAccount(prisma,parsed.value,undefined,actor.id);
     await prisma.tradeShowLead.update({where:{id:leadId},data:{accountId}});
     revalidatePath(`/trade-shows/${tradeShowId}/leads/${leadId}`);
   } catch(error) { return {errors:{},message:friendlyError(error,'Account could not be created.')}; }
-  redirect(`/trade-shows/${tradeShowId}/leads/${leadId}/edit`);
+  redirect(`/trade-shows/${tradeShowId}/leads/${leadId}/edit?saved=account&savedId=${accountId}`);
 }
 export async function createContactForTradeShowLead(tradeShowId:number,leadId:number,_state:State,form:FormData):Promise<State> {
   const {actor,lead}=await editableLead(tradeShowId,leadId);
@@ -41,11 +42,12 @@ export async function createContactForTradeShowLead(tradeShowId:number,leadId:nu
   if(lead.accountId&&parsed.value.accountId&&lead.accountId!==parsed.value.accountId)return {errors:{accountId:'Choose the resolved Lead Account, or return and resolve the Account first.'},message:'Account and Contact must be consistent.',values};
   const matches=parsed.value.email?await prisma.contact.findMany({where:{email:{equals:parsed.value.email,mode:'insensitive'},archivedAt:null},select:{id:true}}):[];
   if(matches.length&&!form.has('confirmDuplicate'))return {errors:{email:'An exact email match exists. Link the existing Contact from the Lead editor, or explicitly confirm a new Contact.'},message:'Duplicate review is required.',values};
+  let contactId:number;
   try {
     // Trade Show resolution never infers consent; the new Contact remains UNKNOWN.
-    const contactId=await saveContact(prisma,{...parsed.value,marketingPreference:'UNKNOWN'},undefined,actor);
+    contactId=await saveContact(prisma,{...parsed.value,marketingPreference:'UNKNOWN'},undefined,actor);
     await prisma.tradeShowLead.update({where:{id:leadId},data:{contactId}});
     revalidatePath(`/trade-shows/${tradeShowId}/leads/${leadId}`);
   } catch(error) { return {errors:{},message:friendlyError(error,'Contact could not be created.'),values}; }
-  redirect(`/trade-shows/${tradeShowId}/leads/${leadId}/edit`);
+  redirect(`/trade-shows/${tradeShowId}/leads/${leadId}/edit?saved=contact&savedId=${contactId}`);
 }

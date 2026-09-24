@@ -11,8 +11,10 @@ import { daysSince } from "@/lib/engagement";
 import { formatCurrency } from "@/lib/display-format";
 import { currentUser } from "@/lib/current-user";
 import { canViewPriceException } from "@/lib/price-exception-visibility";
+import { SaveSuccess } from "@/components/save-success";
+import { saveFeedbackMessage } from "@/lib/save-feedback";
 export const dynamic = "force-dynamic";
-export default async function OpportunityPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tasksView?: string; activitiesView?: string; notesView?: string }> }) {
+export default async function OpportunityPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tasksView?: string; activitiesView?: string; notesView?: string; saved?: string }> }) {
   const id = Number((await params).id); if (!Number.isSafeInteger(id) || id <= 0) notFound();
   const actor = await currentUser();
   const workViews = await searchParams;
@@ -20,7 +22,9 @@ export default async function OpportunityPage({ params, searchParams }: { params
   const partyLabels = opportunityPartyLabels(await getLabels(prisma));
   const lastActivity = await prisma.activity.findFirst({where:{opportunityId:id,archivedAt:null},orderBy:[{activityDate:'desc'},{id:'desc'}],select:{activityDate:true}});
   const total = opportunityTotal(o.products), probability = o.probability ?? o.stage.probability;
+  const saveMessage = saveFeedbackMessage(workViews.saved, 'Opportunity');
   return <Content><PageHeader eyebrow="Opportunities" title={o.name} description={`Opportunity #${id}`} action={<div className="flex gap-2"><Link className="btn-secondary" href="/opportunities">All opportunities</Link>{!o.archivedAt && (actor.role !== "SALES" || o.ownerId === actor.id) && <Link className="btn-primary" href={`/opportunities/${id}/edit`}>Edit opportunity</Link>}</div>}/>
+    {saveMessage && <SaveSuccess message={saveMessage}/>}
     <div className="panel mb-5 p-4 text-sm">Projects: {o.projects.length ? o.projects.map(link => <Link key={link.projectId} className="mr-3 font-semibold text-orange-800" href={`/projects/${link.projectId}`}>{link.project.name}</Link>) : "None"}</div>
     <div className="panel mb-5 flex flex-wrap items-center gap-3 p-5"><span className="rounded bg-slate-100 px-3 py-1 text-sm">{o.archivedAt ? "Archived" : "Current"}</span><CrmStateControl kind="opportunity" id={id} state={o.archivedAt ? "archived" : "active"}/></div>
     <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><div className="panel p-5"><div className="label">Total estimated value</div><div className="text-xl font-semibold">{formatCurrency(total, o.currencyCode)}</div></div><div className="panel p-5"><div className="label">Weighted value</div><div className="text-xl font-semibold">{formatCurrency(weightedValue(total, probability), o.currencyCode)}</div></div><div className="panel p-5"><div className="label">Sales stage</div><div className="text-lg font-semibold">{o.stage.name}</div></div><div className="panel p-5"><div className="label">Probability</div><div className="text-lg font-semibold">{probability}%{o.probability !== null ? " override" : " stage"}</div></div></div>

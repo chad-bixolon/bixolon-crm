@@ -6,6 +6,7 @@ import { previewTradeShowAction, previewMappedTradeShowAction, reviewTradeShowCo
 import type { ImportChoice } from '@/lib/trade-show-import';
 import { MAPPING_DESTINATIONS, REVIEWABLE_LEAD_FIELDS, type MappingDefinition, type MappingDestination, type ReviewableLeadField } from '@/lib/trade-show-import-fields';
 import type { TradeShowImportFormat, TradeShowLeadRouting } from '@prisma/client';
+import { SaveSuccess } from '@/components/save-success';
 
 type Plan = NonNullable<Awaited<ReturnType<typeof previewTradeShowAction>>['plan']>;
 type MappingRequest = NonNullable<Awaited<ReturnType<typeof previewTradeShowAction>>['mappingRequired']>;
@@ -226,10 +227,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
 
     {message && <p role="alert" className="rounded border border-red-300 bg-red-50 p-4 text-sm text-red-900">{message}</p>}
 
-    {result && <section className="panel max-w-3xl p-5">
-      <h2 className="font-semibold">Import Complete</h2>
-      <p className="text-sm">{result.created} new · {result.existing} existing · {result.skipped} skipped. <a className="text-orange-800 underline" href={`/trade-shows/${showId}`}>View Trade Show</a></p>
-    </section>}
+    {result && <div className="max-w-3xl"><SaveSuccess message={`${result.created} Trade Show lead${result.created === 1 ? '' : 's'} imported successfully.`} action={{href:`/trade-shows/${showId}`,label:'View Event Leads'}}/><p className="-mt-3 text-sm text-slate-600">{result.existing} existing · {result.skipped} skipped.</p></div>}
 
     {mappingRequired&&mappingDefinition&&<section className="panel min-w-0 max-w-5xl p-5">
       <h2 className="text-lg font-semibold">Column Mapping Required</h2>

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { currentUser } from "@/lib/current-user";
 import { audienceContactWhere, audienceVisibilities, canManageAudience, canViewAudience, parseAudienceForm } from "@/lib/marketing-audiences";
+import { saveFeedbackPath } from "@/lib/save-feedback";
 
 export type AudienceFormState={message?:string};
 function positive(value:FormDataEntryValue|null){const id=Number(value);return Number.isSafeInteger(id)&&id>0?id:null;}
@@ -20,7 +21,7 @@ export async function saveAudience(_state:AudienceFormState,form:FormData):Promi
   let id:number;
   if(audienceId){const existing=await prisma.marketingAudience.findUnique({where:{id:audienceId}});if(!existing||!canManageAudience(actor,existing))throw new Error("Access denied");const updated=await prisma.marketingAudience.update({where:{id:audienceId},data:{name,description,visibility:visibility as never,filterConfig:config as Prisma.InputJsonValue,updatedById:actor.id}});id=updated.id;}
   else{id=(await prisma.marketingAudience.create({data:{name,description,visibility:visibility as never,filterConfig:config as Prisma.InputJsonValue,ownerId:actor.id,createdById:actor.id,updatedById:actor.id}})).id;}
-  revalidatePath("/marketing/audiences");redirect(`/marketing/audiences/${id}`);
+  revalidatePath("/marketing/audiences");redirect(saveFeedbackPath(`/marketing/audiences/${id}`,audienceId?"updated":"created"));
 }
 
 export async function duplicateAudience(form:FormData){const sourceId=positive(form.get("audienceId"));if(!sourceId)throw new Error("Invalid audience.");const actor=await currentUser(),source=await prisma.marketingAudience.findUnique({where:{id:sourceId}});if(!source||!canViewAudience(actor,source)||!canManageAudience(actor))throw new Error("Access denied");const copy=await prisma.$transaction(async tx=>{const created=await tx.marketingAudience.create({data:{name:`${source.name} (copy)`.slice(0,120),description:source.description,visibility:"PERSONAL",filterConfig:source.filterConfig as Prisma.InputJsonValue,ownerId:actor.id,createdById:actor.id,updatedById:actor.id}});const overrides=await tx.marketingAudienceContactOverride.findMany({where:{audienceId:source.id}});if(overrides.length)await tx.marketingAudienceContactOverride.createMany({data:overrides.map(x=>({audienceId:created.id,contactId:x.contactId,kind:x.kind}))});return created;});revalidatePath("/marketing/audiences");redirect(`/marketing/audiences/${copy.id}`);}

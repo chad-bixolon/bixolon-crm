@@ -5,6 +5,7 @@ import { parseAccountForm } from "@/lib/account-validation";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireMutation } from "@/lib/current-user";
+import { saveFeedbackPath } from "@/lib/save-feedback";
 
 export type FormState = { errors: Record<string, string>; message?: string };
 export async function submitAccount(id: number | null, _state: FormState, form: FormData): Promise<FormState> {
@@ -18,7 +19,7 @@ export async function submitAccount(id: number | null, _state: FormState, form: 
   catch (error) { return { errors: {}, message: error instanceof Error && /Reactivate|not found/.test(error.message) ? error.message : "Account could not be saved. Please try again." }; }
   revalidatePath("/accounts");
   revalidatePath(`/accounts/${accountId}`);
-  redirect(`/accounts/${accountId}`);
+  redirect(saveFeedbackPath(`/accounts/${accountId}`, id ? "updated" : "created"));
 }
 export async function changeArchiveState(id: number, archive: boolean, _state: FormState): Promise<FormState> {
   void _state;

@@ -47,8 +47,10 @@ test('Trade Show form uses the shared required timezone dropdown and safely repr
 
 test('Trade Show Event Leads uses compact responsive filters and six combined table columns', () => {
   const page = fs.readFileSync(path.join(root, 'app/trade-shows/[id]/page.tsx'), 'utf8');
-  assert.match(page, /bg-orange-50\/60/);
-  assert.match(page, /grid-cols-1[^"']*sm:grid-cols-2[^"']*lg:grid-cols-3[^"']*2xl:grid-cols-4/);
+  assert.match(page, /filter-panel/);
+  assert.match(page, /filter-grid/);
+  assert.match(page, /field filter-control/);
+  assert.match(page, /btn-filter-primary/);
   assert.match(page, /TableScroll label="Trade Show leads"/);
   assert.match(page, /\['Lead','Company','Contact','Assigned Sales Rep','Status','CRM \/ Follow-Up'\]/);
   assert.match(page, /min-w-\[960px\][^"']*table-fixed/);

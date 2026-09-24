@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { parseOpportunity, saveOpportunity, setOpportunityArchived } from "@/lib/opportunities";
 import { friendlyError } from "@/lib/crm-validation";
 import { requireMutation } from '@/lib/current-user';
+import { saveFeedbackPath } from '@/lib/save-feedback';
 export type FormState = { errors: Record<string, string>; message?: string; redirectTo?: string };
 export async function submitOpportunity(id: number | null, _state: FormState, form: FormData): Promise<FormState> {
   const actor = await requireMutation('sales.write');
@@ -12,7 +13,7 @@ export async function submitOpportunity(id: number | null, _state: FormState, fo
   try { opportunityId = await saveOpportunity(prisma, parsed.value, id ?? undefined, actor); }
   catch (error) { return { errors: {}, message: friendlyError(error, "Opportunity could not be saved. Check participant and product references.") }; }
   revalidatePath("/opportunities"); revalidatePath("/accounts"); if (id) revalidatePath(`/opportunities/${id}`);
-  return { errors: {}, redirectTo: `/opportunities/${opportunityId}` };
+  return { errors: {}, redirectTo: saveFeedbackPath(`/opportunities/${opportunityId}`, id ? 'updated' : 'created') };
 }
 export async function changeOpportunityArchive(id: number, archive: boolean, _old: FormState): Promise<FormState> {
   const actor = await requireMutation('sales.write');

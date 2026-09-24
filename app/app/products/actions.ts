@@ -6,6 +6,7 @@ import { parseProduct, saveProduct, setProductState } from "@/lib/products";
 import { friendlyError } from "@/lib/crm-validation";
 import { requireMutation } from '@/lib/current-user';
 import { DuplicateSkuError, parseSkuMetadataForm, saveSkuMetadata } from '@/lib/odm-skus';
+import { saveFeedbackPath } from '../../lib/save-feedback';
 export type ProductSubmittedValues = {
   name: string; categoryId: string; sku: string; description: string; catalogSource: string; active: string;
   odmSubtype: string; baseSkuId: string; baseSkuLabel: string;
@@ -35,7 +36,7 @@ export async function submitProduct(id: number | null, _state: FormState, form: 
     if (error instanceof DuplicateSkuError) return { errors: {}, message: `${error.message}${error.existing.catalogSource === 'ODM' ? ' Edit the existing ODM SKU to add customer associations.' : ''}`, existingSku: { href: `/products/${error.existing.productId}/edit#sku-${error.existing.id}`, label: `${error.existing.productName} / ${error.existing.partNumber}` }, values };
     return { errors: {}, message: friendlyError(error, "Product could not be saved. Check that the SKU is unique."), values };
   }
-  revalidatePath("/products"); redirect(`/products/${productId}/edit`);
+  revalidatePath("/products"); redirect(saveFeedbackPath(`/products/${productId}/edit`, id ? "updated" : "created"));
 }
 export async function changeProductState(id: number, state: "active" | "inactive" | "archived", _old: FormState): Promise<FormState> {
   void _old;
@@ -57,5 +58,5 @@ export async function submitProductSku(productId: number, skuId: number | null, 
     return { errors: {}, message: friendlyError(error, 'SKU could not be saved.'), values };
   }
   revalidatePath('/products'); revalidatePath(`/products/${productId}/edit`);
-  redirect(`/products/${productId}/edit#sku-${savedId}`);
+  redirect(saveFeedbackPath(`/products/${productId}/edit#sku-${savedId}`, 'updated'));
 }

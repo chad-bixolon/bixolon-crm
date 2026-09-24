@@ -7,12 +7,14 @@ import { can } from '@/lib/authorization';
 import { canEditTradeShowLead, tradeShowLeadReadWhere } from '@/lib/trade-shows';
 import { canConvertTradeShowLead } from '@/lib/trade-show-conversion';
 import type { TradeShowImportFormat, TradeShowLeadRouting, TradeShowLeadStatus } from '@prisma/client';
+import { SaveSuccess } from '@/components/save-success';
+import { saveFeedbackMessage } from '@/lib/save-feedback';
 
 export const dynamic = 'force-dynamic';
 const statusLabels: Record<TradeShowLeadStatus, string> = { NEW: 'New', CONTACTED: 'Contacted', QUALIFIED: 'Qualified', CONVERTED: 'Converted', DISQUALIFIED: 'Disqualified' };
 const routingLabels:Record<TradeShowLeadRouting,string>={UNREVIEWED:'Unreviewed',BIXOLON_SALES:'BIXOLON Sales',REFERRED_TO_PARTNER:'Referred to Partner',MARKETING_FOLLOW_UP:'Marketing Follow-Up'};
 const sourceFormatLabels: Record<TradeShowImportFormat, string> = { NRA_NRF: 'NRA / NRF', XPRESSLEADS_MODEX: 'MODEX / XPressLeads', CUSTOM_MAPPING: 'Custom mapping' };
-export default async function TradeShowLeadPage({ params }: { params: Promise<{ id: string; leadId: string }> }) {
+export default async function TradeShowLeadPage({ params, searchParams }: { params: Promise<{ id: string; leadId: string }>; searchParams: Promise<{ saved?: string }> }) {
   const actor = await currentUser();
   const { id: rawShowId, leadId: rawLeadId } = await params;
   const tradeShowId = Number(rawShowId), id = Number(rawLeadId);
@@ -33,7 +35,9 @@ export default async function TradeShowLeadPage({ params }: { params: Promise<{ 
   const canLinkOpportunity = can(actor, 'sales.read') && (actor.role !== 'SALES' || lead.convertedOpportunity?.ownerId === actor.id);
   const canConvert = !lead.tradeShow.archivedAt && !lead.convertedOpportunityId && !!lead.accountId && canConvertTradeShowLead(actor, lead);
   const row = (label: string, value: React.ReactNode, fullWidth = false) => <div className={fullWidth ? 'min-w-0 sm:col-span-2' : 'min-w-0'}><dt className="label">{label}</dt><dd className="whitespace-pre-wrap break-words text-sm text-slate-800">{value || '—'}</dd></div>;
+  const saveMessage = saveFeedbackMessage((await searchParams).saved, 'Trade Show Lead');
   return <Content><PageHeader eyebrow={lead.tradeShow.name} title={`${lead.firstName} ${lead.lastName}`} description={`Trade Show Lead #${lead.id}`} action={<div className="flex flex-wrap justify-end gap-2"><Link className="btn-secondary" href={`/trade-shows/${tradeShowId}`}>Back to Trade Show</Link>{!lead.tradeShow.archivedAt && canEditTradeShowLead(actor, lead) && <Link className="btn-primary" href={`/trade-shows/${tradeShowId}/leads/${lead.id}/edit`}>Edit Lead</Link>}</div>}/>
+    {saveMessage && <SaveSuccess message={saveMessage}/>}
     <div className="grid gap-5 lg:grid-cols-2">
       <section className="panel p-5"><h2 className="mb-4 text-lg font-semibold">Lead</h2><dl className="grid gap-4 sm:grid-cols-2">{row('Name', `${lead.firstName} ${lead.lastName}`)}{row('Title', lead.title)}{row('Email', lead.email)}{row('Phone', lead.phone)}</dl></section>
       <section className="panel p-5"><h2 className="mb-4 text-lg font-semibold">Company</h2><dl className="grid gap-4 sm:grid-cols-2">{row('Source Company', lead.sourceCompany)}{row('Website', lead.sourceCompanyWebsite)}{row('Address', [lead.addressLine1, lead.addressLine2].filter(Boolean).join(', '))}{row('Location', [lead.city, lead.stateProvince, lead.postalCode, lead.country].filter(Boolean).join(', '))}</dl></section>

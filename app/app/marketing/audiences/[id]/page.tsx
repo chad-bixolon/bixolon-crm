@@ -7,20 +7,23 @@ import { audienceContactInclude, audienceSummary, canExportAudience, canManageAu
 import { marketingPreferenceLabels } from "@/lib/contacts";
 import { prisma } from "@/lib/prisma";
 import { clearAudienceSelection, duplicateAudience, includeContact, selectAllMatching, setAudienceArchived, setContactSelection } from "../actions";
+import { SaveSuccess } from "@/components/save-success";
+import { saveFeedbackMessage } from "@/lib/save-feedback";
 export const dynamic="force-dynamic";
 const PAGE_SIZE=50;
-export default async function AudiencePage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{page?:string}>}){
+export default async function AudiencePage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{page?:string;saved?:string}>}){
   const id=Number((await params).id),actor=await currentUser();if(!Number.isSafeInteger(id)||id<=0)notFound();
   const audience=await prisma.marketingAudience.findUnique({where:{id},include:{owner:true}});if(!audience||!canViewAudience(actor,audience))notFound();
   let config;try{config=validateAudienceConfig(audience.filterConfig);}catch(error){return <Content><PageHeader eyebrow="Marketing Audiences" title={audience.name} action={<Link className="btn-secondary" href="/marketing/audiences">All audiences</Link>}/><div role="alert" className="panel border-red-200 p-6 text-red-800"><strong>These saved filters cannot run safely.</strong><p className="mt-2 text-sm">{error instanceof Error?error.message:"The configuration is invalid."}</p>{canManageAudience(actor,audience)&&<Link className="btn-secondary mt-4" href={`/marketing/audiences/${id}/edit`}>Review filters</Link>}</div></Content>}
   const resolved=await resolveAudienceContactIds(prisma,audience),summary=await audienceSummary(prisma,resolved.selected,resolved.matched.length),matched=new Set(resolved.matched),selected=new Set(resolved.selected),override=new Map(resolved.overrides.map(x=>[x.contactId,x.kind]));
-  const candidateIds=[...new Set([...resolved.matched,...resolved.overrides.map(x=>x.contactId)])].sort((a,b)=>a-b),pages=Math.max(1,Math.ceil(candidateIds.length/PAGE_SIZE)),requested=Number((await searchParams).page),page=Number.isSafeInteger(requested)&&requested>0?Math.min(requested,pages):1,ids=candidateIds.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE);
+  const query=await searchParams,candidateIds=[...new Set([...resolved.matched,...resolved.overrides.map(x=>x.contactId)])].sort((a,b)=>a-b),pages=Math.max(1,Math.ceil(candidateIds.length/PAGE_SIZE)),requested=Number(query.page),page=Number.isSafeInteger(requested)&&requested>0?Math.min(requested,pages):1,ids=candidateIds.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE);
   const contacts=await prisma.contact.findMany({where:{id:{in:ids}},include:audienceContactInclude,orderBy:[{lastName:"asc"},{firstName:"asc"}]});
   const manage=canManageAudience(actor,audience)&&!audience.archivedAt,exportable=canExportAudience(actor,audience)&&!audience.archivedAt;
   const unresolved=config.tradeShowId?await prisma.tradeShowLead.count({where:{tradeShowId:config.tradeShowId,contactId:null}}):null;
   const metric=[['Matches Criteria',summary.matched],['Final Selected',summary.selected],['Opted In',summary.optedIn],['Unknown',summary.unknown],['Opted Out',summary.optedOut],['Missing Email',summary.missingEmail],['Marketing Ready',summary.marketingReady]] as const;
   return <Content>
     <PageHeader eyebrow="Marketing Audiences" title={audience.name} description={`${audience.visibility==="PERSONAL"?"Personal":"Shared"} · owned by ${audience.owner.firstName} ${audience.owner.lastName}`} action={<div className="flex flex-wrap gap-2"><Link className="btn-secondary" href="/marketing/audiences">All audiences</Link>{manage&&<Link className="btn-secondary" href={`/marketing/audiences/${id}/edit`}>Edit</Link>}{manage&&<form action={duplicateAudience}><input type="hidden" name="audienceId" value={id}/><button className="btn-secondary">Duplicate</button></form>}{manage&&<form action={setAudienceArchived}><input type="hidden" name="audienceId" value={id}/><input type="hidden" name="archived" value="true"/><button className="btn-secondary">Archive</button></form>}</div>}/>
+    {saveFeedbackMessage(query.saved, 'Audience') && <SaveSuccess message={saveFeedbackMessage(query.saved, 'Audience')!}/>}
     {audience.description&&<p className="mb-5 text-sm text-slate-600">{audience.description}</p>}
     {audience.archivedAt&&<div className="mb-5 rounded border border-slate-300 bg-slate-50 p-3 text-sm">This audience is archived. Its live preview remains available, but changes and exports are disabled.</div>}
     <section className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7" aria-label="Audience summary">{metric.map(([label,value])=><div className="panel p-3" key={label}><p className="text-xs font-semibold uppercase text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold">{value}</p></div>)}</section>
