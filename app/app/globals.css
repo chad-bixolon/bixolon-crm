@@ -11,9 +11,10 @@ input, select, button { font: inherit; }
 .btn-secondary:hover { background: #f8fafc; }
 .filter-panel { border-color: #fed7aa; background: rgb(255 247 237 / .65); padding: .875rem; }
 .filter-grid { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: .625rem .75rem; }
+.filter-grid > .label { margin-bottom: 0; }
 .filter-control { display: block; box-sizing: border-box; width: 100%; min-width: 0; height: 2.25rem; min-height: 2.25rem; margin-top: .25rem; padding: .375rem .625rem; font-size: .875rem; line-height: 1.25rem; }
 select.filter-control { padding-right: 2rem; overflow: visible; }
-.filter-actions { display: flex; align-items: flex-end; gap: .5rem; min-height: 2.25rem; }
+.filter-actions { align-self: end; display: flex; align-items: center; gap: .5rem; }
 .btn-filter-primary, .btn-filter-secondary { height: 2.25rem; padding: .375rem .75rem; font-size: .8125rem; line-height: 1rem; }
 .btn-filter-primary { display: inline-flex; align-items: center; justify-content: center; border-radius: .375rem; background: #c2410c; color: white; font-weight: 600; }
 .btn-filter-primary:hover { background: #9a3412; }
