@@ -13,6 +13,7 @@ const sections = [
   ["Sales Targets", "/administration/sales-targets", "Set quarterly targets by sales rep and currency."],
   ["Labels & Terminology", "/administration/labels", "Edit business-facing display labels."],
   ["System Settings", "/administration/settings", "Set safe reporting and warning defaults."],
+  ["Dashboard Views", "/administration/dashboard-views", "Configure the default Dashboard for each role."],
 ] as const;
 export default async function AdministrationPage() {
   await requirePermission("users.manage");

@@ -214,6 +214,8 @@ model User {
   ownedReports            ReportDefinition[] @relation("ReportOwner")
   createdReports          ReportDefinition[] @relation("ReportCreatedBy")
   updatedReports          ReportDefinition[] @relation("ReportUpdatedBy")
+  dashboardLayout         UserDashboardLayout?
+  updatedRoleDashboardLayouts RoleDashboardLayout[] @relation("RoleDashboardLayoutUpdatedBy")
   marketingPreferenceUpdates Contact[]        @relation("ContactMarketingPreferenceUpdatedBy")
   ownedMarketingAudiences MarketingAudience[] @relation("MarketingAudienceOwner")
   createdMarketingAudiences MarketingAudience[] @relation("MarketingAudienceCreatedBy")
@@ -256,6 +258,30 @@ model ReportDefinition {
   @@index([visibility, reportType, archivedAt])
   @@index([createdById])
   @@index([updatedById])
+}
+
+/// Presentation-only role default. Authorization is always recalculated for the viewer.
+model RoleDashboardLayout {
+  role        UserRole @id
+  configuration Json
+  updatedById Int
+  updatedBy   User     @relation("RoleDashboardLayoutUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([updatedById])
+}
+
+/// An intentional personal override, bound to the user's role at save time.
+model UserDashboardLayout {
+  userId        Int      @id
+  user          User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  role          UserRole
+  configuration Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([role])
 }
 
 /// A reusable, validated Contact-grain query. Membership is resolved live, then overrides are applied.
