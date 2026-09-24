@@ -33,6 +33,12 @@ does not query PostgreSQL; database health and migration status need separate mo
 | --- | --- |
 | `DATABASE_URL` | Required at runtime for CRM data access and migration deployment. Use an external PostgreSQL connection string with credentials and TLS settings appropriate to the provider. |
 | `PORT` | Set to the App Platform service's HTTP port; defaults to `3000` in the image. |
+| `SPACES_BUCKET` | Private document Space bucket name. |
+| `SPACES_REGION` | Space region, such as `atl1`. |
+| `SPACES_ENDPOINT` | HTTPS S3-compatible regional endpoint. |
+| `SPACES_ACCESS_KEY_ID` | Encrypted runtime credential; never a build argument. |
+| `SPACES_SECRET_ACCESS_KEY` | Encrypted runtime credential; never a build argument. |
+| `SPACES_PREFIX` | Environment boundary: `dev` locally and `prod` in production. |
 
 For the single App Platform container on a 22-connection DigitalOcean database,
 the runtime Prisma client defaults to `connection_limit=4` when the URL has no

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { PrismaClient, Prisma } from "@prisma/client";
 
 const url = new URL(process.env.DATABASE_URL);
@@ -53,6 +54,18 @@ try {
       assert.equal(row.accountId, account.id);
       assert.equal(row.opportunityId, opportunity.id);
     }
+    const document = await tx.document.create({ data: {
+      originalFileName: "Client Contract.pdf",
+      storageKey: `test/documents/${randomUUID()}`,
+      mimeType: "application/pdf",
+      fileSize: 128,
+      documentType: "CONTRACT",
+      uploadedBy: { connect: { id: 100 } },
+      account: { connect: { id: account.id } },
+    } });
+    assert.equal(document.accountId, account.id);
+    assert.equal(document.projectId, null);
+    assert.equal(document.opportunityId, null);
     await tx.opportunity.update({ where: { id: opportunity.id }, data: { archivedAt: new Date(), archivedById: 100 } });
     await tx.account.update({ where: { id: account.id }, data: { status: "ARCHIVED", archivedAt: new Date(), archivedById: 100 } });
     assert.equal(await tx.note.count({ where: { opportunityId: opportunity.id } }), 1);

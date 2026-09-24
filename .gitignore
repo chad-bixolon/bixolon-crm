@@ -3,6 +3,9 @@ app/.env
 .env.*
 app/.env.*
 
+!.env.example
+!app/.env.example
+
 app/node_modules
 app/.next
 

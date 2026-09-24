@@ -88,6 +88,16 @@ UPDATE "Note" SET "createdById"=100,"updatedById"=100 WHERE id=100;
 SELECT pg_temp.assert_true('attribution references user',(SELECT "createdById"=100 AND "updatedById"=100 FROM "Note" WHERE id=100));
 
 INSERT INTO "User"(id,email,"firstName","lastName","updatedAt") VALUES(200,'second@example.invalid','Second','Fixture',now());
+INSERT INTO "Document"(id,"originalFileName","storageKey","mimeType","fileSize","documentType","uploadedByUserId","accountId")
+  VALUES(100,'Contract.pdf','test/documents/123e4567-e89b-42d3-a456-426614174000','application/pdf',128,'CONTRACT',100,100);
+SELECT pg_temp.assert_true('document has exactly one parent',(SELECT "accountId"=100 AND "projectId" IS NULL AND "opportunityId" IS NULL FROM "Document" WHERE id=100));
+SELECT pg_temp.expect_failure('document requires one parent',$q$INSERT INTO "Document"("originalFileName","storageKey","mimeType","fileSize","documentType","uploadedByUserId") VALUES('None.pdf','test/documents/223e4567-e89b-42d3-a456-426614174000','application/pdf',10,'OTHER',100)$q$,'23514');
+SELECT pg_temp.expect_failure('document rejects two parents',$q$INSERT INTO "Document"("originalFileName","storageKey","mimeType","fileSize","documentType","uploadedByUserId","accountId","opportunityId") VALUES('Two.pdf','test/documents/323e4567-e89b-42d3-a456-426614174000','application/pdf',10,'OTHER',100,100,100)$q$,'23514');
+SELECT pg_temp.expect_failure('document storage key unique',$q$INSERT INTO "Document"("originalFileName","storageKey","mimeType","fileSize","documentType","uploadedByUserId","accountId") VALUES('Again.pdf','test/documents/123e4567-e89b-42d3-a456-426614174000','application/pdf',10,'OTHER',100,100)$q$,'23505');
+SELECT pg_temp.expect_failure('document maximum size',$q$UPDATE "Document" SET "fileSize"=26214401 WHERE id=100$q$,'23514');
+SELECT pg_temp.expect_failure('document archive attribution',$q$UPDATE "Document" SET "archivedAt"=now() WHERE id=100$q$,'23514');
+UPDATE "Document" SET "archivedAt"=now(),"archivedByUserId"=100 WHERE id=100;
+SELECT pg_temp.assert_true('document archive audit',(SELECT "archivedAt" IS NOT NULL AND "archivedByUserId"=100 FROM "Document" WHERE id=100));
 INSERT INTO "ExternalIdentity"("userId",issuer,subject,"updatedAt") VALUES(100,'https://accounts.google.com','fixture-subject',now());
 SELECT pg_temp.expect_failure('unique external identity',$q$INSERT INTO "ExternalIdentity"("userId",issuer,subject,"updatedAt") VALUES(200,'https://accounts.google.com','fixture-subject',now())$q$,'23505');
 SELECT pg_temp.expect_failure('one identity per user/provider',$q$INSERT INTO "ExternalIdentity"("userId",issuer,subject,"updatedAt") VALUES(100,'https://accounts.google.com','different-subject',now())$q$,'23505');

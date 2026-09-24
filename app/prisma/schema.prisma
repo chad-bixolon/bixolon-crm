@@ -16,6 +16,17 @@ enum UserRole {
   READ_ONLY
 }
 
+enum DocumentType {
+  QUOTE
+  STATEMENT_OF_WORK
+  CONTRACT
+  ADDENDUM
+  PROPOSAL
+  NDA
+  TECHNICAL_DOCUMENT
+  OTHER
+}
+
 enum IdentityProvider {
   GOOGLE
 }
@@ -232,6 +243,8 @@ model User {
   updatedTradeShowImportMappings TradeShowImportMapping[] @relation("TradeShowImportMappingUpdater")
   assignedTradeShowLeads  TradeShowLead[]    @relation("TradeShowLeadSalesRep")
   referredTradeShowLeads  TradeShowLead[]    @relation("TradeShowLeadReferrer")
+  uploadedDocuments       Document[]         @relation("DocumentUploadedBy")
+  archivedDocuments       Document[]         @relation("DocumentArchivedBy")
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
 }
@@ -356,6 +369,7 @@ model Account {
   tasks                      Task[]
   activities                 Activity[]
   notes                      Note[]
+  documents                  Document[]
   distributorPriceExceptions PriceException[]      @relation("PriceExceptionDistributor")
   varPriceExceptions         PriceException[]      @relation("PriceExceptionVar")
   endUserPriceExceptions     PriceException[]      @relation("PriceExceptionEndUser")
@@ -568,6 +582,7 @@ model Opportunity {
   participants            OpportunityAccount[]
   products                OpportunityProduct[]
   tasks                   Task[]
+  documents               Document[]
   activities              Activity[]
   notes                   Note[]
   archivedAt              DateTime?
@@ -1040,12 +1055,45 @@ model Project {
   tasks              Task[]
   activities         Activity[]
   notes              Note[]
+  documents          Document[]
 
   @@index([primaryAccountId, archivedAt])
   @@index([ownerId, status])
   @@index([status, archivedAt])
   @@index([createdById])
   @@index([updatedById])
+}
+
+/// File contents remain private in object storage; this table is metadata and CRM linkage only.
+/// SQL enforces exactly one of accountId, projectId, or opportunityId.
+model Document {
+  id                 Int          @id @default(autoincrement())
+  originalFileName   String
+  storageKey         String       @unique
+  mimeType           String
+  fileSize           Int
+  documentType       DocumentType
+  description        String?      @db.Text
+  uploadedByUserId   Int
+  uploadedBy         User         @relation("DocumentUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  createdAt          DateTime     @default(now())
+  archivedAt         DateTime?
+  archivedByUserId   Int?
+  archivedBy         User?        @relation("DocumentArchivedBy", fields: [archivedByUserId], references: [id], onDelete: Restrict)
+  accountId          Int?
+  account            Account?     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  projectId          Int?
+  project            Project?     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  opportunityId      Int?
+  opportunity        Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, archivedAt, createdAt])
+  @@index([projectId, archivedAt, createdAt])
+  @@index([opportunityId, archivedAt, createdAt])
+  @@index([createdAt])
+  @@index([archivedAt])
+  @@index([uploadedByUserId])
+  @@index([archivedByUserId])
 }
 
 model OpportunityProject {

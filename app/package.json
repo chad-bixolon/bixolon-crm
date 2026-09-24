@@ -16,11 +16,15 @@
     "db:status": "prisma migrate status",
     "db:seed-stages": "node scripts/seed-sales-stages.mjs",
     "test": "node --test tests/*.test.mjs",
-    "db:seed-activity-types": "node scripts/seed-activity-types.mjs"
+    "db:seed-activity-types": "node scripts/seed-activity-types.mjs",
+    "storage:check": "node scripts/operations/check-document-storage.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1139.0",
+    "@aws-sdk/s3-request-presigner": "^3.1139.0",
     "@prisma/client": "6.19.3",
     "dotenv": "16.6.1",
+    "file-type": "^21.3.4",
     "next": "16.3.5",
     "next-auth": "5.0.0-beta.32",
     "prisma": "6.19.3",

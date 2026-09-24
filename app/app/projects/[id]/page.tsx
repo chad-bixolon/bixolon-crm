@@ -11,9 +11,10 @@ import { ProjectOpportunityLinks } from '@/components/project-opportunity-links'
 import { changeProjectOpportunity } from './opportunity-actions';
 import { SaveSuccess } from '@/components/save-success';
 import { saveFeedbackMessage } from '@/lib/save-feedback';
+import { DocumentsSection } from '@/components/documents-section';
 export const dynamic = 'force-dynamic';
-const tabs = ['Overview', 'Participants', 'Opportunities', 'Tasks', 'Activities', 'Notes', 'Products'] as const;
-export default async function ProjectPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; tasksView?: string; activitiesView?: string; notesView?: string; saved?: string }> }) {
+const tabs = ['Overview', 'Participants', 'Opportunities', 'Tasks', 'Activities', 'Notes', 'Documents', 'Products'] as const;
+export default async function ProjectPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; tasksView?: string; activitiesView?: string; notesView?: string; documentsView?: string; saved?: string }> }) {
   const actor = await currentUser(), id = Number((await params).id), query = await searchParams;
   if (!Number.isSafeInteger(id) || id < 1) notFound();
   const project = await prisma.project.findFirst({ where: { AND: [{ id }, projectReadWhere(actor)] }, include: {
@@ -51,5 +52,6 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     {tab === 'Tasks' && canSeeWork && <RelatedWork projectId={id} kind="tasks" visibility={query.tasksView} allowCreate={editable && !project.archivedAt}/>}
     {tab === 'Activities' && canSeeWork && <RelatedWork projectId={id} kind="activities" visibility={query.activitiesView} allowCreate={editable && !project.archivedAt}/>}
     {tab === 'Notes' && canSeeWork && <RelatedWork projectId={id} kind="notes" visibility={query.notesView} allowCreate={editable && !project.archivedAt}/>}
+    {tab === 'Documents' && <DocumentsSection parentType="project" parentId={id} actor={actor} view={query.documentsView} basePath={`/projects/${id}?tab=documents`}/>}
   </Content>;
 }
