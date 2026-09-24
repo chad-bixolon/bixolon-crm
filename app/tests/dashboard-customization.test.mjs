@@ -30,12 +30,46 @@ test('system defaults are role-specific and Marketing remains sales-pipeline saf
 
 test('layout validation preserves order and rejects unknown, unauthorized, duplicate, and invalid-size widgets',async()=>{
   const db=client();
-  const valid=await dashboard.validateDashboardLayout(db,actor('SALES'),{version:1,items:[{kind:'BUILTIN',key:'OVERDUE_TASKS',size:'HALF'},{kind:'BUILTIN',key:'FORECAST_SUMMARY',size:'FULL'}]});
+  const requested={version:1,items:[{kind:'BUILTIN',key:'OVERDUE_TASKS',size:'HALF'},{kind:'BUILTIN',key:'FORECAST_SUMMARY',size:'FULL'}]};
+  const valid=await dashboard.validateDashboardLayout(db,actor('SALES'),requested);
+  assert.deepEqual(valid,requested);
   assert.deepEqual(valid.items.map(item=>item.key),['OVERDUE_TASKS','FORECAST_SUMMARY']);
   await assert.rejects(dashboard.validateDashboardLayout(db,actor('SALES'),{version:1,items:[{kind:'BUILTIN',key:'NOPE',size:'HALF'}]}),/Unknown/);
   await assert.rejects(dashboard.validateDashboardLayout(db,actor('SALES'),{version:1,items:[{kind:'BUILTIN',key:'PIPELINE_BY_REP',size:'HALF'}]}),/not available/);
   await assert.rejects(dashboard.validateDashboardLayout(db,actor('SALES'),{version:1,items:[{kind:'BUILTIN',key:'FORECAST_SUMMARY',size:'HALF'}]}),/size/);
   await assert.rejects(dashboard.validateDashboardLayout(db,actor('SALES'),{version:1,items:[{kind:'BUILTIN',key:'OVERDUE_TASKS',size:'HALF'},{kind:'BUILTIN',key:'OVERDUE_TASKS',size:'FULL'}]}),/only appear once/);
+});
+
+test('canonical widget names and presentation sections are shared across Dashboard surfaces',()=>{
+  const expected={
+    FORECAST_SUMMARY:['Forecast Summary','FORECAST'],
+    PIPELINE_BY_REP:['Sales Rep Forecast','PIPELINE'],
+    PIPELINE_BY_STAGE:['Pipeline by Stage','PIPELINE'],
+    PIPELINE_BY_PRODUCT_CATEGORY:['Pipeline by Product Category','PIPELINE'],
+    CLOSING_OPPORTUNITIES:['Opportunities Closing This Quarter','PIPELINE'],
+    STALE_ACCOUNTS:['Accounts with No Activity 90+ Days','ATTENTION'],
+    OVERDUE_TASKS:['Overdue Tasks','ATTENTION'],
+    RECENT_ACTIVITY:['Recent Activity','ATTENTION'],
+    MARKETING_SUMMARY:['Marketing Summary','MARKETING'],
+    ADMIN_SHORTCUTS:['Administration Shortcuts','ADMINISTRATION'],
+  };
+  for(const [key,[title,section]] of Object.entries(expected)){
+    assert.equal(dashboard.dashboardWidgetRegistry[key].title,title);
+    assert.equal(dashboard.dashboardWidgetRegistry[key].presentationSection,section);
+  }
+  assert.equal(dashboard.dashboardPresentationSectionTitles.FORECAST,'Forecast Summary');
+  assert.equal(dashboard.dashboardPresentationSectionTitles.PIPELINE,'Pipeline & Forecast');
+  assert.equal(dashboard.dashboardPresentationSectionTitles.ATTENTION,'Attention & Activity');
+  assert.equal(dashboard.dashboardItemPresentationSection({kind:'SAVED_REPORT',reportId:4,size:'HALF',style:'KPI'}),'PINNED_REPORTS');
+});
+
+test('presentation sections expose only permitted widgets and omit empty unauthorized groups',()=>{
+  const marketing=dashboard.availableDashboardWidgets(actor('MARKETING_MANAGER'));
+  assert.deepEqual(marketing.map(widget=>widget.key),['MARKETING_SUMMARY']);
+  assert.deepEqual(new Set(marketing.map(widget=>widget.presentationSection)),new Set(['MARKETING']));
+  assert.equal(marketing.some(widget=>widget.presentationSection==='PIPELINE'||widget.presentationSection==='ADMINISTRATION'),false);
+  const sales=dashboard.availableDashboardWidgets(actor('SALES'));
+  assert.equal(sales.some(widget=>widget.presentationSection==='MARKETING'||widget.presentationSection==='ADMINISTRATION'),false);
 });
 
 test('Saved Report pins enforce ownership, visibility, report type, grouping, and caps',async()=>{
@@ -63,8 +97,21 @@ test('personal override wins, reset inheritance remains implicit, and a role cha
 });
 
 test('Dashboard UI exposes responsive spans and keyboard reorder controls',()=>{
-  const page=fs.readFileSync(path.join(root,'app/page.tsx'),'utf8'),editor=fs.readFileSync(path.join(root,'components/dashboard-editor.tsx'),'utf8');
+  const page=fs.readFileSync(path.join(root,'app/page.tsx'),'utf8'),editor=fs.readFileSync(path.join(root,'components/dashboard-editor.tsx'),'utf8'),admin=fs.readFileSync(path.join(root,'app/administration/dashboard-views/page.tsx'),'utf8');
   assert.match(page,/lg:grid-cols-2/);assert.match(page,/lg:col-span-2/);
+  assert.match(page,/sm:grid-cols-2 xl:grid-cols-4/);
+  assert.match(page,/dashboardWidgetRegistry\[item\.key\]\.title/);
+  assert.match(page,/dashboardPresentationSectionTitles\[group\.section\]/);
+  assert.match(page,/filter\(group=>group\.items\.length\)/);
   assert.match(editor,/Move .* up/);assert.match(editor,/Move .* down/);assert.match(editor,/Save Dashboard|submitLabel/);
   assert.match(editor,/Half/);assert.match(editor,/Full/);
+  assert.match(editor,/Dashboard Sections/);
+  assert.match(editor,/Choose which items appear, set their order, and select their size\./);
+  assert.match(editor,/dashboardPresentationSectionTitles\[group\.section\]/);
+  assert.match(editor,/filter\(group=>group\.items\.length\)/);
+  assert.match(admin,/widgets=\{availableDashboardWidgets\(target\)\}/);
+  for(const inconsistent of ['Pipeline by Sales Rep','Sales rep forecast','Closing Opportunities','Stale Accounts','Recent Activities']){
+    assert.equal(page.includes(inconsistent),false);
+    assert.equal(editor.includes(inconsistent),false);
+  }
 });

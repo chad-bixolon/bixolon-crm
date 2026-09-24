@@ -11,24 +11,38 @@ export const dashboardWidgetKeys = ['FORECAST_SUMMARY','PIPELINE_BY_REP','PIPELI
 export type DashboardWidgetKey = typeof dashboardWidgetKeys[number];
 export type DashboardWidgetSize = 'HALF'|'FULL';
 export type SavedReportWidgetStyle = 'KPI'|'COMPACT_TABLE'|'GROUPED_SUMMARY';
+export const dashboardPresentationSectionKeys = ['FORECAST','PIPELINE','ATTENTION','MARKETING','ADMINISTRATION','PINNED_REPORTS'] as const;
+export type DashboardPresentationSection = typeof dashboardPresentationSectionKeys[number];
+export const dashboardPresentationSectionTitles: Record<DashboardPresentationSection,string> = {
+  FORECAST:'Forecast Summary',
+  PIPELINE:'Pipeline & Forecast',
+  ATTENTION:'Attention & Activity',
+  MARKETING:'Marketing',
+  ADMINISTRATION:'Administration',
+  PINNED_REPORTS:'Pinned Reports',
+};
 export type DashboardBuiltinItem = { kind:'BUILTIN'; key:DashboardWidgetKey; size:DashboardWidgetSize };
 export type DashboardReportItem = { kind:'SAVED_REPORT'; reportId:number; size:DashboardWidgetSize; style:SavedReportWidgetStyle; title?:string };
 export type DashboardLayoutItem = DashboardBuiltinItem|DashboardReportItem;
 export type DashboardLayoutConfiguration = { version:1; items:DashboardLayoutItem[] };
 
-type WidgetDefinition = { title:string; description:string; sizes:readonly DashboardWidgetSize[]; defaultSize:DashboardWidgetSize; hideable:boolean; section:DashboardSection; roles:readonly UserRole[]; drillDown?:string };
+type WidgetDefinition = { title:string; description:string; sizes:readonly DashboardWidgetSize[]; defaultSize:DashboardWidgetSize; hideable:boolean; section:DashboardSection; presentationSection:Exclude<DashboardPresentationSection,'PINNED_REPORTS'>; roles:readonly UserRole[]; drillDown?:string };
 export const dashboardWidgetRegistry: Record<DashboardWidgetKey,WidgetDefinition> = {
-  FORECAST_SUMMARY:{title:'Forecast Summary',description:'Pipeline, commit, targets, and coverage for the current quarter.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'forecast',roles:['ADMIN','SALES_MANAGER','SALES','READ_ONLY'],drillDown:'/reports/forecast'},
-  PIPELINE_BY_REP:{title:'Pipeline by Sales Rep',description:'Team pipeline grouped by Sales Rep.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'reps',roles:['ADMIN','SALES_MANAGER','READ_ONLY']},
-  PIPELINE_BY_STAGE:{title:'Pipeline by Stage',description:'Current-quarter pipeline grouped by stage.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'stage',roles:['ADMIN','SALES_MANAGER','SALES','READ_ONLY']},
-  PIPELINE_BY_PRODUCT_CATEGORY:{title:'Pipeline by Product Category',description:'Current-quarter pipeline grouped by Product Category.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'category',roles:['ADMIN','SALES_MANAGER','READ_ONLY']},
-  CLOSING_OPPORTUNITIES:{title:'Closing Opportunities',description:'Opportunities expected to close this quarter.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'closing',roles:['ADMIN','SALES_MANAGER','SALES','READ_ONLY']},
-  STALE_ACCOUNTS:{title:'Stale Accounts',description:'Active Accounts needing engagement.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'stale',roles:['ADMIN','SALES_MANAGER','SALES']},
-  OVERDUE_TASKS:{title:'Overdue Tasks',description:'Open Tasks past their due date.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'tasks',roles:['ADMIN','SALES_MANAGER','SALES','MARKETING_MANAGER']},
-  RECENT_ACTIVITY:{title:'Recent Activity',description:'Latest CRM activity in your permitted scope.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'activities',roles:['ADMIN','SALES_MANAGER','SALES']},
-  MARKETING_SUMMARY:{title:'Marketing Summary',description:'Marketing-safe Account and Trade Show lead overview.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'marketing',roles:['MARKETING_MANAGER']},
-  ADMIN_SHORTCUTS:{title:'Administration Shortcuts',description:'Quick access to common Administration areas.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'admin',roles:['ADMIN']},
+  FORECAST_SUMMARY:{title:'Forecast Summary',description:'Pipeline, commit, targets, and coverage for the current quarter.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'forecast',presentationSection:'FORECAST',roles:['ADMIN','SALES_MANAGER','SALES','READ_ONLY'],drillDown:'/reports/forecast'},
+  PIPELINE_BY_REP:{title:'Sales Rep Forecast',description:'Team pipeline and forecast grouped by Sales Rep.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'reps',presentationSection:'PIPELINE',roles:['ADMIN','SALES_MANAGER','READ_ONLY']},
+  PIPELINE_BY_STAGE:{title:'Pipeline by Stage',description:'Current-quarter pipeline grouped by stage.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'stage',presentationSection:'PIPELINE',roles:['ADMIN','SALES_MANAGER','SALES','READ_ONLY']},
+  PIPELINE_BY_PRODUCT_CATEGORY:{title:'Pipeline by Product Category',description:'Current-quarter pipeline grouped by Product Category.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'category',presentationSection:'PIPELINE',roles:['ADMIN','SALES_MANAGER','READ_ONLY']},
+  CLOSING_OPPORTUNITIES:{title:'Opportunities Closing This Quarter',description:'Open Opportunities expected to close this quarter.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'closing',presentationSection:'PIPELINE',roles:['ADMIN','SALES_MANAGER','SALES','READ_ONLY']},
+  STALE_ACCOUNTS:{title:'Accounts with No Activity 90+ Days',description:'Active Accounts needing engagement.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'stale',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES']},
+  OVERDUE_TASKS:{title:'Overdue Tasks',description:'Open Tasks past their due date.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'tasks',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES','MARKETING_MANAGER']},
+  RECENT_ACTIVITY:{title:'Recent Activity',description:'Latest CRM activity in your permitted scope.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'activities',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES']},
+  MARKETING_SUMMARY:{title:'Marketing Summary',description:'Marketing-safe Account and Trade Show lead overview.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'marketing',presentationSection:'MARKETING',roles:['MARKETING_MANAGER']},
+  ADMIN_SHORTCUTS:{title:'Administration Shortcuts',description:'Quick access to common Administration areas.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'admin',presentationSection:'ADMINISTRATION',roles:['ADMIN']},
 };
+
+export function dashboardItemPresentationSection(item:DashboardLayoutItem):DashboardPresentationSection {
+  return item.kind==='SAVED_REPORT'?'PINNED_REPORTS':dashboardWidgetRegistry[item.key].presentationSection;
+}
 
 // A role chooses the default presentation. Authorization still decides which
 // data and actions are accessible; future role-view settings must not grant access.
