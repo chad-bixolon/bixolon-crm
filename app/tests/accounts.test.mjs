@@ -21,7 +21,7 @@ function loadTs(relative) {
   return mod.exports;
 }
 const { parseAccountForm, roleLabels } = loadTs('lib/account-validation.ts');
-const { accountWhere, accountView, accountHref, listAccounts, PAGE_SIZE, checkAccountReferences, setAccountArchived, findAccountNameMatches, normalizeAccountName, saveAccount, createAccountFromImport } = loadTs('lib/accounts.ts');
+const { accountWhere, accountView, accountHref, listAccounts, accountOptions, PAGE_SIZE, checkAccountReferences, setAccountArchived, findAccountNameMatches, normalizeAccountName, saveAccount, createAccountFromImport, isRetiredSpecialAccountTerritory } = loadTs('lib/accounts.ts');
 const { routeAccess } = loadTs('lib/authorization.ts');
 const { parseLookup } = loadTs('lib/lookups.ts');
 function form(entries) { const f = new FormData(); for (const [key, value] of entries) f.append(key, value); return f; }
@@ -189,6 +189,15 @@ test('existing inactive lookup values remain valid on edit, but new inactive sel
   const input = { industry: 'OLD', territory: 'WEST', ownerId: null };
   assert.deepEqual(await checkAccountReferences(client, input, 1), {});
   assert.deepEqual(await checkAccountReferences(client, { ...input, industry: 'OTHER' }, 1), { industry: 'Choose an active industry.' });
+});
+test('Strategic Territory is retired from Account choices while historical assignments and Strategic Account remain safe', async () => {
+  const territories=[{code:'WEST',name:'West',active:true},{code:'Strategic',name:'Strategic',active:true},{code:'EAST',name:'East',active:true}];
+  const client={industry:{findMany:async()=>[]},territory:{findMany:async()=>territories,findFirst:async({where})=>territories.find(item=>item.code===where.code&&item.active)??null},user:{findMany:async()=>[],findFirst:async()=>null},account:{findUnique:async()=>({industry:null,territory:'Strategic'})}};
+  assert.deepEqual((await accountOptions(client)).territories.map(item=>item.code),['WEST','EAST']);
+  assert.equal(isRetiredSpecialAccountTerritory(territories[1]),true);
+  assert.deepEqual(await checkAccountReferences(client,{industry:null,territory:'Strategic',ownerId:null},1),{});
+  assert.deepEqual(await checkAccountReferences({...client,account:{findUnique:async()=>({industry:null,territory:'WEST'})}},{industry:null,territory:'Strategic',ownerId:null},1),{territory:'Choose an active territory.'});
+  assert.equal(parseAccountForm(form([['name','National customer'],['strategicAccount','on']])).value.strategicAccount,true);
 });
 test('lookup administration validates stable codes and sort order', () => {
   assert.deepEqual(parseLookup(form([['code', ' RETAIL '], ['name', ' Retail '], ['sortOrder', '2'], ['active', 'on']]), false).value,

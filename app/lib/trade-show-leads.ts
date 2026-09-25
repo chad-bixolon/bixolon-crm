@@ -1,4 +1,4 @@
-import { TradeShowLeadRouting, TradeShowLeadStatus, type PrismaClient } from '@prisma/client';
+import { TradeShowLeadRouting, TradeShowLeadStatus, type Prisma, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { field, optional, positiveId, type Errors } from './crm-validation';
 import { dateField } from './work';
@@ -6,6 +6,24 @@ import { canEditTradeShowLead } from './trade-shows';
 import { canRouteTradeShowLead, referralData, TRADE_SHOW_ROUTINGS, validateTradeShowRouting } from './trade-show-routing';
 
 const statuses = Object.values(TradeShowLeadStatus);
+export const actionableTradeShowLeadStatuses: TradeShowLeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED'];
+export type SalesLeadQueueFilters = { view?: string; status?: string; tradeShowId?: string };
+export function canViewSalesLeadQueue(actor: Actor) {
+  return can(actor, 'trade-shows.read') && ['SALES', 'SALES_MANAGER', 'ADMIN'].includes(actor.role);
+}
+export function salesLeadQueueWhere(actor: Actor, filters: SalesLeadQueueFilters = {}): Prisma.TradeShowLeadWhereInput {
+  if (!canViewSalesLeadQueue(actor)) return { id: -1 };
+  const allAssigned = filters.view === 'all' && actor.role !== 'SALES';
+  const selectedStatus = statuses.includes(filters.status as TradeShowLeadStatus) ? filters.status as TradeShowLeadStatus : null;
+  const tradeShowId = positiveId(filters.tradeShowId ?? '');
+  return {
+    routing: 'BIXOLON_SALES',
+    assignedSalesRepUserId: allAssigned ? { not: null } : actor.id,
+    status: selectedStatus ?? { in: actionableTradeShowLeadStatuses },
+    tradeShow: { archivedAt: null },
+    ...(tradeShowId ? { tradeShowId } : {}),
+  };
+}
 export function parseTradeShowLeadUpdate(form: FormData) {
   const errors: Errors = {};
   const statusRaw = field(form, 'status');

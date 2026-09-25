@@ -22,6 +22,7 @@ function client({personal=null,roleLayout=null,reports=[]}={}){return {
 
 test('system defaults are role-specific and Marketing remains sales-pipeline safe',()=>{
   assert.ok(dashboard.systemDashboardDefaults.SALES.items.some(item=>item.key==='FORECAST_SUMMARY'));
+  assert.ok(dashboard.systemDashboardDefaults.SALES.items.some(item=>item.key==='MY_TRADE_SHOW_LEADS'));
   assert.ok(dashboard.systemDashboardDefaults.SALES_MANAGER.items.some(item=>item.key==='PIPELINE_BY_REP'));
   assert.deepEqual(dashboard.systemDashboardDefaults.MARKETING_MANAGER.items.map(item=>item.key),['MARKETING_SUMMARY','OVERDUE_TASKS']);
   assert.equal(dashboard.canUseDashboardWidget(actor('MARKETING_MANAGER'),'FORECAST_SUMMARY'),false);
@@ -50,6 +51,7 @@ test('canonical widget names and presentation sections are shared across Dashboa
     STALE_ACCOUNTS:['Accounts with No Activity 90+ Days','ATTENTION'],
     OVERDUE_TASKS:['Overdue Tasks','ATTENTION'],
     RECENT_ACTIVITY:['Recent Activity','ATTENTION'],
+    MY_TRADE_SHOW_LEADS:['My Trade Show Leads','ATTENTION'],
     MARKETING_SUMMARY:['Marketing Summary','MARKETING'],
     ADMIN_SHORTCUTS:['Administration Shortcuts','ADMINISTRATION'],
   };

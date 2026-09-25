@@ -57,6 +57,31 @@ test('activity and note require linked membership and valid references',async()=
  assert.equal((await work.saveActivity({$transaction:fn=>fn(tx)},activity.value)).type,'DEMO');
  assert.equal((await work.saveNote({$transaction:fn=>fn(tx)},note.value)).body,'Follow up');
 });
+test('Activity follow-up Task is explicit, contextual, assigned, atomic, and create-only',async()=>{
+ const key='d7054358-5d57-4398-8550-506157266184';
+ const base=[['subject','Customer call'],['type','CALL'],['accountId','1'],['opportunityId','2'],['projectId','3'],['userId','7'],['activityDate','2026-09-24T14:30'],['followUpDate','2026-09-30'],['contactIds','4'],['createKey',key]];
+ const makeClient=(options={})=>{
+   let activities=0,tasks=0,taskData=null;
+   const tx={
+     account:{findFirst:async()=>({id:1}),findUnique:async()=>({name:'Acme'})},opportunity:{findFirst:async()=>({id:2})},opportunityAccount:{findUnique:async()=>({})},project:{findFirst:async()=>({id:3}),findUnique:async()=>({primaryAccountId:1,participants:[]})},opportunityProject:{findUnique:async()=>({})},
+     activityType:{findFirst:async()=>({code:'CALL'})},user:{findFirst:async()=>({id:7})},contact:{findMany:async()=>[{id:4,accountId:1,active:true}],findFirst:async()=>({firstName:'Ada',lastName:'Lovelace'})},activityContact:{findMany:async()=>[{contactId:4}],createMany:async()=>({})},
+     activity:{findFirst:async()=>({id:10,accountId:1,opportunityId:2,projectId:3,type:'CALL',archivedAt:null}),create:async({data})=>{activities++;return {id:10,...data}},update:async({data})=>({id:10,...data})},
+     task:{create:async({data})=>{if(options.failTask)throw new Error('task failed');tasks++;taskData=data;return {id:20,...data}}},
+   };
+   const client={task:{findUnique:async()=>options.existingTask?{id:20,createKey:key}:null},$transaction:async fn=>{const before=activities;try{return await fn(tx)}catch(error){activities=before;throw error;}}};
+   return {client,counts:()=>({activities,tasks}),task:()=>taskData};
+ };
+ const without=work.parseActivity(form(base)).value, plain=makeClient();
+ assert.equal((await work.saveActivity(plain.client,without)).followUpTaskCreated,false);assert.deepEqual(plain.counts(),{activities:1,tasks:0});
+ const withTask=work.parseActivity(form([...base,['createFollowUpTask','true']])).value, created=makeClient();
+ const result=await work.saveActivity(created.client,withTask,undefined,99);
+ assert.equal(result.followUpTaskCreated,true);assert.deepEqual(created.counts(),{activities:1,tasks:1});
+ assert.deepEqual({...created.task(),dueDate:created.task().dueDate.toISOString().slice(0,10)},{createKey:key,subject:'Follow up with Ada Lovelace',dueDate:'2026-09-30',status:'OPEN',priority:'NORMAL',assignedToId:7,accountId:1,opportunityId:2,projectId:3,createdById:99,updatedById:99});
+ const accountTitle=makeClient(),accountKey='e8054358-5d57-4398-8550-506157266185';await work.saveActivity(accountTitle.client,{...withTask,contactIds:[],followUpTaskCreateKey:accountKey});assert.equal(accountTitle.task().subject,'Follow up with Acme');
+ const failed=makeClient({failTask:true});await assert.rejects(work.saveActivity(failed.client,withTask),/task failed/);assert.deepEqual(failed.counts(),{activities:0,tasks:0});
+ const retry=makeClient({existingTask:true});await assert.rejects(work.saveActivity(retry.client,withTask),/already been scheduled/);assert.deepEqual(retry.counts(),{activities:0,tasks:0});
+ const edited=makeClient();await work.saveActivity(edited.client,withTask,10);assert.deepEqual(edited.counts(),{activities:0,tasks:0});
+});
 test('Activity choices follow Account opportunity, Project, and Contact relationships',()=>{
  const opportunities=[{id:10,name:'A',accountIds:[1,2]},{id:11,name:'B',accountIds:[2]}];
  const projects=[{id:20,name:'Primary',accountIds:[1]},{id:21,name:'Participant',accountIds:[2,1]},{id:22,name:'Other',accountIds:[2]}];
@@ -125,7 +150,7 @@ test('Activity validation state retains every submitted field',()=>{
  const entries=[['subject','Call'],['description','Detailed notes'],['activityDate','2026-09-18T14:30'],['type','CALL'],['direction','OUTBOUND'],['accountId','1'],['opportunityId','10'],['projectId','20'],['contactIds','30'],['contactIds','32'],['outcome','Interested'],['nextStep','Send quote'],['followUpDate','2026-09-25'],['userId','4']];
  const submitted=form(entries);
  const state=work.activityFailureState(submitted,{projectId:'This Project does not include the selected Account.'});
- assert.deepEqual(state.values,Object.assign(Object.fromEntries(entries),{contactIds:'30,32'}));
+ assert.deepEqual(state.values,Object.assign(Object.fromEntries(entries),{createKey:'',createFollowUpTask:'',contactIds:'30,32'}));
  assert.equal(state.errors.projectId,'This Project does not include the selected Account.');
  assert.equal(work.activityErrorField('This Project does not include the selected Account.'),'projectId');
  assert.equal(work.activityErrorField('Account is not a participant in this opportunity.'),'opportunityId');

@@ -21,6 +21,8 @@ test('save feedback paths preserve existing queries and fragments',()=>{
 test('create and edit success copy is consistent',()=>{
   assert.equal(saveFeedbackMessage('created','Opportunity'),'Opportunity created successfully.');
   assert.equal(saveFeedbackMessage('updated','Opportunity'),'Changes saved.');
+  assert.equal(saveFeedbackMessage('activity-created','Account'),'Activity created.');
+  assert.equal(saveFeedbackMessage('activity-task-created','Account'),'Activity created and follow-up task scheduled.');
   assert.equal(saveFeedbackMessage(undefined,'Opportunity'),null);
 });
 

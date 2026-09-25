@@ -83,6 +83,23 @@ test('Trade Show roles and row scopes preserve Marketing and Sales boundaries', 
   assert.equal(routeAccess('/trade-shows/1/import', actor('MARKETING_MANAGER')), 'allowed');
   assert.equal(routeAccess('/trade-shows/1/import', actor('SALES_MANAGER')), 'denied');
   assert.equal(routeAccess('/trade-shows/1/import', actor('SALES')), 'denied');
+  assert.equal(routeAccess('/trade-shows/my-leads', actor('SALES')), 'allowed');
+  assert.equal(routeAccess('/trade-shows/my-leads', actor('SALES_MANAGER')), 'allowed');
+  assert.equal(routeAccess('/trade-shows/my-leads', actor('ADMIN')), 'allowed');
+  assert.equal(routeAccess('/trade-shows/my-leads', actor('MARKETING_MANAGER')), 'denied');
+  assert.equal(routeAccess('/trade-shows/my-leads', actor('READ_ONLY')), 'denied');
+});
+test('My Trade Show Leads uses one actionable internal-sales assignment scope for the page and widget',()=>{
+  const own=leads.salesLeadQueueWhere(actor('SALES'));
+  assert.equal(own.routing,'BIXOLON_SALES');
+  assert.equal(own.assignedSalesRepUserId,7);
+  assert.deepEqual(own.status.in,['NEW','CONTACTED','QUALIFIED']);
+  assert.equal(own.tradeShow.archivedAt,null);
+  assert.equal(leads.salesLeadQueueWhere(actor('SALES'),{view:'all'}).assignedSalesRepUserId,7);
+  assert.deepEqual(leads.salesLeadQueueWhere(actor('SALES_MANAGER'),{view:'all'}).assignedSalesRepUserId,{not:null});
+  assert.equal(leads.salesLeadQueueWhere(actor('ADMIN'),{status:'CONVERTED',tradeShowId:'12'}).status,'CONVERTED');
+  assert.equal(leads.salesLeadQueueWhere(actor('ADMIN'),{status:'CONVERTED',tradeShowId:'12'}).tradeShowId,12);
+  assert.deepEqual(leads.salesLeadQueueWhere(actor('MARKETING_MANAGER')),{id:-1});
 });
 
 test('Trade Show create/edit validates eligible owner and archive stays reversible', async () => {

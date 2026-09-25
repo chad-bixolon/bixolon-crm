@@ -4,6 +4,10 @@ import { parseAccountForm } from "./account-validation";
 import { assertPermission, type Actor } from "./authorization";
 
 export const PAGE_SIZE = 20;
+const retiredSpecialAccountTerritories = new Set(['strategic', 'strategic / national account', 'strategic/national account', 'national account']);
+export function isRetiredSpecialAccountTerritory(territory: { code: string; name: string }) {
+  return retiredSpecialAccountTerritories.has(territory.code.trim().toLowerCase()) || retiredSpecialAccountTerritories.has(territory.name.trim().toLowerCase());
+}
 export const normalizeAccountName = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 export async function findAccountNameMatches(client: Pick<PrismaClient, "account">, name: string) {
   const key = normalizeAccountName(name);
@@ -76,7 +80,7 @@ export async function listAccounts(client: PrismaClient, filters: AccountFilters
 export async function accountOptions(client: PrismaClient) {
   const [industries, territories, owners] = await Promise.all([
     client.industry.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
-    client.territory.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    client.territory.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }).then(items => items.filter(item => !isRetiredSpecialAccountTerritory(item))),
     client.user.findMany({ where: { active: true, archivedAt: null }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
   ]);
   return { industries, territories, owners };
@@ -91,7 +95,7 @@ export async function checkAccountReferences(client: PrismaClient, input: Accoun
   ]);
   const errors: Record<string, string> = {};
   if (input.industry && input.industry !== existing?.industry && !industry) errors.industry = "Choose an active industry.";
-  if (input.territory && input.territory !== existing?.territory && !territory) errors.territory = "Choose an active territory.";
+  if (input.territory && input.territory !== existing?.territory && (!territory || isRetiredSpecialAccountTerritory(territory))) errors.territory = "Choose an active territory.";
   if (input.ownerId && !owner) errors.ownerId = "Choose an active owner.";
   return errors;
 }

@@ -18,8 +18,8 @@ const actor = (role, id = 7) => ({ id, role, active: true, archivedAt: null });
 
 test('role dashboard presentation is filtered by authorization', () => {
   const sections = role => dashboard.getDashboardViewForRole(actor(role)).sections;
-  assert.deepEqual(sections('SALES'), ['forecast','closing','stale','tasks','activities','stage']);
-  assert.deepEqual(sections('SALES_MANAGER'), ['forecast','reps','closing','stale','tasks','activities','stage','category']);
+  assert.deepEqual(sections('SALES'), ['forecast','closing','stale','tasks','activities','tradeShowLeads','stage']);
+  assert.deepEqual(sections('SALES_MANAGER'), ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','stage','category']);
   assert.ok(sections('ADMIN').includes('admin'));
   assert.deepEqual(sections('READ_ONLY'), ['forecast','reps','closing','stage','category']);
   assert.deepEqual(sections('MARKETING_MANAGER'), ['marketing']);

@@ -99,13 +99,17 @@ export function parseActivity(form: FormData) {
   if (!Object.values(ActivityDirection).includes(direction)) errors.direction = 'Choose a direction.';
   const outcome = optional(form, 'outcome', 2000, errors), nextStep = optional(form, 'nextStep', 2000, errors);
   const followUpDate = dateField(field(form, 'followUpDate'), 'followUpDate', errors);
+  const createFollowUpTask = form.has('createFollowUpTask');
+  const followUpTaskCreateKey = field(form, 'createKey');
+  if (createFollowUpTask && !followUpDate) errors.followUpDate = 'Choose a valid Follow-Up Date to create a Task.';
+  if (createFollowUpTask && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(followUpTaskCreateKey)) errors.createFollowUpTask = 'Reload the form and try again.';
   const contactIds = [...new Set(form.getAll('contactIds').map(String).filter(Boolean).map(positiveId))];
   if (contactIds.includes(null)) errors.contactIds = 'Choose valid Contacts.';
-  return { errors, value: Object.keys(errors).length ? undefined : { subject, description, accountId, opportunityId, projectId, userId, type, activityDate: activityDate!, direction, outcome, nextStep, followUpDate, contactIds: contactIds as number[] } };
+  return { errors, value: Object.keys(errors).length ? undefined : { subject, description, accountId, opportunityId, projectId, userId, type, activityDate: activityDate!, direction, outcome, nextStep, followUpDate, contactIds: contactIds as number[], createFollowUpTask, followUpTaskCreateKey } };
 }
-const activityFields = ['subject','description','accountId','opportunityId','projectId','userId','type','activityDate','direction','outcome','nextStep','followUpDate'] as const;
+const activityFields = ['subject','description','accountId','opportunityId','projectId','userId','type','activityDate','direction','outcome','nextStep','followUpDate','createKey'] as const;
 export function activitySubmittedValues(form: FormData) {
-  return { ...Object.fromEntries(activityFields.map(key => [key, String(form.get(key) ?? '')])), contactIds: form.getAll('contactIds').map(String).join(',') };
+  return { ...Object.fromEntries(activityFields.map(key => [key, String(form.get(key) ?? '')])), createFollowUpTask: form.has('createFollowUpTask') ? 'true' : '', contactIds: form.getAll('contactIds').map(String).join(',') };
 }
 export function activityFailureState(form: FormData, errors: Errors, message = 'Correct the highlighted fields.') {
   return { errors, message, values: activitySubmittedValues(form) };
@@ -120,7 +124,8 @@ export function activityErrorField(message: string) {
   if (message.includes('responsible user')) return 'userId';
   return null;
 }
-export async function saveActivity(client: PrismaClient, value: NonNullable<ReturnType<typeof parseActivity>['value']>, id?: number) {
+export async function saveActivity(client: PrismaClient, value: NonNullable<ReturnType<typeof parseActivity>['value']>, id?: number, actorId?: number) {
+  if (!id && value.createFollowUpTask && await client.task.findUnique({ where: { createKey: value.followUpTaskCreateKey } })) throw new Error('This follow-up Task has already been scheduled.');
   return client.$transaction(async tx => {
     const existing = id ? await tx.activity.findFirst({ where: { id, archivedAt: null } }) : null;
     if (id && !existing) throw new Error('Activity not found or archived.');
@@ -145,7 +150,7 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
     if (existing?.accountId != null && existing.accountId !== value.accountId && await tx.activityContact.count({ where: { activityId: id } })) throw new Error('Account cannot change while Contact history is linked.');
     if (!(await tx.activityType.findFirst({ where: { code: value.type, active: true } })) && existing?.type !== value.type) throw new Error('Choose an active activity type.');
     if (value.userId && !(await tx.user.findFirst({ where: { id: value.userId, active: true, archivedAt: null } }))) throw new Error('Choose an active responsible user.');
-    const { contactIds: suppliedContactIds, ...data } = value;
+    const { contactIds: suppliedContactIds, createFollowUpTask, followUpTaskCreateKey, ...data } = value;
     const contactIds = suppliedContactIds ?? [];
     if (contactIds.length) {
       const contacts = await tx.contact.findMany({ where: { id: { in: contactIds }, archivedAt: null }, select: { id: true, accountId: true, active: true } });
@@ -157,7 +162,15 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
     }
     const row = id ? await tx.activity.update({ where: { id }, data }) : await tx.activity.create({ data });
     for (const contactId of contactIds) await tx.activityContact.createMany({ data: [{ activityId: row.id, contactId }], skipDuplicates: true });
-    return row;
+    if (!id && createFollowUpTask) {
+      if (!value.followUpDate) throw new Error('Choose a valid Follow-Up Date to create a Task.');
+      if (!value.userId) throw new Error('Choose a responsible user to create a follow-up Task.');
+      const contact = contactIds.length ? await tx.contact.findFirst({where:{id:{in:contactIds}},select:{firstName:true,lastName:true},orderBy:{id:'asc'}}) : null;
+      const account = contact ? null : await tx.account.findUnique({where:{id:value.accountId},select:{name:true}});
+      const subject = contact ? `Follow up with ${contact.firstName} ${contact.lastName}` : account ? `Follow up with ${account.name}` : 'Follow up on activity';
+      await tx.task.create({data:{createKey:followUpTaskCreateKey,subject,dueDate:value.followUpDate,status:'OPEN',priority:'NORMAL',assignedToId:value.userId,accountId:value.accountId,opportunityId:value.opportunityId,projectId:value.projectId,createdById:actorId??value.userId,updatedById:actorId??value.userId}});
+    }
+    return { ...row, followUpTaskCreated: !id && createFollowUpTask };
   });
 }
 export function parseNote(form: FormData) {

@@ -3,11 +3,12 @@ import { can, taskScope, type Actor } from './authorization';
 import { canRunReportType, canViewBuiltInReport, canViewReportDefinition, validateReportConfiguration } from './reporting';
 import { engagementAccountWhere } from './engagement';
 import { dashboardOpenTaskWhere } from './work';
+import { canViewSalesLeadQueue } from './trade-show-leads';
 
-export type DashboardSection = 'forecast' | 'reps' | 'closing' | 'stage' | 'category' | 'stale' | 'tasks' | 'activities' | 'admin' | 'marketing';
+export type DashboardSection = 'forecast' | 'reps' | 'closing' | 'stage' | 'category' | 'stale' | 'tasks' | 'activities' | 'tradeShowLeads' | 'admin' | 'marketing';
 export type DashboardView = { title: string; sections: readonly DashboardSection[] };
 
-export const dashboardWidgetKeys = ['FORECAST_SUMMARY','PIPELINE_BY_REP','PIPELINE_BY_STAGE','PIPELINE_BY_PRODUCT_CATEGORY','CLOSING_OPPORTUNITIES','STALE_ACCOUNTS','OVERDUE_TASKS','RECENT_ACTIVITY','MARKETING_SUMMARY','ADMIN_SHORTCUTS'] as const;
+export const dashboardWidgetKeys = ['FORECAST_SUMMARY','PIPELINE_BY_REP','PIPELINE_BY_STAGE','PIPELINE_BY_PRODUCT_CATEGORY','CLOSING_OPPORTUNITIES','STALE_ACCOUNTS','OVERDUE_TASKS','RECENT_ACTIVITY','MY_TRADE_SHOW_LEADS','MARKETING_SUMMARY','ADMIN_SHORTCUTS'] as const;
 export type DashboardWidgetKey = typeof dashboardWidgetKeys[number];
 export type DashboardWidgetSize = 'HALF'|'FULL';
 export type SavedReportWidgetStyle = 'KPI'|'COMPACT_TABLE'|'GROUPED_SUMMARY';
@@ -36,6 +37,7 @@ export const dashboardWidgetRegistry: Record<DashboardWidgetKey,WidgetDefinition
   STALE_ACCOUNTS:{title:'Accounts with No Activity 90+ Days',description:'Active Accounts needing engagement.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'stale',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES']},
   OVERDUE_TASKS:{title:'Overdue Tasks',description:'Open Tasks past their due date.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'tasks',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES','MARKETING_MANAGER']},
   RECENT_ACTIVITY:{title:'Recent Activity',description:'Latest CRM activity in your permitted scope.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'activities',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES']},
+  MY_TRADE_SHOW_LEADS:{title:'My Trade Show Leads',description:'Actionable internal Sales leads assigned to you.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'tradeShowLeads',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES'],drillDown:'/trade-shows/my-leads'},
   MARKETING_SUMMARY:{title:'Marketing Summary',description:'Marketing-safe Account and Trade Show lead overview.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'marketing',presentationSection:'MARKETING',roles:['MARKETING_MANAGER']},
   ADMIN_SHORTCUTS:{title:'Administration Shortcuts',description:'Quick access to common Administration areas.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'admin',presentationSection:'ADMINISTRATION',roles:['ADMIN']},
 };
@@ -47,16 +49,16 @@ export function dashboardItemPresentationSection(item:DashboardLayoutItem):Dashb
 // A role chooses the default presentation. Authorization still decides which
 // data and actions are accessible; future role-view settings must not grant access.
 const views: Record<UserRole, DashboardView> = {
-  SALES: { title: 'My sales dashboard', sections: ['forecast','closing','stale','tasks','activities','stage'] },
-  SALES_MANAGER: { title: 'Team sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','stage','category'] },
-  ADMIN: { title: 'Sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','stage','category','admin'] },
+  SALES: { title: 'My sales dashboard', sections: ['forecast','closing','stale','tasks','activities','tradeShowLeads','stage'] },
+  SALES_MANAGER: { title: 'Team sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','stage','category'] },
+  ADMIN: { title: 'Sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','stage','category','admin'] },
   READ_ONLY: { title: 'Sales overview', sections: ['forecast','reps','closing','stage','category'] },
   MARKETING_MANAGER: { title: 'Marketing overview', sections: ['marketing'] },
 };
 
 const item=(key:DashboardWidgetKey,size?:DashboardWidgetSize):DashboardBuiltinItem=>({kind:'BUILTIN',key,size:size??dashboardWidgetRegistry[key].defaultSize});
 export const systemDashboardDefaults: Record<UserRole,DashboardLayoutConfiguration> = {
-  SALES:{version:1,items:[item('FORECAST_SUMMARY'),item('PIPELINE_BY_STAGE'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY')]},
+  SALES:{version:1,items:[item('FORECAST_SUMMARY'),item('PIPELINE_BY_STAGE'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('MY_TRADE_SHOW_LEADS')]},
   SALES_MANAGER:{version:1,items:[item('FORECAST_SUMMARY'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY')]},
   ADMIN:{version:1,items:[item('FORECAST_SUMMARY'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('ADMIN_SHORTCUTS')]},
   READ_ONLY:{version:1,items:[item('FORECAST_SUMMARY'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES')]},
@@ -129,6 +131,7 @@ export function canShowDashboardSection(actor: Actor, section: DashboardSection)
   if (['forecast','reps','closing','stage','category'].includes(section)) return canRunReportType(actor, 'PIPELINE');
   if (section === 'stale') return canViewBuiltInReport(actor, 'ACCOUNT_ENGAGEMENT');
   if (section === 'tasks' || section === 'activities') return can(actor, 'tasks.read');
+  if (section === 'tradeShowLeads') return canViewSalesLeadQueue(actor);
   if (section === 'admin') return can(actor, 'users.manage');
   return can(actor, 'marketing.read') && can(actor, 'accounts.read');
 }
