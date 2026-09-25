@@ -15,12 +15,14 @@ docker compose exec -T app npm run audit:production-cleanup -- --expect-host db 
 
 The output path must be new and absolute, under `/tmp` or `/app/reports`. `--expect-host` must match the database host shown by `--inspect-target`; neither command prints the URL or credentials. Keep generated CSVs private because they contain customer names and Contact email addresses. Do not commit them.
 
-The current local Compose environment targets `db/bixolon_crm`; production uses an external database configured in the DigitalOcean runtime. This script is copied into the production image by the Dockerfile only after a later authorized release. Until then, the current production console does not have it. In that future release, run these commands from the DigitalOcean app console, with `AUDIT_DB_HOST` set to the host shown by the first command:
+For a failed audit, add `--debug-safe`. It prints each connection, model query, analysis, and report-file stage. On failure it prints the last stage, an allowlisted error name, validated Prisma/PostgreSQL codes when available, and a fixed description. Raw database errors and their metadata are never printed because they may contain connection details or customer data. The audit still issues only Prisma `findMany` reads through a connection configured with `default_transaction_read_only=on`.
+
+The current local Compose environment targets `db/bixolon_crm`; production uses an external database configured in the DigitalOcean runtime. After the diagnostic change is deployed in a later authorized release, run these commands from the DigitalOcean app console, with `AUDIT_DB_HOST` set to the host shown by the first command:
 
 ```sh
 npm run audit:production-cleanup -- --inspect-target
 AUDIT_DB_HOST="$(node -p 'new URL(process.env.DATABASE_URL).hostname')"
-npm run audit:production-cleanup -- --expect-host "$AUDIT_DB_HOST" --output "/tmp/saleshub-production-cleanup-audit-$(date -u +%Y%m%dT%H%M%SZ)"
+npm run audit:production-cleanup -- --expect-host "$AUDIT_DB_HOST" --debug-safe --output "/tmp/saleshub-production-cleanup-audit-$(date -u +%Y%m%dT%H%M%SZ)"
 ```
 
 Review the host and database name displayed by `--inspect-target` before the run. The output remains in that console/container's `/tmp`; arrange a separately approved secure retrieval method if the report needs to leave the container. No cleanup, migration, or Spaces operation is part of this audit.

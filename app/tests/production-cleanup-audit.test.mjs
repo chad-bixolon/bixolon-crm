@@ -3,20 +3,25 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { analyze, emptySnapshot, readSnapshot, writeReport } from '../scripts/operations/audit-production-cleanup.mjs';
+import { analyze, emptySnapshot, readSnapshot, safeDiagnostic, writeReport } from '../scripts/operations/audit-production-cleanup.mjs';
 
 const before=new Date('2026-09-20T12:00:00Z');
 const after=new Date('2026-09-26T12:00:00Z');
 const user={id:1,firstName:'Admin',lastName:'User',role:'ADMIN',createdAt:before};
 
 test('empty categories produce counts and readable private CSV files',async()=>{
-  const result=analyze(emptySnapshot());
+  const stages=[];
+  const result=analyze(emptySnapshot(),stage=>stages.push(stage));
   assert.equal(result.candidates.length,0);
   assert.equal(result.duplicates.length,0);
+  assert.ok(stages.includes('relationships'));
+  assert.ok(stages.includes('duplicate detection'));
+  assert.ok(stages.includes('candidate scoring: opportunities'));
   const directory=await fs.mkdtemp(path.join(os.tmpdir(),'saleshub-cleanup-test-'));
   try {
-    const files=await writeReport(result,directory,{host:'local-db',database:'fixture'});
+    const files=await writeReport(result,directory,{host:'local-db',database:'fixture'},stage=>stages.push(stage));
     assert.ok(files.includes('document-inventory.csv'));
+    assert.ok(stages.includes('report generation: production-cleanup-summary.md'));
     assert.match(await fs.readFile(path.join(directory,'accounts-candidates.csv'),'utf8'),/confidence/);
     assert.equal((await fs.stat(path.join(directory,'production-cleanup-summary.md'))).mode & 0o777,0o600);
   } finally { await fs.rm(directory,{recursive:true,force:true}); }
@@ -29,6 +34,21 @@ test('database snapshot uses read methods only',async()=>{
   assert.deepEqual(Object.keys(result).sort(),Object.keys(emptySnapshot()).sort());
   assert.equal(calls.length,Object.keys(result).length);
   assert.ok(calls.every(call=>call.options.select&&Object.values(call.options.select).every(value=>value===true)));
+});
+
+test('failed query identifies its model without printing secrets',async()=>{
+  const stages=[];
+  const db=new Proxy({}, {get(_target,model){return {findMany:async()=>{
+    if(model==='contact') throw Object.assign(new Error('postgresql://user:password@host/db certificate SECRET'),{name:'PrismaClientKnownRequestError',code:'P2022',meta:{code:'42703',detail:'password=SECRET'}});
+    return [];
+  }};}});
+  await assert.rejects(readSnapshot(db,stage=>stages.push(stage)),error=>{
+    const output=safeDiagnostic(error,stages.at(-1));
+    assert.match(output,/query: contacts \(contact\.findMany\)/);
+    assert.match(output,/prismaCode=P2022; postgresCode=42703/);
+    assert.doesNotMatch(output,/password|SECRET|postgresql:\/\//);
+    return true;
+  });
 });
 
 test('confidence uses multiple signals and real relationships raise cleanup risk',()=>{
