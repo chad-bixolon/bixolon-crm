@@ -4,9 +4,12 @@ import { parseAccountForm } from "./account-validation";
 import { assertPermission, type Actor } from "./authorization";
 
 export const PAGE_SIZE = 20;
-const retiredSpecialAccountTerritories = new Set(['strategic', 'strategic / national account', 'strategic/national account', 'national account']);
+const retiredSpecialAccountTerritories = new Set(['strategic_sales', 'strategic', 'strategic / national accounts', 'strategic / national account', 'strategic/national account', 'national account']);
 export function isRetiredSpecialAccountTerritory(territory: { code: string; name: string }) {
   return retiredSpecialAccountTerritories.has(territory.code.trim().toLowerCase()) || retiredSpecialAccountTerritories.has(territory.name.trim().toLowerCase());
+}
+export function accountEditTerritories<T extends { code: string; active: boolean }>(territories: T[], current: T | null) {
+  return current && !territories.some((item) => item.code === current.code) ? [...territories, { ...current, active: false }] : territories;
 }
 export const normalizeAccountName = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 export async function findAccountNameMatches(client: Pick<PrismaClient, "account">, name: string) {

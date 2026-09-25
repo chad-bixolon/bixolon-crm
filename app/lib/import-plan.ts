@@ -1,6 +1,7 @@
 import { AccountBusinessRoleCode, AccountStatus, Prisma, type PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { parseImportCsv, type CsvRow, type ImportHeader } from './import-csv';
+import { isRetiredSpecialAccountTerritory } from './accounts';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Account = Prisma.AccountGetPayload<{include:{businessRoles:true}}>;
@@ -49,7 +50,7 @@ export async function planImport(db:Db, csv:string):Promise<ImportPlan> {
     if (has(row,'account_status')) { const status = v(row,'account_status').toUpperCase(); if (!['ACTIVE','INACTIVE'].includes(status)) messages.push('Account status must be ACTIVE or INACTIVE.'); else data.status = status as AccountStatus; }
     if (has(row,'strategic_account')) { const value = bool(v(row,'strategic_account')); if (value === null) messages.push('Strategic account must be true or false.'); else data.strategicAccount = value; }
     if (has(row,'owner_email')) { const matches = users.filter(u => email(u.email) === email(v(row,'owner_email')) && u.active && !u.archivedAt); if (matches.length !== 1) messages.push('Owner email must match one active CRM user.'); else data.ownerId = matches[0].id; }
-    if (has(row,'territory_code') && !territories.some(t => t.code === v(row,'territory_code') && t.active)) messages.push('Unknown or inactive Territory code.');
+    if (has(row,'territory_code') && v(row,'territory_code') !== match?.territory && !territories.some(t => t.code === v(row,'territory_code') && t.active && !isRetiredSpecialAccountTerritory(t))) messages.push('Unknown, inactive, or retired Territory code.');
     if (has(row,'industry_code') && !industries.some(i => i.code === v(row,'industry_code') && i.active)) messages.push('Unknown or inactive Industry code.');
     let roles:AccountBusinessRoleCode[]|undefined;
     if (has(row,'business_roles')) { const values = v(row,'business_roles').split('|').map(x=>x.trim()).filter(Boolean); const invalid = values.filter(x=>!Object.values(AccountBusinessRoleCode).includes(x as AccountBusinessRoleCode)); if (invalid.length) messages.push(`Unknown business role: ${invalid.join(', ')}.`); else roles = [...new Set(values)] as AccountBusinessRoleCode[]; }

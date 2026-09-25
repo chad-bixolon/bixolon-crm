@@ -21,7 +21,7 @@ function loadTs(relative) {
   return mod.exports;
 }
 const { parseAccountForm, roleLabels } = loadTs('lib/account-validation.ts');
-const { accountWhere, accountView, accountHref, listAccounts, accountOptions, PAGE_SIZE, checkAccountReferences, setAccountArchived, findAccountNameMatches, normalizeAccountName, saveAccount, createAccountFromImport, isRetiredSpecialAccountTerritory } = loadTs('lib/accounts.ts');
+const { accountWhere, accountView, accountHref, listAccounts, accountOptions, accountEditTerritories, PAGE_SIZE, checkAccountReferences, setAccountArchived, findAccountNameMatches, normalizeAccountName, saveAccount, createAccountFromImport, isRetiredSpecialAccountTerritory } = loadTs('lib/accounts.ts');
 const { routeAccess } = loadTs('lib/authorization.ts');
 const { parseLookup } = loadTs('lib/lookups.ts');
 function form(entries) { const f = new FormData(); for (const [key, value] of entries) f.append(key, value); return f; }
@@ -190,13 +190,29 @@ test('existing inactive lookup values remain valid on edit, but new inactive sel
   assert.deepEqual(await checkAccountReferences(client, input, 1), {});
   assert.deepEqual(await checkAccountReferences(client, { ...input, industry: 'OTHER' }, 1), { industry: 'Choose an active industry.' });
 });
-test('Strategic Territory is retired from Account choices while historical assignments and Strategic Account remain safe', async () => {
-  const territories=[{code:'WEST',name:'West',active:true},{code:'Strategic',name:'Strategic',active:true},{code:'EAST',name:'East',active:true}];
-  const client={industry:{findMany:async()=>[]},territory:{findMany:async()=>territories,findFirst:async({where})=>territories.find(item=>item.code===where.code&&item.active)??null},user:{findMany:async()=>[],findFirst:async()=>null},account:{findUnique:async()=>({industry:null,territory:'Strategic'})}};
+test('new Account options exclude the production retired Territory code and local legacy code', async () => {
+  const territories=[{code:'WEST',name:'West',active:true},{code:'STRATEGIC_SALES',name:'Strategic / National Accounts',active:true},{code:'Strategic',name:'Strategic',active:true},{code:'EAST',name:'East',active:true}];
+  const client={industry:{findMany:async()=>[]},territory:{findMany:async()=>territories},user:{findMany:async()=>[]}};
   assert.deepEqual((await accountOptions(client)).territories.map(item=>item.code),['WEST','EAST']);
   assert.equal(isRetiredSpecialAccountTerritory(territories[1]),true);
-  assert.deepEqual(await checkAccountReferences(client,{industry:null,territory:'Strategic',ownerId:null},1),{});
-  assert.deepEqual(await checkAccountReferences({...client,account:{findUnique:async()=>({industry:null,territory:'WEST'})}},{industry:null,territory:'Strategic',ownerId:null},1),{territory:'Choose an active territory.'});
+  assert.equal(isRetiredSpecialAccountTerritory({code:'OTHER',name:'Strategic / National Accounts'}),true);
+});
+test('historical retired Territory is shown on edit and preserved by validation', async () => {
+  const current={code:'STRATEGIC_SALES',name:'Strategic / National Accounts',active:true};
+  const choices=[{code:'WEST',name:'West',active:true}];
+  assert.deepEqual(accountEditTerritories(choices,current),[...choices,{...current,active:false}]);
+  assert.deepEqual(accountEditTerritories(choices,null),choices);
+  const client={account:{findUnique:async()=>({industry:null,territory:current.code})},territory:{findFirst:async()=>{throw Error('current Territory should not be looked up');}}};
+  assert.deepEqual(await checkAccountReferences(client,{industry:null,territory:current.code,ownerId:null},1),{});
+});
+test('new or non-historical Account cannot submit retired Territory', async () => {
+  const retired={code:'STRATEGIC_SALES',name:'Strategic / National Accounts',active:true};
+  const client={account:{findUnique:async()=>({industry:null,territory:'WEST'})},territory:{findFirst:async({where})=>where.code===retired.code?retired:null}};
+  const input={industry:null,territory:retired.code,ownerId:null};
+  const choices=[{code:'WEST',name:'West',active:true}];
+  assert.deepEqual(accountEditTerritories(choices,choices[0]).map(item=>item.code),['WEST']);
+  assert.deepEqual(await checkAccountReferences(client,input),{territory:'Choose an active territory.'});
+  assert.deepEqual(await checkAccountReferences(client,input,1),{territory:'Choose an active territory.'});
   assert.equal(parseAccountForm(form([['name','National customer'],['strategicAccount','on']])).value.strategicAccount,true);
 });
 test('lookup administration validates stable codes and sort order', () => {

@@ -32,11 +32,19 @@ test('Account matching normalizes name and domain and rejects ambiguity',async()
   assert.equal((await planImport(data,'record_type,account_name,website\naccount,Acme Co,https://other.com')).items[0].status,'ERROR');
 });
 test('lookup validation, roles, duplicate rows, and blank preservation',async()=>{
-  const data=db({accounts:[account(1,'Acme')],users:[{id:4,email:'owner@example.com',active:true,archivedAt:null}],territories:[{code:'EAST',active:true}],industries:[{code:'RETAIL',active:true}]});
+  const data=db({accounts:[account(1,'Acme')],users:[{id:4,email:'owner@example.com',active:true,archivedAt:null}],territories:[{code:'EAST',name:'East',active:true}],industries:[{code:'RETAIL',active:true}]});
   const good=await planImport(data,'record_type,account_name,phone,owner_email,territory_code,industry_code,business_roles\naccount,Acme,,owner@example.com,EAST,RETAIL,VAR|ISV');
   assert.equal(good.items[0].status,'UPDATE'); assert.equal(good.items[0].data.phone,undefined); assert.equal(good.items[0].data.ownerId,4); assert.deepEqual(good.items[0].roles,['VAR','ISV']);
   const bad=await planImport(data,'record_type,account_name,owner_email,territory_code,industry_code,business_roles\naccount,Acme,no@example.com,NO,NO,Reseller\naccount,ACME,,,,');
   assert.equal(bad.counts.errors,2); assert.match(bad.items[0].messages.join(' '),/Owner email.*Territory.*Industry.*business role/);
+});
+test('CSV import rejects new retired Territory assignments but preserves historical ones',async()=>{
+  const retired={code:'STRATEGIC_SALES',name:'Strategic / National Accounts',active:true};
+  const data=db({accounts:[{...account(1,'Historical'),territory:retired.code},account(2,'Other')],territories:[retired]});
+  const csv='record_type,account_name,territory_code\naccount,New,STRATEGIC_SALES\naccount,Other,STRATEGIC_SALES\naccount,Historical,STRATEGIC_SALES';
+  const plan=await planImport(data,csv);
+  assert.deepEqual(plan.items.map(item=>item.status),['ERROR','ERROR','UNCHANGED']);
+  assert.match(plan.items[0].messages.join(' '),/retired Territory/);
 });
 test('Contact email matching, unassigned Contact, and Primary rules',async()=>{
   const data=db({accounts:[account(1,'Acme')],contacts:[contact(1,'ADA@example.com',1),{...contact(2,'primary@example.com',1),isPrimary:true}]});
