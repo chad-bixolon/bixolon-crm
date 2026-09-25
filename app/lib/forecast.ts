@@ -1,3 +1,4 @@
+import { operationalOpportunityWhere } from './operational-where';
 import { ForecastCategory, Prisma, SalesQuarter, type PrismaClient, type UserRole } from '@prisma/client';
 import { can, opportunityScope, type Actor } from './authorization';
 import { opportunityTotal, weightedValue } from './opportunities';
@@ -49,7 +50,7 @@ async function forecastForRepWithTarget(client: PrismaClient, actor: Actor, inpu
   const { start, endExclusive } = quarterBounds(input.year, input.quarter);
   const [target, opportunities] = await Promise.all([
     knownTarget === undefined ? client.salesTarget.findFirst({ where: { userId: input.userId, year: input.year, quarter: input.quarter, currencyCode: input.currencyCode, archivedAt: null } }) : knownTarget,
-    client.opportunity.findMany({ where: { AND: [opportunityScope(actor), { ownerId: input.userId, archivedAt: null, stage: { isClosed: false }, forecastCategory: { in: [ForecastCategory.PIPELINE, ForecastCategory.BEST_CASE, ForecastCategory.COMMIT] }, currencyCode: input.currencyCode, expectedCloseDate: { gte: start, lt: endExclusive } }] }, select: { forecastCategory: true, probability: true, stage: { select: { probability: true } }, products: { where: { archivedAt: null }, select: { quantity: true, estimatedUnitPrice: true } } } }),
+    client.opportunity.findMany({ where: { AND: [opportunityScope(actor), { AND: [operationalOpportunityWhere], ownerId: input.userId, archivedAt: null, stage: { isClosed: false }, forecastCategory: { in: [ForecastCategory.PIPELINE, ForecastCategory.BEST_CASE, ForecastCategory.COMMIT] }, currencyCode: input.currencyCode, expectedCloseDate: { gte: start, lt: endExclusive } }] }, select: { forecastCategory: true, probability: true, stage: { select: { probability: true } }, products: { where: { archivedAt: null }, select: { quantity: true, estimatedUnitPrice: true } } } }),
   ]);
   let pipeline = new Prisma.Decimal(0), weightedPipeline = new Prisma.Decimal(0), commit = new Prisma.Decimal(0), bestCase = new Prisma.Decimal(0);
   for (const row of opportunities) {

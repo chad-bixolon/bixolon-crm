@@ -51,6 +51,7 @@ export function accountHref(filters: AccountFilters, changes: Partial<AccountFil
 
 export function accountWhere(filters: AccountFilters, currentUserId?: number): Prisma.AccountWhereInput {
   const where: Prisma.AccountWhereInput = {};
+  if (filters.status !== 'ARCHIVED') { where.archivedAt = null; if (!filters.status) where.status = { not: 'ARCHIVED' }; }
   if (accountView(filters) === "my") {
     if (!currentUserId) throw new Error("A CRM user is required for My Accounts.");
     where.ownerId = currentUserId;

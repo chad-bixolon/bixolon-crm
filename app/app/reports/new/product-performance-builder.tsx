@@ -1,3 +1,4 @@
+import { operationalProjectWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import type { Actor } from '@/lib/authorization';
 import { Content,PageHeader } from '@/components/shell';
@@ -21,8 +22,8 @@ export async function ProductPerformanceBuilder({params,actor,saved}:{params:Par
     prisma.industry.findMany({orderBy:{name:'asc'}}),prisma.territory.findMany({orderBy:{name:'asc'}}),
     prisma.productCategory.findMany({orderBy:{name:'asc'}}),
     prisma.product.findMany({where:{archivedAt:null},select:{id:true,name:true},orderBy:{name:'asc'}}),
-    prisma.productSku.findMany({select:{id:true,partNumber:true},orderBy:{partNumber:'asc'}}),
-    prisma.project.findMany({where:{archivedAt:null},select:{id:true,name:true},orderBy:{name:'asc'}}),
+    prisma.productSku.findMany({where:{active:true,product:{active:true,archivedAt:null}},select:{id:true,partNumber:true},orderBy:{partNumber:'asc'}}),
+    prisma.project.findMany({where:operationalProjectWhere,select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.currency.findMany({where:{active:true},orderBy:{code:'asc'}}),
   ]);
   const selected=(field:string)=>String(filterValue(config,field)??'');

@@ -1,3 +1,4 @@
+import { operationalActivityWhere } from './operational-where';
 import type { Prisma, PrismaClient, UserRole } from '@prisma/client';
 import { can, taskScope, type Actor } from './authorization';
 import { canRunReportType, canViewBuiltInReport, canViewReportDefinition, validateReportConfiguration } from './reporting';
@@ -158,7 +159,7 @@ export function dashboardTaskWhere(actor: Actor, today: Date, repIds: number[]):
 
 export function dashboardActivityWhere(actor: Actor, repIds: number[]): Prisma.ActivityWhereInput {
   if (!can(actor, 'tasks.read')) throw new Error('Access denied');
-  return { archivedAt: null, userId: actor.role === 'SALES' ? actor.id : { in: repIds } };
+  return { AND: [operationalActivityWhere], userId: actor.role === 'SALES' ? actor.id : { in: repIds } };
 }
 
 export function pipelineReportHref(input: { currency: string; ownerId?: number; groupBy?: 'owner'|'stage'|'productCategory'; commit?: boolean; team?: boolean }) {

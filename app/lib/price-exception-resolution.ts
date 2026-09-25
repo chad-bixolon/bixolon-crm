@@ -45,7 +45,7 @@ export async function updatePriceExceptionSalesRep(db: Db, priceExceptionId: num
     assignedSalesRepUserId ? db.user.findUnique({ where: { id: assignedSalesRepUserId }, select: { id: true, role: true, active: true, archivedAt: true } }) : null,
   ]);
   if (!priceException) throw new PriceExceptionAccountValidationError({ form: 'Price Exception not found.' });
-  if (assignedSalesRepUserId && (!user || !['SALES', 'SALES_MANAGER'].includes(user.role))) throw new PriceExceptionAccountValidationError({ assignedSalesRepUserId: 'Choose a Sales or Sales Manager user.' });
+  if (assignedSalesRepUserId && (!user || !user.active || user.archivedAt || !['SALES', 'SALES_MANAGER'].includes(user.role))) throw new PriceExceptionAccountValidationError({ assignedSalesRepUserId: 'Choose a Sales or Sales Manager user.' });
   await db.priceException.update({ where: { id: priceExceptionId }, data: { assignedSalesRepUserId, updatedById: actor.id } });
 }
 
@@ -58,12 +58,12 @@ export async function updatePriceExceptionAccountLinks(db: Db, priceExceptionId:
   const requestedIds = [...new Set(entries.map(([, id]) => id).filter((id): id is number => id !== null))];
   const [existingPriceException, accounts] = await Promise.all([
     db.priceException.findUnique({ where: { id: priceExceptionId }, select: { distributorAccountId: true, varAccountId: true, endUserAccountId: true } }),
-    requestedIds.length ? db.account.findMany({ where: { id: { in: requestedIds } }, select: { id: true } }) : Promise.resolve([]),
+    requestedIds.length ? db.account.findMany({ where: { id: { in: requestedIds }, status: 'ACTIVE', archivedAt: null }, select: { id: true } }) : Promise.resolve([]),
   ]);
   if (!existingPriceException) throw new PriceExceptionAccountValidationError({ form: 'Price Exception not found.' });
   const found = new Set(accounts.map(account => account.id));
   const errors: Record<string, string> = {};
-  for (const [field, id] of entries) if (id !== null && !found.has(id)) errors[field] = 'The selected Account no longer exists.';
+  for (const [field, id] of entries) if (id !== null && !found.has(id) && existingPriceException[field] !== id) errors[field] = 'Choose an active Account.';
   if (Object.keys(errors).length) throw new PriceExceptionAccountValidationError(errors);
   await db.priceException.update({ where: { id: priceExceptionId }, data: { ...patch, updatedById: actor.id } });
   const current = { ...existingPriceException, ...patch };

@@ -1,9 +1,10 @@
 import Link from 'next/link';
+import { restoreReportAction } from './actions';
 import { notFound } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
 import { currentUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
-import { canAccessReports, getCreatableReportTypes, getVisibleBuiltInReports, getVisibleReportTypes, reportRegistry, savedReportWhere, type BuiltInReportType } from '@/lib/reporting';
+import { canAccessReports, canEditReportDefinition, getCreatableReportTypes, getVisibleBuiltInReports, getVisibleReportTypes, reportRegistry, savedReportWhere, type BuiltInReportType } from '@/lib/reporting';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,13 +72,14 @@ const builtInGroups: { title: string; cards: BuiltInCard[] }[] = [
   },
 ];
 
-export default async function ReportsPage() {
+export default async function ReportsPage({searchParams}:{searchParams:Promise<{view?:string}>}) {
   const actor = await currentUser();
+  const archivedView=(await searchParams).view==='archived';
   if (!canAccessReports(actor)) notFound();
   const builtIns = new Set(getVisibleBuiltInReports(actor));
   const visibleReportTypes = getVisibleReportTypes(actor);
   const creatableReportTypes = getCreatableReportTypes(actor);
-  const reports = await prisma.reportDefinition.findMany({ where: savedReportWhere(actor), include: { owner: true }, orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }] });
+  const reports = await prisma.reportDefinition.findMany({ where: {...savedReportWhere(actor),archivedAt:archivedView?{not:null}:null}, include: { owner: true }, orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }] });
   const mine = reports.filter(report => report.ownerId === actor.id);
   const shared = reports.filter(report => report.visibility === 'SHARED' && report.ownerId !== actor.id);
 
@@ -108,7 +110,7 @@ export default async function ReportsPage() {
         })}
       </div>
     </section>}
-    <section className="mb-8"><h2 className="text-lg font-semibold">Saved Reports</h2><p className="mt-1 text-sm text-slate-600">Open reports you&apos;ve saved or reports shared with your team.</p><div className="mt-4 grid items-stretch gap-4 lg:grid-cols-2">{[{title:'My Reports',help:'Reports you\'ve saved for reuse.',list:mine},{title:'Shared Reports',help:'Reports shared with your team.',list:shared}].map(({title,help,list})=><section className="panel flex min-w-0 flex-col" key={title}><div className="border-b border-slate-200 p-5"><h3 className="text-base font-semibold">{title}</h3><p className="mt-1 text-sm leading-5 text-slate-600">{help}</p></div>{list.length?<ul className="divide-y divide-slate-100">{list.map(report=><li className="p-5" key={report.id}><Link className="font-medium text-orange-800 underline" href={`/reports/${report.id}`}>{report.name}</Link><p className="mt-1 text-sm leading-5 text-slate-600">{reportRegistry[report.reportType].label} · {report.visibility==='PERSONAL'?'Personal':`Shared by ${report.owner.firstName} ${report.owner.lastName}`} · updated {report.updatedAt.toISOString().slice(0,10)}</p></li>)}</ul>:<p className="flex flex-1 items-center p-5 text-sm text-slate-500">No reports yet.</p>}</section>)}</div></section>
+    <section className="mb-8"><h2 className="text-lg font-semibold">Saved Reports</h2><nav className="mt-2 flex gap-4 text-sm"><Link className={!archivedView?'font-semibold text-orange-800':'underline'} href="/reports">Current</Link><Link className={archivedView?'font-semibold text-orange-800':'underline'} href="/reports?view=archived">Archived</Link></nav><p className="mt-1 text-sm text-slate-600">Open reports you&apos;ve saved or reports shared with your team.</p><div className="mt-4 grid items-stretch gap-4 lg:grid-cols-2">{[{title:'My Reports',help:'Reports you\'ve saved for reuse.',list:mine},{title:'Shared Reports',help:'Reports shared with your team.',list:shared}].map(({title,help,list})=><section className="panel flex min-w-0 flex-col" key={title}><div className="border-b border-slate-200 p-5"><h3 className="text-base font-semibold">{title}</h3><p className="mt-1 text-sm leading-5 text-slate-600">{help}</p></div>{list.length?<ul className="divide-y divide-slate-100">{list.map(report=><li className="p-5" key={report.id}><Link className="font-medium text-orange-800 underline" href={`/reports/${report.id}`}>{report.name}</Link>{archivedView&&canEditReportDefinition(actor,report)&&<form action={restoreReportAction} className="mt-2"><input type="hidden" name="reportId" value={report.id}/><button className="text-sm text-orange-800 underline">Restore</button></form>}<p className="mt-1 text-sm leading-5 text-slate-600">{reportRegistry[report.reportType].label} · {report.visibility==='PERSONAL'?'Personal':`Shared by ${report.owner.firstName} ${report.owner.lastName}`} · updated {report.updatedAt.toISOString().slice(0,10)}</p></li>)}</ul>:<p className="flex flex-1 items-center p-5 text-sm text-slate-500">No reports yet.</p>}</section>)}</div></section>
     {!!visibleReportTypes.length&&<section className="border-t border-slate-200 pt-7"><h2 className="text-lg font-semibold">Report Types</h2><p className="mt-1 text-sm text-slate-600">Create a new report from an available template.</p><div className="mt-4 grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-3">{visibleReportTypes.map(reportType=>{const definition=reportRegistry[reportType];return <div className="flex h-full min-w-0 flex-col rounded-md border border-slate-200 bg-slate-50/70 p-4" key={reportType}><p className="text-sm font-semibold leading-6 text-slate-800">{definition.label}</p><p className="mt-1 text-sm leading-5 text-slate-600">{definition.description}</p></div>;})}</div></section>}
   </Content>;
 }

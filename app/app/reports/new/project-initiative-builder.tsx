@@ -1,3 +1,4 @@
+import { operationalProjectWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import type {Actor} from '@/lib/authorization';
 import {Content,PageHeader} from '@/components/shell';
@@ -16,7 +17,7 @@ export async function ProjectInitiativeBuilder({params,actor,saved}:{params:Para
   const [result,owners,projects,accounts,stages,categories,currencies,competitors]=await Promise.all([
     executeProjectInitiativeReport(prisma,actor,config),
     prisma.user.findMany({where:{active:true,archivedAt:null},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
-    prisma.project.findMany({where:{AND:[{archivedAt:null},projectReadWhere(actor)]},select:{id:true,name:true},orderBy:{name:'asc'}}),
+    prisma.project.findMany({where:{AND:[operationalProjectWhere,projectReadWhere(actor)]},select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.account.findMany({where:{archivedAt:null},select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.salesStage.findMany({orderBy:[{sortOrder:'asc'},{id:'asc'}]}),
     prisma.productCategory.findMany({where:{active:true},orderBy:{name:'asc'}}),

@@ -6,12 +6,12 @@ import { prisma } from '@/lib/prisma';
 
 export const runtime = 'nodejs';
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const id = Number((await params).id);
   if (!Number.isSafeInteger(id) || id < 1) return NextResponse.json({ error: 'Document not found.' }, { status: 404 });
   try {
     const actor = await currentUser();
-    const url = await createDocumentDownloadUrl(prisma, documentStorage, actor, id);
+    const url = await createDocumentDownloadUrl(prisma, documentStorage, actor, id, new URL(request.url).searchParams.get('view') === 'archived');
     const response = NextResponse.redirect(url, 307);
     response.headers.set('Cache-Control', 'private, no-store');
     return response;

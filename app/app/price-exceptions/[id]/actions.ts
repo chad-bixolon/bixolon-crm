@@ -43,3 +43,12 @@ export async function archivePriceException(form:FormData){
   await prisma.priceException.update({where:{id},data:{status:'ARCHIVED',archivedAt:new Date(),updatedById:actor.id}});
   revalidatePath('/price-exceptions');revalidatePath(`/price-exceptions/${id}`);revalidatePath('/accounts');
 }
+export async function restorePriceException(form:FormData){
+  const actor=await requireMutation('users.manage');
+  const id=Number(form.get('id'));
+  if(!Number.isSafeInteger(id)||id<=0)throw new Error('Invalid Price Exception.');
+  const row=await prisma.priceException.findFirst({where:{id,archivedAt:{not:null}},select:{expirationDate:true}});
+  if(!row)throw new Error('Archived Price Exception not found.');
+  await prisma.priceException.update({where:{id},data:{status:row.expirationDate&&row.expirationDate<new Date()?'EXPIRED':'ACTIVE',archivedAt:null,updatedById:actor.id}});
+  revalidatePath('/price-exceptions');revalidatePath(`/price-exceptions/${id}`);revalidatePath('/accounts');
+}

@@ -6,7 +6,7 @@ import { can } from "@/lib/authorization";
 export const dynamic = "force-dynamic";
 export default async function NewContactPage({ searchParams }: { searchParams: Promise<{ accountId?: string }> }) {
   const actor = await currentUser();
-  const accounts = await prisma.account.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true } });
+  const accounts = await prisma.account.findMany({ where: { status: "ACTIVE", archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } });
   const accountId = Number((await searchParams).accountId);
   return <Content><PageHeader eyebrow="Contacts" title="New contact"/><ContactForm accounts={accounts} accountId={Number.isSafeInteger(accountId) && accountId > 0 ? accountId : undefined} canEditMarketingPreference={can(actor,"marketing.write")}/></Content>;
 }

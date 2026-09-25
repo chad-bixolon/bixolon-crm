@@ -120,7 +120,7 @@ export async function confirmTradeShowImport(client:PrismaClient,showId:number,b
     const contactIds=[...new Set(choices.map(c=>c.contactId).filter((id):id is number=>id!==null))];
     const [accounts,contacts]=await Promise.all([
       tx.account.findMany({where:{id:{in:accountIds},status:'ACTIVE',archivedAt:null},select:{id:true}}),
-      tx.contact.findMany({where:{id:{in:contactIds},active:true,archivedAt:null},select:{id:true,accountId:true}}),
+      tx.contact.findMany({where:{id:{in:contactIds},active:true,archivedAt:null,OR:[{accountId:null},{account:{is:{archivedAt:null,status:'ACTIVE'}}}]},select:{id:true,accountId:true}}),
     ]);
     const validAccounts=new Set(accounts.map(a=>a.id)),validContacts=new Map(contacts.map(c=>[c.id,c]));
     if(accountIds.some(id=>!validAccounts.has(id))||contactIds.some(id=>!validContacts.has(id)))throw new Error('Selected Account or Contact is unavailable.');

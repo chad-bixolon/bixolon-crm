@@ -51,8 +51,9 @@ export function productHref(filters: ProductFilters, page?: number) {
   return `/products?${params}`;
 }
 export function productWhere(filters: ProductFilters): Prisma.ProductWhereInput {
-  const where: Prisma.ProductWhereInput = {};
+  const where: Prisma.ProductWhereInput = { archivedAt: null };
   if (filters.q?.trim()) { const q = filters.q.trim().slice(0, 100); where.OR = [{ name: { contains: q, mode: "insensitive" } }, { sku: { contains: q, mode: "insensitive" } }, { skus: { some: { partNumber: { contains: q, mode: "insensitive" } } } }]; }
+  if (filters.active === "all") delete where.archivedAt;
   if (filters.active === "active") { where.active = true; where.archivedAt = null; }
   if (filters.active === "inactive") { where.active = false; where.archivedAt = null; }
   if (filters.active === "archived") where.archivedAt = { not: null };

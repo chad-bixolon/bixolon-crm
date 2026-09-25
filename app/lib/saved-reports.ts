@@ -25,3 +25,6 @@ export async function duplicateReportDefinition(client: PrismaClient, actor: Act
 export async function archiveReportDefinition(client: PrismaClient, actor: Actor, id: number) {
   const report=await client.reportDefinition.findUnique({where:{id}}); if(!report||report.archivedAt)throw new Error('Report not found or archived.'); if(!canEditReportDefinition(actor,report))throw new Error('Access denied'); await client.reportDefinition.update({where:{id},data:{archivedAt:new Date(),updatedById:actor.id}});
 }
+export async function restoreReportDefinition(client: PrismaClient, actor: Actor, id: number) {
+  const report=await client.reportDefinition.findUnique({where:{id}}); if(!report?.archivedAt)throw new Error('Archived report not found.'); if(!canEditReportDefinition(actor,report))throw new Error('Access denied'); await client.reportDefinition.update({where:{id},data:{archivedAt:null,updatedById:actor.id}});
+}

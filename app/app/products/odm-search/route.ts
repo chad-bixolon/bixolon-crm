@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ items: items.map(item => ({ id: item.id, label: item.name })) });
   }
   if (kind === 'baseSku') {
-    const items = await prisma.productSku.findMany({ where: { catalogSource: { not: 'ODM' }, OR: [{ partNumber: { contains: q, mode: 'insensitive' } }, { product: { name: { contains: q, mode: 'insensitive' } } }, { description: { contains: q, mode: 'insensitive' } }] }, select: { id: true, partNumber: true, product: { select: { name: true } } }, orderBy: { partNumber: 'asc' }, take: 20 });
+    const items = await prisma.productSku.findMany({ where: { catalogSource: { not: 'ODM' }, active: true, product: { active: true, archivedAt: null }, OR: [{ partNumber: { contains: q, mode: 'insensitive' } }, { product: { name: { contains: q, mode: 'insensitive' } } }, { description: { contains: q, mode: 'insensitive' } }] }, select: { id: true, partNumber: true, product: { select: { name: true } } }, orderBy: { partNumber: 'asc' }, take: 20 });
     return NextResponse.json({ items: items.map(item => ({ id: item.id, label: `${item.partNumber} · ${item.product.name}` })) });
   }
   return NextResponse.json({ error: 'Invalid search' }, { status: 400 });

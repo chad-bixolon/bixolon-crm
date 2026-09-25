@@ -1,3 +1,4 @@
+import { operationalProjectWhere, operationalOpportunityWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import { ProjectStatus, type Prisma } from '@prisma/client';
 import { Content, PageHeader } from '@/components/shell';
@@ -12,14 +13,14 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const actor = await currentUser(), filters = await searchParams;
   const ownerId = positiveId(filters.ownerId ?? ''), accountId = positiveId(filters.accountId ?? '');
   const status = Object.values(ProjectStatus).includes(filters.status as ProjectStatus) ? filters.status as ProjectStatus : null;
-  const where: Prisma.ProjectWhereInput = { AND: [projectReadWhere(actor),
+  const where: Prisma.ProjectWhereInput = { AND: [projectReadWhere(actor),...(filters.archived==='yes'||filters.archived==='all'?[]:[operationalProjectWhere]),
     { ...(filters.archived === 'yes' ? { archivedAt: { not: null } } : filters.archived === 'all' ? {} : { archivedAt: null }),
       ...(filters.q?.trim() ? { name: { contains: filters.q.trim().slice(0, 100), mode: 'insensitive' } } : {}),
       ...(status ? { status } : {}), ...(ownerId ? { ownerId } : {}),
       ...(accountId ? { OR: [{ primaryAccountId: accountId }, { participants: { some: { accountId } } }] } : {}) } ] };
   const [projects, accounts, owners] = await Promise.all([
-    prisma.project.findMany({ where, include: { primaryAccount: true, owner: true, _count: { select: { participants: true, opportunities: { where: { opportunity: { archivedAt: null } } } } } }, orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }] }),
-    prisma.account.findMany({ where: { archivedAt: null }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+    prisma.project.findMany({ where, include: { primaryAccount: true, owner: true, _count: { select: { participants: true, opportunities: { where: { opportunity: operationalOpportunityWhere } } } } }, orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }] }),
+    prisma.account.findMany({ where: { archivedAt: null, status: 'ACTIVE' }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
     prisma.user.findMany({ where: { active: true, archivedAt: null }, select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }),
   ]);
   return <Content><PageHeader eyebrow="CRM records" title="Projects" description="Programs and initiatives with optional Account relationships." action={can(actor, 'projects.write') ? <Link className="btn-primary" href="/projects/new">New Project</Link> : undefined}/>

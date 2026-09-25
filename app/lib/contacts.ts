@@ -55,11 +55,19 @@ export async function setContactState(client: PrismaClient, id: number, state: "
 }
 export type ContactFilters = { q?: string; active?: string; accountId?: string; marketingPreference?: string; page?: string };
 export function contactWhere(filters: ContactFilters): Prisma.ContactWhereInput {
-  const where: Prisma.ContactWhereInput = {};
-  if (filters.q?.trim()) { const q = filters.q.trim().slice(0, 100); where.OR = [{ firstName: { contains: q, mode: "insensitive" } }, { lastName: { contains: q, mode: "insensitive" } }, { email: { contains: q, mode: "insensitive" } }]; }
+  const where: Prisma.ContactWhereInput = { archivedAt: null, OR: [{ accountId: null }, { account: { is: { archivedAt: null, status: 'ACTIVE' } } }] };
+  if (filters.q?.trim()) {
+    const q = filters.q.trim().slice(0, 100);
+    where.AND = [{ OR: [
+      { firstName: { contains: q, mode: 'insensitive' } },
+      { lastName: { contains: q, mode: 'insensitive' } },
+      { email: { contains: q, mode: 'insensitive' } },
+    ] }];
+  }
+  if (filters.active === "all") { delete where.archivedAt; delete where.OR; }
   if (filters.active === "active") { where.active = true; where.archivedAt = null; }
   if (filters.active === "inactive") { where.active = false; where.archivedAt = null; }
-  if (filters.active === "archived") where.archivedAt = { not: null };
+  if (filters.active === "archived") { where.archivedAt = { not: null }; delete where.OR; }
   if (filters.accountId === "unassigned") where.accountId = null;
   else { const accountId = positiveId(filters.accountId ?? ""); if (accountId) where.accountId = accountId; }
   if (Object.values(MarketingPreference).includes(filters.marketingPreference as MarketingPreference)) where.marketingPreference = filters.marketingPreference as MarketingPreference;

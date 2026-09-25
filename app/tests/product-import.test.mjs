@@ -123,12 +123,12 @@ test('Products filters combine search, status, category, and SKU source',async()
     OR:[{name:{contains:'DX',mode:'insensitive'}},{sku:{contains:'DX',mode:'insensitive'}},{skus:{some:{partNumber:{contains:'DX',mode:'insensitive'}}}}],
     active:true,archivedAt:null,category:{code:'POS'},skus:{some:{catalogSource:'PRICE_LIST'}},
   });
-  assert.deepEqual(productWhere({category:'BOGUS',catalogSource:'BOGUS'}),{category:{code:'BOGUS'}});
+  assert.deepEqual(productWhere({category:'BOGUS',catalogSource:'BOGUS'}),{archivedAt:null,category:{code:'BOGUS'}});
   let countWhere,rowsQuery;
   const client={product:{count:async({where})=>{countWhere=where;return 21;},findMany:async args=>{rowsQuery=args;return [];}}};
   const result=await listProducts(client,{category:'POS',catalogSource:'PE_LIST',page:'2'});
   assert.equal(result.page,2);assert.equal(result.pages,2);
-  assert.deepEqual(countWhere,{category:{code:'POS'},skus:{some:{catalogSource:'PE_LIST'}}});
+  assert.deepEqual(countWhere,{archivedAt:null,category:{code:'POS'},skus:{some:{catalogSource:'PE_LIST'}}});
   assert.deepEqual(rowsQuery.where,countWhere);assert.equal(rowsQuery.skip,20);
 });
 test('category choices include active and linked inactive values in configured order',async()=>{
@@ -245,5 +245,5 @@ test('ODM classification requires explicit source and rejects invalid base SKU',
   assert.equal((await planProductImport(db([model]),source)).counts.errors,1);
   const safe=await planProductImport(db([model]),'model,part_number\nXT5-40,XT5-STD\n');
   assert.equal(safe.items[0].after.catalogSource,'PRICE_LIST');
-  assert.deepEqual(productWhere({catalogSource:'ODM'}),{skus:{some:{catalogSource:'ODM'}}});
+  assert.deepEqual(productWhere({catalogSource:'ODM'}),{archivedAt:null,skus:{some:{catalogSource:'ODM'}}});
 });

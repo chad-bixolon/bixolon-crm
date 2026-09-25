@@ -1,3 +1,4 @@
+import { operationalOpportunityWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
@@ -28,7 +29,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     where: projectOpportunitiesWhere(id, tab === 'Products'), include: { stage: true, products: { where: { archivedAt: null }, include: { product: true } } },
     orderBy: [{ expectedCloseDate: 'asc' }, { id: 'desc' }],
   }) : [];
-  const linkOptions = canSeeSales && can(actor, 'sales.write') && tab === 'Opportunities' ? await prisma.opportunity.findMany({ where: { archivedAt: null, projects: { none: { projectId: id } } }, select: { id: true, name: true }, orderBy: { name: 'asc' } }) : [];
+  const linkOptions = canSeeSales && can(actor, 'sales.write') && tab === 'Opportunities' ? await prisma.opportunity.findMany({ where: { AND: [operationalOpportunityWhere], projects: { none: { projectId: id } } }, select: { id: true, name: true }, orderBy: { name: 'asc' } }) : [];
   const productRows = opportunities.flatMap(o => o.products.map(line => ({ opportunity: o, line })));
   const editable = canEditProject(actor, project);
   const visibleTabs = tabs.filter(t => !(['Opportunities', 'Products'].includes(t) && !canSeeSales) && !(['Tasks', 'Activities', 'Notes'].includes(t) && !canSeeWork));

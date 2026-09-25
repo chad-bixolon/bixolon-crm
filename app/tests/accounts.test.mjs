@@ -99,9 +99,10 @@ test('import Account creation enforces Admin access and reuses exact normalized 
   assert.equal(creates,1);
 });
 test('filter accepts supported role only', () => {
-  assert.deepEqual(accountWhere({ role: 'BOGUS' }), {});
-  assert.deepEqual(accountWhere({ role: 'VAR', strategic: 'yes' }), { businessRoles: { some: { role: 'VAR' } }, strategicAccount: true });
-  assert.deepEqual(accountWhere({ role: 'MEDIA_PARTNER' }), { businessRoles: { some: { role: 'MEDIA_PARTNER' } } });
+  const live={archivedAt:null,status:{not:'ARCHIVED'}};
+  assert.deepEqual(accountWhere({ role: 'BOGUS' }), live);
+  assert.deepEqual(accountWhere({ role: 'VAR', strategic: 'yes' }), { ...live, businessRoles: { some: { role: 'VAR' } }, strategicAccount: true });
+  assert.deepEqual(accountWhere({ role: 'MEDIA_PARTNER' }), { ...live, businessRoles: { some: { role: 'MEDIA_PARTNER' } } });
 });
 test('All Accounts keeps the existing unscoped query for every role', async () => {
   const calls = [];
@@ -113,7 +114,7 @@ test('All Accounts keeps the existing unscoped query for every role', async () =
     const result = await listAccounts(client, { view }, 7);
     assert.equal(accountView({ view }), 'all');
     assert.equal(result.accounts.length, 1);
-    assert.deepEqual(calls.splice(0).map(({ where }) => where), [{}, {}]);
+    assert.deepEqual(calls.splice(0).map(({ where }) => where), [{archivedAt:null,status:{not:'ARCHIVED'}}, {archivedAt:null,status:{not:'ARCHIVED'}}]);
   }
   for (const role of ['SALES', 'SALES_MANAGER', 'ADMIN', 'MARKETING_MANAGER', 'READ_ONLY']) {
     assert.equal(routeAccess('/accounts?view=all', { id: 7, role, active: true, archivedAt: null }), 'allowed');
@@ -137,14 +138,14 @@ test('My Accounts scopes count and rows to the authenticated CRM user', async ()
     findMany: async (args) => { calls.push(args); return [{ id: 1 }, { id: 2 }]; },
   } };
   await listAccounts(client, { view: 'my' }, 7);
-  assert.deepEqual(calls.map(({ where }) => where), [{ ownerId: 7 }, { ownerId: 7 }]);
+  assert.deepEqual(calls.map(({ where }) => where), [{ archivedAt:null,status:{not:'ARCHIVED'},ownerId: 7 }, { archivedAt:null,status:{not:'ARCHIVED'},ownerId: 7 }]);
   await listAccounts(client, { view: 'my' }, 8);
-  assert.deepEqual(calls.slice(2).map(({ where }) => where), [{ ownerId: 8 }, { ownerId: 8 }]);
+  assert.deepEqual(calls.slice(2).map(({ where }) => where), [{ archivedAt:null,status:{not:'ARCHIVED'},ownerId: 8 }, { archivedAt:null,status:{not:'ARCHIVED'},ownerId: 8 }]);
   await assert.rejects(listAccounts(client, { view: 'my' }), /CRM user is required/);
 });
 test('My Accounts combines ownership with every existing filter', () => {
   assert.deepEqual(accountWhere({ view: 'my', q: '  Acme  ', status: 'ACTIVE', role: 'VAR', territory: 'WEST', industry: 'RETAIL', strategic: 'yes' }, 7), {
-    ownerId: 7, name: { contains: 'Acme', mode: 'insensitive' }, status: 'ACTIVE',
+    archivedAt:null,ownerId: 7, name: { contains: 'Acme', mode: 'insensitive' }, status: 'ACTIVE',
     businessRoles: { some: { role: 'VAR' } }, territory: 'WEST', industry: 'RETAIL', strategicAccount: true,
   });
 });
@@ -161,7 +162,7 @@ test('pagination uses the count within the selected view', async () => {
     const query = queries.at(-1);
     assert.equal(query.skip, PAGE_SIZE);
     assert.equal(query.take, PAGE_SIZE);
-    assert.deepEqual(query.where, { ...(view === 'my' ? { ownerId: 7 } : {}), name: { contains: 'Acme', mode: 'insensitive' }, status: 'ACTIVE' });
+    assert.deepEqual(query.where, { archivedAt:null,...(view === 'my' ? { ownerId: 7 } : {}), name: { contains: 'Acme', mode: 'insensitive' }, status: 'ACTIVE' });
   }
 });
 test('view links retain filters and pagination links retain the view', () => {

@@ -1,3 +1,4 @@
+import { operationalOpportunityWhere, operationalProjectWhere, operationalActivityWhere } from './operational-where';
 import { ForecastCategory, ProductCatalogSource, Prisma, type PrismaClient, type TradeShowLeadRouting, type TradeShowLeadStatus } from '@prisma/client';
 import { can, opportunityScope, type Actor } from './authorization';
 import { lineTotal, opportunityTotal, weightedValue } from './opportunities';
@@ -218,7 +219,7 @@ export function reportDatePreset(preset: typeof presets[number], now = new Date(
 }
 
 function pipelineWhere(config: ReportConfiguration, actor: Actor, now: Date): Prisma.OpportunityWhereInput {
-  const clauses: Prisma.OpportunityWhereInput[] = [{ archivedAt: null }, opportunityScope(actor)];
+  const clauses: Prisma.OpportunityWhereInput[] = [operationalOpportunityWhere, opportunityScope(actor)];
   for (const filter of config.filters) {
     const value = filter.value;
     if (filter.field === 'ownerId') clauses.push({ ownerId: value as number });
@@ -290,7 +291,7 @@ function projectGroups(project:ProjectDbRow, groupBy:string|null):{key:string;la
 export async function executeProjectInitiativeReport(client:PrismaClient,actor:Actor,rawConfig:unknown,now=new Date()):Promise<ProjectReportResult>{
   if(!canRunReportType(actor,'PROJECT_INITIATIVE')||!can(actor,'projects.read'))throw new Error('Access denied');
   const config=validateReportConfiguration('PROJECT_INITIATIVE',rawConfig);
-  const projectClauses:Prisma.ProjectWhereInput[]=[{archivedAt:null},projectReadWhere(actor)];
+  const projectClauses:Prisma.ProjectWhereInput[]=[operationalProjectWhere,projectReadWhere(actor)];
   const opportunityFilters=config.filters.filter(f=>['ownerId','stageId','competitorId','forecastCategory','status','closeDate','productCategoryId','currency'].includes(f.field));
   for(const filter of config.filters){const value=filter.value;
     if(filter.field==='projectOwnerId')projectClauses.push({ownerId:value as number});
@@ -299,7 +300,7 @@ export async function executeProjectInitiativeReport(client:PrismaClient,actor:A
     else if(filter.field==='primaryAccountId')projectClauses.push({primaryAccountId:value as number});
     else if(filter.field==='participantAccountId')projectClauses.push({participants:{some:{accountId:value as number}}});
     else if(filter.field==='hasAccount')projectClauses.push(value?{OR:[{primaryAccountId:{not:null}},{participants:{some:{}}}]}:{primaryAccountId:null,participants:{none:{}}});
-    else if(filter.field==='hasOpportunities')projectClauses.push({opportunities:value?{some:{opportunity:{archivedAt:null}}}:{none:{opportunity:{archivedAt:null}}}});
+    else if(filter.field==='hasOpportunities')projectClauses.push({opportunities:value?{some:{opportunity:operationalOpportunityWhere}}:{none:{opportunity:operationalOpportunityWhere}}});
     else if(filter.field==='startDate'||filter.field==='targetEndDate'){
       let bounds:Prisma.DateTimeNullableFilter;
       if(filter.operator==='attention'){
@@ -522,7 +523,7 @@ export async function executeAccountActivityReport(client:PrismaClient, actor:Ac
     else if(filter.field==='strategicAccount')clauses.push({strategicAccount:value as boolean});
     else if(filter.field==='businessRole')clauses.push({businessRoles:{some:{role:value as never}}});
   }
-  const [accounts,settings]=await Promise.all([client.account.findMany({where:{AND:clauses},include:{owner:true,industryCategory:true,territoryCategory:true,businessRoles:true,activities:{where:{archivedAt:null},include:{activityType:true,user:true},orderBy:latestAccountActivityOrder()}}}),getSettings(client)]);
+  const [accounts,settings]=await Promise.all([client.account.findMany({where:{AND:clauses},include:{owner:true,industryCategory:true,territoryCategory:true,businessRoles:true,activities:{where:operationalActivityWhere,include:{activityType:true,user:true},orderBy:latestAccountActivityOrder()}}}),getSettings(client)]);
   const staleThresholdDays=settings.STALE_ACCOUNT_WARNING_DAYS;
   const filtered=accounts.filter(row=>{const latest=row.activities[0], date=latest?.activityDate??null;return config.filters.every(filter=>filter.field==='minDays'?hasNoActivityInDays(date,filter.value as number,now):filter.field==='hasActivity'?Boolean(latest)===filter.value:filter.field==='activityType'?latest?.type===filter.value:true);});
   const enriched=filtered.map(row=>({row,latest:row.activities[0],days:daysSince(row.activities[0]?.activityDate??null,now)}));
@@ -585,7 +586,7 @@ function tradeShowGroup(row:TradeShowReportDbRow,groupBy:string|null){
 function tradeShowDateBounds(filter:ReportFilter,now:Date){return filter.operator==='preset'?reportDatePreset(filter.value as typeof presets[number],now):{gte:new Date(`${(filter.value as {from:string}).from}T00:00:00Z`),lt:new Date(new Date(`${(filter.value as {to:string}).to}T00:00:00Z`).getTime()+86400000)};}
 export async function executeTradeShowReport(client:PrismaClient,actor:Actor,rawConfig:unknown,now=new Date()):Promise<TradeShowReportResult>{
   if(!canRunReportType(actor,'TRADE_SHOW'))throw new Error('Access denied');
-  const config=validateReportConfiguration('TRADE_SHOW',rawConfig),clauses:Prisma.TradeShowLeadWhereInput[]=[];
+  const config=validateReportConfiguration('TRADE_SHOW',rawConfig),clauses:Prisma.TradeShowLeadWhereInput[]=[{tradeShow:{archivedAt:null}}];
   if(actor.role==='SALES')clauses.push({assignedSalesRepUserId:actor.id});
   for(const filter of config.filters){const value=filter.value;
     if(filter.field==='tradeShowId')clauses.push({tradeShowId:value as number});
@@ -611,7 +612,10 @@ export async function executeTradeShowReport(client:PrismaClient,actor:Actor,raw
       else clauses.push({routing:'BIXOLON_SALES',status:'QUALIFIED',convertedOpportunityId:null});
     }
   }
-  const rows=await client.tradeShowLead.findMany({where:clauses.length?{AND:clauses}:{},include:tradeShowReportInclude});
+  const rawRows=await client.tradeShowLead.findMany({where:{AND:clauses},include:tradeShowReportInclude});
+  const convertedIds=[...new Set(rawRows.flatMap(row=>row.convertedOpportunityId?[row.convertedOpportunityId]:[]))];
+  const liveIds=new Set(convertedIds.length?(await client.opportunity.findMany({where:{AND:[operationalOpportunityWhere,{id:{in:convertedIds}}]},select:{id:true}})).map(row=>row.id):[]);
+  const rows=rawRows.map(row=>({...row,convertedOpportunity:row.convertedOpportunity&&liveIds.has(row.convertedOpportunity.id)?row.convertedOpportunity:null}));
   const read=(row:TradeShowReportDbRow,field:string):string|number=>field==='tradeShow'?row.tradeShow.name:field==='lead'?`${row.lastName} ${row.firstName}`:field==='company'?row.sourceCompany??'':field==='assignedRep'?row.assignedSalesRep?.lastName??'':field==='leadStatus'?row.status:field==='capturedDate'?row.capturedAt?.getTime()??0:field==='followUp'?row.followUpAt?.getTime()??0:field==='opportunityStage'?row.convertedOpportunity?.stage.name??'':field==='opportunityValue'?(row.convertedOpportunity?opportunityTotal(row.convertedOpportunity.products).toNumber():0):field==='conversionDate'?row.convertedAt?.getTime()??0:row.id;
   rows.sort((a,b)=>{for(const spec of config.sort){const x=read(a,spec.field),y=read(b,spec.field),cmp=x<y?-1:x>y?1:0;if(cmp)return spec.direction==='asc'?cmp:-cmp;}return a.id-b.id;});
   const groups=new Map<string,{key:string;label:string;rows:TradeShowReportDbRow[]}>();

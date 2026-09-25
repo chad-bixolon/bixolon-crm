@@ -124,3 +124,11 @@ test('Pipeline close date controls preserve Any, preset, and custom date behavio
  const legacyCustom=reportBuilder.pipelineConfigFromParams({configured:'1',closeFrom:'2026-09-01',closeTo:'2026-09-30'});
  assert.deepEqual(legacyCustom.filters.find(filter=>filter.field==='closeDate'),custom.filters.find(filter=>filter.field==='closeDate'));
 });
+
+test('archived Saved Reports restore without changing their configuration',async()=>{
+ const config=base();let row={id:4,ownerId:7,visibility:'PERSONAL',reportType:'PIPELINE',archivedAt:new Date(),configuration:config};
+ const db={reportDefinition:{findUnique:async()=>row,update:async({data})=>(row={...row,...data})}};
+ await saved.restoreReportDefinition(db,actor('SALES'),4);
+ assert.equal(row.archivedAt,null);
+ assert.deepEqual(row.configuration,config);
+});

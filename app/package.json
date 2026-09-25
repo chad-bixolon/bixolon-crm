@@ -17,7 +17,8 @@
     "db:seed-stages": "node scripts/seed-sales-stages.mjs",
     "test": "node --test tests/*.test.mjs",
     "db:seed-activity-types": "node scripts/seed-activity-types.mjs",
-    "storage:check": "node scripts/operations/check-document-storage.mjs"
+    "storage:check": "node scripts/operations/check-document-storage.mjs",
+    "audit:production-cleanup": "node scripts/operations/audit-production-cleanup.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1139.0",

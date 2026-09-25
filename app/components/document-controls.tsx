@@ -41,28 +41,29 @@ export function DocumentUpload({ parent, types }: { parent: Parent; types: { val
   </>;
 }
 
-export function DocumentArchive({ id }: { id: number }) {
+export function DocumentArchive({ id, archived = false }: { id: number; archived?: boolean }) {
   const router = useRouter();
   const pathname = usePathname(), searchParams = useSearchParams();
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
   async function archive() {
-    if (!window.confirm('Archive this document?\n\nArchived documents are removed from the active list but retained.')) return;
+    if (!archived && !window.confirm('Archive this document?\n\nArchived documents are removed from the active list but retained.')) return;
     setBusy(true); setError(null);
     try {
-      const response = await fetch(`/api/documents/${id}/archive`, { method: 'POST' });
+      const response = await fetch(`/api/documents/${id}/${archived ? 'restore' : 'archive'}`, { method: 'POST' });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || 'The document could not be archived.');
-      const query = new URLSearchParams(searchParams.toString()); query.set('saved', 'document-archived');
+      const query = new URLSearchParams(searchParams.toString()); query.set('saved', archived ? 'document-restored' : 'document-archived');
       router.replace(`${pathname}?${query}#documents`);
     } catch (archiveError) { setError(archiveError instanceof Error ? archiveError.message : 'The document could not be archived.'); }
     finally { setBusy(false); }
   }
-  return <div className="inline-flex flex-col items-start gap-1"><button className="text-orange-800 underline disabled:text-slate-400" type="button" disabled={busy} onClick={archive}>{busy ? 'Archiving…' : 'Archive'}</button>{error && <span className="text-xs text-red-700" role="alert">{error}</span>}</div>;
+  return <div className="inline-flex flex-col items-start gap-1"><button className="text-orange-800 underline disabled:text-slate-400" type="button" disabled={busy} onClick={archive}>{busy ? (archived ? 'Restoring…' : 'Archiving…') : (archived ? 'Restore' : 'Archive')}</button>{error && <span className="text-xs text-red-700" role="alert">{error}</span>}</div>;
 }
 
 export function DocumentFeedback() {
   const status = useQueryValue('saved');
   if (status === 'document-uploaded') return <div className="mb-4"><SaveSuccess message="Document uploaded successfully."/></div>;
+  if (status === 'document-restored') return <div className="mb-4"><SaveSuccess message="Document restored."/></div>;
   if (status === 'document-archived') return <div className="mb-4"><SaveSuccess message="Document archived."/></div>;
   return null;
 }

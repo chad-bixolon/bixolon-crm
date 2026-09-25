@@ -1,3 +1,4 @@
+import { operationalProjectWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import type {Actor} from '@/lib/authorization';
 import {Content,PageHeader} from '@/components/shell';
@@ -18,7 +19,7 @@ export async function ChannelPartnerBuilder({params,actor,saved}:{params:Params;
     prisma.user.findMany({where:{active:true,archivedAt:null,...(actor.role==='SALES'?{id:actor.id}:{})},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
     prisma.account.findMany({where:{archivedAt:null,status:'ACTIVE'},select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.salesStage.findMany({orderBy:[{sortOrder:'asc'},{id:'asc'}]}),prisma.industry.findMany({orderBy:{name:'asc'}}),prisma.territory.findMany({orderBy:{name:'asc'}}),
-    prisma.productCategory.findMany({orderBy:{name:'asc'}}),prisma.project.findMany({where:{archivedAt:null},select:{id:true,name:true},orderBy:{name:'asc'}}),
+    prisma.productCategory.findMany({orderBy:{name:'asc'}}),prisma.project.findMany({where:operationalProjectWhere,select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.currency.findMany({where:{active:true},orderBy:{code:'asc'}}),
   ]);
   const selected=(field:string)=>String(filterValue(config,field)??'');

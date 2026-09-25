@@ -42,7 +42,7 @@ export async function DocumentsSection({ parentType, parentId, actor, view, base
         <div><span className="md:hidden label">{archived ? 'Archived By' : 'Uploaded By'}: </span>{archived ? (document.archivedBy ? `${document.archivedBy.firstName} ${document.archivedBy.lastName}` : '—') : `${document.uploadedBy.firstName} ${document.uploadedBy.lastName}`}</div>
         <div className="text-slate-600"><span className="md:hidden label">{archived ? 'Archived' : 'Uploaded'}: </span>{(archived ? document.archivedAt : document.createdAt)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}{!archived && <> · {formatSize(document.fileSize)}</>}</div>
         {!archived && <div className="flex gap-3 whitespace-nowrap"><a className="text-orange-800 underline" href={`/api/documents/${document.id}/download`} target="_blank" rel="noopener noreferrer">Open</a>{canWrite && <DocumentArchive id={document.id}/>}</div>}
-        {archived && <div className="md:col-span-4"><a className="text-orange-800 underline" href={`/api/documents/${document.id}/download`} target="_blank" rel="noopener noreferrer">Open retained document</a></div>}
+        {archived && <div className="md:col-span-4"><a className="text-orange-800 underline" href={`/api/documents/${document.id}/download?view=archived`} target="_blank" rel="noopener noreferrer">Open retained document</a>{canWrite && <DocumentArchive id={document.id} archived/>}</div>}
       </div>)}
     </div> : <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">{archived ? 'No documents have been archived.' : 'No documents have been uploaded.'}</p>}
   </section>;

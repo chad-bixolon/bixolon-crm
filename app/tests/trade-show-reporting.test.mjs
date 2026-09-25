@@ -18,7 +18,7 @@ const opportunity=(id,amount,currency='USD',overrides={})=>({id,name:`Opportunit
 const show=(id=1,name='MODEX 2026')=>({id,name,startDate:new Date('2026-03-01')});
 const lead=(id,status='NEW',opportunity=null,overrides={})=>({id,tradeShowId:1,tradeShow:show(),firstName:`Lead${id}`,lastName:'Person',sourceCompany:`Company ${id}`,email:`lead${id}@example.com`,capturedAt:new Date('2026-03-02'),assignedSalesRepUserId:7,assignedSalesRep:{firstName:'Sales',lastName:'Rep'},status,routing:'UNREVIEWED',routedPartnerAccountId:null,routedPartnerAccount:null,followUpAt:null,lastContactedAt:null,accountId:null,account:null,contactId:null,contact:null,competitorId:null,competitor:null,competitorSourceText:null,productInterest:null,convertedOpportunityId:opportunity?.id??null,convertedOpportunity:opportunity,convertedAt:opportunity?new Date('2026-03-10'):null,...overrides});
 const config=()=>reporting.defaultReportConfiguration('TRADE_SHOW');
-const run=async(rows,cfg=config(),role='ADMIN',now=new Date('2026-09-23T12:00:00Z'))=>{let args;const result=await reporting.executeTradeShowReport({tradeShowLead:{findMany:async input=>{args=input;return rows;}}},actor(role),cfg,now);return {result,args};};
+const run=async(rows,cfg=config(),role='ADMIN',now=new Date('2026-09-23T12:00:00Z'))=>{let args;const result=await reporting.executeTradeShowReport({tradeShowLead:{findMany:async input=>{args=input;return rows;}},opportunity:{findMany:async()=>rows.filter(row=>row.convertedOpportunity&&!row.convertedOpportunity.archivedAt).map(row=>({id:row.convertedOpportunity.id}))}},actor(role),cfg,now);return {result,args};};
 
 test('Trade Show lead metrics include every status, cumulative funnel counts, and a safe zero denominator',async()=>{
   const rows=[lead(1),lead(2,'CONTACTED'),lead(3,'QUALIFIED'),lead(4,'CONVERTED',opportunity(1,'100')),lead(5,'DISQUALIFIED',null,{assignedSalesRepUserId:null,assignedSalesRep:null})];
@@ -56,7 +56,7 @@ test('Trade Show attribution is queried only from originating leads and SALES sc
   assert.equal(JSON.stringify(args.where).includes('participants'),false);
   assert.equal(JSON.stringify(args.where).includes('accountId'),false);
   assert.equal(JSON.stringify(args.where).includes('contactId'),false);
-  for(const role of ['ADMIN','SALES_MANAGER','MARKETING_MANAGER','READ_ONLY']){const scoped=await run([],config(),role);assert.deepEqual(scoped.args.where,{});}
+  for(const role of ['ADMIN','SALES_MANAGER','MARKETING_MANAGER','READ_ONLY']){const scoped=await run([],config(),role);assert.deepEqual(scoped.args.where,{AND:[{tradeShow:{archivedAt:null}}]});}
 });
 
 test('grouping supports show, rep, status, resolved competitor, stage, forecast, and currency without duplicate overall value',async()=>{
@@ -99,4 +99,19 @@ test('Trade Show report UI uses compact filters and shared scrolling without dir
   assert.match(resultSource,/TableScroll label="Trade Show lead details"/);
   assert.match(resultSource,/even:bg-slate-50\/60[^"']*hover:bg-orange-50\/50/);
   assert.match(resultSource,/row\.canOpenOpportunity/);
+});
+
+test('Trade Show report excludes leads from archived shows at the database boundary',async()=>{
+  const {args}=await run([lead(1)]);
+  assert.ok(args.where.AND.some(clause=>clause.tradeShow?.archivedAt===null));
+});
+
+test('attributed Trade Show pipeline checks converted Opportunity parent activity',async()=>{
+ const deal=opportunity(99,'100');let opportunityWhere;
+ const db={tradeShowLead:{findMany:async()=>[lead(1,'CONVERTED',deal)]},opportunity:{findMany:async({where})=>{opportunityWhere=where;return [];}}};
+ const result=await reporting.executeTradeShowReport(db,actor('ADMIN'),config());
+ assert.equal(result.summary.leads.convertedLeads,1);
+ assert.deepEqual(result.summary.amounts,[]);
+ assert.ok(opportunityWhere.AND.some(clause=>clause.AND?.some(part=>part.projects?.none)));
+ assert.equal(result.rows[0].opportunityValue,null);
 });

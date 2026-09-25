@@ -1,3 +1,4 @@
+import { operationalContactWhere } from './operational-where';
 import { AccountBusinessRoleCode, MarketingPreference, Prisma, type MarketingAudience, type PrismaClient, TradeShowLeadRouting, TradeShowLeadStatus } from "@prisma/client";
 import { can, type Actor } from "./authorization";
 
@@ -36,7 +37,7 @@ export function validateAudienceConfig(raw:unknown):MarketingAudienceConfig {
 }
 
 export function audienceContactWhere(raw:unknown):Prisma.ContactWhereInput {
-  const config=validateAudienceConfig(raw), clauses:Prisma.ContactWhereInput[]=[{active:true,archivedAt:null}];
+  const config=validateAudienceConfig(raw), clauses:Prisma.ContactWhereInput[]=[operationalContactWhere];
   if(config.search)clauses.push({OR:[{firstName:{contains:config.search,mode:"insensitive"}},{lastName:{contains:config.search,mode:"insensitive"}},{email:{contains:config.search,mode:"insensitive"}}]});
   if(config.title)clauses.push({title:{contains:config.title,mode:"insensitive"}});
   if(config.preference)clauses.push({marketingPreference:config.preference});
@@ -51,9 +52,9 @@ export function audienceContactWhere(raw:unknown):Prisma.ContactWhereInput {
   if(config.activeAccount===true){account.status="ACTIVE";account.archivedAt=null;}
   if(config.activeAccount===false)account.OR=[{status:{not:"ACTIVE"}},{archivedAt:{not:null}}];
   if(Object.keys(account).length)clauses.push({account:{is:account}});
-  const lead:Prisma.TradeShowLeadWhereInput={};
+  const lead:Prisma.TradeShowLeadWhereInput={tradeShow:{archivedAt:null}};
   if(config.tradeShowId)lead.tradeShowId=config.tradeShowId;
-  if(config.showDateFrom||config.showDateTo)lead.tradeShow={is:{startDate:{...(config.showDateFrom?{gte:new Date(`${config.showDateFrom}T00:00:00Z`)}:{}),...(config.showDateTo?{lt:new Date(new Date(`${config.showDateTo}T00:00:00Z`).getTime()+86400000)}:{})}}};
+  if(config.showDateFrom||config.showDateTo)lead.tradeShow={is:{archivedAt:null,startDate:{...(config.showDateFrom?{gte:new Date(`${config.showDateFrom}T00:00:00Z`)}:{}),...(config.showDateTo?{lt:new Date(new Date(`${config.showDateTo}T00:00:00Z`).getTime()+86400000)}:{})}}};
   if(config.leadStatus)lead.status=config.leadStatus;
   if(config.routing)lead.routing=config.routing;
   if(config.assignedSalesRepId)lead.assignedSalesRepUserId=config.assignedSalesRepId;
@@ -61,7 +62,7 @@ export function audienceContactWhere(raw:unknown):Prisma.ContactWhereInput {
   if(config.converted!==undefined)lead.convertedOpportunityId=config.converted?{not:null}:null;
   if(config.productInterest)lead.productInterest={contains:config.productInterest,mode:"insensitive"};
   if(config.competitorId)lead.competitorId=config.competitorId;
-  if(Object.keys(lead).length)clauses.push({tradeShowLeads:{some:lead}});
+  if(Object.keys(lead).length>1 || config.tradeShowId || config.showDateFrom || config.showDateTo)clauses.push({tradeShowLeads:{some:lead}});
   return {AND:clauses};
 }
 
@@ -76,7 +77,7 @@ export async function resolveAudienceContactIds(client:PrismaClient,audience:{id
   const overrides=await client.marketingAudienceContactOverride.findMany({where:{audienceId:audience.id},select:{contactId:true,kind:true}});
   const excluded=new Set(overrides.filter(x=>x.kind==="EXCLUDE").map(x=>x.contactId));
   const included=overrides.filter(x=>x.kind==="INCLUDE").map(x=>x.contactId);
-  const eligibleIncludes=(await client.contact.findMany({where:{id:{in:included},active:true,archivedAt:null},select:{id:true}})).map(x=>x.id);
+  const eligibleIncludes=(await client.contact.findMany({where:{AND:[operationalContactWhere],id:{in:included}},select:{id:true}})).map(x=>x.id);
   const selected=[...new Set([...matched.filter(id=>!excluded.has(id)),...eligibleIncludes])];
   return {matched,selected,overrides};
 }

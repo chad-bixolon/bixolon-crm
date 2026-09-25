@@ -77,8 +77,8 @@ export async function saveSkuMetadataInTransaction(tx: Prisma.TransactionClient,
     const calculatedPrices = input.odmPrices?.map(price => ({ accountId: price.accountId, ...calculateOdmCustomerPrice(price) })) ?? [];
     if (input.baseSkuId) {
       if (input.baseSkuId === input.skuId) throw new Error('A SKU cannot be its own Base SKU.');
-      const base = await tx.productSku.findUnique({ where: { id: input.baseSkuId }, select: { catalogSource: true } });
-      if (!base || base.catalogSource === 'ODM') throw new Error('Base SKU must be an existing non-ODM SKU.');
+      const base = await tx.productSku.findUnique({ where: { id: input.baseSkuId }, select: { catalogSource: true, active: true, product: { select: { active: true, archivedAt: true } } } });
+      if (!base || !base.active || !base.product.active || base.product.archivedAt || base.catalogSource === 'ODM') throw new Error('Base SKU must be an existing non-ODM SKU.');
     }
     if (input.catalogSource === 'ODM' && input.skuId && await tx.productSku.count({ where: { baseSkuId: input.skuId } })) throw new Error('An ODM SKU cannot be used as a Base SKU.');
     const data = { partNumber: input.partNumber.trim(), normalizedPartNumber: key, description: input.description, active: input.active,

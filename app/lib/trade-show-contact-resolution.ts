@@ -48,7 +48,7 @@ async function editableLead(tx:Prisma.TransactionClient,tradeShowId:number,leadI
 export async function linkTradeShowLeadContact(client:ResolutionClient,tradeShowId:number,leadId:number,contactId:number,actor:Actor){
   return client.$transaction(async tx=>{
     const lead=await editableLead(tx,tradeShowId,leadId,actor);
-    const contact=await tx.contact.findFirst({where:{id:contactId,active:true,archivedAt:null},select:{id:true,accountId:true}});
+    const contact=await tx.contact.findFirst({where:{id:contactId,active:true,archivedAt:null,OR:[{accountId:null},{account:{is:{archivedAt:null,status:'ACTIVE'}}}]},select:{id:true,accountId:true}});
     if(!contact)throw new Error('Choose an active Contact.');
     if(lead.accountId&&contact.accountId&&lead.accountId!==contact.accountId)throw new Error('The selected Contact belongs to a different Account. Neither record was changed.');
     await tx.tradeShowLead.update({where:{id:lead.id},data:{contactId:contact.id}});

@@ -16,3 +16,18 @@ export async function submitActivity(id: number | null, _old: WorkState, form: F
   catch (e) { const message = e instanceof Error ? e.message : 'Activity could not be saved.'; const field = activityErrorField(message); return activityFailureState(form, field ? { [field]: message } : {}, field ? undefined : message); }
   redirect(destination);
 }
+export async function setActivityArchived(form: FormData) {
+  const actor=await currentUser();assertPermission(actor,'tasks.write');
+  const id=Number(form.get('id')), archived=String(form.get('archived'))==='true';
+  if(!Number.isSafeInteger(id)||id<1)throw new Error('Activity not found.');
+  const row=await prisma.activity.findUnique({where:{id},select:{projectId:true,accountId:true,opportunityId:true,archivedAt:true}});
+  if(!row)throw new Error('Activity not found.');
+  await assertProjectWorkEdit(prisma,actor,row.projectId);
+  if(Boolean(row.archivedAt)===archived)throw new Error('Activity state has already changed.');
+  await prisma.activity.update({where:{id},data:{archivedAt:archived?new Date():null,archivedById:archived?actor.id:null,updatedById:actor.id}});
+  revalidatePath('/');revalidatePath('/reports/engagement');revalidatePath(`/activities/${id}/edit`);
+  if(row.accountId)revalidatePath(`/accounts/${row.accountId}`);
+  if(row.opportunityId)revalidatePath(`/opportunities/${row.opportunityId}`);
+  if(row.projectId)revalidatePath(`/projects/${row.projectId}`);
+  redirect(`/activities/${id}/edit`);
+}

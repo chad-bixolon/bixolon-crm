@@ -12,11 +12,11 @@ const { Prisma } = require('@prisma/client');
 const { saveSkuMetadata, parseSkuMetadataForm, DuplicateSkuError } = require(path.join(root,'lib/odm-skus.ts'));
 function fixture() {
   const calls=[];
-  const rows=new Map([[1,{id:1,productId:10,catalogSource:'PRICE_LIST',odmCustomers:[]}],[2,{id:2,productId:10,catalogSource:'ODM',odmSubtype:'CUSTOMER_SPECIFIC',baseSkuId:null,odmDescription:null,odmCustomers:[]}]]);
+  const rows=new Map([[1,{id:1,productId:10,catalogSource:'PRICE_LIST',active:true,product:{active:true,archivedAt:null},odmCustomers:[]}],[2,{id:2,productId:10,catalogSource:'ODM',active:true,product:{active:true,archivedAt:null},odmSubtype:'CUSTOMER_SPECIFIC',baseSkuId:null,odmDescription:null,odmCustomers:[]}]]);
   const tx={product:{findUnique:async()=>({id:10,archivedAt:null})},productSku:{findUnique:async({where})=>where.normalizedPartNumber?rows.get('duplicate')??null:rows.get(where.id)??null,count:async()=>0,create:async({data})=>{calls.push(data);return {id:3,...data};},update:async({data})=>{calls.push(data);return {id:2,...data};}},account:{count:async({where})=>where.id.in.filter(id=>[7,8].includes(id)).length},productSkuOdmCustomer:{updateMany:async args=>{calls.push({archive:args.where});},upsert:async({create})=>{calls.push(create)}},productSkuOdmCustomerPrice:{updateMany:async()=>{},findFirst:async()=>null,create:async({data})=>{calls.push({customerPrice:data})}}};
   return {calls,rows,tx,db:{$transaction:async callback=>callback(tx)}};
 }
-const input={productId:10,partNumber:'XT5-UPS',description:null,active:true,catalogSource:'ODM',odmSubtype:'CUSTOMER_SPECIFIC',odmCustomerAccountIds:[7,8],baseSkuId:1,odmDescription:'RFID'};
+const input={productId:10,partNumber:'XT5-UPS',description:null,active:true,catalogSource:'ODM',active:true,product:{active:true,archivedAt:null},odmSubtype:'CUSTOMER_SPECIFIC',odmCustomerAccountIds:[7,8],baseSkuId:1,odmDescription:'RFID'};
 test('ODM SKU links existing Account and standard base without touching Account roles',async()=>{
   const {db,calls}=fixture();await saveSkuMetadata(db,input);
   assert.equal(calls.filter(call=>call.accountId).length,2);assert.equal(calls[0].baseSkuId,1);assert.equal(calls[0].active,true);

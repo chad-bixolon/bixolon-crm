@@ -88,10 +88,19 @@ export async function archiveDocument(client: PrismaClient, actor: Actor, id: nu
   return client.document.update({ where: { id }, data: { archivedAt: new Date(), archivedByUserId: actor.id } });
 }
 
-export async function createDocumentDownloadUrl(client: PrismaClient, storage: DocumentStorage, actor: Actor, id: number) {
-  const document = await client.document.findUnique({ where: { id }, select: { ...documentParentSelect, storageKey: true, originalFileName: true, mimeType: true } });
+export async function restoreDocument(client: PrismaClient, actor: Actor, id: number) {
+  const document = await client.document.findUnique({ where: { id }, select: { ...documentParentSelect, archivedAt: true } });
+  if (!document) throw new Error('Document not found.');
+  await assertDocumentParentAccess(client, actor, parentFromDocument(document), 'write');
+  if (!document.archivedAt) throw new Error('Document is already active.');
+  return client.document.update({ where: { id }, data: { archivedAt: null, archivedByUserId: null } });
+}
+
+export async function createDocumentDownloadUrl(client: PrismaClient, storage: DocumentStorage, actor: Actor, id: number, archivedView = false) {
+  const document = await client.document.findUnique({ where: { id }, select: { ...documentParentSelect, archivedAt: true, storageKey: true, originalFileName: true, mimeType: true } });
   if (!document) throw new Error('Document not found.');
   await assertDocumentParentAccess(client, actor, parentFromDocument(document), 'read');
+  if (document.archivedAt && !archivedView) throw new Error('Document not found.');
   return storage.createSignedDocumentUrl({ storageKey: document.storageKey, fileName: document.originalFileName, mimeType: document.mimeType });
 }
 

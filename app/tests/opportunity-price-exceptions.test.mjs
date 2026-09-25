@@ -38,7 +38,7 @@ test('related discovery uses resolved Opportunity Account IDs and keeps two MOQ 
   assert.ok(options.every(option => !('selected' in option)));
   assert.deepEqual(options[0].matchedRoles, ['Distributor/OEM']);
   const accountClause = query.where.priceException.AND[1].OR;
-  assert.ok(accountClause.every(condition => Object.values(condition)[0].in[0] === 7));
+  assert.ok(accountClause.every(condition => Object.values(condition)[0].id.in[0] === 7 && Object.values(condition)[0].archivedAt === null));
 });
 
 test('search-all returns an otherwise valid unrelated PE with warning context and never confirms raw party text', async () => {

@@ -1,3 +1,4 @@
+import { operationalOpportunityWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import type { Actor } from '@/lib/authorization';
 import { Content,PageHeader } from '@/components/shell';
@@ -19,8 +20,8 @@ export async function PriceExceptionUsageBuilder({params,actor,saved}:{params:Pa
     prisma.account.findMany({where:{archivedAt:null,status:'ACTIVE',...(actor.role==='SALES'?{opportunityMemberships:{some:{opportunity:{ownerId:actor.id,archivedAt:null}}}}:{})},select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.productCategory.findMany({orderBy:{name:'asc'}}),
     prisma.product.findMany({where:{archivedAt:null},select:{id:true,name:true},orderBy:{name:'asc'}}),
-    prisma.productSku.findMany({select:{id:true,partNumber:true},orderBy:{partNumber:'asc'}}),
-    prisma.opportunity.findMany({where:{archivedAt:null,...(actor.role==='SALES'?{ownerId:actor.id}:{})},select:{id:true,name:true},orderBy:{name:'asc'}}),
+    prisma.productSku.findMany({where:{active:true,product:{active:true,archivedAt:null}},select:{id:true,partNumber:true},orderBy:{partNumber:'asc'}}),
+    prisma.opportunity.findMany({where:{AND:[operationalOpportunityWhere],...(actor.role==='SALES'?{ownerId:actor.id}:{})},select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.priceException.findMany({where:{lines:{some:{opportunityProducts:{some:{archivedAt:null,opportunity:{archivedAt:null,...(actor.role==='SALES'?{ownerId:actor.id}:{})}}}}}},select:{id:true,peCode:true},orderBy:{peCode:'asc'}}),
     prisma.user.findMany({where:{assignedPriceExceptions:{some:{lines:{some:{opportunityProducts:{some:{archivedAt:null,opportunity:{archivedAt:null,...(actor.role==='SALES'?{ownerId:actor.id}:{})}}}}}}}},select:{id:true,firstName:true,lastName:true},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
     prisma.currency.findMany({where:{active:true},orderBy:{code:'asc'}}),

@@ -1,3 +1,4 @@
+import { operationalOpportunityWhere, operationalTaskWhere, operationalActivityWhere } from '@/lib/operational-where';
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Content, PageHeader } from "@/components/shell";
@@ -20,11 +21,11 @@ export default async function AccountPage({ params, searchParams }: { params: Pr
   const id = Number((await params).id); if (!Number.isSafeInteger(id) || id <= 0) notFound();
   const account = await prisma.account.findUnique({ where: { id }, include: { businessRoles: true, owner: { select: { firstName: true, lastName: true } }, industryCategory: true, territoryCategory: true,
     contacts: { where: { archivedAt: null }, orderBy: [{ isPrimary: "desc" }, { lastName: "asc" }], select: { id: true, firstName: true, lastName: true, title: true, active: true, isPrimary: true } },
-    opportunityMemberships: { where: { opportunity: { archivedAt: null } }, include: { opportunity: { select: { id: true, name: true, stage: { select: { name: true, isClosed: true } } } }, roles: true } },
-    _count: { select: { contacts: true, opportunityMemberships: true, activities: { where: { archivedAt: null } }, tasks: { where: { archivedAt: null } }, notes: { where: { archivedAt: null } } } } } });
+    opportunityMemberships: { where: { opportunity: operationalOpportunityWhere }, include: { opportunity: { select: { id: true, name: true, stage: { select: { name: true, isClosed: true } } } }, roles: true } },
+    _count: { select: { contacts: true, opportunityMemberships: true, activities: { where: operationalActivityWhere }, tasks: { where: operationalTaskWhere }, notes: { where: { archivedAt: null } } } } } });
   if (!account) notFound();
   const actor = await currentUser();
-  const [projects, labels, lastActivity, openTasks, priceExceptions, odmSkus] = await Promise.all([listAccountProjects(prisma, id, actor), getLabels(prisma), prisma.activity.findFirst({where:{accountId:id,archivedAt:null},orderBy:[{activityDate:'desc'},{id:'desc'}],select:{activityDate:true,subject:true}}), prisma.task.findMany({where:{accountId:id,archivedAt:null,status:{in:['OPEN','IN_PROGRESS']}},select:{dueDate:true}}), prisma.priceException.findMany({where:accountPriceExceptionWhere(id,actor),orderBy:[{expirationDate:'desc'},{id:'desc'}],select:{id:true,peCode:true,status:true,expirationDate:true,distributorAccountId:true,varAccountId:true,endUserAccountId:true,_count:{select:{lines:true}}}}), prisma.productSku.findMany({where:{catalogSource:"ODM",odmCustomers:{some:{accountId:id}}},select:{id:true,partNumber:true,odmDescription:true,product:{select:{id:true,name:true,category:{select:{name:true}}}}},orderBy:{partNumber:"asc"},take:20})]);
+  const [projects, labels, lastActivity, openTasks, priceExceptions, odmSkus] = await Promise.all([listAccountProjects(prisma, id, actor), getLabels(prisma), prisma.activity.findFirst({where:{accountId:id,AND:[operationalActivityWhere]},orderBy:[{activityDate:'desc'},{id:'desc'}],select:{activityDate:true,subject:true}}), prisma.task.findMany({where:{accountId:id,AND:[operationalTaskWhere],status:{in:['OPEN','IN_PROGRESS']}},select:{dueDate:true}}), prisma.priceException.findMany({where:accountPriceExceptionWhere(id,actor),orderBy:[{expirationDate:'desc'},{id:'desc'}],select:{id:true,peCode:true,status:true,expirationDate:true,distributorAccountId:true,varAccountId:true,endUserAccountId:true,_count:{select:{lines:true}}}}), prisma.productSku.findMany({where:{catalogSource:"ODM",odmCustomers:{some:{accountId:id}}},select:{id:true,partNumber:true,odmDescription:true,product:{select:{id:true,name:true,category:{select:{name:true}}}}},orderBy:{partNumber:"asc"},take:20})]);
   const overdueTasks = openTasks.filter(task => task.dueDate && task.dueDate < dayBounds().start).length;
   const openOpportunities = account.opportunityMemberships.filter(m => !m.opportunity.stage.isClosed).length;
   const workViews = await searchParams;

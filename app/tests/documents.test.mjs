@@ -110,7 +110,7 @@ test('parent authorization preserves Account, Project, Opportunity and role scop
 test('authorized download signs at request time and archived documents remain accessible', async () => {
   const objects = storage();
   const db = client({ document: { findUnique: async () => ({ accountId: 10, projectId: null, opportunityId: null, archivedAt: new Date(), storageKey: 'dev/documents/id', originalFileName: 'NDA.pdf', mimeType: 'application/pdf' }) } });
-  assert.equal(await documents.createDocumentDownloadUrl(db, objects, actor('READ_ONLY'), 1), 'https://signed.invalid/temporary');
+  assert.equal(await documents.createDocumentDownloadUrl(db, objects, actor('READ_ONLY'), 1, true), 'https://signed.invalid/temporary');
   assert.deepEqual(objects.calls.map(call => call[0]), ['sign']);
   assert.equal('signedUrl' in (await db.document.findUnique()), false);
 });
@@ -141,4 +141,23 @@ test('schema, migration, and detail pages wire the V1 document invariants and UI
   assert.match(section, /No documents have been uploaded/);
   assert.match(section, /orderBy: \[\{ createdAt: 'desc' \}, \{ id: 'desc' \}\]/);
   for (const label of Object.values(documents.documentTypeLabels)) assert.match(section + JSON.stringify(documents.documentTypeLabels), new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('archived Document direct download is denied; explicit history access remains authorized',async()=>{
+  const signer=storage();
+  const document={accountId:null,projectId:null,opportunityId:10,archivedAt:new Date(),storageKey:'dev/documents/key',originalFileName:'old.pdf',mimeType:'application/pdf'};
+  const db=client({document:{findUnique:async()=>document}});
+  await assert.rejects(documents.createDocumentDownloadUrl(db,signer,actor('ADMIN'),1),/not found/i);
+  assert.equal(signer.calls.length,0);
+  await documents.createDocumentDownloadUrl(db,signer,actor('ADMIN'),1,true);
+  assert.equal(signer.calls.length,1);
+  await assert.rejects(documents.createDocumentDownloadUrl(db,signer,actor('MARKETING_MANAGER'),1,true),/Access denied/);
+  assert.equal(signer.calls.length,1);
+});
+
+test('archived Document restore clears archive metadata after parent authorization',async()=>{
+  let updated;
+  const db=client({document:{findUnique:async()=>({accountId:10,projectId:null,opportunityId:null,archivedAt:new Date()}),update:async args=>(updated=args.data)}});
+  await documents.restoreDocument(db,actor('ADMIN'),1);
+  assert.deepEqual(updated,{archivedAt:null,archivedByUserId:null});
 });

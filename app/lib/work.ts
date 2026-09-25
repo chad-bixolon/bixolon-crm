@@ -1,3 +1,5 @@
+import { operationalProjectWhere, operationalContactWhere, operationalAccountWhere } from './operational-where';
+import { operationalOpportunityWhere, operationalTaskWhere } from './operational-where';
 import { ActivityDirection, Prisma, TaskPriority, TaskStatus, type PrismaClient } from '@prisma/client';
 import { field, optional, positiveId, required, type Errors } from './crm-validation';
 import { archivedWhere, recordVisibility } from './record-visibility';
@@ -23,10 +25,10 @@ export function parseTask(form: FormData) {
 }
 export type TaskInput = NonNullable<ReturnType<typeof parseTask>['value']>;
 export async function checkRelations(client: PrismaClient | Prisma.TransactionClient, accountId: number | null, opportunityId: number | null, projectId: number | null = null) {
-  if (accountId && !(await client.account.findFirst({ where: { id: accountId, archivedAt: null } }))) throw new Error('Account not found or archived.');
-  if (opportunityId && !(await client.opportunity.findFirst({ where: { id: opportunityId, archivedAt: null } }))) throw new Error('Opportunity not found or archived.');
+  if (accountId && !(await client.account.findFirst({ where: { id: accountId, AND: [operationalAccountWhere] } }))) throw new Error('Account not found or archived.');
+  if (opportunityId && !(await client.opportunity.findFirst({ where: { AND: [operationalOpportunityWhere], id: opportunityId } }))) throw new Error('Opportunity not found or archived.');
   if (accountId && opportunityId && !(await client.opportunityAccount.findUnique({ where: { opportunityId_accountId: { opportunityId, accountId } } }))) throw new Error('Account is not a participant in this opportunity.');
-  if (projectId && !(await client.project.findFirst({ where: { id: projectId, archivedAt: null } }))) throw new Error('Project not found or archived.');
+  if (projectId && !(await client.project.findFirst({ where: { id: projectId, AND: [operationalProjectWhere] } }))) throw new Error('Project not found or archived.');
   if (projectId && opportunityId) {
     const link = await client.opportunityProject.findUnique({ where: { opportunityId_projectId: { opportunityId, projectId } } });
     if (!link) throw new Error('Opportunity is not linked to this Project.');
@@ -72,7 +74,7 @@ export async function saveTask(
 }
 export type TaskFilters = { q?: string; status?: string; priority?: string; assignedToId?: string; accountId?: string; opportunityId?: string; dueFrom?: string; dueTo?: string; visibility?: string };
 export function taskWhere(f: TaskFilters): Prisma.TaskWhereInput {
-  const where: Prisma.TaskWhereInput = { ...archivedWhere(recordVisibility(f.visibility)) };
+  const where: Prisma.TaskWhereInput = { ...archivedWhere(recordVisibility(f.visibility)), ...(recordVisibility(f.visibility)==='active'?{AND:[operationalTaskWhere]}:{}) };
   if (f.q?.trim()) where.OR = [{ subject: { contains: f.q.trim().slice(0, 100), mode: 'insensitive' } }, { description: { contains: f.q.trim().slice(0, 100), mode: 'insensitive' } }];
   if (taskStatuses.includes(f.status as TaskStatus)) where.status = f.status as TaskStatus;
   if (taskPriorities.includes(f.priority as TaskPriority)) where.priority = f.priority as TaskPriority;
@@ -82,7 +84,7 @@ export function taskWhere(f: TaskFilters): Prisma.TaskWhereInput {
   return where;
 }
 export function dashboardOpenTaskWhere(): Prisma.TaskWhereInput {
-  return { archivedAt: null, status: { in: ['OPEN', 'IN_PROGRESS'] } };
+  return { AND: [operationalTaskWhere], status: { in: ['OPEN', 'IN_PROGRESS'] } };
 }
 export function dayBounds(now = new Date()) { const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now); const read = (type: string) => Number(parts.find(p => p.type === type)?.value); const start = new Date(Date.UTC(read('year'), read('month') - 1, read('day'))); return { start, end: new Date(start.getTime() + 86400000) }; }
 export function taskTiming(task: { status: TaskStatus; dueDate: Date | null }, now = new Date()) { if (!task.dueDate || !['OPEN','IN_PROGRESS'].includes(task.status)) return null; const { start, end } = dayBounds(now); return task.dueDate < start ? 'Overdue' : task.dueDate < end ? 'Due today' : null; }
@@ -133,13 +135,13 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
     const accountChanged = !existing || existing.accountId !== value.accountId;
     const opportunityChanged = !existing || existing.opportunityId !== value.opportunityId;
     const projectChanged = !existing || existing.projectId !== value.projectId;
-    if (accountChanged && !(await tx.account.findFirst({ where: { id: value.accountId, archivedAt: null } }))) throw new Error('Account not found or archived.');
+    if (accountChanged && !(await tx.account.findFirst({ where: { id: value.accountId, AND: [operationalAccountWhere] } }))) throw new Error('Account not found or archived.');
     if (value.opportunityId && (accountChanged || opportunityChanged || projectChanged)) {
-      if (!(await tx.opportunity.findFirst({ where: { id: value.opportunityId, archivedAt: null } }))) throw new Error('Opportunity not found or archived.');
+      if (!(await tx.opportunity.findFirst({ where: { id: value.opportunityId, AND: [operationalOpportunityWhere] } }))) throw new Error('Opportunity not found or archived.');
       if (!(await tx.opportunityAccount.findUnique({ where: { opportunityId_accountId: { opportunityId: value.opportunityId, accountId: value.accountId } } }))) throw new Error('This Opportunity is not associated with the selected Account.');
     }
     if (value.projectId && (accountChanged || opportunityChanged || projectChanged)) {
-      if (!(await tx.project.findFirst({ where: { id: value.projectId, archivedAt: null } }))) throw new Error('Project not found or archived.');
+      if (!(await tx.project.findFirst({ where: { id: value.projectId, AND: [operationalProjectWhere] } }))) throw new Error('Project not found or archived.');
       const project = await tx.project.findUnique({ where: { id: value.projectId }, select: { primaryAccountId: true, participants: { where: { accountId: value.accountId }, select: { accountId: true } } } });
       if (project?.primaryAccountId !== value.accountId && !project?.participants.length) throw new Error('This Project is not associated with the selected Account.');
     }
@@ -153,7 +155,7 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
     const { contactIds: suppliedContactIds, createFollowUpTask, followUpTaskCreateKey, ...data } = value;
     const contactIds = suppliedContactIds ?? [];
     if (contactIds.length) {
-      const contacts = await tx.contact.findMany({ where: { id: { in: contactIds }, archivedAt: null }, select: { id: true, accountId: true, active: true } });
+      const contacts = await tx.contact.findMany({ where: { id: { in: contactIds }, AND: [operationalContactWhere] }, select: { id: true, accountId: true, active: true } });
       const linked = id ? await tx.activityContact.findMany({ where: { activityId: id }, select: { contactId: true } }) : [];
       if (contacts.length !== contactIds.length || contacts.some(c => {
         const alreadyLinked = linked.some(l => l.contactId === c.id);

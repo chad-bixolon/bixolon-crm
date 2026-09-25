@@ -63,7 +63,7 @@ test('standard Product creation still creates one initial SKU', async () => {
 });
 
 test('new Customer-Specific ODM Product creates SKU and multiple Account links atomically', async () => {
-  const { db, state, commits } = fixture([{ id: 20, catalogSource: 'PRICE_LIST' }]);
+  const { db, state, commits } = fixture([{ id: 20, catalogSource: 'PRICE_LIST', active: true, product: { active: true, archivedAt: null } }]);
   await create(db, form({ catalogSource: 'ODM', odmSubtype: 'CUSTOMER_SPECIFIC', baseSkuId: '20', odmDescription: 'RFID customization' }, [7, 8]));
   assert.equal(commits(), 1);
   assert.equal(state.products.length, 1);

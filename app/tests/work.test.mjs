@@ -196,7 +196,8 @@ test('task visibility separates active, archived, and all while dashboard stays 
  assert.deepEqual(work.taskWhere({visibility:'archived'}).archivedAt,{not:null});
  assert.equal('archivedAt' in work.taskWhere({visibility:'all'}),false);
  assert.deepEqual(work.taskWhere({visibility:'unexpected'}).archivedAt,null);
- assert.deepEqual(work.dashboardOpenTaskWhere(),{archivedAt:null,status:{in:['OPEN','IN_PROGRESS']}});
+ assert.deepEqual(work.dashboardOpenTaskWhere().status,{in:['OPEN','IN_PROGRESS']});
+ assert.ok(work.dashboardOpenTaskWhere().AND[0].AND.some(clause=>clause.OR?.some(part=>part.opportunity?.is)));
 });
 
 test('dashboard pipeline aggregate keeps currencies separate and counts actual opportunities',()=>{

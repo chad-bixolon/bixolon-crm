@@ -33,6 +33,7 @@ export function priceExceptionEligibilityWhere(skuId: number, currencyCode: stri
   const cutoff = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   return {
     productSkuId: skuId,
+    productSku: { active: true, product: { active: true, archivedAt: null } },
     approvedUnitPrice: { not: null },
     currencyCode,
     priceException: {
@@ -69,9 +70,9 @@ export async function findPriceExceptionCandidates(
     where.priceException = { ...parent, AND: [
       ...((parent.AND as Prisma.PriceExceptionWhereInput[]) ?? []),
       { OR: [
-          { distributorAccountId: { in: accountIds } },
-          { varAccountId: { in: accountIds } },
-          { endUserAccountId: { in: accountIds } },
+          { distributorAccount: { id: { in: accountIds }, archivedAt: null, status: 'ACTIVE' } },
+          { varAccount: { id: { in: accountIds }, archivedAt: null, status: 'ACTIVE' } },
+          { endUserAccount: { id: { in: accountIds }, archivedAt: null, status: 'ACTIVE' } },
       ] },
     ] };
   }

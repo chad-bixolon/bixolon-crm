@@ -1,3 +1,4 @@
+import { operationalActivityWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import { Content,PageHeader } from '@/components/shell';
 import { DashboardEditor } from '@/components/dashboard-editor';
@@ -51,7 +52,7 @@ export default async function HomePage({searchParams}:{searchParams:Promise<{cur
   const [stage,categories]=salesData?await Promise.all([report('stage'),keys.has('PIPELINE_BY_PRODUCT_CATEGORY')?report('productCategory'):null]):[null,null];
   const settings=keys.has('STALE_ACCOUNTS')?await getSettings(prisma):null;
   const [accounts,tasks,activities,myTradeShowLeads,marketingCounts,executedReports]=await Promise.all([
-    keys.has('STALE_ACCOUNTS')?prisma.account.findMany({where:dashboardAccountWhere(actor),select:{id:true,name:true,activities:{where:{archivedAt:null},orderBy:latestAccountActivityOrder(),take:1,select:{activityDate:true}}},orderBy:{name:'asc'}}):[],
+    keys.has('STALE_ACCOUNTS')?prisma.account.findMany({where:dashboardAccountWhere(actor),select:{id:true,name:true,activities:{where:operationalActivityWhere,orderBy:latestAccountActivityOrder(),take:1,select:{activityDate:true}}},orderBy:{name:'asc'}}):[],
     keys.has('OVERDUE_TASKS')?prisma.task.findMany({where:dashboardTaskWhere(actor,dayBounds(now).start,ids.length?ids:[actor.id]),select:{id:true,subject:true,dueDate:true},orderBy:[{dueDate:'asc'},{id:'asc'}],take:6}):[],
     keys.has('RECENT_ACTIVITY')?prisma.activity.findMany({where:dashboardActivityWhere(actor,ids),select:{id:true,subject:true,activityDate:true,account:{select:{name:true}}},orderBy:[{activityDate:'desc'},{id:'desc'}],take:6}):[],
     keys.has('MY_TRADE_SHOW_LEADS')?Promise.all([prisma.tradeShowLead.count({where:salesLeadQueueWhere(actor)}),prisma.tradeShowLead.count({where:salesLeadQueueWhere(actor,{status:'NEW'})}),prisma.tradeShowLead.findMany({where:salesLeadQueueWhere(actor),select:{id:true,tradeShowId:true,firstName:true,lastName:true,sourceCompany:true,status:true,tradeShow:{select:{name:true}}},orderBy:[{followUpAt:'asc'},{updatedAt:'desc'}],take:5})]):null,

@@ -13,7 +13,7 @@ export default async function ForecastPage({ searchParams }: { searchParams: Pro
   if (!can(actor, 'sales.read')) notFound();
   const f = await searchParams;
   const [users, currencies] = await Promise.all([
-    prisma.user.findMany({ where: { role: { in: ['SALES','SALES_MANAGER'] }, ...(actor.role === 'SALES' ? { id: actor.id } : {}) }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
+    prisma.user.findMany({ where: { role: { in: ['SALES','SALES_MANAGER'] }, active: true, archivedAt: null, ...(actor.role === 'SALES' ? { id: actor.id } : {}) }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
     prisma.currency.findMany({ where: { active: true }, orderBy: { code: 'asc' } }),
   ]);
   const today = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: 'numeric' }).formatToParts(new Date());

@@ -1,3 +1,4 @@
+import { operationalOpportunityWhere, operationalProjectWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
 import { prisma } from '@/lib/prisma';
@@ -16,11 +17,11 @@ export default async function Page({searchParams}:{searchParams:Promise<Filters>
   const date=(v?:string)=>v&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v))?new Date(`${v}T00:00:00Z`):null;
   const from=date(f.closeFrom),to=date(f.closeTo);
   const [rows,owners,stages,territories,projects]=await Promise.all([
-    prisma.opportunity.findMany({where:{archivedAt:null,stage:{isClosed:false},...(ownerId?{ownerId}:{}),...(stageId?{stageId}:{}),...pipelineProjectFilter(f.projectId),...(f.territory?{participants:{some:{account:{territory:f.territory}}}}:{}),...(from||to?{expectedCloseDate:{...(from?{gte:from}:{}),...(to?{lt:new Date(to.getTime()+86400000)}:{})}}:{})},include:{stage:true,products:{where:{archivedAt:null}}}}),
+    prisma.opportunity.findMany({where:{AND:[operationalOpportunityWhere],stage:{isClosed:false},...(ownerId?{ownerId}:{}),...(stageId?{stageId}:{}),...pipelineProjectFilter(f.projectId),...(f.territory?{participants:{some:{account:{territory:f.territory}}}}:{}),...(from||to?{expectedCloseDate:{...(from?{gte:from}:{}),...(to?{lt:new Date(to.getTime()+86400000)}:{})}}:{})},include:{stage:true,products:{where:{archivedAt:null}}}}),
     prisma.user.findMany({where:{active:true,archivedAt:null},orderBy:{lastName:'asc'}}),
     prisma.salesStage.findMany({orderBy:{sortOrder:'asc'}}),
     prisma.territory.findMany({orderBy:{name:'asc'}}),
-    prisma.project.findMany({where:{archivedAt:null},select:{id:true,name:true},orderBy:{name:'asc'}}),
+    prisma.project.findMany({where:operationalProjectWhere,select:{id:true,name:true},orderBy:{name:'asc'}}),
   ]);
   const currencies=[...new Set(rows.map(r=>r.currencyCode))].sort();
   type Row=Pick<Opportunity,'id'|'currencyCode'|'probability'|'expectedCloseDate'|'forecastCategory'> & {stage:Pick<SalesStage,'id'|'name'|'probability'>;products:Pick<OpportunityProduct,'quantity'|'estimatedUnitPrice'|'archivedAt'>[]};

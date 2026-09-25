@@ -1,3 +1,4 @@
+import { operationalAccountWhere, operationalContactWhere, operationalProjectWhere, operationalOpportunityWhere } from './operational-where';
 import { ForecastCategory, OpportunityPartyRole, OpportunityProductPriceSource, Prisma, ProductPriceTier, type PrismaClient } from "@prisma/client";
 import { field, optional, pageNumber, positiveId, required, type Errors } from "./crm-validation";
 import { archivedWhere, recordVisibility } from "./record-visibility";
@@ -92,13 +93,13 @@ export function opportunityTotal(lines: { quantity: number; estimatedUnitPrice: 
 export function weightedValue(total: Prisma.Decimal, probability: number) { return total.mul(probability).div(100); }
 export async function opportunityOptions(client: PrismaClient) {
   const [accounts, contacts, owners, stages, currencies, productCount, projects, productCategories, competitors] = await Promise.all([
-    client.account.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    client.contact ? client.contact.findMany({ where: { active: true, archivedAt: null }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true, email: true, accountId: true } }) : Promise.resolve([]),
+    client.account.findMany({ where: operationalAccountWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    client.contact ? client.contact.findMany({ where: operationalContactWhere, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true, email: true, accountId: true } }) : Promise.resolve([]),
     client.user.findMany({ where: { active: true, archivedAt: null }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
     client.salesStage.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { id: true, name: true, probability: true, isClosed: true, isWon: true } }),
     client.currency.findMany({ where: { active: true }, orderBy: { code: "asc" }, select: { code: true, name: true } }),
     client.product.count({ where: { active: true, archivedAt: null } }),
-    client.project.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    client.project.findMany({ where: operationalProjectWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     client.productCategory.findMany({ where: { OR: [{ active: true }, { products: { some: {} } }] }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
     client.competitorOption.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true, active: true } }),
   ]);
@@ -113,10 +114,10 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
     const [stage, currency, owner, accounts, contacts, products, projects, skus, catalogPrices, peLines, odmPrices] = await Promise.all([
       tx.salesStage.findUnique({ where: { id: input.stageId } }), tx.currency.findUnique({ where: { code: input.currencyCode } }),
       input.ownerId ? tx.user.findUnique({ where: { id: input.ownerId } }) : null,
-      tx.account.findMany({ where: { id: { in: input.participants.map((p) => p.accountId) }, status: "ACTIVE" }, select: { id: true } }),
-      input.contacts.length ? tx.contact.findMany({ where: { id: { in: input.contacts.map(contact => contact.contactId) }, active: true, archivedAt: null }, select: { id: true, accountId: true } }) : Promise.resolve([]),
+      tx.account.findMany({ where: { id: { in: input.participants.map((p) => p.accountId) }, status: "ACTIVE", archivedAt: null }, select: { id: true } }),
+      input.contacts.length ? tx.contact.findMany({ where: { id: { in: input.contacts.map(contact => contact.contactId) }, AND: [operationalContactWhere] }, select: { id: true, accountId: true } }) : Promise.resolve([]),
       tx.product.findMany({ where: { id: { in: input.lines.map((l) => l.productId) }, active: true, archivedAt: null }, select: { id: true } }),
-      tx.project.findMany({ where: { id: { in: input.projectIds } }, select: { id: true, archivedAt: true } }),
+      tx.project.findMany({ where: { AND: [operationalProjectWhere], id: { in: input.projectIds } }, select: { id: true, archivedAt: true } }),
       input.lines.some(line => line.skuId) ? tx.productSku.findMany({ where: { id: { in: input.lines.flatMap(line => line.skuId ? [line.skuId] : []) } }, select: { id: true, productId: true, active: true, catalogSource: true, odmSubtype: true } }) : Promise.resolve([]),
       input.lines.some(line => line.priceSource === "CATALOG") ? tx.productPrice.findMany({ where: { OR: input.lines.filter(line => line.priceSource === "CATALOG" && line.skuId && line.catalogPriceTier).map(line => ({ skuId: line.skuId!, currencyCode: input.currencyCode, tier: line.catalogPriceTier! })) }, select: { skuId: true, currencyCode: true, tier: true } }) : Promise.resolve([]),
       input.lines.some(line => line.priceSource === "PRICE_EXCEPTION") ? tx.priceExceptionLine.findMany({ where: { id: { in: input.lines.flatMap(line => line.priceExceptionLineId ? [line.priceExceptionLineId] : []) } }, include: { priceException: true } }) : Promise.resolve([]),
@@ -220,7 +221,8 @@ export async function setOpportunityArchived(client: PrismaClient, id: number, a
 }
 export type OpportunityFilters = { q?: string; stageId?: string; ownerId?: string; competitorId?: string; projectId?: string; forecastCategory?: string; closeFrom?: string; closeTo?: string; accountId?: string; page?: string; archived?: string };
 export function opportunityWhere(filters: OpportunityFilters): Prisma.OpportunityWhereInput {
-  const where: Prisma.OpportunityWhereInput = { ...archivedWhere(recordVisibility(filters.archived === "yes" ? "archived" : filters.archived === "all" ? "all" : "active")) };
+  const visibility = recordVisibility(filters.archived === "yes" ? "archived" : filters.archived === "all" ? "all" : "active");
+  const where: Prisma.OpportunityWhereInput = { ...archivedWhere(visibility), ...(visibility === 'active' ? { AND: [operationalOpportunityWhere] } : {}) };
   if (filters.q?.trim()) where.name = { contains: filters.q.trim().slice(0, 100), mode: "insensitive" };
   const stageId = positiveId(filters.stageId ?? ""); if (stageId) where.stageId = stageId;
   const competitorId = positiveId(filters.competitorId ?? ""); if (competitorId) where.competitorId = competitorId;
