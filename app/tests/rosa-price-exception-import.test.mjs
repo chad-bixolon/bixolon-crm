@@ -18,3 +18,112 @@ test('existing PE from another source requires review even if the number matches
 test('supplied CSV has 19 groups; conflicting repeats and invalid 3027 dates remain blocked',async()=>{const accounts=[...new Set(sourceRows.flatMap(row=>[row.values.Customer,row.values.VAR,row.values['End User']]))].map((name,index)=>({id:index+100,name,status:'ACTIVE',archivedAt:null})),skus=[...new Set(sourceRows.map(row=>row.values.SKU.toUpperCase()))].map((partNumber,index)=>({id:index+100,partNumber,normalizedPartNumber:partNumber,active:true,product:{active:true,archivedAt:null}}));const plan=await planRosaPriceExceptions(db({accounts,skus}),parseRosaCsv(fixture),'price-exceptions-2026-09-25.csv');assert.equal(plan.sourceRowCount,22);assert.equal(plan.groups.length,19);for(const code of ['SPAZ09032026-2','SPAZ09032026','SPR09022026-2']){const group=plan.groups.find(item=>item.peNumber===code);assert.equal(group.disposition,'REVIEW REQUIRED');assert.ok(group.conflictingFields.length>0)}for(const code of ['SPAZ09042026LA','SPAZ08262026-2'])assert.equal(plan.groups.find(item=>item.peNumber===code).disposition,'ERROR')});
 test('invalid expiration and unresolved mandatory SKU are errors; unresolved parties need review',async()=>{const wrongDate=await planRosaPriceExceptions(db(),parsed(row(2,{'Expiration Date':'3027-06-30'})),'rosa.csv');assert.equal(wrongDate.groups[0].disposition,'ERROR');const badSecond=await planRosaPriceExceptions(db(),parsed(row(2),row(3,{'Expiration Date':'3027-06-30'})),'rosa.csv');assert.equal(badSecond.groups[0].disposition,'ERROR');for(const [change,message,disposition] of [[{users:[]},'Requested By','REVIEW REQUIRED'],[{users:[...seed.users,{...seed.users[0],id:99,lastName:'Other'}]},'Requested By','REVIEW REQUIRED'],[{accounts:[]},'Customer','REVIEW REQUIRED'],[{skus:[]},'SKU','ERROR']]){const plan=await planRosaPriceExceptions(db(change),parsed(row(2)),'rosa.csv');assert.equal(plan.groups[0].disposition,disposition);assert.ok(plan.groups[0].messages.some(text=>text.includes(message)))}});
 test('apply requires preview digest and explicit confirmation',async()=>{const client=db(),input=parsed(row(2)),plan=await planRosaPriceExceptions(client,input,'rosa.csv');await assert.rejects(applyRosaPriceExceptions(client,input,'rosa.csv',plan.digest,false,91),/confirmation/);await assert.rejects(applyRosaPriceExceptions(client,input,'rosa.csv','wrong',true,91),/Preview changed/);assert.equal(client.writes.length,0)});
+
+test('unresolved Customer, VAR, and End User can each be mapped to active Accounts without changing source names',async()=>{
+  for(const [field,column] of [['Customer','distributorAccountId'],['VAR','varAccountId'],['End User','endUserAccountId']]){
+    const client=db({accounts:seed.accounts.filter(account=>account.name!==first.values[field])});
+    const selectedId=client.source.accounts[0].id;
+    const input=parsed(row(2)),initial=await planRosaPriceExceptions(client,input,'rosa.csv');
+    assert.equal(initial.counts['REVIEW REQUIRED'],1);
+    const choices={[initial.groups[0].groupKey]:{accountIds:{[field]:selectedId}}};
+    const reviewed=await planRosaPriceExceptions(client,input,'rosa.csv',choices);
+    assert.equal(reviewed.counts.READY,1);
+    assert.equal(reviewed.counts['REVIEW REQUIRED'],0);
+    assert.equal(reviewed.groups[0][field==='Customer'?'customer':field==='VAR'?'varAccount':'endUser'].source,first.values[field]);
+    await applyRosaPriceExceptions(client,input,'rosa.csv',reviewed.digest,true,91,choices);
+    assert.equal(client.writes[0][column],selectedId);
+    assert.equal(client.writes[0].sourceMetadata.rosaRawRows[0].values[field],first.values[field]);
+    assert.equal(client.writes[0].sourceMetadata.rosaReviewedChoices.accountIds[field],selectedId);
+    assert.equal(client.writes.length,1);
+  }
+});
+
+test('unresolved Requested By and Reviewed By can be mapped to active CRM users',async()=>{
+  const client=db({users:[seed.users[1]]}),input=parsed(row(2));
+  const initial=await planRosaPriceExceptions(client,input,'rosa.csv');
+  assert.equal(initial.counts['REVIEW REQUIRED'],1);
+  const choices={[initial.groups[0].groupKey]:{userIds:{'Requested By':2,'Reviewed By':2}}};
+  const reviewed=await planRosaPriceExceptions(client,input,'rosa.csv',choices);
+  assert.equal(reviewed.counts.READY,1);
+  assert.equal(reviewed.groups[0].requestedBy.source,first.values['Requested By']);
+  assert.equal(reviewed.groups[0].reviewedBy.source,first.values['Reviewed By']);
+  await applyRosaPriceExceptions(client,input,'rosa.csv',reviewed.digest,true,91,choices);
+  assert.equal(client.writes[0].assignedSalesRepUserId,2);
+  assert.equal(client.writes[0].sourceSalesRepName,first.values['Requested By']);
+  assert.equal(client.writes[0].sourceMetadata.reviewedByUserId,2);
+  assert.equal(client.writes[0].sourceMetadata.rosaRawRows[0].values['Reviewed By'],first.values['Reviewed By']);
+});
+
+test('unresolved required SKU can be mapped without creating a SKU and updates Error to Ready',async()=>{
+  const client=db(),input=parsed(row(2,{SKU:'UNKNOWN-SKU'}));
+  const initial=await planRosaPriceExceptions(client,input,'rosa.csv');
+  assert.equal(initial.counts.ERROR,1);
+  const choices={[initial.groups[0].groupKey]:{skuIds:{2:21}}};
+  const reviewed=await planRosaPriceExceptions(client,input,'rosa.csv',choices);
+  assert.equal(reviewed.counts.ERROR,0);
+  assert.equal(reviewed.counts.READY,1);
+  await applyRosaPriceExceptions(client,input,'rosa.csv',reviewed.digest,true,91,choices);
+  assert.equal(client.writes[0].lines.create[0].productSkuId,21);
+  assert.equal(client.writes[0].lines.create[0].sourceSku,'UNKNOWN-SKU');
+  assert.equal(client.writes[0].lines.create[0].sourceMetadata.rosaRaw.SKU,'UNKNOWN-SKU');
+});
+
+test('resolving a SKU leaves the group in Needs review when an Account is still unresolved',async()=>{
+  const client=db({accounts:seed.accounts.filter(account=>account.name!==first.values.VAR)}),input=parsed(row(2,{SKU:'UNKNOWN-SKU'}));
+  const initial=await planRosaPriceExceptions(client,input,'rosa.csv');
+  assert.equal(initial.counts.ERROR,1);
+  const choices={[initial.groups[0].groupKey]:{skuIds:{2:21}}};
+  const reviewed=await planRosaPriceExceptions(client,input,'rosa.csv',choices);
+  assert.deepEqual([reviewed.counts.ERROR,reviewed.counts['REVIEW REQUIRED'],reviewed.counts.READY],[0,1,0]);
+  assert.equal(reviewed.groups[0].varAccount.issue,'No CRM match.');
+  assert.equal(client.writes.length,0);
+});
+
+test('conflicting grouped header values can be chosen while every original source row is preserved',async()=>{
+  const client=db(),input=parsed(row(2),row(3,{Description:'Corrected description','Reviewed At':'2026-09-26T00:00:00+00:00','End User':'Bluestar',Quantity:'250'}));
+  const initial=await planRosaPriceExceptions(client,input,'rosa.csv');
+  assert.deepEqual(initial.groups[0].conflictingFields,['Reviewed At','End User','Description']);
+  assert.equal(initial.counts['REVIEW REQUIRED'],1);
+  const choices={[initial.groups[0].groupKey]:{headerLines:{'Reviewed At':3,'End User':3,Description:3}}};
+  const reviewed=await planRosaPriceExceptions(client,input,'rosa.csv',choices);
+  assert.deepEqual(reviewed.groups[0].conflictingFields,[]);
+  assert.equal(reviewed.counts.READY,1);
+  assert.equal(reviewed.groups[0].description,'Corrected description');
+  await applyRosaPriceExceptions(client,input,'rosa.csv',reviewed.digest,true,91,choices);
+  assert.equal(client.writes[0].sourceDescription,'Corrected description');
+  assert.equal(client.writes[0].sourceMetadata.reviewedAt,'2026-09-26T00:00:00+00:00');
+  assert.deepEqual(client.writes[0].sourceMetadata.rosaRawRows.map(item=>item.values.Description),[first.values.Description,'Corrected description']);
+  assert.equal(client.writes[0].lines.create.length,2);
+});
+
+test('apply binds manual choices and source content to the reviewed digest',async()=>{
+  const client=db(),input=parsed(row(2,{SKU:'UNKNOWN-SKU'})),initial=await planRosaPriceExceptions(client,input,'rosa.csv');
+  const choices={[initial.groups[0].groupKey]:{skuIds:{2:21}}};
+  const reviewed=await planRosaPriceExceptions(client,input,'rosa.csv',choices);
+  await assert.rejects(applyRosaPriceExceptions(client,input,'rosa.csv',reviewed.digest,true,91,{}),/Preview changed/);
+  await assert.rejects(applyRosaPriceExceptions(client,parsed(row(2,{SKU:'CHANGED-SKU'})),'rosa.csv',reviewed.digest,true,91,choices),/Preview changed/);
+  await assert.rejects(applyRosaPriceExceptions(client,input,'rosa.csv',reviewed.digest,false,91,choices),/confirmation/);
+  assert.equal(client.writes.length,0);
+  await applyRosaPriceExceptions(client,input,'rosa.csv',reviewed.digest,true,91,choices);
+  const repeated=await planRosaPriceExceptions(client,input,'rosa.csv',choices);
+  assert.equal(repeated.counts['EXISTING / NO CHANGE'],1);
+  await assert.rejects(applyRosaPriceExceptions(client,input,'rosa.csv',repeated.digest,true,91,choices),/No Price Exceptions ready/);
+  assert.equal(client.writes.length,1);
+});
+
+test('manual choices cannot bypass invalid dates or select inactive and unreviewed records',async()=>{
+  const client=db(),input=parsed(row(2,{'Expiration Date':'3027-06-30',SKU:'UNKNOWN-SKU'}));
+  const initial=await planRosaPriceExceptions(client,input,'rosa.csv');
+  const choices={[initial.groups[0].groupKey]:{skuIds:{2:21}}};
+  const reviewed=await planRosaPriceExceptions(client,input,'rosa.csv',choices);
+  assert.equal(reviewed.counts.ERROR,1);
+  await assert.rejects(applyRosaPriceExceptions(client,input,'rosa.csv',reviewed.digest,true,91,choices),/No Price Exceptions ready/);
+  await assert.rejects(planRosaPriceExceptions(client,input,'rosa.csv',{[initial.groups[0].groupKey]:{headerLines:{'Expiration Date':2}}}),/Invalid header choice/);
+  const invalidTimestamp=parsed(row(2),row(3,{'Reviewed At':'3027-06-30T00:00:00+00:00',Quantity:'250'}));
+  const timestampPlan=await planRosaPriceExceptions(client,invalidTimestamp,'rosa.csv');
+  assert.equal(timestampPlan.counts.ERROR,1);
+  assert.ok(!timestampPlan.groups[0].conflictOptions.some(option=>option.field==='Reviewed At'));
+  await assert.rejects(planRosaPriceExceptions(client,invalidTimestamp,'rosa.csv',{[timestampPlan.groups[0].groupKey]:{headerLines:{'Reviewed At':2}}}),/not safe for this source conflict/);
+  await assert.rejects(planRosaPriceExceptions(db({skus:[{...seed.skus[1],active:false}]}),input,'rosa.csv',choices),/no longer an active CRM choice/);
+  assert.equal(client.writes.length,0);
+});

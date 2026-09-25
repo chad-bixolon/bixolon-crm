@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { TableScroll } from '@/components/table-scroll';
+import { ImportSearchPicker as Picker } from '@/components/import-search-picker';
 import { previewTradeShowAction, previewMappedTradeShowAction, reviewTradeShowCorrectionsAction, confirmTradeShowAction } from './actions';
 import type { ImportChoice } from '@/lib/trade-show-import';
 import { MAPPING_DESTINATIONS, REVIEWABLE_LEAD_FIELDS, type MappingDefinition, type MappingDestination, type ReviewableLeadField } from '@/lib/trade-show-import-fields';
@@ -18,21 +19,6 @@ function CorrectionFields({row,disabled,onApply}:{row:Plan['rows'][number];disab
   const [editing,setEditing]=useState<ReviewableLeadField|null>(null),[value,setValue]=useState('');
   const longFields=new Set<ReviewableLeadField>(['productInterest','sourceNotes','customerPainPoints']);
   return <details className="rounded border border-slate-200 bg-white p-2 text-xs"><summary className="cursor-pointer font-semibold text-orange-800">Correct imported fields</summary><div className="mt-2 space-y-2">{REVIEWABLE_LEAD_FIELDS.map(([field,label])=>{const source=row.sourceValues[field],current=String(row[field]??''),corrected=Object.prototype.hasOwnProperty.call(row.reviewedOverrides,field),active=editing===field;return <div className="rounded bg-slate-50 p-2" key={field}><div className="flex items-center justify-between gap-2"><span className="font-semibold text-slate-700">{label} {corrected&&<span className="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">Corrected</span>}</span>{!active&&<button className="font-semibold text-orange-800 underline underline-offset-2" type="button" disabled={disabled} onClick={()=>{setEditing(field);setValue(corrected?current:source??current)}}>{corrected?'Edit':'Correct'}</button>}</div><div className="mt-0.5 break-words text-[11px] text-slate-500">Source: {source||'(blank)'}</div>{corrected&&!active&&<div className="mt-0.5 whitespace-pre-wrap break-words text-slate-800">Corrected: {current||'(blank)'}</div>}{active&&<div className="mt-1">{longFields.has(field)?<textarea aria-label={`Corrected ${label}`} className="field min-h-20 w-full p-2 text-xs" maxLength={10000} value={value} onChange={event=>setValue(event.target.value)}/>:<input aria-label={`Corrected ${label}`} className="field h-8 w-full px-2 py-1 text-xs" maxLength={500} value={value} onChange={event=>setValue(event.target.value)}/>}<div className="mt-1 flex gap-2"><button className="font-semibold text-orange-800 underline" type="button" disabled={disabled} onClick={async()=>{if(await onApply(field,value))setEditing(null)}}>Apply correction</button><button className="text-slate-600 underline" type="button" disabled={disabled} onClick={()=>setEditing(null)}>Cancel</button></div></div>}</div>})}</div></details>;
-}
-
-function Picker({ value, onChange, items, label, emptyLabel = 'Not linked' }: { value: number | null; onChange: (id: number | null) => void; items: { id: number; name: string }[]; label: string; emptyLabel?: string }) {
-  const [search, setSearch] = useState('');
-  const filtered = search ? items.filter(item => item.name.toLowerCase().includes(search.toLowerCase())).slice(0, 30) : items.slice(0, 30);
-  const selected = items.find(item => item.id === value);
-
-  return <div className="min-w-0">
-    <input aria-label={`Search ${label}`} className="field mb-1 h-8 min-w-0 px-2 py-1 text-xs" value={search} onChange={event => setSearch(event.target.value)} placeholder={`Search ${label}`} />
-    <select aria-label={label} className="field h-8 min-w-0 px-2 py-1 text-xs" value={value ?? ''} onChange={event => onChange(event.target.value ? Number(event.target.value) : null)}>
-      <option value="">{emptyLabel}</option>
-      {selected && !filtered.some(item => item.id === selected.id) && <option value={selected.id}>{selected.name}</option>}
-      {filtered.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-    </select>
-  </div>;
 }
 
 const summaryMetrics = [
