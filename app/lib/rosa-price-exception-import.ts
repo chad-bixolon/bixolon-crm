@@ -36,7 +36,17 @@ export function parseRosaCsv(input:string):RosaParsed {
   return {rows,errors};
 }
 function timestamp(value:string){const raw=value.trim();if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(raw))return null;const date=new Date(raw);return Number.isNaN(date.valueOf())||date.getUTCFullYear()<1900||date.getUTCFullYear()>2100?null:date.toISOString();}
-function dateOnly(value:string){const raw=value.trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(raw))return null;const date=new Date(`${raw}T00:00:00.000Z`);return Number.isNaN(date.valueOf())||date.toISOString().slice(0,10)!==raw||date.getUTCFullYear()>2100||date.getUTCFullYear()<1900?null:raw;}
+export function parseRosaExpirationDate(value:string){
+  const raw=value.trim(),iso=/^(\d{4})-(\d{2})-(\d{2})$/.exec(raw),slash=/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(raw);
+  if(!iso&&!slash)return null;
+  const year=iso?Number(iso[1]):slash![3].length===2?2000+Number(slash![3]):Number(slash![3]);
+  const month=Number(iso?iso[2]:slash![1]),day=Number(iso?iso[3]:slash![2]);
+  if(year<1900||year>2100||month<1||month>12)return null;
+  const leap=year%4===0&&(year%100!==0||year%400===0);
+  const days=[31,leap?29:28,31,30,31,30,31,31,30,31,30,31];
+  if(day<1||day>days[month-1])return null;
+  return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
 function decimal(value:string,scale:number,whole:number){const raw=value.trim();if(!new RegExp(`^\\d{1,${whole}}(?:\\.\\d{1,${scale}})?$`).test(raw))return null;const number=new Prisma.Decimal(raw);return number.gt(0)?number.toFixed(scale):null;}
 function resolve(source:string,candidates:{id:number;name:string}[],normalizer:(value:string)=>string):RosaResolution{const value=source.trim();if(!value)return {source,id:null,name:null,issue:'Missing source value.'};const matches=candidates.filter(candidate=>normalizer(candidate.name)===normalizer(value));return matches.length===1?{source,id:matches[0].id,name:matches[0].name,issue:null}:{source,id:null,name:null,issue:matches.length?'Multiple CRM matches.':'No CRM match.'};}
 function resolveUser(source:string,users:{id:number;name:string;firstName:string}[]):RosaResolution{const value=source.trim();if(!value)return {source,id:null,name:null,issue:'Missing source value.'};const normalized=normalizedName(value);const matches=users.filter(user=>normalizedName(user.name)===normalized||normalizedName(user.firstName)===normalized);return matches.length===1?{source,id:matches[0].id,name:matches[0].name,issue:null}:{source,id:null,name:null,issue:matches.length?'Multiple CRM matches.':'No CRM match.'};}
@@ -45,7 +55,7 @@ const headerFields = ['Status','Requested At','Reviewed At','Requested By','Revi
 type HeaderField = typeof headerFields[number];
 function headerValue(field:HeaderField,value:string){
   if(field==='Requested At'||field==='Reviewed At')return timestamp(value)??value.trim();
-  if(field==='Expiration Date')return dateOnly(value)??value.trim();
+  if(field==='Expiration Date')return parseRosaExpirationDate(value)??value.trim();
   if(field==='Status'||field==='Currency')return value.normalize('NFKC').trim().toUpperCase();
   if(field==='Description')return value.normalize('NFKC').trim().replace(/\s+/g,' ');
   return normalizedName(value);
@@ -73,33 +83,36 @@ export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:s
   const groups:RosaPlanGroup[]=[];
   for(const sourceRows of grouped.values()){
     const first=sourceRows[0],raw=first.values,peNumber=raw['PE Number'].trim(),code=key(peNumber),messages:string[]=[],changedFields:string[]=[];
+    let invalid=false;const sourceError=(message:string)=>{messages.push(message);invalid=true;};
     const conflictingFields=conflictingHeaderFields(sourceRows);
     for(const field of conflictingFields)messages.push(headerConflictMessage(field,sourceRows));
     const requestedBy=resolveUser(raw['Requested By'],userChoices),reviewedBy=resolveUser(raw['Reviewed By'],userChoices);
     const customer=resolve(raw.Customer,accountChoices,normalizedName),varAccount=resolve(raw.VAR,accountChoices,normalizedName),endUser=resolve(raw['End User'],accountChoices,normalizedName);
-    const requestedAt=timestamp(raw['Requested At']),reviewedAt=timestamp(raw['Reviewed At']),expirationDate=dateOnly(raw['Expiration Date']);
+    const requestedAt=timestamp(raw['Requested At']),reviewedAt=timestamp(raw['Reviewed At']),expirationDate=parseRosaExpirationDate(raw['Expiration Date']);
     const statusSource=raw.Status.trim(),statusMapped=statusSource.toLowerCase()==='approved'?'ACTIVE' as const:null;
-    if(!code)messages.push('PE Number is required.');if(!statusMapped)messages.push(`Unsupported status: ${statusSource||'(blank)'}.`);
-    if(!requestedAt||!reviewedAt)messages.push('Requested At and Reviewed At must be valid timestamps with offsets.');
-    if(requestedAt&&reviewedAt&&requestedAt>reviewedAt)messages.push('Reviewed At is before Requested At.');
-    if(!expirationDate)messages.push('Expiration Date is invalid or outside 1900–2100.');
-    if(!raw.Description.trim())messages.push('Description is required.');
+    if(!code)sourceError('PE Number is required.');if(!statusMapped)sourceError(`Unsupported status: ${statusSource||'(blank)'}.`);
+    if(!requestedAt||!reviewedAt)sourceError('Requested At and Reviewed At must be valid timestamps with offsets.');
+    if(requestedAt&&reviewedAt&&requestedAt>reviewedAt)sourceError('Reviewed At is before Requested At.');
+    if(!expirationDate)sourceError('Expiration Date is invalid or outside 1900–2100.');
+    if(!raw.Description.trim())sourceError('Description is required.');
+    if(!raw.Customer.trim())sourceError('Customer is required.');
     for(const row of sourceRows.slice(1)){
       const value=row.values,requested=timestamp(value['Requested At']),reviewed=timestamp(value['Reviewed At']);
-      if(!dateOnly(value['Expiration Date']))messages.push(`Line ${row.line}: Expiration Date is invalid or outside 1900–2100.`);
-      if(!requested||!reviewed)messages.push(`Line ${row.line}: Requested At and Reviewed At must be valid timestamps with offsets.`);
-      if(requested&&reviewed&&requested>reviewed)messages.push(`Line ${row.line}: Reviewed At is before Requested At.`);
-      if(value.Status.trim().toLowerCase()!=='approved')messages.push(`Line ${row.line}: Unsupported status: ${value.Status.trim()||'(blank)'}.`);
-      if(!value.Description.trim())messages.push(`Line ${row.line}: Description is required.`);
+      if(!parseRosaExpirationDate(value['Expiration Date']))sourceError(`Line ${row.line}: Expiration Date is invalid or outside 1900–2100.`);
+      if(!requested||!reviewed)sourceError(`Line ${row.line}: Requested At and Reviewed At must be valid timestamps with offsets.`);
+      if(requested&&reviewed&&requested>reviewed)sourceError(`Line ${row.line}: Reviewed At is before Requested At.`);
+      if(value.Status.trim().toLowerCase()!=='approved')sourceError(`Line ${row.line}: Unsupported status: ${value.Status.trim()||'(blank)'}.`);
+      if(!value.Description.trim())sourceError(`Line ${row.line}: Description is required.`);
+      if(!value.Customer.trim())sourceError(`Line ${row.line}: Customer is required.`);
     }
     for(const [label,item] of [['Requested By',requestedBy],['Reviewed By',reviewedBy],['Customer',customer],['VAR',varAccount],['End User',endUser]] as const)if(item.issue)messages.push(`${label}: ${item.issue}`);
     const tierOccurrences=new Map<string,number>();
     const tiers:RosaPlanTier[]=sourceRows.map(row=>{
       const value=row.values,tierKey=canonicalTier(row),occurrence=(tierOccurrences.get(tierKey)??0)+1;tierOccurrences.set(tierKey,occurrence);
       const sku=resolve(value.SKU,skuChoices,normalizePartNumber),quantity=decimal(value.Quantity,3,11),originalPrice=decimal(value['Original Price'],2,10),approvedPrice=decimal(value['Approved Price'],2,10),currency=value.Currency.trim().toUpperCase();
-      if(sku.issue)messages.push(`Line ${row.line} SKU: ${sku.issue}`);
-      if(!quantity||!originalPrice||!approvedPrice)messages.push(`Line ${row.line}: Quantity and both prices must be positive values within CRM precision.`);
-      if(!currencies.some(item=>item.code===currency&&item.active))messages.push(`Line ${row.line}: Currency ${currency||'(blank)'} is not active in CRM.`);
+      if(sku.issue)sourceError(`Line ${row.line} SKU: ${sku.issue}`);
+      if(!quantity||!originalPrice||!approvedPrice)sourceError(`Line ${row.line}: Quantity and both prices must be positive values within CRM precision.`);
+      if(!currencies.some(item=>item.code===currency&&item.active))sourceError(`Line ${row.line}: Currency ${currency||'(blank)'} is not active in CRM.`);
       return {line:row.line,sku,quantity:value.Quantity,originalPrice:value['Original Price'],approvedPrice:value['Approved Price'],currency:value.Currency,sourceLineKey:`ROSA:${hash(tierKey)}:${occurrence}`,sourceFingerprint:sourceFingerprint(row)};
     });
     const matching=existing.filter(item=>item.peCode&&key(item.peCode)===code||item.sourceType==='EXTERNAL_EXPORT'&&item.sourceKey===`ROSA:${code}`);
@@ -114,20 +127,20 @@ export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:s
       }else changedFields.push('Existing PE has no comparable Rosa group metadata.');
       messages.push(identical?'Existing PE and all pricing tiers are identical.':'Existing PE differs; historical data will not be changed.');
     }else if(matching.length>1){changedFields.push('Multiple existing PEs share this number.');messages.push('Multiple existing PEs share this number.');}
-    const fatal=messages.some(message=>/required|invalid|must be valid|Unsupported|precision|before Requested|not active in CRM/.test(message));
-    const disposition:RosaDisposition=fatal?'ERROR':conflictingFields.length||matching.length&&!identical?'REVIEW REQUIRED':matching.length?'EXISTING / NO CHANGE':messages.length?'REVIEW REQUIRED':'READY';
+    const needsReview=conflictingFields.length>0||changedFields.length>0||[requestedBy,reviewedBy,customer,varAccount,endUser].some(item=>!!item.issue);
+    const disposition:RosaDisposition=invalid?'ERROR':needsReview?'REVIEW REQUIRED':matching.length?'EXISTING / NO CHANGE':'READY';
     counts[disposition]++;
-    groups.push({peNumber,sourceLines:sourceRows.map(row=>row.line),statusSource,statusMapped,requestedAt:raw['Requested At'],reviewedAt:raw['Reviewed At'],requestedBy,reviewedBy,customer,varAccount,endUser,expirationDate:raw['Expiration Date'],currency:raw.Currency,description:raw.Description,tiers,disposition,messages,conflictingFields:[...conflictingFields],changedFields,existingId:matching[0]?.id??null,fingerprint});
+    groups.push({peNumber,sourceLines:sourceRows.map(row=>row.line),statusSource,statusMapped,requestedAt:raw['Requested At'],reviewedAt:raw['Reviewed At'],requestedBy,reviewedBy,customer,varAccount,endUser,expirationDate:expirationDate??raw['Expiration Date'],currency:raw.Currency,description:raw.Description,tiers,disposition,messages,conflictingFields:[...conflictingFields],changedFields,existingId:matching[0]?.id??null,fingerprint});
   }
   return {groups,counts,sourceRowCount:parsed.rows.length,errors:[],digest:hash(JSON.stringify({fileName,groups})),fileName};
 }
 export async function applyRosaPriceExceptions(db:PrismaClient,parsed:RosaParsed,fileName:string,expectedDigest:string,confirmed:boolean,actorId:number){
-  if(confirmed!==true||!expectedDigest)throw new Error('Dry-run preview and explicit confirmation required.');
+  if(confirmed!==true||!expectedDigest)throw new Error('Preview and explicit confirmation required.');
   return db.$transaction(async tx=>{
     const plan=await planRosaPriceExceptions(tx,parsed,fileName);
-    if(plan.digest!==expectedDigest||plan.errors.length)throw new Error('Preview changed. Run the dry-run again.');
+    if(plan.digest!==expectedDigest||plan.errors.length)throw new Error('Preview changed. Preview the file again.');
     const ready=plan.groups.filter(group=>group.disposition==='READY');
-    if(!ready.length)throw new Error('No READY Price Exceptions to import.');
+    if(!ready.length)throw new Error('No Price Exceptions ready to import.');
     for(const group of ready){
       const sourceRows=parsed.rows.filter(row=>group.sourceLines.includes(row.line));const raw=sourceRows[0].values;
       const assignee=await tx.user.findUnique({where:{id:group.requestedBy.id!},select:{role:true}});

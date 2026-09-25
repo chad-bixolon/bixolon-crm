@@ -14,9 +14,9 @@ const workflows = [
     description: 'Upload and review Products, part numbers, and prices before applying changes.',
   },
   {
-    title: 'Price Exceptions · Rosa CSV',
+    title: 'Price Exceptions · CSV',
     href: '/administration/imports/price-exceptions/rosa',
-    description: 'Preferred Price Exception import: preview the Rosa CSV, resolve exceptions, and confirm READY rows.',
+    description: 'Preview and validate a Price Exception CSV before importing ready records.',
   },
   {
     title: 'Price Exceptions · Legacy Workbook',
