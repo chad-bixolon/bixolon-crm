@@ -58,6 +58,7 @@ COPY --from=production-build --chown=node:node /app/prisma.config.ts ./prisma.co
 COPY --from=production-build --chown=node:node /app/scripts/seed-sales-stages.mjs ./scripts/seed-sales-stages.mjs
 COPY --from=production-build --chown=node:node /app/scripts/seed-activity-types.mjs ./scripts/seed-activity-types.mjs
 COPY --from=production-build --chown=node:node /app/scripts/operations/audit-production-cleanup.mjs ./scripts/operations/audit-production-cleanup.mjs
+COPY --from=production-build --chown=node:node /app/scripts/operations/reset-price-exceptions.mjs ./scripts/operations/reset-price-exceptions.mjs
 USER node
 EXPOSE 3000
 CMD ["npm", "start"]
