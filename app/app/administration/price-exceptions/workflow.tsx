@@ -1,0 +1,49 @@
+'use client';
+import Link from 'next/link';
+import { useMemo, useState, useTransition } from 'react';
+import { cleanupIssues, cleanupIssueKeys, type CleanupAction, type CleanupIssue, type CleanupRequest } from '@/lib/price-exception-cleanup-shared';
+import { confirmCleanup, previewCleanup } from './actions';
+
+type Row = { id:number;code:string;status:string;sourceType:string;expiration:string|null;owner:string;parties:string;issues:CleanupIssue[];clues:string[];creator:string|null;sourceRep:string|null;eligible:Record<CleanupAction,boolean> };
+type Choice = {id:number;firstName?:string;lastName?:string;name?:string};
+type Preview = { fingerprint:string;count:number;changes:{id:number;code:string;before:string;after:string}[];request:CleanupRequest };
+const actions: {value:CleanupAction;label:string}[] = [
+  {value:'assignOwner',label:'Assign salesperson to unassigned records'},
+  {value:'linkDistributor',label:'Link missing Distributor / OEM Account'},
+  {value:'linkVar',label:'Link missing VAR / ISV Account'},
+  {value:'linkEndUser',label:'Link missing End User Account'},
+  {value:'expire',label:'Set overdue active records to Expired'},
+  {value:'archive',label:'Archive records'},
+];
+export function CleanupWorkflow({rows,counts,salesReps,accounts}:{rows:Row[];counts:Record<string,number>;salesReps:Choice[];accounts:Choice[]}) {
+  const [issue,setIssue]=useState<CleanupIssue|'all'>('all');
+  const [query,setQuery]=useState('');
+  const [sort,setSort]=useState<'code'|'status'|'expiration'|'id'>('id');
+  const [selected,setSelected]=useState<number[]>([]);
+  const [action,setAction]=useState<CleanupAction>('assignOwner');
+  const [targetId,setTargetId]=useState('');
+  const [preview,setPreview]=useState<Preview|null>(null);
+  const [confirmed,setConfirmed]=useState(false);
+  const [message,setMessage]=useState('');
+  const [busy,start]=useTransition();
+  const visible=useMemo(()=>rows.filter(row => (issue==='all'||row.issues.includes(issue)) && (!query.trim() || `${row.code} ${row.parties}`.toLowerCase().includes(query.trim().toLowerCase()))).sort((a,b)=>sort==='id'?b.id-a.id:String(a[sort]??'').localeCompare(String(b[sort]??''))),[rows,issue,query,sort]);
+  const selectedSet=new Set(selected);
+  const allVisibleSelected=visible.length>0&&visible.every(row=>selectedSet.has(row.id));
+  const resetPreview=()=>{setPreview(null);setConfirmed(false);setMessage('');};
+  const changeSelection=(ids:number[])=>{setSelected(ids);resetPreview();};
+  const choices=action==='assignOwner'?salesReps:accounts;
+  const needsTarget=action!=='expire'&&action!=='archive';
+  const eligibleCount=selected.filter(id=>rows.find(row=>row.id===id)?.eligible[action]).length;
+  const request:CleanupRequest={ids:selected,action,...(needsTarget?{targetId:Number(targetId)}:{})};
+  function handlePreview(){resetPreview();start(async()=>{const result=await previewCleanup(request);if(result.ok)setPreview({fingerprint:result.fingerprint,count:result.count,changes:result.changes,request});else setMessage(result.message);});}
+  function handleConfirm(){if(!preview||!confirmed)return;start(async()=>{const result=await confirmCleanup(preview.request,preview.fingerprint,preview.count,confirmed);if(result.ok){setMessage(`${result.count} Price Exceptions updated. Refreshing audit…`);window.location.reload();}else{setMessage(result.message);setPreview(null);setConfirmed(false);}});}
+  return <div className="space-y-5">
+    <p className="text-sm text-slate-600">{rows.length} records audited. A record may appear in several categories. Account and Opportunity owners are clues only; legacy import creators are not treated as sales owners.</p>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{cleanupIssueKeys.map(key=><button type="button" key={key} onClick={()=>{setIssue(key);changeSelection([])}} className={`panel p-4 text-left ${issue===key?'ring-2 ring-orange-600':''}`}><span className="block text-2xl font-semibold">{counts[key]??0}</span><span className="text-sm text-slate-600">{cleanupIssues[key]}</span></button>)}</div>
+    <div className="panel flex flex-wrap items-end gap-3 p-4"><label className="label">Issue<select className="field mt-1" value={issue} onChange={event=>{setIssue(event.target.value as CleanupIssue|'all');changeSelection([])}}><option value="all">All ({rows.length})</option>{cleanupIssueKeys.map(key=><option key={key} value={key}>{cleanupIssues[key]} ({counts[key]??0})</option>)}</select></label><label className="label">Search PE or customer<input className="field mt-1" value={query} onChange={event=>{setQuery(event.target.value);changeSelection([])}}/></label><label className="label">Sort<select className="field mt-1" value={sort} onChange={event=>setSort(event.target.value as typeof sort)}><option value="id">Newest ID</option><option value="code">PE number</option><option value="status">Status</option><option value="expiration">Expiration</option></select></label><span className="pb-2 text-sm text-slate-600">{visible.length} shown · {selected.length} selected</span></div>
+    <div className="panel max-h-[580px] overflow-auto"><table className="w-full min-w-[1120px] text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-xs uppercase text-slate-600"><tr><th className="p-3"><input aria-label="Select all filtered Price Exceptions" type="checkbox" checked={allVisibleSelected} onChange={event=>changeSelection(event.target.checked?[...new Set([...selected,...visible.map(row=>row.id)])]:selected.filter(id=>!visible.some(row=>row.id===id)))}/></th><th className="p-3">PE</th><th className="p-3">Status / expiration</th><th className="p-3">Salesperson / clues</th><th className="p-3">Customer</th><th className="p-3">Issues</th></tr></thead><tbody className="divide-y">{visible.map(row=><tr key={row.id} className="align-top"><td className="p-3"><input aria-label={`Select ${row.code}`} type="checkbox" checked={selectedSet.has(row.id)} onChange={event=>changeSelection(event.target.checked?[...selected,row.id]:selected.filter(id=>id!==row.id))}/></td><td className="p-3"><Link className="font-medium text-orange-800 underline" href={`/price-exceptions/${row.id}`}>{row.code}</Link><div className="text-xs text-slate-500">#{row.id} · {row.sourceType}</div></td><td className="p-3">{row.status}<div className="text-xs text-slate-500">{row.expiration??'No expiration'}</div></td><td className="p-3">{row.owner}{row.sourceRep&&<div className="text-xs text-slate-600">Source rep: {row.sourceRep}</div>}{row.clues.length>0&&<div className="text-xs text-slate-600">Possible Account / Opportunity owners: {row.clues.join(', ')}</div>}{row.creator&&<div className="text-xs text-slate-500">{row.creator}</div>}</td><td className="p-3">{row.parties}</td><td className="p-3 text-xs">{row.issues.map(key=><span key={key} className="mr-1 mb-1 inline-block rounded bg-amber-50 px-2 py-1 text-amber-900">{cleanupIssues[key]}</span>)}</td></tr>)}</tbody></table>{!visible.length&&<p className="p-6 text-center text-sm text-slate-500">No matching records.</p>}</div>
+    <section className="panel p-5"><h2 className="text-lg font-semibold">Bulk correction</h2><p className="mb-4 text-sm text-slate-600">Only selected, eligible records can change. Pricing lines, source values, and Opportunity price snapshots are never part of these actions.</p><div className="flex flex-wrap items-end gap-3"><label className="label">Action<select className="field mt-1" value={action} onChange={event=>{setAction(event.target.value as CleanupAction);setTargetId('');resetPreview()}}>{actions.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</select></label>{needsTarget&&<label className="label">{action==='assignOwner'?'Salesperson':'Active Account'}<select className="field mt-1 max-w-80" value={targetId} onChange={event=>{setTargetId(event.target.value);resetPreview()}}><option value="">Choose…</option>{choices.map(choice=><option key={choice.id} value={choice.id}>{choice.name??`${choice.firstName} ${choice.lastName}`}</option>)}</select></label>}<button type="button" className="btn-primary" disabled={busy||!selected.length||eligibleCount!==selected.length||(needsTarget&&!targetId)} onClick={handlePreview}>Preview {selected.length} updates</button></div>{selected.length>0&&eligibleCount!==selected.length&&<p className="mt-2 text-sm text-amber-800">{selected.length-eligibleCount} selected records are ineligible for this action. Narrow the selection before previewing.</p>}</section>
+    {preview&&<section role="dialog" aria-modal="true" aria-label="Confirm Price Exception bulk update" className="panel border-2 border-orange-500 p-5"><h2 className="text-lg font-semibold">Confirm {preview.count} Price Exception updates</h2><p className="mt-1 text-sm">Action: {actions.find(item=>item.value===preview.request.action)?.label}. Review every before and after value below.</p><div className="mt-3 max-h-64 overflow-auto"><table className="w-full text-left text-sm"><thead><tr><th>PE</th><th>Before</th><th>After</th></tr></thead><tbody>{preview.changes.map(change=><tr key={change.id} className="border-t"><td>{change.code} (#{change.id})</td><td>{change.before}</td><td>{change.after}</td></tr>)}</tbody></table></div><label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={confirmed} onChange={event=>setConfirmed(event.target.checked)}/>I confirm these {preview.count} updates.</label><div className="mt-4 flex gap-2"><button type="button" className="btn-primary" disabled={!confirmed||busy} onClick={handleConfirm}>Apply {preview.count} updates</button><button type="button" className="btn-secondary" onClick={resetPreview}>Cancel</button></div></section>}
+    {message&&<p role="status" className="text-sm text-amber-800">{message}</p>}
+  </div>;
+}
