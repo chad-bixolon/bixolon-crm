@@ -35,22 +35,32 @@ Accounts, Contacts, Projects, Opportunities, OpportunityProducts, Products, Prod
    python3 app/scripts/operations/check-migration-checksums.py
    ```
 
-5. Obtain `BIXOLON_PRODUCTION_SYSTEM_ID` from the **previously recorded production cluster inventory**, independently of the database connection being tested. The script also requires `NODE_ENV=production`, the Compose host `db`, database name `bixolon_crm`, and an exact match to this PostgreSQL system identifier. It prints no database URL or credentials. If the production cluster has been rebuilt, review and update the trusted inventory first.
+5. In the DigitalOcean App Platform production console, query and record the PostgreSQL system identifier using the read-only command below. The value comes from `pg_control_system()` on the connected server; it is never derived from the hostname. Compare it with the separately maintained production cluster inventory. If the cluster has been rebuilt, review and update that inventory before apply. The command prints only the system identifier and does not print the URL or credentials.
 6. Run the dry-run. Record the before counts, affected-table list, foreign-key graph, and protected-table counts. Apply is forbidden if `blocked` is true or `OpportunityProductLinkedToPeLine` is nonzero. Confirm the PE counts match the approved deletion scope.
 
 ## Commands
 
-From the production repository root, after placing the trusted cluster identifier in the shell environment:
+Run these commands inside the **DigitalOcean App Platform production app console**. The host value below is the reviewed production managed PostgreSQL host; the script accepts an explicitly supplied host and checks it against `DATABASE_URL` exactly. The app runtime supplies `NODE_ENV=production` and `DATABASE_URL`.
 
 ```sh
-docker compose exec -T -e NODE_ENV=production -e BIXOLON_PRODUCTION_SYSTEM_ID="$BIXOLON_PRODUCTION_SYSTEM_ID" app node scripts/operations/reset-price-exceptions.mjs
+EXPECTED_DB_HOST=bixolon-crm-db-do-user-44410788-0.e.db.ondigitalocean.com
+node scripts/operations/reset-price-exceptions.mjs --expect-host="$EXPECTED_DB_HOST" --show-system-id
 ```
 
-Only after all prerequisites and the final dry-run have passed, the apply command is:
+Record the returned decimal identifier in the protected change record, compare it with the trusted cluster inventory, and set `EXPECTED_SYSTEM_ID` to that reviewed value. Then run the dry-run:
 
 ```sh
-docker compose exec -T -e NODE_ENV=production -e BIXOLON_PRODUCTION_SYSTEM_ID="$BIXOLON_PRODUCTION_SYSTEM_ID" app node scripts/operations/reset-price-exceptions.mjs --apply --confirm=DELETE_ALL_PRICE_EXCEPTIONS
+EXPECTED_SYSTEM_ID=REPLACE_WITH_REVIEWED_SERVER_SYSTEM_IDENTIFIER
+node scripts/operations/reset-price-exceptions.mjs --expect-host="$EXPECTED_DB_HOST" --expect-system-id="$EXPECTED_SYSTEM_ID"
 ```
+
+Only after all prerequisites and the final dry-run have passed, apply with:
+
+```sh
+node scripts/operations/reset-price-exceptions.mjs --expect-host="$EXPECTED_DB_HOST" --expect-system-id="$EXPECTED_SYSTEM_ID" --apply --confirm=DELETE_ALL_PRICE_EXCEPTIONS
+```
+
+The system ID lookup and dry-run use a connection configured with PostgreSQL `default_transaction_read_only=on`. All three commands require the production environment, a PostgreSQL `DATABASE_URL` whose hostname matches `--expect-host`, `bixolon_crm` in the URL, and `current_database() = 'bixolon_crm'`. Dry-run and apply additionally require the connected server's system identifier to equal `--expect-system-id`.
 
 Apply locks `PriceException`, `PriceExceptionLine`, and `OpportunityProduct` against concurrent writes; rechecks identity, constraints, triggers, counts, and Opportunity links inside a serializable transaction; deletes PE lines before PE headers; verifies zero PE rows and unchanged protected-table and Opportunity snapshot counts; then commits. Any failure rolls the transaction back. Unexpected foreign keys or custom triggers also stop the reset. The command does not delete Opportunity products to make the reset succeed.
 

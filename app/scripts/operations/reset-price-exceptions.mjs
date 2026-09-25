@@ -13,17 +13,40 @@ const PROTECTED_TABLES = ['Account','Contact','Project','Opportunity','Opportuni
 const CONFIRMATION = 'DELETE_ALL_PRICE_EXCEPTIONS';
 
 export function parseResetOptions(argv) {
-  if (argv.some(arg => !['--apply',`--confirm=${CONFIRMATION}`].includes(arg))) throw new Error('Unknown option. Use --apply and the documented confirmation token.');
+  const allowed = ['--apply', '--show-system-id', `--confirm=${CONFIRMATION}`];
+  if (argv.some(arg => !allowed.includes(arg) && !arg.startsWith('--expect-host=') && !arg.startsWith('--expect-system-id='))) throw new Error('Unknown option. Use --expect-host, --expect-system-id, --apply, and the documented confirmation token.');
+  const get = name => {
+    const values = argv.filter(arg => arg.startsWith(`${name}=`));
+    if (values.length !== 1 || !values[0].slice(name.length + 1)) throw new Error(`Refusing reset: exactly one ${name}=VALUE is required.`);
+    return values[0].slice(name.length + 1);
+  };
+  const expectHost = get('--expect-host');
+  const showSystemId = argv.includes('--show-system-id');
   const apply = argv.includes('--apply');
+  if (showSystemId && (apply || argv.some(arg => arg.startsWith('--confirm=')) || argv.some(arg => arg.startsWith('--expect-system-id=')))) throw new Error('Refusing reset: --show-system-id cannot be combined with apply or an expected system identifier.');
+  const expectSystemId = showSystemId ? null : get('--expect-system-id');
+  if (expectSystemId && !/^\d{10,24}$/.test(expectSystemId)) throw new Error('Refusing reset: expected PostgreSQL system identifier must be 10 to 24 digits.');
   if (apply && !argv.includes(`--confirm=${CONFIRMATION}`)) throw new Error(`Apply requires --confirm=${CONFIRMATION}.`);
   if (!apply && argv.some(arg => arg.startsWith('--confirm='))) throw new Error('Confirmation token is only valid with --apply.');
-  return { apply };
+  return { apply, showSystemId, expectHost, expectSystemId };
 }
-export function assertProductionIdentity(env, actual) {
-  const url = env.DATABASE_URL ? new URL(env.DATABASE_URL) : null;
-  if (env.NODE_ENV !== 'production' || !url || url.hostname !== 'db' || url.pathname.slice(1) !== EXPECTED_DATABASE || actual.database !== EXPECTED_DATABASE) throw new Error('Refusing reset: expected production database identity was not established.');
-  const expected = env.BIXOLON_PRODUCTION_SYSTEM_ID;
-  if (!expected || !/^\d{10,24}$/.test(expected) || actual.systemId !== expected) throw new Error('Refusing reset: production PostgreSQL cluster identifier did not match.');
+export function assertProductionTarget(env, expectHost) {
+  let url;
+  try { url = env.DATABASE_URL ? new URL(env.DATABASE_URL) : null; } catch { /* Refuse without exposing connection details. */ }
+  if (env.NODE_ENV !== 'production' || !url || !['postgres:','postgresql:'].includes(url.protocol) || !expectHost || url.hostname !== expectHost || decodeURIComponent(url.pathname.slice(1)) !== EXPECTED_DATABASE) throw new Error('Refusing reset: expected production database target was not established.');
+  return url;
+}
+export function assertProductionIdentity(env, actual, options) {
+  assertProductionTarget(env, options.expectHost);
+  if (actual.database !== EXPECTED_DATABASE) throw new Error('Refusing reset: connected database identity did not match.');
+  if (!options.showSystemId && (!options.expectSystemId || !/^\d{10,24}$/.test(options.expectSystemId) || actual.systemId !== options.expectSystemId)) throw new Error('Refusing reset: production PostgreSQL cluster identifier did not match.');
+}
+function readOnlyUrl(url) {
+  const safe = new URL(url);
+  const prior = safe.searchParams.get('options') ?? '';
+  safe.searchParams.set('options', `${prior} -c default_transaction_read_only=on`.trim());
+  safe.searchParams.set('connection_limit', '1');
+  return safe.toString();
 }
 export function assertKnownDependencies(foreignKeys, triggers) {
   const actual = foreignKeys.map(row=>`${row.name}|${row.referencingTable}|${row.referencedTable}|${row.deleteAction}`).sort();
@@ -59,21 +82,27 @@ async function protectedCounts(db) {
   for(const table of PROTECTED_TABLES){const [row]=await db.$queryRawUnsafe(`SELECT count(*)::int AS count FROM "${table}"`);result[table]=row.count;}
   return result;
 }
-async function inspect(db,env) {
-  assertProductionIdentity(env,await identity(db));
+async function inspect(db,env,options) {
+  assertProductionIdentity(env,await identity(db),options);
   const graph=await dependencies(db);assertKnownDependencies(graph.foreignKeys,graph.triggers);
   return { counts:await counts(db),protected:await protectedCounts(db),foreignKeys:graph.foreignKeys };
 }
 export async function runPriceExceptionReset(db,env,options) {
+  assertProductionTarget(env,options.expectHost);
+  if (options.showSystemId) {
+    const actual = await identity(db);
+    assertProductionIdentity(env,actual,options);
+    return { systemId: actual.systemId };
+  }
   if (!options.apply) {
-    const before=await inspect(db,env);
+    const before=await inspect(db,env,options);
     return { mode:'DRY RUN',affectedTables:['PriceExceptionLine','PriceException'],deleteOrder:['PriceExceptionLine','PriceException'],before,blocked:before.counts.OpportunityProductLinkedToPeLine>0,reason:before.counts.OpportunityProductLinkedToPeLine>0?'OpportunityProduct rows reference PE lines. Preserving pricing history requires stopping; no deletes can run.':null };
   }
   return db.$transaction(async tx=>{
     await tx.$executeRawUnsafe('SET LOCAL lock_timeout = \'5s\'');
     await tx.$executeRawUnsafe('SET LOCAL statement_timeout = \'60s\'');
     await tx.$executeRawUnsafe('LOCK TABLE "PriceException", "PriceExceptionLine", "OpportunityProduct" IN SHARE ROW EXCLUSIVE MODE');
-    const before=await inspect(tx,env);
+    const before=await inspect(tx,env,options);
     if (before.counts.OpportunityProductLinkedToPeLine>0) throw new Error('Reset blocked: OpportunityProduct pricing history references PE lines. No records deleted.');
     const deletedLines=await tx.priceExceptionLine.deleteMany({});
     const deletedHeaders=await tx.priceException.deleteMany({});
@@ -85,7 +114,8 @@ export async function runPriceExceptionReset(db,env,options) {
 async function main() {
   try {
     const options=parseResetOptions(process.argv.slice(2));
-    const db=new PrismaClient();
+    const url=assertProductionTarget(process.env,options.expectHost);
+    const db=new PrismaClient(options.apply ? undefined : {datasources:{db:{url:readOnlyUrl(url)}}});
     try { console.log(JSON.stringify(await runPriceExceptionReset(db,process.env,options),null,2)); }
     finally { await db.$disconnect(); }
   } catch(error) {
