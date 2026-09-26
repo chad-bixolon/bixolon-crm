@@ -1,5 +1,5 @@
 export const cleanupIssues = {
-  missingOwner: 'Missing salesperson', missingAccount: 'Missing Account relationship', inactiveAccount: 'Inactive / archived Account',
+  missingOwner: 'Missing salesperson', missingAccount: 'Missing Customer / Distributor', missingVar: 'Missing VAR', missingEndUser: 'Missing End User', sourceAccountMismatch: 'Source differs from linked Account', suspiciousSku: 'Suspicious SKU mapping', inactiveAccount: 'Inactive / archived Account',
   expired: 'Expired', activePastExpiration: 'Active past expiration', archived: 'Archived', incompleteCustomer: 'Incomplete customer information',
   missingSku: 'Unlinked product / SKU', legacyUnassigned: 'Legacy / unassigned', possibleDuplicate: 'Possible duplicate PE number',
   inconsistentStatus: 'Inconsistent status / dates',

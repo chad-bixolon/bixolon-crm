@@ -49,7 +49,8 @@ test('likely duplicates require a second explicit choice before creation',async(
 test('Account creation from import requires Account write permission',async()=>{
   const client=db('VAR');await assert.rejects(createPeReviewAccount(client,{id:1,role:'READ_ONLY',active:true},form('New Partner','VAR'),true,true),/Access denied/);assert.equal(client.created.length,0);
 });
-test('Administration landing no longer links standalone PE cleanup',()=>{
+test('Administration landing restores PE Cleanup as ongoing maintenance',()=>{
   const page=fs.readFileSync(path.join(root,'app/administration/page.tsx'),'utf8');
-  assert.doesNotMatch(page,/Price Exception Cleanup|\/administration\/price-exceptions/);
+  assert.match(page,/\["Imports"/);assert.match(page,/\["PE Cleanup", "\/administration\/price-exceptions", "Review and correct imported Price Exceptions, account mappings, owners, statuses, and other data issues\."\]/);
+  assert.doesNotMatch(page,/legacy cleanup/i);
 });

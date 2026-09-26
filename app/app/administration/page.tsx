@@ -3,6 +3,7 @@ import { Content, PageHeader } from "@/components/shell";
 import { requirePermission } from "@/lib/current-user";
 const sections = [
   ["Imports", "/administration/imports", "Preview and confirm CRM, Product, and finalized Price Exception imports."],
+  ["PE Cleanup", "/administration/price-exceptions", "Review and correct imported Price Exceptions, account mappings, owners, statuses, and other data issues."],
   ["Users", "/administration/users", "Manage access and record owners."],
   ["Industries", "/administration/lookups/industries", "Manage account industry choices."],
   ["Territories", "/administration/lookups/territories", "Manage account territory choices."],

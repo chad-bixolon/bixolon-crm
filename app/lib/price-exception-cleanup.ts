@@ -5,14 +5,14 @@ import { assertPermission, type Actor } from './authorization';
 import type { CleanupIssue, CleanupRequest } from './price-exception-cleanup-shared';
 export { cleanupIssues, cleanupIssueKeys } from './price-exception-cleanup-shared';
 export type { CleanupAction, CleanupIssue, CleanupRequest } from './price-exception-cleanup-shared';
-type AccountRef = { status: string; archivedAt: Date | null; ownerId?: number | null } | null;
+type AccountRef = { name?: string; status: string; archivedAt: Date | null; ownerId?: number | null } | null;
 export type CleanupRecord = {
   id: number; peCode: string | null; sourceType: string; status: string; archivedAt: Date | null;
   assignedSalesRepUserId: number | null; effectiveDate: Date | null; expirationDate: Date | null;
   distributorAccountId: number | null; varAccountId: number | null; endUserAccountId: number | null;
   distributorSourceName: string | null; varSourceName: string | null; endUserSourceName: string | null;
   distributorAccount: AccountRef; varAccount: AccountRef; endUserAccount: AccountRef;
-  lines: { productSkuId: number | null; sourceSku: string | null }[];
+  lines: { productSkuId: number | null; sourceSku: string | null; productSku?: {partNumber:string;active:boolean;product:{active:boolean;archivedAt:Date|null}} | null }[];
 };
 export function utcToday(now = new Date()) { return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())); }
 const filled = (value: string | null) => !!value?.trim();
@@ -22,13 +22,17 @@ export function classifyPriceException(row: CleanupRecord, duplicateCodes: Reado
   const ids = [row.distributorAccountId, row.varAccountId, row.endUserAccountId];
   const names = [row.distributorSourceName, row.varSourceName, row.endUserSourceName];
   if (row.assignedSalesRepUserId === null) issues.push('missingOwner');
-  if (ids.every(id => id === null) || ids.some((id, index) => id === null && filled(names[index]))) issues.push('missingAccount');
+  if (row.distributorAccountId === null) issues.push('missingAccount');
+  if (row.varAccountId === null && filled(row.varSourceName)) issues.push('missingVar');
+  if (row.endUserAccountId === null && filled(row.endUserSourceName)) issues.push('missingEndUser');
+  if (accounts.some((account,index) => account?.name && filled(names[index]) && account.name.trim().toLowerCase() !== names[index]!.trim().toLowerCase())) issues.push('sourceAccountMismatch');
   if (accounts.some(account => account && (account.status !== 'ACTIVE' || !!account.archivedAt))) issues.push('inactiveAccount');
   if (row.status === 'EXPIRED' || row.expirationDate && row.expirationDate < today) issues.push('expired');
   if (row.status === 'ACTIVE' && row.expirationDate && row.expirationDate < today) issues.push('activePastExpiration');
   if (row.status === 'ARCHIVED' || row.archivedAt) issues.push('archived');
   if (ids.every(id => id === null) && names.every(name => !filled(name))) issues.push('incompleteCustomer');
   if (!row.lines.length || row.lines.some(line => line.productSkuId === null)) issues.push('missingSku');
+  if (row.lines.some(line => line.productSku && (!line.productSku.active || !line.productSku.product.active || !!line.productSku.product.archivedAt || !!line.sourceSku && line.productSku.partNumber.trim().toLowerCase() !== line.sourceSku.trim().toLowerCase()))) issues.push('suspiciousSku');
   if (row.sourceType === 'LEGACY_WORKBOOK' && row.assignedSalesRepUserId === null) issues.push('legacyUnassigned');
   if (row.peCode && duplicateCodes.has(row.peCode.trim().toLowerCase())) issues.push('possibleDuplicate');
   if (row.effectiveDate && row.expirationDate && row.effectiveDate > row.expirationDate ||
