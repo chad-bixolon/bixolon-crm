@@ -9,6 +9,7 @@ import {zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 Module._extensions['.ts']=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,filename);
 const require=Module.createRequire(fileURLToPath(import.meta.url));
+const {Prisma}=require('@prisma/client');
 const {parseProductWorkbookXlsx,routeProductWorkbookSheet,odmHeaderIndex,mapOdmProductWorkbookSheet}=require(path.join(root,'lib/odm-product-workbook.ts'));
 const {planProductImport,applyProductImport,createProductImportAccounts,createProductImportCatalog,productImportHeaders,odmSourceHeaders}=require(path.join(root,'lib/product-import.ts'));
 const {parseImportCsv}=require(path.join(root,'lib/import-csv.ts'));
@@ -24,6 +25,37 @@ function syntheticCsv(part,customer='NCR',extra=[]) {
   const csv=mapped.rows.map(row=>row.map(value=>/[",\r\n]/.test(value)?`"${value.replaceAll('"','""')}"`:value).join(',')).join('\n')+'\n';
   return {csv,rows:parseImportCsv(csv,headers).rows};
 }
+test('ODM preview compares active customer price and prior source evidence before a revision',async()=>{
+  const full=syntheticCsv('ODM-1','UPS').csv;
+  const csv=full.split('\n').slice(0,3).join('\n')+'\n';
+  const sku={id:5,productId:1,partNumber:'ODM-1',normalizedPartNumber:'ODM-1',description:undefined,priceUnit:'EACH',active:true,catalogSource:'ODM',odmSubtype:'CUSTOMER_SPECIFIC',odmCustomerSourceName:'UPS',odmDescription:'Shared note',baseSkuId:null,prices:[],odmCustomers:[{accountId:7,sourceCustomerName:'UPS'}]};
+  const product={id:1,name:'ODM-1',sku:'ODM-1',active:true,archivedAt:null,category:null,skus:[sku]};
+  const review={applyRecommendations:true,tariffChoices:{'3:1':'AMOUNT'}};
+  let active=[],audit=[];
+  const client={...fakeDb([{id:7,name:'UPS'}],[product]),productSkuOdmCustomerPrice:{findMany:async()=>active},odmPricingImportSource:{findMany:async({where})=>audit.length?where.sourceKey.in.map(sourceKey=>({sourceKey})):[]}};
+  const first=await planProductImport(client,csv,undefined,review);
+  assert.equal(first.items[0].status,'READY');
+  assert.equal(first.items[0].priceComparison.kind,'NEW');
+  const terms=first.items[0].odmPricing;
+  active=[{skuId:5,accountId:7,currencyCode:terms.currencyCode,customerPrice:new Prisma.Decimal(terms.customerPrice),previousPrice:new Prisma.Decimal(terms.previousPrice),tariffPercent:new Prisma.Decimal(terms.tariffPercent),tariffAmount:new Prisma.Decimal(terms.tariffAmount),notes:terms.notes}];
+  const newEvidence=await planProductImport(client,csv,undefined,review);
+  assert.equal(newEvidence.items[0].status,'READY');
+  assert.equal(newEvidence.items[0].priceComparison.kind,'UNCHANGED');
+  audit=[true];
+  const same=await planProductImport(client,csv,undefined,review);
+  assert.equal(same.items[0].status,'ALREADY IMPORTED');
+  assert.equal(same.counts.priceChanges,0);
+  active[0]={...active[0],customerPrice:new Prisma.Decimal('110.00')};
+  const changed=await planProductImport(client,csv,undefined,review);
+  assert.equal(changed.items[0].status,'NEEDS REVIEW');
+  assert.equal(changed.counts.priceChanges,1);
+  assert.match(changed.items[0].messages.join(' '),/110\.00.*120\.00/);
+  const confirmed=await planProductImport(client,csv,undefined,{...review,priceRevisions:{'3:1':changed.items[0].priceComparison.confirmationKey}});
+  assert.equal(confirmed.items[0].status,'READY');
+  active[0]={...active[0],customerPrice:new Prisma.Decimal('109.00')};
+  const staleConfirmation=await planProductImport(client,csv,undefined,{...review,priceRevisions:{'3:1':changed.items[0].priceComparison.confirmationKey}});
+  assert.equal(staleConfirmation.items[0].status,'NEEDS REVIEW');
+});
 function withSecondSheet(name,xml) {
   const entries=unzipSync(real);
   entries['xl/workbook.xml']=strToU8(strFromU8(entries['xl/workbook.xml']).replace('</sheets>',`<sheet name="${name}" sheetId="17" r:id="rId22"/></sheets>`));

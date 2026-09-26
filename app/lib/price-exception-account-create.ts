@@ -1,6 +1,6 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
-import { checkAccountReferences, normalizeAccountName, saveAccount } from './accounts';
+import { accountWriteData, checkAccountReferences, normalizeAccountName } from './accounts';
 import { parseAccountForm } from './account-validation';
 
 export const peAccountFields = ['Customer', 'VAR', 'End User'] as const;
@@ -23,9 +23,16 @@ export async function createPeReviewAccount(client:PrismaClient, actor:Actor, fo
   if (parsed.value.status !== 'ACTIVE') return {kind:'validation' as const,errors:{status:'Choose Active so this Account can resolve the Price Exception.'}};
   const refs=await checkAccountReferences(client,parsed.value);
   if (Object.keys(refs).length) return {kind:'validation' as const,errors:refs};
-  const candidates=await client.account.findMany({where:{archivedAt:null},select:{id:true,name:true},orderBy:{name:'asc'}});
-  const matches=likelyAccountMatches(candidates,parsed.value.name);
+  const candidates=await client.account.findMany({select:{id:true,name:true,status:true,archivedAt:true},orderBy:{name:'asc'}});
+  const exact=candidates.find(account=>normalizeAccountName(account.name)===normalizeAccountName(parsed.value!.name));
+  if(exact)return {kind:'exact' as const,account:{id:exact.id,name:exact.name,usable:exact.status==='ACTIVE'&&!exact.archivedAt},message:exact.status==='ACTIVE'&&!exact.archivedAt?'An Account with this name already exists. Use the existing Account.':'An inactive or archived Account with this name exists. Reactivate it before mapping.'};
+  const matches=likelyAccountMatches(candidates.filter(account=>account.status==='ACTIVE'&&!account.archivedAt),parsed.value.name);
   if (!confirmed || (matches.length>0&&!acknowledgeDuplicate)) return {kind:'review' as const,matches};
-  const id=await saveAccount(client,parsed.value,undefined,actor.id);
-  return {kind:'created' as const,account:{id,name:parsed.value.name}};
+  return client.$transaction(async tx=>{
+    const current=await tx.account.findMany({select:{id:true,name:true,status:true,archivedAt:true}});
+    const duplicate=current.find(account=>normalizeAccountName(account.name)===normalizeAccountName(parsed.value!.name));
+    if(duplicate)return {kind:'exact' as const,account:{id:duplicate.id,name:duplicate.name,usable:duplicate.status==='ACTIVE'&&!duplicate.archivedAt},message:'An Account with this name already exists. Use the existing Account.'};
+    const account=await tx.account.create({data:{...accountWriteData(parsed.value!),createdById:actor.id,updatedById:actor.id,businessRoles:{create:parsed.value!.roles.map(role=>({role}))}}});
+    return {kind:'created' as const,account:{id:account.id,name:parsed.value!.name}};
+  },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
 }

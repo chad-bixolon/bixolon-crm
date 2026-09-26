@@ -25,12 +25,12 @@ const tierFields = [
   {header:'distributor_price',field:'distributorPrice',tier:ProductPriceTier.DISTRIBUTOR},
 ] as const;
 export type ProductImportSource = {workbook:string;sheet:string;customerCell:string;partNumber:string;partIndex:number;partCount:number;oldPrice:string;priorPrice:string;newPrice:string;tariffPercent:string;tariffAmount:string;note:string;rawOldPrice:string;rawPriorPrice:string;rawNewPrice:string;rawTariffPercent:string;rawTariffAmount:string};
-export type ProductImportItem = {line:number;label:string;classes:string[];status:'READY'|'NEEDS REVIEW'|'ERROR'|'SKIPPED';before:Values|null;after:Values;messages:string[];productId?:number;skuId?:number;source?:ProductImportSource;odmPricing?:ReturnType<typeof calculateOdmCustomerPrice>;reviewKey?:string;suggestedBaseSku?:string;recommendations?:string[];catalogCreatable?:boolean;resolvedPrice?:string;resolvedTariffPercent?:string;resolvedTariffAmount?:string};
+export type ProductImportItem = {line:number;label:string;classes:string[];status:'READY'|'NEEDS REVIEW'|'ERROR'|'SKIPPED'|'ALREADY IMPORTED';before:Values|null;after:Values;messages:string[];productId?:number;skuId?:number;source?:ProductImportSource;odmPricing?:ReturnType<typeof calculateOdmCustomerPrice>;priceComparison?:{kind:'NEW'|'UNCHANGED'|'CHANGED';before?:string;after:string;confirmationKey?:string};reviewKey?:string;suggestedBaseSku?:string;recommendations?:string[];catalogCreatable?:boolean;resolvedPrice?:string;resolvedTariffPercent?:string;resolvedTariffAmount?:string};
 export type ProductImportCounts = {newProducts:number;updatedProducts:number;newSkus:number;updatedSkus:number;priceChanges:number;unchanged:number;warnings:number;errors:number};
 export type CustomerResolution = {source:string;key:string;accountId?:number;accountName?:string;status:'Matched'|'Manually Mapped'|'Needs Review'|'Unresolved';rows:number};
 export type ProductImportDecisionGroup = {key:string;kind:'PRICE'|'TARIFF';reason:'NOTE_PRICE'|'MISSING_PRICE'|'STRUCTURED_TARIFF'|'NOTE_TARIFF';customer:string;label:string;reviewKeys:string[];lines:number[];partNumbers:string[];oldPrice?:string;priorPrice?:string;newPrice?:string;notePrice?:string;proposedPrice?:string;tariffPercent?:string;tariffAmount?:string;noteTariff?:string};
 export type AccountCreationCandidate = {key:string;name:string;role?:string};
-export type ProductImportReview = {customerMappings?:Record<string,number>;rowAccountIds?:Record<string,number>;productIds?:Record<string,number>;modelNames?:Record<string,string>;subtypes?:Record<string,OdmCustomizationSubtype>;baseSkus?:Record<string,string>;partNumbers?:Record<string,string>;prices?:Record<string,string>;priceChoices?:Record<string,string>;tariffChoices?:Record<string,string>;tariffPercents?:Record<string,string>;tariffAmounts?:Record<string,string>;dispositions?:Record<string,string>;createCatalog?:Record<string,string>;noteChoices?:Record<string,string>;applyRecommendations?:boolean};
+export type ProductImportReview = {customerMappings?:Record<string,number>;rowAccountIds?:Record<string,number>;productIds?:Record<string,number>;modelNames?:Record<string,string>;subtypes?:Record<string,OdmCustomizationSubtype>;baseSkus?:Record<string,string>;partNumbers?:Record<string,string>;prices?:Record<string,string>;priceChoices?:Record<string,string>;tariffChoices?:Record<string,string>;tariffPercents?:Record<string,string>;tariffAmounts?:Record<string,string>;dispositions?:Record<string,string>;createCatalog?:Record<string,string>;noteChoices?:Record<string,string>;priceRevisions?:Record<string,string>;applyRecommendations?:boolean};
 export type ProductImportPlan = {items:ProductImportItem[];customers:CustomerResolution[];decisionGroups:ProductImportDecisionGroup[];errors:string[];notices:string[];counts:ProductImportCounts;digest:string};
 export function catalogCreationEligible(item:ProductImportItem) {
   if (!item.source || item.skuId || !item.after.model || !item.after.partNumber || !item.after.odmSubtype || /[\r\n()]/.test(item.after.partNumber) || /\bdiscontinued\b/i.test(item.source.note)) return false;
@@ -40,6 +40,15 @@ const blankCounts = ():ProductImportCounts => ({newProducts:0,updatedProducts:0,
 const digestOf = (items:ProductImportItem[]) => createHash('sha256').update(JSON.stringify(items)).digest('hex');
 const validPrice = (value:string) => /^(?:0|[1-9]\d{0,9})(?:\.\d{1,2})?$/.test(value);
 const bool = (value:string) => /^(true|yes|1)$/i.test(value) ? true : /^(false|no|0)$/i.test(value) ? false : undefined;
+function odmEvidence(item:ProductImportItem,review:ProductImportReview) {
+  const source=item.source!;
+  const entryKey=item.reviewKey??'';
+  const decision=review.dispositions?.[entryKey] ?? (review.applyRecommendations && /\bdiscontinued\b/i.test(source.note) ? 'HISTORICAL' : undefined);
+  const disposition=decision==='HISTORICAL' ? 'HISTORICAL' : 'IMPORTED';
+  const resolution={partNumber:item.after.partNumber,accountId:item.after.odmCustomerAccountId??null,subtype:item.after.odmSubtype??null,baseSku:item.after.baseSku??null,price:item.resolvedPrice??null,tariffPercent:item.resolvedTariffPercent??null,tariffAmount:item.resolvedTariffAmount??null,disposition,choices:{partNumber:review.partNumbers?.[entryKey],productId:review.productIds?.[entryKey],accountId:review.rowAccountIds?.[entryKey],subtype:review.subtypes?.[normalizePartNumber(item.after.partNumber)],baseSku:review.baseSkus?.[entryKey],priceChoice:review.priceChoices?.[entryKey],correctedPrice:review.prices?.[entryKey],noteChoice:review.noteChoices?.[entryKey],tariffChoice:review.tariffChoices?.[entryKey],correctedTariffPercent:review.tariffPercents?.[entryKey],correctedTariffAmount:review.tariffAmounts?.[entryKey]}};
+  const sourceKey=createHash('sha256').update(JSON.stringify({source,resolution})).digest('hex');
+  return {source,sourceKey,resolution,disposition};
+}
 
 export async function planProductImport(db:Db,csv:string,selectedSource?:ProductCatalogSource,review:ProductImportReview={}):Promise<ProductImportPlan> {
   const parsed = parseImportCsv(csv,[...productImportHeaders,...odmSourceHeaders]);
@@ -255,19 +264,53 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
       for (const conflict of [prior, item]) { conflict.messages.push('Repeated SKU/Account has conflicting customer pricing; skip one source entry or correct the pricing.'); conflict.classes = ['ERROR']; conflict.status='NEEDS REVIEW'; }
     } else if (!prior) pricingByRelationship.set(key, item);
   }
+  const odmItems=items.filter(item=>!!item.source);
+  const skuIds=[...new Set(odmItems.map(item=>item.skuId).filter((id):id is number=>!!id))];
+  const activePrices=skuIds.length && db.productSkuOdmCustomerPrice?.findMany ? await db.productSkuOdmCustomerPrice.findMany({where:{skuId:{in:skuIds},archivedAt:null},select:{skuId:true,accountId:true,currencyCode:true,customerPrice:true,previousPrice:true,tariffPercent:true,tariffAmount:true,notes:true}}) : [];
+  const evidenceKeys=odmItems.map(item=>odmEvidence(item,review).sourceKey);
+  const priorEvidence=evidenceKeys.length && db.odmPricingImportSource?.findMany ? await db.odmPricingImportSource.findMany({where:{sourceKey:{in:evidenceKeys}},select:{sourceKey:true}}) : [];
+  const evidenceSet=new Set(priorEvidence.map(row=>row.sourceKey));
+  for(const item of odmItems){
+    const evidence=odmEvidence(item,review);
+    if(item.status==='READY'&&evidence.disposition==='HISTORICAL'&&evidenceSet.has(evidence.sourceKey)){
+      item.status='ALREADY IMPORTED';item.classes=['ALREADY IMPORTED'];item.messages.push('Historical source evidence is already imported.');
+      continue;
+    }
+    if(!item.odmPricing||!item.skuId||!item.after.odmCustomerAccountId)continue;
+    const active=activePrices.find(price=>price.skuId===item.skuId&&price.accountId===item.after.odmCustomerAccountId);
+    const terms=item.odmPricing;
+    const after=`${terms.customerPrice} + ${terms.tariffAmount} = ${terms.finalUnitPrice} ${terms.currencyCode}`;
+    if(!active){item.priceComparison={kind:'NEW',after};continue;}
+    const before=`${active.customerPrice.toFixed(2)} + ${active.tariffAmount.toFixed(2)} ${active.currencyCode}`;
+    const same=active.currencyCode===terms.currencyCode&&new Prisma.Decimal(active.customerPrice).equals(terms.customerPrice)&&(active.previousPrice?.toFixed(2)??null)===terms.previousPrice&&new Prisma.Decimal(active.tariffPercent).equals(terms.tariffPercent)&&new Prisma.Decimal(active.tariffAmount).equals(terms.tariffAmount)&&active.notes===terms.notes;
+    const confirmationKey=same?undefined:createHash('sha256').update(JSON.stringify({skuId:item.skuId,accountId:item.after.odmCustomerAccountId,before:{currency:active.currencyCode,price:active.customerPrice.toFixed(2),previous:active.previousPrice?.toFixed(2)??null,percent:active.tariffPercent.toFixed(4),amount:active.tariffAmount.toFixed(2),notes:active.notes},after:terms})).digest('hex');
+    item.priceComparison={kind:same?'UNCHANGED':'CHANGED',before,after,confirmationKey};
+    if(!same){
+      item.classes=item.classes.filter(value=>value!=='UNCHANGED');
+      if(!item.classes.includes('PRICE CHANGE'))item.classes.push('PRICE CHANGE');
+      if(item.status==='READY'&&review.priceRevisions?.[item.reviewKey??'']!==confirmationKey){
+        item.status='NEEDS REVIEW';item.messages.push(`Active customer price changes from ${before} to ${after}. Confirm this price revision.`);
+      }
+    }else if(item.status==='READY'&&evidenceSet.has(evidence.sourceKey)&&item.classes.every(value=>value==='UNCHANGED')){
+      item.status='ALREADY IMPORTED';item.classes=['ALREADY IMPORTED'];item.messages.push('Source evidence and active customer price are already imported.');
+    }
+  }
   const productUpdates=new Set<number>();
   const updatedSkuKeys=new Set<string>();
+  const changedRelationships=new Set<string>();
   for (const item of items) {
     if (item.messages.some(message=>message.startsWith('WARNING:'))) counts.warnings++;
     if (item.status==='SKIPPED') continue;
-    if (item.status!=='READY') counts.errors++;
+    if (item.status!=='READY'&&item.status!=='ALREADY IMPORTED') counts.errors++;
     if (item.classes.includes('NEW PRODUCT') && (!item.source || seen.get(normalizePartNumber(item.after.partNumber))===item)) counts.newProducts++;
     if (item.classes.includes('UPDATE PRODUCT') && item.productId) productUpdates.add(item.productId);
     if (item.classes.includes('NEW SKU') && (!item.source || seen.get(normalizePartNumber(item.after.partNumber))===item)) counts.newSkus++;
     if (item.classes.includes('UPDATE SKU')) updatedSkuKeys.add(normalizePartNumber(item.after.partNumber));
-    if (item.classes.includes('PRICE CHANGE')) counts.priceChanges++;
-    if (item.classes.includes('UNCHANGED')) counts.unchanged++;
+    if(item.source){if(item.priceComparison?.kind==='CHANGED'&&item.skuId&&item.after.odmCustomerAccountId)changedRelationships.add(`${item.skuId}:${item.after.odmCustomerAccountId}`);}
+    else if (item.classes.includes('PRICE CHANGE')) counts.priceChanges++;
+    if (item.classes.includes('UNCHANGED')||item.status==='ALREADY IMPORTED') counts.unchanged++;
   }
+  counts.priceChanges+=changedRelationships.size;
   counts.updatedProducts=productUpdates.size;
   counts.updatedSkus=updatedSkuKeys.size;
   return {items,customers:[...customers.values()],decisionGroups:productImportDecisionGroups(items),errors:[],notices:odmWorkbook?['Choose an ODM subtype for each SKU candidate. Resolved Customer-Specific prices are saved per SKU and Account.','Workbook pricing is never written to generic catalog tiers. Blank Customer cells are left unresolved.']:[],counts,digest:digestOf(items)};
@@ -307,12 +350,7 @@ export async function applyProductImport(db:PrismaClient,csv:string,expectedDige
     for (const item of plan.items) {
       if (item.status!=='READY') continue;
       if (item.source) {
-        const source=item.source;
-        const decision=review.dispositions?.[item.reviewKey ?? ''] ?? (review.applyRecommendations && /\bdiscontinued\b/i.test(source.note) ? 'HISTORICAL' : undefined);
-        const disposition=decision==='HISTORICAL' ? 'HISTORICAL' : 'IMPORTED';
-        const entryKey=item.reviewKey??'';
-        const resolution={partNumber:item.after.partNumber,accountId:item.after.odmCustomerAccountId??null,subtype:item.after.odmSubtype??null,baseSku:item.after.baseSku??null,price:item.resolvedPrice??null,tariffPercent:item.resolvedTariffPercent??null,tariffAmount:item.resolvedTariffAmount??null,disposition,choices:{partNumber:review.partNumbers?.[entryKey],productId:review.productIds?.[entryKey],accountId:review.rowAccountIds?.[entryKey],subtype:review.subtypes?.[normalizePartNumber(item.after.partNumber)],baseSku:review.baseSkus?.[entryKey],priceChoice:review.priceChoices?.[entryKey],correctedPrice:review.prices?.[entryKey],noteChoice:review.noteChoices?.[entryKey],tariffChoice:review.tariffChoices?.[entryKey],correctedTariffPercent:review.tariffPercents?.[entryKey],correctedTariffAmount:review.tariffAmounts?.[entryKey]}};
-        const sourceKey=createHash('sha256').update(JSON.stringify({source,resolution})).digest('hex');
+        const {source,sourceKey,resolution,disposition}=odmEvidence(item,review);
         await tx.odmPricingImportSource.upsert({where:{sourceKey},create:{sourceKey,workbook:source.workbook||'Unknown workbook',sheet:source.sheet,rowNumber:item.line,partIndex:source.partIndex,disposition,source:source as Prisma.InputJsonValue,resolution:JSON.parse(JSON.stringify(resolution)) as Prisma.InputJsonValue},update:{}});
         if (disposition==='HISTORICAL') continue;
       }

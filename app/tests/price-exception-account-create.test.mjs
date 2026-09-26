@@ -39,12 +39,24 @@ test('unresolved Customer, VAR, and End User creation is confirmed, selected, an
     assert.equal(client.accounts.some(account=>account.id===created.account.id),true);
   }
 });
-test('likely duplicates require a second explicit choice before creation',async()=>{
+test('exact Account names cannot be created again, even with acknowledgement',async()=>{
   const client=db('VAR');client.accounts.push({id:50,name:'Sonda Chile',status:'ACTIVE',archivedAt:null});
   assert.equal(likelyAccountMatches(client.accounts,'Sonda Chile')[0].id,50);
   const result=await createPeReviewAccount(client,actor,form('Sonda Chile','VAR'),true,false);
-  assert.equal(result.kind,'review');assert.equal(result.matches[0].id,50);assert.equal(client.created.length,0);
-  assert.equal((await createPeReviewAccount(client,actor,form('Sonda Chile','VAR'),true,true)).kind,'created');
+  assert.equal(result.kind,'exact');assert.equal(result.account.id,50);assert.equal(client.created.length,0);
+  assert.equal((await createPeReviewAccount(client,actor,form(' sonda  chile ','VAR'),true,true)).kind,'exact');
+  assert.equal(client.created.length,0);
+});
+test('fuzzy Account matches require acknowledgement and can be overridden',async()=>{
+  const client=db('VAR');client.accounts.push({id:50,name:'Sonda Chile',status:'ACTIVE',archivedAt:null});
+  const result=await createPeReviewAccount(client,actor,form('Sonda Chile Holdings','VAR'),true,false);
+  assert.equal(result.kind,'review');assert.equal(result.matches[0].id,50);
+  assert.equal((await createPeReviewAccount(client,actor,form('Sonda Chile Holdings','VAR'),true,true)).kind,'created');
+});
+test('inactive exact Account blocks creation and cannot be used until reactivated',async()=>{
+  const client=db('VAR');client.accounts.push({id:51,name:'Dormant Partner',status:'INACTIVE',archivedAt:null});
+  const result=await createPeReviewAccount(client,actor,form('dormant  partner','VAR'),true,true);
+  assert.equal(result.kind,'exact');assert.equal(result.account.usable,false);assert.equal(client.created.length,0);
 });
 test('Account creation from import requires Account write permission',async()=>{
   const client=db('VAR');await assert.rejects(createPeReviewAccount(client,{id:1,role:'READ_ONLY',active:true},form('New Partner','VAR'),true,true),/Access denied/);assert.equal(client.created.length,0);

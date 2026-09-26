@@ -24,7 +24,7 @@ export type RosaPlanGroup = {
   expirationDate:string; currency:string; description:string; tiers:RosaPlanTier[];
   disposition:RosaDisposition; messages:string[]; conflictingFields:string[]; conflictOptions:{field:RosaHeaderChoiceField;values:{line:number;value:string}[]}[]; changedFields:string[]; existingId:number|null; fingerprint:string;
 };
-export type RosaPlan = { groups:RosaPlanGroup[]; counts:Record<RosaDisposition,number>; sourceRowCount:number; errors:string[]; digest:string; fileName:string; choices:{accounts:RosaChoice[];users:RosaChoice[];skus:RosaChoice[]} };
+export type RosaPlan = { groups:RosaPlanGroup[]; counts:Record<RosaDisposition,number>; sourceRowCount:number; errors:string[]; digest:string; fileName:string; choices:{accounts:RosaChoice[];users:RosaChoice[];skus:RosaChoice[]}; restoredChoices:RosaManualChoices };
 type Db = PrismaClient | Prisma.TransactionClient;
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
 const normalizedName=(value:string)=>value.normalize('NFKC').toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
@@ -93,12 +93,12 @@ function safeHeaderConflict(field:HeaderField,rows:RosaSourceRow[]):field is Ros
   return rows.every(row=>field==='Requested At'||field==='Reviewed At'?!!timestamp(row.values[field]):!!row.values[field].trim());
 }
 export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:string,manualChoices:RosaManualChoices={}):Promise<RosaPlan>{
-  const counts=emptyCounts();if(parsed.errors.length)return {groups:[],counts,sourceRowCount:parsed.rows.length,errors:parsed.errors,digest:'',fileName,choices:emptyChoices()};
+  const counts=emptyCounts();if(parsed.errors.length)return {groups:[],counts,sourceRowCount:parsed.rows.length,errors:parsed.errors,digest:'',fileName,choices:emptyChoices(),restoredChoices:{}};
   const [users,accounts,skus,existing,currencies]=await Promise.all([
     db.user.findMany({select:{id:true,firstName:true,lastName:true,active:true,archivedAt:true,role:true}}),
     db.account.findMany({select:{id:true,name:true,status:true,archivedAt:true}}),
     db.productSku.findMany({select:{id:true,partNumber:true,normalizedPartNumber:true,active:true,product:{select:{name:true,active:true,archivedAt:true}}}}),
-    db.priceException.findMany({select:{id:true,peCode:true,sourceType:true,sourceKey:true,sourceMetadata:true,lines:{select:{sourceSku:true,sourceQuantity:true,sourceQuantityRaw:true,approvedUnitPrice:true,currencyCode:true,sourceMetadata:true}}}}),
+    db.priceException.findMany({select:{id:true,peCode:true,sourceType:true,sourceKey:true,sourceFileName:true,sourceMetadata:true,lines:{select:{sourceSku:true,sourceQuantity:true,sourceQuantityRaw:true,approvedUnitPrice:true,currencyCode:true,sourceMetadata:true}}}}),
     db.currency.findMany({select:{code:true,active:true}}),
   ]);
   const userChoices=users.filter(user=>user.active&&!user.archivedAt).map(user=>({id:user.id,name:`${user.firstName} ${user.lastName}`,firstName:user.firstName}));
@@ -107,9 +107,28 @@ export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:s
   const grouped=new Map<string,RosaSourceRow[]>();for(const row of parsed.rows){const code=key(row.values['PE Number']);const groupKey=code||`BLANK:${row.line}`;grouped.set(groupKey,[...(grouped.get(groupKey)??[]),row]);}
   const requestedChoices=checkedRecord(manualChoices,'manual resolutions');
   for(const groupKey of Object.keys(requestedChoices))if(!grouped.has(groupKey))throw new Error('Manual resolution does not match this CSV. Preview the file again.');
+  const restoredChoices:RosaManualChoices={...manualChoices};
+  for(const [groupKey,sourceRows] of grouped){
+    if(Object.hasOwn(restoredChoices,groupKey))continue;
+    const matches=existing.filter(item=>item.peCode&&key(item.peCode)===groupKey||item.sourceType==='EXTERNAL_EXPORT'&&item.sourceKey===`ROSA:${groupKey}`);
+    if(matches.length!==1||matches[0].sourceFileName!==fileName)continue;
+    const metadata=matches[0].sourceMetadata as {adapter?:string;rosaRawRows?:RosaSourceRow[];rosaReviewedChoices?:RosaManualGroupChoice}|null;
+    if(metadata?.adapter!=='ROSA_PE_CSV_V1'||!same(metadata.rosaRawRows,sourceRows)||!metadata.rosaReviewedChoices)continue;
+    const prior=metadata.rosaReviewedChoices;
+    const safeHeaders=new Set<HeaderField>(conflictingHeaderFields(sourceRows).filter(field=>safeHeaderConflict(field,sourceRows)));
+    const headerLines=Object.fromEntries(Object.entries(prior.headerLines??{}).filter(([field,line])=>safeHeaders.has(field as HeaderField)&&sourceRows.some(row=>row.line===line))) as RosaManualGroupChoice['headerLines'];
+    const raw={...sourceRows[0].values};
+    for(const [field,line] of Object.entries(headerLines??{}))raw[field as RosaHeaderChoiceField]=sourceRows.find(row=>row.line===line)!.values[field as RosaHeaderChoiceField];
+    const accountSource:{[K in typeof accountFields[number]]:string}={Customer:raw.Customer,VAR:raw.VAR,'End User':raw['End User']};
+    const userSource:{[K in typeof userFields[number]]:string}={'Requested By':raw['Requested By'],'Reviewed By':raw['Reviewed By']};
+    const accountIds=Object.fromEntries(Object.entries(prior.accountIds??{}).filter(([field,id])=>accountFields.includes(field as typeof accountFields[number])&&accountChoices.some(item=>item.id===id)&&(!resolve(accountSource[field as typeof accountFields[number]],accountChoices,normalizedName).id||resolve(accountSource[field as typeof accountFields[number]],accountChoices,normalizedName).id===id))) as RosaManualGroupChoice['accountIds'];
+    const userIds=Object.fromEntries(Object.entries(prior.userIds??{}).filter(([field,id])=>userFields.includes(field as typeof userFields[number])&&userChoices.some(item=>item.id===id)&&(!resolveUser(userSource[field as typeof userFields[number]],userChoices).id||resolveUser(userSource[field as typeof userFields[number]],userChoices).id===id))) as RosaManualGroupChoice['userIds'];
+    const skuIds=Object.fromEntries(Object.entries(prior.skuIds??{}).filter(([line,id])=>{const row=sourceRows.find(item=>String(item.line)===line);if(!row||!skuChoices.some(item=>item.id===id))return false;const automatic=resolve(row.values.SKU,skuChoices,normalizePartNumber);return !automatic.id||automatic.id===id;}));
+    restoredChoices[groupKey]={headerLines,accountIds,userIds,skuIds};
+  }
   const groups:RosaPlanGroup[]=[];
   for(const [groupKey,sourceRows] of grouped){
-    const groupChoice=checkedRecord(requestedChoices[groupKey]??{},'manual resolution');checkedKeys(groupChoice,['headerLines','accountIds','userIds','skuIds'],'manual resolution');
+    const groupChoice=checkedRecord(restoredChoices[groupKey]??{},'manual resolution');checkedKeys(groupChoice,['headerLines','accountIds','userIds','skuIds'],'manual resolution');
     const headerLines=checkedRecord(groupChoice.headerLines??{},'header choices');checkedKeys(headerLines,choiceHeaderFields,'header choice');
     const accountIds=checkedRecord(groupChoice.accountIds??{},'Account choices');checkedKeys(accountIds,accountFields,'Account choice');
     const userIds=checkedRecord(groupChoice.userIds??{},'user choices');checkedKeys(userIds,userFields,'user choice');
@@ -130,7 +149,7 @@ export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:s
     for(const line of Object.keys(skuIds))if(!sourceRows.some(row=>String(row.line)===line))throw new Error('SKU choice does not match a source line. Preview the file again.');
     const automaticUsers={ 'Requested By':resolveUser(raw['Requested By'],userChoices),'Reviewed By':resolveUser(raw['Reviewed By'],userChoices) };
     const automaticAccounts={Customer:resolve(raw.Customer,accountChoices,normalizedName),VAR:resolve(raw.VAR,accountChoices,normalizedName),'End User':resolve(raw['End User'],accountChoices,normalizedName)};
-    for(const field of Object.keys(userIds))if(!automaticUsers[field as keyof typeof automaticUsers].issue)throw new Error('User choice is no longer needed. Preview the file again.');
+    for(const field of Object.keys(userIds))if(!automaticUsers[field as keyof typeof automaticUsers].issue&&automaticUsers[field as keyof typeof automaticUsers].id!==userIds[field])throw new Error('User choice is no longer needed. Preview the file again.');
     for(const field of Object.keys(accountIds))if(!automaticAccounts[field as keyof typeof automaticAccounts].issue&&automaticAccounts[field as keyof typeof automaticAccounts].id!==accountIds[field])throw new Error('Account choice is no longer needed. Preview the file again.');
     const requestedBy=Object.hasOwn(userIds,'Requested By')?manualResolution(raw['Requested By'],userIds['Requested By'],userChoices,'Requested By'):automaticUsers['Requested By'];
     const reviewedBy=Object.hasOwn(userIds,'Reviewed By')?manualResolution(raw['Reviewed By'],userIds['Reviewed By'],userChoices,'Reviewed By'):automaticUsers['Reviewed By'];
@@ -166,10 +185,13 @@ export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:s
     const tiers:RosaPlanTier[]=sourceRows.map(row=>{
       const value=row.values,tierKey=canonicalTier(row),occurrence=(tierOccurrences.get(tierKey)??0)+1;tierOccurrences.set(tierKey,occurrence);
       const automaticSku=resolve(value.SKU,skuChoices,normalizePartNumber);
-      if(Object.hasOwn(skuIds,String(row.line))&&!automaticSku.issue)throw new Error('SKU choice is no longer needed. Preview the file again.');
+      if(Object.hasOwn(skuIds,String(row.line))&&!automaticSku.issue&&automaticSku.id!==skuIds[String(row.line)])throw new Error('SKU choice is no longer needed. Preview the file again.');
       const sku=Object.hasOwn(skuIds,String(row.line))?manualResolution(value.SKU,skuIds[String(row.line)],skuChoices,`Line ${row.line} SKU`):automaticSku;
       const quantity=decimal(value.Quantity,3,11),originalPrice=decimal(value['Original Price'],2,10),approvedPrice=decimal(value['Approved Price'],2,10),currency=value.Currency.trim().toUpperCase();
-      if(sku.issue)sourceError(`Line ${row.line} SKU: ${sku.issue}`);
+      if(sku.issue){
+        if(!value.SKU.trim())sourceError(`Line ${row.line} SKU: ${sku.issue}`);
+        else messages.push(`Line ${row.line} SKU: ${sku.issue}`);
+      }
       if(!quantity||!originalPrice||!approvedPrice)sourceError(`Line ${row.line}: Quantity and both prices must be positive values within CRM precision.`);
       if(!currencies.some(item=>item.code===currency&&item.active))sourceError(`Line ${row.line}: Currency ${currency||'(blank)'} is not active in CRM.`);
       return {line:row.line,sku,quantity:value.Quantity,originalPrice:value['Original Price'],approvedPrice:value['Approved Price'],currency:value.Currency,sourceLineKey:`ROSA:${hash(tierKey)}:${occurrence}`,sourceFingerprint:sourceFingerprint(row)};
@@ -188,14 +210,16 @@ export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:s
         if(!same({headerLines:prior.headerLines??{},accountIds:prior.accountIds??{},userIds:prior.userIds??{},skuIds:prior.skuIds??{}},reviewedChoice))changedFields.push('Reviewed resolutions');
         identical=changedFields.length===0;
       }else changedFields.push('Existing PE has no comparable Rosa group metadata.');
-      messages.push(identical?'Existing PE and all pricing tiers are identical.':'Existing PE differs; historical data will not be changed.');
+      const priorReviewedAt=timestamp((record.sourceMetadata as {reviewedAt?:string}|null)?.reviewedAt??'');
+      const newer=!!priorReviewedAt&&!!reviewedAt&&reviewedAt>priorReviewedAt;
+      messages.push(identical?'Existing PE and all pricing tiers are identical.':newer?'Needs review — Newer source revision available. Original PE and tiers will not be changed.':'Existing PE differs; historical data will not be changed.');
     }else if(matching.length>1){changedFields.push('Multiple existing PEs share this number.');messages.push('Multiple existing PEs share this number.');}
-    const needsReview=conflictingFields.length>0||changedFields.length>0||[requestedBy,reviewedBy,customer,varAccount,endUser].some(item=>!!item.issue);
+    const needsReview=conflictingFields.length>0||changedFields.length>0||[requestedBy,reviewedBy,customer,varAccount,endUser].some(item=>!!item.issue)||tiers.some(tier=>!!tier.sku.issue);
     const disposition:RosaDisposition=invalid?'ERROR':needsReview?'REVIEW REQUIRED':matching.length?'EXISTING / NO CHANGE':'READY';
     counts[disposition]++;
     groups.push({groupKey,peNumber,sourceLines:sourceRows.map(row=>row.line),statusSource,statusMapped,requestedAt:raw['Requested At'],reviewedAt:raw['Reviewed At'],requestedBy,reviewedBy,customer,varAccount,endUser,expirationDate:expirationDate??raw['Expiration Date'],currency:raw.Currency,description:raw.Description,tiers,disposition,messages,conflictingFields:[...conflictingFields],conflictOptions,changedFields,existingId:matching[0]?.id??null,fingerprint});
   }
-  return {groups,counts,sourceRowCount:parsed.rows.length,errors:[],digest:hash(JSON.stringify({fileName,groups,manualChoices})),fileName,choices:{accounts:accountChoices.map(({id,name})=>({id,name})),users:userChoices.map(({id,name})=>({id,name})),skus:skuChoices.map(({id,name,productName})=>({id,name:productName?`${name} · ${productName}`:name}))}};
+  return {groups,counts,sourceRowCount:parsed.rows.length,errors:[],digest:hash(JSON.stringify({fileName,groups,manualChoices:restoredChoices})),fileName,choices:{accounts:accountChoices.map(({id,name})=>({id,name})),users:userChoices.map(({id,name})=>({id,name})),skus:skuChoices.map(({id,name,productName})=>({id,name:productName?`${name} · ${productName}`:name}))},restoredChoices};
 }
 export async function applyRosaPriceExceptions(db:PrismaClient,parsed:RosaParsed,fileName:string,expectedDigest:string,confirmed:boolean,actorId:number,manualChoices:RosaManualChoices={}){
   if(confirmed!==true||!expectedDigest)throw new Error('Preview and explicit confirmation required.');
