@@ -10,7 +10,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 Module._extensions['.ts']=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,filename);
 const require=Module.createRequire(fileURLToPath(import.meta.url));
 const {parseProductWorkbookXlsx,routeProductWorkbookSheet,odmHeaderIndex,mapOdmProductWorkbookSheet}=require(path.join(root,'lib/odm-product-workbook.ts'));
-const {planProductImport,applyProductImport,productImportHeaders,odmSourceHeaders}=require(path.join(root,'lib/product-import.ts'));
+const {planProductImport,applyProductImport,createProductImportAccounts,createProductImportCatalog,productImportHeaders,odmSourceHeaders}=require(path.join(root,'lib/product-import.ts'));
 const {parseImportCsv}=require(path.join(root,'lib/import-csv.ts'));
 const realPath=path.resolve(root,'../reference-data/ODM customer pricing_Sep 2026.xlsx');
 const real=fs.readFileSync(realPath);
@@ -107,9 +107,11 @@ test('real workbook requires classification, keeps complex labels for mapping, a
   const {result}=await parsed(real);
   const initial=await planProductImport(fakeDb([{id:7,name:'UPS'},{id:8,name:'Amazon'}]),result.csv);
   assert.equal(initial.items.length,122);
-  assert.equal(initial.customers.length,21);
-  assert.equal(initial.customers.find(c=>c.source==='UPS').status,'Matched');
-  assert.equal(initial.customers.find(c=>c.source==='Amazon (thr BS -> Levata)').status,'Unresolved');
+  assert.equal(initial.customers.length,0);
+  const recommended=await planProductImport(fakeDb([{id:7,name:'UPS'},{id:8,name:'Amazon'}]),result.csv,undefined,{applyRecommendations:true});
+  assert.equal(recommended.customers.length,21);
+  assert.equal(recommended.customers.find(c=>c.source==='UPS').status,'Matched');
+  assert.equal(recommended.customers.find(c=>c.source==='Amazon (thr BS -> Levata)').status,'Unresolved');
   assert.equal(initial.items.filter(item=>item.source&&!item.source.customerCell).length,6);
   assert.equal(initial.items.filter(item=>item.messages.some(message=>message.includes('Choose an ODM subtype'))).length,122);
   assert.equal(initial.items.filter(item=>item.after.catalogSource==='ODM').length,122);
@@ -127,14 +129,14 @@ test('real workbook requires classification, keeps complex labels for mapping, a
 });
 test('current-upload Account mapping resolves every matching real workbook row without changing source text or classification',async()=>{
   const {result}=await parsed(real);
-  const initial=await planProductImport(fakeDb(),result.csv);
+  const initial=await planProductImport(fakeDb(),result.csv,undefined,{applyRecommendations:true});
   const brady=initial.customers.find(customer=>customer.source==='Brady');
   const amazon=initial.customers.find(customer=>customer.source==='Amazon (thr BS -> Levata)');
   assert.equal(brady.status,'Unresolved');
   assert.equal(amazon.status,'Unresolved');
   const review={customerMappings:{[brady.key]:70,[amazon.key]:71}};
   const accounts=[{id:70,name:'Brady'},{id:71,name:'Amazon'}];
-  const mapped=await planProductImport(fakeDb(accounts),result.csv,undefined,review);
+  const mapped=await planProductImport(fakeDb(accounts),result.csv,undefined,{...review,applyRecommendations:true});
   for(const source of ['Brady','Amazon (thr BS -> Levata)']) {
     const rows=mapped.items.filter(item=>item.source?.customerCell===source);
     assert.ok(rows.length>0);
@@ -143,7 +145,7 @@ test('current-upload Account mapping resolves every matching real workbook row w
     for(const item of rows) {
       assert.equal(item.source.customerCell,source);
       assert.equal(item.after.catalogSource,'ODM');
-      assert.equal(item.after.odmCustomerAccountId,undefined);
+      assert.equal(item.after.odmCustomerAccountId,source==='Brady'?70:71);
     }
   }
   const classified=await planProductImport(fakeDb(accounts),result.csv,undefined,{...review,subtypes:{'XT5-43D9S/BRD':'CUSTOMER_SPECIFIC'}});
@@ -189,7 +191,7 @@ test('LF, CRLF, CR, blanks, and whitespace expand into independent candidates wi
 test('classification and import decisions remain per SKU and repeats consolidate after expansion',async()=>{
   const {csv:rawCsv}=syntheticCsv('SRP-S300LOEK/RDU\nSRP-S300LOEK/NSU','NCR',[['','UPS','SRP-S300LOEK/RDU','','','250']]);
   const csv=rawCsv.replaceAll('15.00','16.20');
-  const review={subtypes:{'SRP-S300LOEK/RDU':'CUSTOMER_SPECIFIC','SRP-S300LOEK/NSU':'SPECIAL_CONFIGURATION','SINGLE-SKU':'OTHER'}};
+  const review={subtypes:{'SRP-S300LOEK/RDU':'CUSTOMER_SPECIFIC','SRP-S300LOEK/NSU':'SPECIAL_CONFIGURATION','SINGLE-SKU':'OTHER'},createCatalog:{'3:1':'CONFIRM','3:2':'CONFIRM','4:1':'CONFIRM','5:1':'CONFIRM'}};
   const plan=await planProductImport(fakeDb([{id:1,name:'NCR'},{id:2,name:'UPS'}]),csv,undefined,review);
   const rdu=plan.items.filter(item=>item.after.partNumber==='SRP-S300LOEK/RDU');
   const nsu=plan.items.find(item=>item.after.partNumber==='SRP-S300LOEK/NSU');
@@ -211,7 +213,7 @@ test('classification and import decisions remain per SKU and repeats consolidate
     product:{findMany:async()=>[],create:async()=>({id:createdSkus.length+1})},
     productSku:{create:async({data})=>{createdSkus.push(data);return {id:createdSkus.length}}},
     productSkuOdmCustomer:{findUnique:async()=>null,upsert:async({create})=>{links.push(create)}},
-    productSkuOdmCustomerPrice:{findFirst:async()=>null,create:async()=>{}},
+    odmPricingImportSource:{upsert:async()=>{}},productSkuOdmCustomerPrice:{findFirst:async()=>null,create:async()=>{}},
   })};
   await applyProductImport(client,csv,plan.digest,undefined,review);
   assert.equal(createdSkus.filter(sku=>sku.partNumber==='SRP-S300LOEK/RDU').length,1);
@@ -239,4 +241,231 @@ test('single-line parts stay unchanged and ambiguous multiline cells remain bloc
   assert.equal(rows.filter(row=>row.values.odm_source_row==='3').length,1);
   const plan=await planProductImport(fakeDb(),csv,undefined,{subtypes:{'GOOD-SKU QUESTIONABLE PART?':'OTHER'}});
   assert.match(plan.items.find(item=>item.line===3).messages.join(' '),/could not be safely separated/);
+});
+
+test('review decisions turn workbook exceptions into Ready without losing source cells',async()=>{
+  const {result}=await parsed(real);
+  const accounts=[{id:7,name:'NCR'},{id:8,name:'Oracle'}];
+  const base=await planProductImport(fakeDb(accounts),result.csv,undefined,{subtypes:{'SRP-S300TOEK/SBK':'CUSTOMER_SPECIFIC','SPP-R310IK-ORA2':'CUSTOMER_SPECIFIC'}});
+  const tariff=base.items.find(item=>item.line===63);
+  assert.equal(tariff.status,'NEEDS REVIEW');
+  assert.match(tariff.messages.join(' '),/different tariff rate/);
+  const resolved=await planProductImport(fakeDb(accounts),result.csv,undefined,{subtypes:{'SRP-S300TOEK/SBK':'CUSTOMER_SPECIFIC'},tariffChoices:{'63:1':'SOURCE'},createCatalog:{'63:1':'CONFIRM'}});
+  const ready=resolved.items.find(item=>item.line===63);
+  assert.equal(ready.status,'READY');
+  assert.equal(ready.odmPricing.customerPrice,'176.60');
+  assert.equal(ready.odmPricing.tariffPercent,'7.5000');
+  assert.equal(ready.source.rawTariffAmount,'13.244999999999999');
+  const corrected=await planProductImport(fakeDb(accounts),result.csv,undefined,{subtypes:{'SRP-S300TOEK/SBK':'CUSTOMER_SPECIFIC'},tariffChoices:{'63:1':'CORRECTED'},tariffPercents:{'63:1':'4.5'},createCatalog:{'63:1':'CONFIRM'}});
+  assert.equal(corrected.items.find(item=>item.line===63).odmPricing.tariffAmount,'7.95');
+  const oracle=base.items.find(item=>item.line===6);
+  assert.equal(oracle.source.rawNewPrice,'233.52160000000003');
+  assert.equal(oracle.source.newPrice,'233.52');
+  assert.equal(oracle.source.note,'233.52');
+});
+
+test('blank customer, corrected SKU, corrected price and historical-only decisions are scoped by source entry',async()=>{
+  const {result}=await parsed(real);
+  const review={subtypes:{'SRP-F312IICOPK/OXO':'SPECIAL_CONFIGURATION'},createCatalog:{'86:1':'CONFIRM'},partNumbers:{'85:1':'IFJ-WDAK'},dispositions:{'9:1':'HISTORICAL'}};
+  const plan=await planProductImport(fakeDb(),result.csv,undefined,review);
+  assert.equal(plan.items.find(item=>item.line===86).status,'READY');
+  assert.equal(plan.items.find(item=>item.line===85).after.partNumber,'IFJ-WDAK');
+  assert.equal(plan.items.find(item=>item.line===85).after.model,'IFJ-WDAK');
+  assert.equal(plan.items.find(item=>item.line===9).status,'READY');
+  const price=await planProductImport(fakeDb([{id:8,name:'Oracle'}]),result.csv,undefined,{subtypes:{'SPP-R310IK-ORA2':'CUSTOMER_SPECIFIC'},createCatalog:{'6:1':'CONFIRM'},priceChoices:{'6:1':'CORRECTED'},prices:{'6:1':'230.45'}});
+  assert.equal(price.items.find(item=>item.line===6).odmPricing.customerPrice,'230.45');
+  assert.equal(price.items.find(item=>item.line===6).source.rawNewPrice,'233.52160000000003');
+});
+
+test('N/A, dash and blank prices remain nonnumeric while multiline provenance stays exact',async()=>{
+  const {result}=await parsed(real);
+  const rows=parseImportCsv(result.csv,headers).rows;
+  assert.equal(rows.find(row=>row.values.odm_source_row==='13').values.odm_source_old_price,'N/A');
+  assert.equal(rows.find(row=>row.values.odm_source_row==='9').values.odm_source_new_price,'-');
+  assert.equal(rows.find(row=>row.values.odm_source_row==='30').values.odm_source_new_price,'');
+  assert.equal(rows.find(row=>row.values.odm_source_row==='24').values.odm_source_note,'Separate Line Item ');
+  const split=rows.filter(row=>row.values.odm_source_row==='66');
+  assert.equal(split.length,2);
+  assert.equal(split[0].values.odm_source_part_number,split[1].values.odm_source_part_number);
+  assert.match(split[0].values.odm_source_part_number,/\n/);
+});
+
+test('historical-only source evidence is idempotent and never creates active pricing',async()=>{
+  const {result}=await parsed(real);
+  const keys=new Set();let catalogWrites=0;
+  const client={...fakeDb(),odmPricingImportSource:{upsert:async({where,create})=>{keys.add(where.sourceKey);assert.equal(create.disposition,'HISTORICAL');assert.equal(create.rowNumber,9);assert.equal(create.source.newPrice,'-');}},productSku:{create:async()=>{catalogWrites++}},productSkuOdmCustomerPrice:{create:async()=>{catalogWrites++}}};
+  client.$transaction=async callback=>callback(client);
+  const review={dispositions:{'9:1':'HISTORICAL'}};
+  const first=await planProductImport(client,result.csv,undefined,review);
+  assert.equal(first.items.find(item=>item.line===9).status,'READY');
+  await applyProductImport(client,result.csv,first.digest,undefined,review);
+  await applyProductImport(client,result.csv,first.digest,undefined,review);
+  assert.equal(keys.size,1);
+  assert.equal(catalogWrites,0);
+});
+
+test('new workbook SKU can be assigned to an existing Product inline',async()=>{
+  const {result}=await parsed(real);
+  const existing={id:50,name:'IFJ Model',category:null,archivedAt:null,skus:[]};
+  const review={partNumbers:{'85:1':'IFJ-WDAK'},productIds:{'85:1':50},subtypes:{'IFJ-WDAK':'SPECIAL_CONFIGURATION'},createCatalog:{'85:1':'CONFIRM'}};
+  const plan=await planProductImport(fakeDb([], [existing]),result.csv,undefined,review);
+  const row=plan.items.find(item=>item.line===85);
+  assert.equal(row.productId,50);
+  assert.equal(row.after.model,'IFJ Model');
+  assert.equal(row.status,'READY');
+  assert.equal(row.classes.includes('NEW PRODUCT'),false);
+  assert.equal(row.classes.includes('NEW SKU'),true);
+});
+
+test('tariff mentioned only in Notes needs an explicit tariff choice',async()=>{
+  const mapped=mapOdmProductWorkbookSheet('Test sheet',[[],odmHeader,['','UPS','CUSTOM-UPS','100','','120','','','120 w/ 4.5% line (5.40)'],['','UPS','SECOND-UPS','','','20']]);
+  const csv=mapped.rows.map(row=>row.map(value=>/[",\r\n]/.test(value)?`"${value.replaceAll('"','""')}"`:value).join(',')).join('\n')+'\n';
+  const base={subtypes:{'CUSTOM-UPS':'CUSTOMER_SPECIFIC'},createCatalog:{'3:1':'CONFIRM'},noteChoices:{'3:1':'STRUCTURED'}};
+  const initial=await planProductImport(fakeDb([{id:1,name:'UPS'}]),csv,undefined,base);
+  assert.equal(initial.items[0].status,'NEEDS REVIEW');
+  assert.match(initial.items[0].messages.join(' '),/different tariff rate/);
+  const reviewed=await planProductImport(fakeDb([{id:1,name:'UPS'}]),csv,undefined,{...base,tariffChoices:{'3:1':'NOTES'}});
+  assert.equal(reviewed.items[0].status,'READY');
+  assert.equal(reviewed.items[0].odmPricing.tariffPercent,'4.5000');
+  assert.equal(reviewed.items[0].odmPricing.tariffAmount,'5.40');
+  assert.equal(reviewed.items[0].source.tariffPercent,'');
+});
+
+test('recommendations resolve exact family and optional base without bypassing account or note conflicts',async()=>{
+  const {csv}=syntheticCsv('MODEL-1/UPS','UPS',[['','UPS','MODEL-1/ALT','','','125','','','100 competing price']]);
+  const standard={id:10,partNumber:'MODEL-1',normalizedPartNumber:'MODEL-1',catalogSource:'PRICE_LIST',prices:[],odmCustomers:[]};
+  const model={id:2,name:'MODEL-1',archivedAt:null,category:null,skus:[standard]};
+  const plan=await planProductImport(fakeDb([{id:7,name:' UPS '}],[model]),csv,undefined,{applyRecommendations:true});
+  const first=plan.items[0],conflict=plan.items.find(item=>item.after.partNumber==='MODEL-1/ALT');
+  assert.equal(first.productId,2);
+  assert.equal(first.after.baseSkuId,10);
+  assert.equal(first.after.odmCustomerAccountId,7);
+  assert.equal(first.after.odmSubtype,'CUSTOMER_SPECIFIC');
+  assert.equal(first.odmPricing,undefined); // synthetic source tariff is inconsistent
+  assert.match(conflict.messages.join(' '),/price in Notes differs/);
+  assert.equal(conflict.status,'NEEDS REVIEW');
+  const blank=await planProductImport(fakeDb(),syntheticCsv('KIT/OXO','').csv,undefined,{applyRecommendations:true});
+  assert.equal(blank.items[0].after.odmSubtype,'SPECIAL_CONFIGURATION');
+  assert.equal(blank.items[0].after.odmCustomerAccountId,undefined);
+  assert.equal(blank.customers.length,1); // second synthetic row still has UPS
+});
+
+test('batch catalog creation is explicit, rechecks the preview, and writes no pricing',async()=>{
+  const {csv}=syntheticCsv('NEW/UPS','UPS',[['','UPS','NEW/ALT','','','125']]);
+  const products=[];const skus=[];let pricingWrites=0;
+  const client={...fakeDb([{id:7,name:'UPS'}]),product:{findMany:async()=>products,create:async({data})=>{const item={id:products.length+1,name:data.name,archivedAt:null,category:null,skus:[]};products.push(item);return item;}},productSku:{create:async({data})=>{const sku={id:skus.length+1,...data};skus.push(sku);return sku;}},productSkuOdmCustomerPrice:{create:async()=>{pricingWrites++;}}};
+  client.$transaction=async fn=>fn(client);
+  const review={applyRecommendations:true};
+  const plan=await planProductImport(client,csv,undefined,review);
+  assert.equal(plan.items[0].catalogCreatable,true);
+  await assert.rejects(createProductImportCatalog(client,csv,'stale',review,['3:1']),/Preview changed/);
+  const result=await createProductImportCatalog(client,csv,plan.digest,review,['3:1','5:1']);
+  assert.deepEqual(result,{newProducts:1,newSkus:2});
+  assert.equal(pricingWrites,0);
+  assert.equal(products.length,1);
+  assert.deepEqual(skus.map(sku=>sku.productId),[1,1]);
+});
+
+test('reviewed Product assignment and subtype reach the catalog creation plan',async()=>{
+  const {csv}=syntheticCsv('NEW/UPS','UPS');
+  const review={applyRecommendations:true,modelNames:{'3:1':'Reviewed Product'},subtypes:{'NEW/UPS':'SPECIAL_CONFIGURATION'}};
+  const plan=await planProductImport(fakeDb([{id:7,name:'UPS'}]),csv,undefined,review);
+  assert.equal(plan.items[0].after.model,'Reviewed Product');
+  assert.equal(plan.items[0].after.odmSubtype,'SPECIAL_CONFIGURATION');
+  assert.equal(plan.items[0].catalogCreatable,true);
+});
+
+test('missing current price stays in review while unambiguous discontinued rows become historical',async()=>{
+  const {result}=await parsed(real);
+  const plan=await planProductImport(fakeDb(),result.csv,undefined,{applyRecommendations:true});
+  assert.equal(plan.items.find(item=>item.line===30).status,'NEEDS REVIEW');
+  assert.match(plan.items.find(item=>item.line===30).messages.join(' '),/New Price is unavailable/);
+  assert.equal(plan.items.find(item=>item.line===9).status,'READY');
+  assert.equal(plan.items.find(item=>item.line===9).odmPricing,undefined);
+});
+
+test('recommended historical disposition records source audit without catalog or pricing writes',async()=>{
+  const {csv:base}=syntheticCsv('OLD/UPS','UPS');
+  const csv=base.replaceAll('Shared note','discontinued');
+  const audit=[];let writes=0;
+  const client={...fakeDb(),odmPricingImportSource:{upsert:async({create})=>audit.push(create)},product:{findMany:async()=>[],create:async()=>{writes++;}},productSku:{create:async()=>{writes++;}},productSkuOdmCustomerPrice:{create:async()=>{writes++;}}};
+  client.$transaction=async fn=>fn(client);
+  const review={applyRecommendations:true};
+  const plan=await planProductImport(client,csv,undefined,review);
+  assert.equal(plan.items[0].status,'READY');
+  await applyProductImport(client,csv,plan.digest,undefined,review);
+  assert.equal(audit.length,1);
+  assert.equal(audit[0].disposition,'HISTORICAL');
+  assert.equal(writes,0);
+});
+
+test('one confirmed Account creation maps every entry sharing a normalized source customer',async()=>{
+  const {csv}=syntheticCsv('FIRST/UPS',' UPS ',[['','ups','THIRD/UPS','','','90']]);
+  const accounts=[];const writes=[];
+  const client={...fakeDb(),account:{findMany:async()=>accounts,create:async({data})=>{const account={id:accounts.length+1,name:data.name,status:data.status,archivedAt:null};accounts.push(account);writes.push(data);return account;}}};
+  client.$transaction=async fn=>fn(client);
+  const review={applyRecommendations:true};
+  const preview=await planProductImport(client,csv,undefined,review);
+  assert.equal(preview.customers.length,1);
+  assert.equal(preview.customers[0].rows,3);
+  await assert.rejects(createProductImportAccounts(client,csv,'stale',review,[{key:'ups',name:'UPS',role:'END_USER'}],7),/Preview changed/);
+  assert.equal(writes.length,0);
+  const mapped=await createProductImportAccounts(client,csv,preview.digest,review,[{key:'ups',name:'UPS',role:'END_USER'}],7);
+  assert.deepEqual(mapped,{ups:1});
+  assert.equal(writes.length,1);
+  assert.equal(writes[0].accountType,'END_USER');
+  assert.deepEqual(writes[0].businessRoles.create,[{role:'END_USER'}]);
+  const refreshed=await planProductImport(client,csv,undefined,{...review,customerMappings:mapped});
+  assert.deepEqual(refreshed.items.map(item=>item.after.odmCustomerAccountId),[1,1,1]);
+  assert.equal(refreshed.items[0].source.customerCell,' UPS ');
+});
+
+test('duplicate Account names block confirmed batch creation before any write',async()=>{
+  const {csv}=syntheticCsv('FIRST/UPS','UPS');
+  const accounts=[{id:2,name:'Existing',status:'ACTIVE',archivedAt:null}];let writes=0;
+  const client={...fakeDb(accounts),account:{findMany:async()=>accounts,create:async()=>{writes++;return {id:3};}}};
+  client.$transaction=async fn=>fn(client);
+  const review={applyRecommendations:true};
+  const preview=await planProductImport(client,csv,undefined,review);
+  await assert.rejects(createProductImportAccounts(client,csv,preview.digest,review,[{key:'ups',name:' Existing ',role:''}],7),/already exists/);
+  assert.equal(writes,0);
+});
+
+test('composite source Account labels cannot enter safe Account batch creation',async()=>{
+  const {csv}=syntheticCsv('FIRST/UPS','Zones & CDW');
+  const accounts=[];let writes=0;
+  const client={...fakeDb(accounts),account:{findMany:async()=>accounts,create:async()=>{writes++;return {id:3};}}};
+  client.$transaction=async fn=>fn(client);
+  const review={applyRecommendations:true};
+  const preview=await planProductImport(client,csv,undefined,review);
+  const key=preview.customers.find(customer=>customer.source==='Zones & CDW').key;
+  await assert.rejects(createProductImportAccounts(client,csv,preview.digest,review,[{key,name:'Zones'}],7),/manual interpretation/);
+  assert.equal(writes,0);
+});
+
+test('tariff choices group identical rate conflicts while price choices stay tied to exact relationships',async()=>{
+  const {result}=await parsed(real);
+  const preview=await planProductImport(fakeDb(),result.csv,undefined,{applyRecommendations:true});
+  const prices=preview.decisionGroups.filter(group=>group.kind==='PRICE');
+  const tariffs=preview.decisionGroups.filter(group=>group.kind==='TARIFF');
+  assert.equal(prices.length,31);
+  assert.equal(prices.reduce((sum,group)=>sum+group.reviewKeys.length,0),31);
+  assert.equal(tariffs.length,1);
+  assert.equal(tariffs[0].reviewKeys.length,15);
+  const choices=Object.fromEntries(tariffs[0].reviewKeys.map(key=>[key,'SOURCE']));
+  const resolved=await planProductImport(fakeDb(),result.csv,undefined,{applyRecommendations:true,tariffChoices:choices});
+  assert.equal(resolved.decisionGroups.filter(group=>group.kind==='TARIFF').length,0);
+  assert.equal(resolved.decisionGroups.filter(group=>group.kind==='PRICE').length,31);
+});
+
+test('identical price conflicts for one customer and SKU share one explicit decision',async()=>{
+  const mapped=mapOdmProductWorkbookSheet('Test sheet',[[],odmHeader,['','UPS','REPEATED/UPS','100','110','120','','','115'],['','UPS','REPEATED/UPS','100','110','120','','','115']]);
+  const csv=mapped.rows.map(row=>row.map(value=>/[",\r\n]/.test(value)?`"${value.replaceAll('"','""')}"`:value).join(',')).join('\n')+'\n';
+  const preview=await planProductImport(fakeDb([{id:7,name:'UPS'}]),csv,undefined,{applyRecommendations:true});
+  const priceGroups=preview.decisionGroups.filter(group=>group.kind==='PRICE');
+  assert.equal(priceGroups.length,1);
+  assert.deepEqual(priceGroups[0].reviewKeys,['3:1','4:1']);
+  const noteChoices=Object.fromEntries(priceGroups[0].reviewKeys.map(key=>[key,'STRUCTURED']));
+  const resolved=await planProductImport(fakeDb([{id:7,name:'UPS'}]),csv,undefined,{applyRecommendations:true,noteChoices});
+  assert.equal(resolved.decisionGroups.filter(group=>group.kind==='PRICE').length,0);
 });

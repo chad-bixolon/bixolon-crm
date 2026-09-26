@@ -79,7 +79,7 @@ test('minimal Account creation uses normal defaults and acting Admin attribution
 test('import Account creation enforces Admin access and reuses exact normalized matches', async () => {
   const admin={id:7,role:'ADMIN',active:true,archivedAt:null};
   let creates=0;
-  const records=[{id:10,name:' Amazon ',archivedAt:null}];
+  const records=[{id:10,name:' Amazon ',archivedAt:null,status:'ACTIVE'}];
   const client={account:{findMany:async()=>records},$transaction:async fn=>fn({account:{create:async ({data})=>{creates++;return {id:20,...data};}}})};
   await assert.rejects(createAccountFromImport(client,{...admin,role:'SALES'},form([['name','Brady']])),/Access denied/);
   assert.equal(creates,0);
@@ -87,7 +87,7 @@ test('import Account creation enforces Admin access and reuses exact normalized 
   assert.equal(existing.kind,'existing');
   assert.equal(existing.account.id,10);
   assert.equal(creates,0);
-  records.push({id:11,name:'AMAZON',archivedAt:null});
+  records.push({id:11,name:'AMAZON',archivedAt:null,status:'ACTIVE'});
   const ambiguous=await createAccountFromImport(client,admin,form([['name','Amazon']]));
   assert.equal(ambiguous.kind,'ambiguous');
   assert.deepEqual(ambiguous.matches.map(account=>account.id),[10,11]);

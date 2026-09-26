@@ -753,6 +753,22 @@ model ProductSkuOdmCustomerPrice {
   @@index([accountId, currencyCode, archivedAt])
 }
 
+/// Immutable workbook entry evidence, including reviewed rows that create no active price.
+model OdmPricingImportSource {
+  id         Int      @id @default(autoincrement())
+  sourceKey  String   @unique
+  workbook   String
+  sheet      String
+  rowNumber  Int
+  partIndex  Int
+  disposition String
+  source     Json
+  resolution Json
+  createdAt  DateTime @default(now())
+
+  @@index([workbook, sheet, rowNumber])
+}
+
 /// A finalized commercial price exception imported from an operational source.
 /// sourceKey, not peCode, is the stable import identity because legacy codes are reused.
 model PriceException {

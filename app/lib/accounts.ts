@@ -15,7 +15,7 @@ export const normalizeAccountName = (value: string) => value.trim().replace(/\s+
 export async function findAccountNameMatches(client: Pick<PrismaClient, "account">, name: string) {
   const key = normalizeAccountName(name);
   if (!key) return [];
-  const candidates = await client.account.findMany({ where: { name: { contains: name.trim().split(/\s+/)[0], mode: "insensitive" } }, select: { id: true, name: true, archivedAt: true } });
+  const candidates = await client.account.findMany({ where: { name: { contains: name.trim().split(/\s+/)[0], mode: "insensitive" } }, select: { id: true, name: true, archivedAt: true, status: true } });
   return candidates.filter((account) => normalizeAccountName(account.name) === key);
 }
 export async function createAccountFromImport(client: PrismaClient, actor: Actor, form: FormData) {
@@ -26,10 +26,10 @@ export async function createAccountFromImport(client: PrismaClient, actor: Actor
   const references = await checkAccountReferences(client,parsed.value);
   if (Object.keys(references).length) return {kind:'validation' as const,errors:references,message:'Please correct the Account details.'};
   const matches = await findAccountNameMatches(client,parsed.value.name);
-  const available = matches.filter(account=>!account.archivedAt);
+  const available = matches.filter(account=>!account.archivedAt && account.status==='ACTIVE');
   if (matches.length===1 && available.length===1) return {kind:'existing' as const,account:{id:available[0].id,name:available[0].name}};
   if (matches.length>1) return {kind:'ambiguous' as const,matches:available.map(({id,name})=>({id,name})),message:'More than one Account has this name. Choose the correct existing Account.'};
-  if (matches.length) return {kind:'validation' as const,errors:{name:'An archived Account has this name. Reactivate it before mapping.'},message:'Account could not be created.'};
+  if (matches.length) return {kind:'validation' as const,errors:{name:'An inactive or archived Account has this name. Activate it before mapping.'},message:'Account could not be created.'};
   const id = await saveAccount(client,parsed.value,undefined,actor.id);
   return {kind:'created' as const,account:{id,name:parsed.value.name}};
 }
@@ -104,12 +104,15 @@ export async function checkAccountReferences(client: PrismaClient, input: Accoun
   return errors;
 }
 
-export async function saveAccount(client: PrismaClient, input: AccountFields, id?: number, actorId?: number) {
-  const data = { name: input.name, status: input.status, strategicAccount: input.strategicAccount,
+export function accountWriteData(input: AccountFields) {
+  return { name: input.name, status: input.status, strategicAccount: input.strategicAccount,
     industry: input.industry, territory: input.territory, ownerId: input.ownerId,
     website: input.website, phone: input.phone, addressLine1: input.addressLine1, addressLine2: input.addressLine2,
     city: input.city, stateProvince: input.stateProvince, postalCode: input.postalCode, country: input.country,
     accountType: input.roles[0] ?? null };
+}
+export async function saveAccount(client: PrismaClient, input: AccountFields, id?: number, actorId?: number) {
+  const data = accountWriteData(input);
   return client.$transaction(async (tx) => {
     if (id) {
       const existing = await tx.account.findUnique({ where: { id }, select: { status: true } });

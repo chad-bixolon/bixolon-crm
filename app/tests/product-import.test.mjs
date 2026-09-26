@@ -176,7 +176,7 @@ test('customer labels match exactly, manual mapping covers repeated rows, and Sp
   const initial=await planProductImport(db([],categories,accounts),input);
   assert.equal(initial.counts.errors,3);
   assert.equal(initial.customers[0].status,'Unresolved');
-  assert.equal(initial.customers[0].rows,3);
+  assert.equal(initial.customers[0].rows,2);
   assert.equal(initial.items[0].after.odmCustomerAccountId,undefined);
   const review={customerMappings:{'amazon (thr bs -> levata)':7},subtypes:{'SKU-2':'CABLE_PACKAGING_ACCESSORY'}};
   const corrected=await planProductImport(db([],categories,accounts),input,undefined,review);
@@ -195,7 +195,7 @@ test('customer labels match exactly, manual mapping covers repeated rows, and Sp
   assert.equal(directSpecial.counts.errors,0);
   assert.equal(directSpecial.items[0].after.odmCustomerAccountId,undefined);
   assert.equal(directSpecial.items[0].after.odmCustomerSourceName,'Amazon (thr BS -> Levata)');
-  const ambiguous=await planProductImport(db([],categories,[{id:1,name:'UPS'},{id:2,name:' ups '}]),'model,part_number,catalog_source,odm_customer\nModel,S-1,ODM,UPS\n');
+  const ambiguous=await planProductImport(db([],categories,[{id:1,name:'UPS'},{id:2,name:' ups '}]),'model,part_number,catalog_source,odm_customer,odm_subtype\nModel,S-1,ODM,UPS,CUSTOMER_SPECIFIC\n');
   assert.equal(ambiguous.customers[0].status,'Needs Review');
   assert.equal(ambiguous.counts.errors,1);
 });
@@ -221,11 +221,11 @@ test('reviewed ODM workbook rows share one SKU and link distinct Accounts withou
   const row=(line,customer)=>Object.fromEntries([...header.map(key=>[key,'']),['model','MODEL'],['part_number','ODM-1'],['odm_customer',customer],['odm_source_format','ODM_CUSTOMER_PRICING'],['odm_source_row',String(line)],['odm_source_customer_cell',customer],['odm_source_part_number','ODM-1'],['odm_source_new_price',line===4?'12':'10']]);
   const input=[header.join(','),...[row(3,'UPS'),row(4,'Amazon'),row(5,'UPS alias')].map(values=>header.map(key=>values[key]).join(','))].join('\n')+'\n';
   const accounts=[{id:7,name:'UPS'},{id:8,name:'Amazon'}];
-  const products=[],skus=[],links=new Map(),prices=[];
+  const products=[],skus=[],links=new Map(),prices=[],sourceKeys=[];
   const customerPrices=[];
-  const client={product:{findMany:async()=>products,create:async({data})=>{const value={id:1,...data};products.push({...value,skus:[]});return value;}},productCategory:{findMany:async()=>[]},account:{findMany:async()=>accounts},productSku:{create:async({data})=>{const value={id:2,...data};skus.push(value);return value;}},productSkuOdmCustomer:{findUnique:async({where})=>links.get(where.skuId_accountId.accountId)??null,upsert:async({create,update})=>links.set(create.accountId,{sourceCustomerName:update.sourceCustomerName})},productSkuOdmCustomerPrice:{findFirst:async({where})=>customerPrices.find(price=>price.skuId===where.skuId&&price.accountId===where.accountId)??null,create:async({data})=>customerPrices.push({...data,customerPrice:new Prisma.Decimal(data.customerPrice),previousPrice:data.previousPrice?new Prisma.Decimal(data.previousPrice):null,tariffPercent:new Prisma.Decimal(data.tariffPercent),tariffAmount:new Prisma.Decimal(data.tariffAmount)})},productPrice:{upsert:async(value)=>prices.push(value)}};
+  const client={product:{findMany:async()=>products,create:async({data})=>{const value={id:1,...data};products.push({...value,skus:[]});return value;}},productCategory:{findMany:async()=>[]},account:{findMany:async()=>accounts},productSku:{create:async({data})=>{const value={id:2,...data};skus.push(value);return value;}},productSkuOdmCustomer:{findUnique:async({where})=>links.get(where.skuId_accountId.accountId)??null,upsert:async({create,update})=>links.set(create.accountId,{sourceCustomerName:update.sourceCustomerName})},odmPricingImportSource:{upsert:async({where,create})=>{sourceKeys.push(where.sourceKey);assert.equal(create.source.partNumber,'ODM-1');assert.equal(create.workbook,'Unknown workbook');}},productSkuOdmCustomerPrice:{findFirst:async({where})=>customerPrices.find(price=>price.skuId===where.skuId&&price.accountId===where.accountId)??null,create:async({data})=>customerPrices.push({...data,customerPrice:new Prisma.Decimal(data.customerPrice),previousPrice:data.previousPrice?new Prisma.Decimal(data.previousPrice):null,tariffPercent:new Prisma.Decimal(data.tariffPercent),tariffAmount:new Prisma.Decimal(data.tariffAmount)})},productPrice:{upsert:async(value)=>prices.push(value)}};
   client.$transaction=async callback=>callback(client);
-  const review={subtypes:{'ODM-1':'CUSTOMER_SPECIFIC'},customerMappings:{'ups alias':7}};
+  const review={subtypes:{'ODM-1':'CUSTOMER_SPECIFIC'},customerMappings:{'ups alias':7},createCatalog:{'3:1':'CONFIRM','4:1':'CONFIRM','5:1':'CONFIRM'}};
   const plan=await planProductImport(client,input,undefined,review);
   assert.equal(plan.counts.errors,0);
   assert.equal(plan.counts.newSkus,1);
@@ -235,6 +235,8 @@ test('reviewed ODM workbook rows share one SKU and link distinct Accounts withou
   assert.equal(prices.length,0);
   assert.equal(customerPrices.length,2);
   assert.deepEqual([...new Set(customerPrices.map(price=>price.accountId))],[7,8]);
+  assert.equal(sourceKeys.length,3);
+  assert.equal(new Set(sourceKeys).size,3);
 });
 test('ODM classification requires explicit source and rejects invalid base SKU',async()=>{
   const standard=sku(2,1,'XT5-STD');standard.catalogSource='PRICE_LIST';

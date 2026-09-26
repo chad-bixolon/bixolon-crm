@@ -48,7 +48,7 @@ export function parseImportCsv(input: string, catalogHeaders?: readonly string[]
   const rows: CsvRow[] = [];
   for (const record of records.slice(1)) {
     if (record.cells.length > headers.length) { errors.push(`Line ${record.line}: expected at most ${headers.length} columns, found ${record.cells.length}.`); continue; }
-    rows.push({line:record.line,values:Object.fromEntries(headers.map((h,i) => [h,h==='odm_source_part_number' ? record.cells[i] ?? '' : (record.cells[i] ?? '').trim()]))});
+    rows.push({line:record.line,values:Object.fromEntries(headers.map((h,i) => [h,['odm_source_part_number','odm_source_customer_cell','odm_source_note'].includes(h) ? record.cells[i] ?? '' : (record.cells[i] ?? '').trim()]))});
   }
   return {rows,errors};
 }
