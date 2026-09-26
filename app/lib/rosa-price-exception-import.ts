@@ -23,6 +23,9 @@ export type RosaPlanGroup = {
   customer:RosaResolution; varAccount:RosaResolution; endUser:RosaResolution;
   expirationDate:string; currency:string; description:string; tiers:RosaPlanTier[];
   disposition:RosaDisposition; messages:string[]; conflictingFields:string[]; conflictOptions:{field:RosaHeaderChoiceField;values:{line:number;value:string}[]}[]; changedFields:string[]; existingId:number|null; fingerprint:string;
+  currentRevision:{id:number|null;fileName:string;header:Record<string,string>;tiers:string[]}|null;
+  revisionAction:'PROMOTE'|'OLDER'|'NONE';
+  revisionRecorded:boolean;
 };
 export type RosaPlan = { groups:RosaPlanGroup[]; counts:Record<RosaDisposition,number>; sourceRowCount:number; errors:string[]; digest:string; fileName:string; choices:{accounts:RosaChoice[];users:RosaChoice[];skus:RosaChoice[]}; restoredChoices:RosaManualChoices };
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -98,21 +101,31 @@ export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:s
     db.user.findMany({select:{id:true,firstName:true,lastName:true,active:true,archivedAt:true,role:true}}),
     db.account.findMany({select:{id:true,name:true,status:true,archivedAt:true}}),
     db.productSku.findMany({select:{id:true,partNumber:true,normalizedPartNumber:true,active:true,product:{select:{name:true,active:true,archivedAt:true}}}}),
-    db.priceException.findMany({select:{id:true,peCode:true,sourceType:true,sourceKey:true,sourceFileName:true,sourceMetadata:true,lines:{select:{sourceSku:true,sourceQuantity:true,sourceQuantityRaw:true,approvedUnitPrice:true,currencyCode:true,sourceMetadata:true}}}}),
+    db.priceException.findMany({select:{id:true,peCode:true,sourceType:true,sourceKey:true,sourceFileName:true,sourceMetadata:true,currentSourceRevision:{select:{id:true,sourceFileName:true,resolvedHeader:true,resolvedTiers:true,sourceReviewedAt:true,contentHash:true}},sourceRevisions:{select:{contentHash:true}},lines:{where:{retiredAt:null},select:{sourceSku:true,sourceQuantity:true,sourceQuantityRaw:true,approvedUnitPrice:true,currencyCode:true,sourceMetadata:true}}}}),
     db.currency.findMany({select:{code:true,active:true}}),
   ]);
   const userChoices=users.filter(user=>user.active&&!user.archivedAt).map(user=>({id:user.id,name:`${user.firstName} ${user.lastName}`,firstName:user.firstName}));
   const accountChoices=accounts.filter(account=>account.status==='ACTIVE'&&!account.archivedAt);
   const skuChoices=skus.filter(sku=>sku.active&&sku.product.active&&!sku.product.archivedAt).map(sku=>({id:sku.id,name:sku.partNumber,productName:sku.product.name}));
-  const grouped=new Map<string,RosaSourceRow[]>();for(const row of parsed.rows){const code=key(row.values['PE Number']);const groupKey=code||`BLANK:${row.line}`;grouped.set(groupKey,[...(grouped.get(groupKey)??[]),row]);}
+  const byCode=new Map<string,RosaSourceRow[]>();for(const row of parsed.rows){const code=key(row.values['PE Number'])||`BLANK:${row.line}`;byCode.set(code,[...(byCode.get(code)??[]),row]);}
+  const grouped=new Map<string,RosaSourceRow[]>();
+  for(const [code,rows] of byCode){
+    const submissions=new Map<string,RosaSourceRow[]>();
+    for(const row of rows){const identity=JSON.stringify([timestamp(row.values['Requested At'])??row.values['Requested At'].trim(),timestamp(row.values['Reviewed At'])??row.values['Reviewed At'].trim()]);submissions.set(identity,[...(submissions.get(identity)??[]),row]);}
+    for(const [identity,submissionRows] of submissions)grouped.set(submissions.size===1?code:`${code}::${hash(identity).slice(0,12)}`,submissionRows);
+  }
   const requestedChoices=checkedRecord(manualChoices,'manual resolutions');
   for(const groupKey of Object.keys(requestedChoices))if(!grouped.has(groupKey))throw new Error('Manual resolution does not match this CSV. Preview the file again.');
   const restoredChoices:RosaManualChoices={...manualChoices};
   for(const [groupKey,sourceRows] of grouped){
     if(Object.hasOwn(restoredChoices,groupKey))continue;
-    const matches=existing.filter(item=>item.peCode&&key(item.peCode)===groupKey||item.sourceType==='EXTERNAL_EXPORT'&&item.sourceKey===`ROSA:${groupKey}`);
-    if(matches.length!==1||matches[0].sourceFileName!==fileName)continue;
-    const metadata=matches[0].sourceMetadata as {adapter?:string;rosaRawRows?:RosaSourceRow[];rosaReviewedChoices?:RosaManualGroupChoice}|null;
+    const code=key(sourceRows[0].values['PE Number']);
+    const matches=existing.filter(item=>item.peCode&&key(item.peCode)===code||item.sourceType==='EXTERNAL_EXPORT'&&item.sourceKey===`ROSA:${code}`);
+    if(matches.length!==1)continue;
+    const latest=matches[0].currentSourceRevision;
+    let metadata=matches[0].sourceMetadata as {adapter?:string;rosaRawRows?:RosaSourceRow[];rosaReviewedChoices?:RosaManualGroupChoice}|null;
+    if(latest){const revision=await db.priceExceptionSourceRevision.findUnique({where:{id:latest.id},select:{sourceFileName:true,rawRows:true,reviewedChoices:true}});metadata={adapter:'ROSA_PE_CSV_V1',rosaRawRows:revision?.rawRows as RosaSourceRow[]|undefined,rosaReviewedChoices:revision?.reviewedChoices as RosaManualGroupChoice|undefined};if(revision?.sourceFileName!==fileName)continue;}
+    else if(matches[0].sourceFileName!==fileName)continue;
     if(metadata?.adapter!=='ROSA_PE_CSV_V1'||!same(metadata.rosaRawRows,sourceRows)||!metadata.rosaReviewedChoices)continue;
     const prior=metadata.rosaReviewedChoices;
     const safeHeaders=new Set<HeaderField>(conflictingHeaderFields(sourceRows).filter(field=>safeHeaderConflict(field,sourceRows)));
@@ -200,24 +213,35 @@ export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:s
     const header=Object.fromEntries(headerFields.map(field=>[field,headerValue(field,raw[field])])) as Record<HeaderField,string>;
     const reviewedChoice={headerLines,accountIds,userIds,skuIds};
     const fingerprint=hash(JSON.stringify({header,tiers:sortedTierValues(sourceRows),reviewedChoice}));
-    let identical=false;
+    let identical=false;let currentRevision:RosaPlanGroup['currentRevision']=null;let revisionAction:RosaPlanGroup['revisionAction']='NONE';let revisionRecorded=false;
     if(matching.length===1){
       const record=matching[0],metadata=record.sourceMetadata as {adapter?:string;rosaHeader?:Record<HeaderField,string>;rosaReviewedChoices?:RosaManualGroupChoice}|null;
-      if(metadata?.adapter==='ROSA_PE_CSV_V1'&&metadata.rosaHeader){
-        for(const field of headerFields)if(metadata.rosaHeader[field]!==header[field])changedFields.push(field);
+      revisionRecorded=!!record.sourceRevisions?.some(revision=>revision.contentHash===fingerprint);
+      const current=record.currentSourceRevision;
+      const oldHeader=(current?.resolvedHeader as Record<HeaderField,string>|undefined)??(metadata?.adapter==='ROSA_PE_CSV_V1'?metadata.rosaHeader:undefined);
+      const currentSourceValues=(current?.resolvedHeader as {sourceValues?:Record<string,string>}|undefined)?.sourceValues;
+      const originalSourceValues=(record.sourceMetadata as {rosaRawRows?:RosaSourceRow[]}|null)?.rosaRawRows?.[0]?.values;
+      currentRevision=oldHeader?{id:current?.id??null,fileName:current?.sourceFileName??record.sourceFileName??'',header:currentSourceValues??originalSourceValues??oldHeader,tiers:existingTierValues(record.lines)}:null;
+      if(oldHeader){
+        for(const field of headerFields)if(oldHeader[field]!==header[field])changedFields.push(field);
         if(!same(existingTierValues(record.lines),sortedTierValues(sourceRows)))changedFields.push('Pricing tiers');
-        const prior=metadata.rosaReviewedChoices??{};
-        if(!same({headerLines:prior.headerLines??{},accountIds:prior.accountIds??{},userIds:prior.userIds??{},skuIds:prior.skuIds??{}},reviewedChoice))changedFields.push('Reviewed resolutions');
+        const prior=current?{}:metadata?.rosaReviewedChoices??{};
+        if(!current&&!same({headerLines:prior.headerLines??{},accountIds:prior.accountIds??{},userIds:prior.userIds??{},skuIds:prior.skuIds??{}},reviewedChoice))changedFields.push('Reviewed resolutions');
         identical=changedFields.length===0;
       }else changedFields.push('Existing PE has no comparable Rosa group metadata.');
-      const priorReviewedAt=timestamp((record.sourceMetadata as {reviewedAt?:string}|null)?.reviewedAt??'');
+      const priorReviewedAt=current?.sourceReviewedAt.toISOString()??timestamp((record.sourceMetadata as {reviewedAt?:string}|null)?.reviewedAt??'');
       const newer=!!priorReviewedAt&&!!reviewedAt&&reviewedAt>priorReviewedAt;
-      messages.push(identical?'Existing PE and all pricing tiers are identical.':newer?'Needs review — Newer source revision available. Original PE and tiers will not be changed.':'Existing PE differs; historical data will not be changed.');
+      if(!identical)revisionAction=newer?'PROMOTE':'OLDER';
+      messages.push(identical?'Existing PE and all pricing tiers are identical.':revisionAction==='PROMOTE'?'Needs review — Newer source revision available.':'Existing PE differs or is older; current pricing will not change.');
     }else if(matching.length>1){changedFields.push('Multiple existing PEs share this number.');messages.push('Multiple existing PEs share this number.');}
-    const needsReview=conflictingFields.length>0||changedFields.length>0||[requestedBy,reviewedBy,customer,varAccount,endUser].some(item=>!!item.issue)||tiers.some(tier=>!!tier.sku.issue);
+    const siblingSubmissions=[...grouped].filter(([,rows])=>key(rows[0].values['PE Number'])===code);
+    const earliest=siblingSubmissions.sort((a,b)=>(timestamp(a[1][0].values['Reviewed At'])??'').localeCompare(timestamp(b[1][0].values['Reviewed At'])??''))[0]?.[0];
+    const pendingSibling=!matching.length&&siblingSubmissions.length>1&&earliest!==groupKey;
+    if(pendingSibling)messages.push('Another submission for this PE Number appears earlier in this file. Import it first, then review this revision for promotion.');
+    const needsReview=pendingSibling||conflictingFields.length>0||changedFields.length>0||[requestedBy,reviewedBy,customer,varAccount,endUser].some(item=>!!item.issue)||tiers.some(tier=>!!tier.sku.issue);
     const disposition:RosaDisposition=invalid?'ERROR':needsReview?'REVIEW REQUIRED':matching.length?'EXISTING / NO CHANGE':'READY';
     counts[disposition]++;
-    groups.push({groupKey,peNumber,sourceLines:sourceRows.map(row=>row.line),statusSource,statusMapped,requestedAt:raw['Requested At'],reviewedAt:raw['Reviewed At'],requestedBy,reviewedBy,customer,varAccount,endUser,expirationDate:expirationDate??raw['Expiration Date'],currency:raw.Currency,description:raw.Description,tiers,disposition,messages,conflictingFields:[...conflictingFields],conflictOptions,changedFields,existingId:matching[0]?.id??null,fingerprint});
+    groups.push({groupKey,peNumber,sourceLines:sourceRows.map(row=>row.line),statusSource,statusMapped,requestedAt:raw['Requested At'],reviewedAt:raw['Reviewed At'],requestedBy,reviewedBy,customer,varAccount,endUser,expirationDate:expirationDate??raw['Expiration Date'],currency:raw.Currency,description:raw.Description,tiers,disposition,messages,conflictingFields:[...conflictingFields],conflictOptions,changedFields,existingId:matching[0]?.id??null,fingerprint,currentRevision,revisionAction,revisionRecorded});
   }
   return {groups,counts,sourceRowCount:parsed.rows.length,errors:[],digest:hash(JSON.stringify({fileName,groups,manualChoices:restoredChoices})),fileName,choices:{accounts:accountChoices.map(({id,name})=>({id,name})),users:userChoices.map(({id,name})=>({id,name})),skus:skuChoices.map(({id,name,productName})=>({id,name:productName?`${name} · ${productName}`:name}))},restoredChoices};
 }
@@ -230,21 +254,75 @@ export async function applyRosaPriceExceptions(db:PrismaClient,parsed:RosaParsed
     if(!ready.length)throw new Error('No Price Exceptions ready to import.');
     for(const group of ready){
       const sourceRows=parsed.rows.filter(row=>group.sourceLines.includes(row.line));const raw={...sourceRows[0].values};
-      const groupKey=key(group.peNumber)||`BLANK:${group.sourceLines[0]}`;
+      const groupKey=group.groupKey;
       const reviewedChoice=manualChoices[groupKey]??{};
       for(const [field,line] of Object.entries(reviewedChoice.headerLines??{}))raw[field as RosaHeaderChoiceField]=sourceRows.find(row=>row.line===line)!.values[field as RosaHeaderChoiceField];
       const assignee=await tx.user.findUnique({where:{id:group.requestedBy.id!},select:{role:true}});
-      await tx.priceException.create({data:{
+      const pe=await tx.priceException.create({data:{
         peCode:group.peNumber,status:'ACTIVE',sourceType:'EXTERNAL_EXPORT',sourceKey:`ROSA:${key(group.peNumber)}`,
         distributorAccountId:group.customer.id,varAccountId:group.varAccount.id,endUserAccountId:group.endUser.id,
         distributorSourceName:raw.Customer,varSourceName:raw.VAR,endUserSourceName:raw['End User'],sourceSalesRepName:raw['Requested By'],
         assignedSalesRepUserId:usersSalesRepId(group.requestedBy.id,assignee),expirationDate:new Date(`${group.expirationDate}T00:00:00.000Z`),
         sourceDescription:raw.Description,sourceFileName:fileName,createdById:actorId,
         sourceMetadata:{adapter:'ROSA_PE_CSV_V1',rosaFingerprint:group.fingerprint,rosaHeader:Object.fromEntries(headerFields.map(field=>[field,headerValue(field,raw[field])])),rosaRawRows:sourceRows.map(row=>({line:row.line,values:row.values})),rosaReviewedChoices:reviewedChoice,requestedAt:raw['Requested At'],reviewedAt:raw['Reviewed At'],requestedByUserId:group.requestedBy.id,reviewedByUserId:group.reviewedBy.id,sourceStatus:raw.Status,partyMapping:{Customer:'distributorAccount',VAR:'varAccount','End User':'endUserAccount'}},
-        lines:{create:group.tiers.map((tier,index)=>{const row=sourceRows.find(candidate=>candidate.line===tier.line)!;return {sourceLineKey:tier.sourceLineKey,productSkuId:tier.sku.id,sourceSku:row.values.SKU,approvedUnitPrice:new Prisma.Decimal(row.values['Approved Price']),currencyCode:row.values.Currency.trim().toUpperCase(),sourceQuantity:new Prisma.Decimal(row.values.Quantity),sourceQuantityRaw:row.values.Quantity,sortOrder:index,sourceMetadata:{originalPrice:row.values['Original Price'],sourceLine:row.line,rosaRaw:row.values,rosaFingerprint:tier.sourceFingerprint}}})},
       }});
+      const revision=await createRevision(tx,pe.id,group,sourceRows,fileName,reviewedChoice,actorId);
+      await tx.priceExceptionLine.createMany({data:lineData(pe.id,revision.id,group,sourceRows)});
+      await tx.priceException.update({where:{id:pe.id},data:{currentSourceRevisionId:revision.id}});
     }
     return {created:ready.length,lines:ready.reduce((sum,group)=>sum+group.tiers.length,0),skipped:plan.groups.length-ready.length,counts:plan.counts};
   },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,timeout:60000});
 }
 function usersSalesRepId(id:number|null,user:{role:string}|null){return id&&user&&['SALES','SALES_MANAGER'].includes(user.role)?id:null;}
+
+function resolvedHeader(group:RosaPlanGroup,raw:Record<RosaColumn,string>){
+  return Object.fromEntries(headerFields.map(field=>[field,headerValue(field,raw[field])])) as Record<HeaderField,string>;
+}
+function lineData(peId:number,revisionId:number,group:RosaPlanGroup,sourceRows:RosaSourceRow[]){return group.tiers.map((tier,index)=>{const row=sourceRows.find(candidate=>candidate.line===tier.line)!;return {
+  priceExceptionId:peId,sourceRevisionId:revisionId,sourceLineKey:`ROSA:${group.fingerprint}:${tier.sourceLineKey}`,productSkuId:tier.sku.id,sourceSku:row.values.SKU,approvedUnitPrice:new Prisma.Decimal(row.values['Approved Price']),currencyCode:row.values.Currency.trim().toUpperCase(),sourceQuantity:new Prisma.Decimal(row.values.Quantity),sourceQuantityRaw:row.values.Quantity,sortOrder:index,sourceMetadata:{originalPrice:row.values['Original Price'],sourceLine:row.line,rosaRaw:row.values,rosaFingerprint:tier.sourceFingerprint},
+};});}
+async function createRevision(tx:Prisma.TransactionClient,peId:number,group:RosaPlanGroup,rows:RosaSourceRow[],fileName:string,choice:RosaManualGroupChoice,actorId:number){
+  const raw={...rows[0].values};for(const [field,line] of Object.entries(choice.headerLines??{}))raw[field as RosaHeaderChoiceField]=rows.find(row=>row.line===line)!.values[field as RosaHeaderChoiceField];
+  return tx.priceExceptionSourceRevision.create({data:{priceExceptionId:peId,peNumber:key(group.peNumber),contentHash:group.fingerprint,sourceFileName:fileName,sourceReviewedAt:new Date(group.reviewedAt),rawRows:rows as unknown as Prisma.InputJsonValue,reviewedChoices:choice as Prisma.InputJsonValue,resolvedHeader:{...resolvedHeader(group,raw),sourceValues:raw,resolutions:{requestedBy:group.requestedBy,reviewedBy:group.reviewedBy,customer:group.customer,varAccount:group.varAccount,endUser:group.endUser}} as Prisma.InputJsonValue,resolvedTiers:group.tiers as unknown as Prisma.InputJsonValue,recordedById:actorId}});
+}
+
+/** Explicit administrator promotion; preview digest and current pointer are rechecked inside the transaction. */
+export async function promoteRosaRevision(db:PrismaClient,parsed:RosaParsed,fileName:string,expectedDigest:string,groupKey:string,confirmed:boolean,actorId:number,manualChoices:RosaManualChoices={}){
+  if(!confirmed||!expectedDigest)throw new Error('Preview and explicit confirmation required.');
+  return db.$transaction(async tx=>{
+    const plan=await planRosaPriceExceptions(tx,parsed,fileName,manualChoices);
+    if(plan.digest!==expectedDigest||plan.errors.length)throw new Error('Preview changed. Preview the file again.');
+    const group=plan.groups.find(item=>item.groupKey===groupKey);
+    if(!group||!group.existingId||group.revisionAction!=='PROMOTE'||group.disposition!=='REVIEW REQUIRED'||group.conflictingFields.length||[group.requestedBy,group.reviewedBy,group.customer,group.varAccount,group.endUser,...group.tiers.map(tier=>tier.sku)].some(item=>item.issue))throw new Error('Resolve the newer source revision before promotion.');
+    const pe=await tx.priceException.findUniqueOrThrow({where:{id:group.existingId},select:{currentSourceRevisionId:true,sourceType:true,sourceKey:true,archivedAt:true}});
+    if(pe.archivedAt||pe.sourceType!=='EXTERNAL_EXPORT'||pe.sourceKey!==`ROSA:${key(group.peNumber)}`||pe.currentSourceRevisionId!==group.currentRevision?.id)throw new Error('Current Price Exception changed. Preview again.');
+    const sourceRows=parsed.rows.filter(row=>group.sourceLines.includes(row.line));
+    const choice=plan.restoredChoices[groupKey]??{};
+    const revision=await tx.priceExceptionSourceRevision.findUnique({where:{priceExceptionId_contentHash:{priceExceptionId:group.existingId,contentHash:group.fingerprint}}})??await createRevision(tx,group.existingId,group,sourceRows,fileName,choice,actorId);
+    const retiredAt=new Date();
+    await tx.priceExceptionLine.updateMany({where:{priceExceptionId:group.existingId,retiredAt:null},data:{retiredAt}});
+    await tx.priceExceptionLine.createMany({data:lineData(group.existingId,revision.id,group,sourceRows)});
+    const raw={...sourceRows[0].values};for(const [field,line] of Object.entries(choice.headerLines??{}))raw[field as RosaHeaderChoiceField]=sourceRows.find(row=>row.line===line)!.values[field as RosaHeaderChoiceField];
+    const assignee=await tx.user.findUnique({where:{id:group.requestedBy.id!},select:{role:true}});
+    await tx.priceException.update({where:{id:group.existingId},data:{currentSourceRevisionId:revision.id,status:'ACTIVE',distributorAccountId:group.customer.id,varAccountId:group.varAccount.id,endUserAccountId:group.endUser.id,distributorSourceName:raw.Customer,varSourceName:raw.VAR,endUserSourceName:raw['End User'],sourceSalesRepName:raw['Requested By'],assignedSalesRepUserId:usersSalesRepId(group.requestedBy.id,assignee),expirationDate:new Date(`${group.expirationDate}T00:00:00.000Z`),sourceDescription:raw.Description,updatedById:actorId}});
+    return {priceExceptionId:group.existingId,revisionId:revision.id,retiredAt,tiers:group.tiers.length};
+  },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,timeout:60000});
+}
+
+/** Keep operational pricing current while recording the reviewed source submission as immutable evidence. */
+export async function recordRosaRevision(db:PrismaClient,parsed:RosaParsed,fileName:string,expectedDigest:string,groupKey:string,confirmed:boolean,actorId:number,manualChoices:RosaManualChoices={}){
+  if(!confirmed||!expectedDigest)throw new Error('Preview and explicit confirmation required.');
+  return db.$transaction(async tx=>{
+    const plan=await planRosaPriceExceptions(tx,parsed,fileName,manualChoices);
+    if(plan.digest!==expectedDigest||plan.errors.length)throw new Error('Preview changed. Preview the file again.');
+    const group=plan.groups.find(item=>item.groupKey===groupKey);
+    if(!group||!group.existingId||group.revisionAction!=='PROMOTE'||group.disposition!=='REVIEW REQUIRED'||group.conflictingFields.length||[group.requestedBy,group.reviewedBy,group.customer,group.varAccount,group.endUser,...group.tiers.map(tier=>tier.sku)].some(item=>item.issue))throw new Error('Resolve the source revision before recording it.');
+    const pe=await tx.priceException.findUniqueOrThrow({where:{id:group.existingId},select:{currentSourceRevisionId:true,sourceType:true,sourceKey:true,archivedAt:true}});
+    if(pe.archivedAt||pe.sourceType!=='EXTERNAL_EXPORT'||pe.sourceKey!==`ROSA:${key(group.peNumber)}`||pe.currentSourceRevisionId!==group.currentRevision?.id)throw new Error('Current Price Exception changed. Preview again.');
+    const existing=await tx.priceExceptionSourceRevision.findUnique({where:{priceExceptionId_contentHash:{priceExceptionId:group.existingId,contentHash:group.fingerprint}}});
+    if(existing)return {priceExceptionId:group.existingId,revisionId:existing.id,created:false};
+    const sourceRows=parsed.rows.filter(row=>group.sourceLines.includes(row.line));
+    const revision=await createRevision(tx,group.existingId,group,sourceRows,fileName,plan.restoredChoices[groupKey]??{},actorId);
+    return {priceExceptionId:group.existingId,revisionId:revision.id,created:true};
+  },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,timeout:60000});
+}

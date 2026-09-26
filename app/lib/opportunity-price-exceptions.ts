@@ -32,6 +32,7 @@ export function moqEligibility(opportunityQuantity: number, normalizedMoq: strin
 export function priceExceptionEligibilityWhere(skuId: number, currencyCode: string, today = new Date()): Prisma.PriceExceptionLineWhereInput {
   const cutoff = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   return {
+    retiredAt: null,
     productSkuId: skuId,
     productSku: { active: true, product: { active: true, archivedAt: null } },
     approvedUnitPrice: { not: null },

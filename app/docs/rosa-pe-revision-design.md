@@ -1,4 +1,4 @@
-# Rosa PE source revision design (proposal only)
+# Rosa PE source revision design
 
 The current importer keeps one `PriceException` header per normalized PE Number and stores the original CSV rows and reviewed choices in that header and its lines. A changed submission is review-only. The schema has no immutable record for a second source submission and no way to retire old pricing lines from new selection while retaining their Opportunity references. Updating the header JSON or replacing lines would lose evidence or change historical links.
 
@@ -14,4 +14,7 @@ Preview still performs no writes. A changed PE stays **Needs review — Newer so
 
 Promotion is a separate explicit Admin confirmation. In one serializable transaction, recheck the preview digest, current revision pointer, and active CRM references; retire the current PE lines, insert the reviewed revision's lines, update the current PE header fields and pointer, and retain the original header metadata and all prior line rows. New pricing searches and new Opportunity selections must filter to `retiredAt IS NULL`. Existing Opportunity line references and their price snapshots continue to reference retained historical lines. The PE detail view should show current lines by default and provide revision history from the append-only table.
 
-No migration or promotion action is implemented by this proposal.
+
+## Implementation
+
+Implemented in `20260926180000_rosa_pe_source_revisions` and the Rosa review workflow. The migration is intentionally unapplied. New imports create revision #1; existing PEs remain unchanged with a nullable current pointer. Different Requested At or Reviewed At submissions for the same exact PE Number are reviewed separately. Promotion is an explicit Admin action in a serializable transaction. A database trigger prevents updates or deletes of source revision rows.

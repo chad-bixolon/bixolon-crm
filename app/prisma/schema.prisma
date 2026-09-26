@@ -221,6 +221,7 @@ model User {
   updatedProjects         Project[]          @relation("ProjectUpdatedBy")
   createdPriceExceptions  PriceException[]   @relation("PriceExceptionCreatedBy")
   updatedPriceExceptions  PriceException[]   @relation("PriceExceptionUpdatedBy")
+  recordedPeRevisions     PriceExceptionSourceRevision[] @relation("PeRevisionRecordedBy")
   assignedPriceExceptions PriceException[]   @relation("PriceExceptionAssignedSalesRep")
   ownedReports            ReportDefinition[] @relation("ReportOwner")
   createdReports          ReportDefinition[] @relation("ReportCreatedBy")
@@ -799,6 +800,9 @@ model PriceException {
   sourceFileName         String?
   sourceSheet            String?
   sourceMetadata         Json?
+  currentSourceRevisionId Int?                     @unique
+  currentSourceRevision   PriceExceptionSourceRevision? @relation("CurrentPeRevision", fields: [currentSourceRevisionId, id], references: [id, priceExceptionId], onDelete: Restrict)
+  sourceRevisions         PriceExceptionSourceRevision[] @relation("PeSourceRevisions")
   lines                  PriceExceptionLine[]
   archivedAt             DateTime?
   createdById            Int?
@@ -809,6 +813,7 @@ model PriceException {
   updatedAt              DateTime                 @updatedAt
 
   @@unique([sourceType, sourceKey])
+  @@unique([currentSourceRevisionId, id])
   @@index([peCode])
   @@index([status, expirationDate])
   @@index([distributorAccountId])
@@ -836,12 +841,40 @@ model PriceExceptionLine {
   competitor          String?
   sortOrder           Int                  @default(0)
   sourceMetadata      Json?
+  sourceRevisionId    Int?
+  sourceRevision      PriceExceptionSourceRevision? @relation(fields: [sourceRevisionId, priceExceptionId], references: [id, priceExceptionId], onDelete: Restrict)
+  retiredAt           DateTime?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
   @@unique([priceExceptionId, sourceLineKey])
   @@index([productSkuId, priceExceptionId])
   @@index([priceExceptionId, sortOrder])
+  @@index([priceExceptionId, retiredAt, sortOrder])
+}
+
+/// Immutable reviewed source evidence. Only the PE's current pointer and tier effective state change.
+model PriceExceptionSourceRevision {
+  id                 Int @id @default(autoincrement())
+  priceExceptionId   Int
+  priceException     PriceException @relation("PeSourceRevisions", fields: [priceExceptionId], references: [id], onDelete: Restrict)
+  currentFor         PriceException? @relation("CurrentPeRevision")
+  peNumber           String
+  contentHash        String
+  sourceFileName     String
+  sourceReviewedAt   DateTime
+  rawRows            Json
+  reviewedChoices    Json
+  resolvedHeader     Json
+  resolvedTiers      Json
+  recordedById       Int
+  recordedBy         User @relation("PeRevisionRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
+  lines              PriceExceptionLine[]
+  createdAt          DateTime @default(now())
+
+  @@unique([priceExceptionId, contentHash])
+  @@unique([id, priceExceptionId])
+  @@index([priceExceptionId, sourceReviewedAt])
 }
 
 enum ProductCatalogSource {

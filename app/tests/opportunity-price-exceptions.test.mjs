@@ -21,6 +21,7 @@ const line = (id, quantity, price, pe = parent()) => ({ id, priceExceptionId: pe
 test('candidate eligibility is exact resolved SKU, active/unarchived, unexpired, priced, and same currency', () => {
   const where = priceExceptionEligibilityWhere(9, 'USD', new Date('2026-09-20T15:00:00Z'));
   assert.equal(where.productSkuId, 9);
+  assert.equal(where.retiredAt, null);
   assert.deepEqual(where.approvedUnitPrice, { not: null });
   assert.equal(where.currencyCode, 'USD');
   assert.equal(where.priceException.status, 'ACTIVE');

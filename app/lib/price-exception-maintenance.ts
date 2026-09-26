@@ -15,7 +15,7 @@ export async function correctPriceExceptionReference(db:PrismaClient,actor:Actor
       if(!Number.isSafeInteger(lineId)||!lineId||lineId<=0)throw new Error('Choose a pricing line.');
       const sku=await tx.productSku.findUnique({where:{id:targetId},select:{active:true,product:{select:{active:true,archivedAt:true}}}});
       if(!sku?.active||!sku.product.active||sku.product.archivedAt)throw new Error('Choose an active SKU.');
-      const line=await tx.priceExceptionLine.findFirst({where:{id:lineId,priceExceptionId:peId},select:{id:true}});
+      const line=await tx.priceExceptionLine.findFirst({where:{id:lineId,priceExceptionId:peId,retiredAt:null},select:{id:true}});
       if(!line)throw new Error('Pricing line not found.');
       await tx.priceExceptionLine.update({where:{id:line.id},data:{productSkuId:targetId}});
       await tx.priceException.update({where:{id:peId},data:{updatedById:actor.id}});

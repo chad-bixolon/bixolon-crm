@@ -17,7 +17,7 @@ export default async function PriceExceptionCleanupPage() {
         distributorAccount: { select: { id:true,name:true,status:true,archivedAt:true,ownerId:true } },
         varAccount: { select: { id:true,name:true,status:true,archivedAt:true,ownerId:true } },
         endUserAccount: { select: { id:true,name:true,status:true,archivedAt:true,ownerId:true } },
-        lines: { select: { id:true,productSkuId:true,sourceSku:true,productSku:{select:{id:true,partNumber:true,active:true,product:{select:{active:true,archivedAt:true}}}},opportunityProducts:{select:{opportunity:{select:{ownerId:true}}}} } },
+        lines: { where:{retiredAt:null},select: { id:true,productSkuId:true,sourceSku:true,productSku:{select:{id:true,partNumber:true,active:true,product:{select:{active:true,archivedAt:true}}}},opportunityProducts:{select:{opportunity:{select:{ownerId:true}}}} } },
       },
     }),
     prisma.user.findMany({ where: { active:true, archivedAt:null,role:{in:['SALES','SALES_MANAGER']} }, select:{id:true,firstName:true,lastName:true},orderBy:[{lastName:'asc'},{firstName:'asc'}] }),
