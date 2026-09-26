@@ -131,7 +131,7 @@ export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:s
     const automaticUsers={ 'Requested By':resolveUser(raw['Requested By'],userChoices),'Reviewed By':resolveUser(raw['Reviewed By'],userChoices) };
     const automaticAccounts={Customer:resolve(raw.Customer,accountChoices,normalizedName),VAR:resolve(raw.VAR,accountChoices,normalizedName),'End User':resolve(raw['End User'],accountChoices,normalizedName)};
     for(const field of Object.keys(userIds))if(!automaticUsers[field as keyof typeof automaticUsers].issue)throw new Error('User choice is no longer needed. Preview the file again.');
-    for(const field of Object.keys(accountIds))if(!automaticAccounts[field as keyof typeof automaticAccounts].issue)throw new Error('Account choice is no longer needed. Preview the file again.');
+    for(const field of Object.keys(accountIds))if(!automaticAccounts[field as keyof typeof automaticAccounts].issue&&automaticAccounts[field as keyof typeof automaticAccounts].id!==accountIds[field])throw new Error('Account choice is no longer needed. Preview the file again.');
     const requestedBy=Object.hasOwn(userIds,'Requested By')?manualResolution(raw['Requested By'],userIds['Requested By'],userChoices,'Requested By'):automaticUsers['Requested By'];
     const reviewedBy=Object.hasOwn(userIds,'Reviewed By')?manualResolution(raw['Reviewed By'],userIds['Reviewed By'],userChoices,'Reviewed By'):automaticUsers['Reviewed By'];
     const customer=Object.hasOwn(accountIds,'Customer')?manualResolution(raw.Customer,accountIds.Customer,accountChoices,'Customer'):automaticAccounts.Customer;
