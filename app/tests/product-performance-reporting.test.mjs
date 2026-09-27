@@ -32,10 +32,10 @@ test('weighted unit price uses actual line snapshots, not PE approved price',asy
  assert.equal(result.summary[0].lineValue,'190.00');assert.equal(result.summary[0].averageUnitPrice,'19.00');
  assert.equal(result.groups[0].label,'Price Exception');assert.equal(result.rows.find(x=>x.id===2).peCode,'PE-4');
 });
-test('Manual, Catalog and Price Exception groups use the same snapshot calculation',async()=>{
+test('Manual price, Price List and Price Exception groups use the same snapshot calculation',async()=>{
  const rows=[line(1,'POS','M',2,'10'),line(2,'POS','C',3,'20','USD',{priceSource:'CATALOG'}),line(3,'POS','E',4,'30','USD',{priceSource:'PRICE_EXCEPTION',priceExceptionUnitPrice:new Prisma.Decimal('1')})];
  const result=await run(rows,{...config(),groupBy:'priceSource'});
- assert.deepEqual(Object.fromEntries(result.groups.map(group=>[group.label,group.metrics[0].lineValue])),{'Manual':'20.00','Catalog':'60.00','Price Exception':'120.00'});
+ assert.deepEqual(Object.fromEntries(result.groups.map(group=>[group.label,group.metrics[0].lineValue])),{'Manual price':'20.00','Price List':'60.00','Price Exception':'120.00'});
  assert.equal(result.summary[0].lineValue,'200.00');
 });
 test('currency totals remain partitioned, and archived lines and Opportunities are excluded in query',async()=>{

@@ -7,6 +7,7 @@ import type {
 } from '@prisma/client';
 import type { Actor } from './authorization';
 import { canViewPriceException, type PriceExceptionVisibilityRecord } from './price-exception-visibility';
+import type { PriceExceptionAccounts } from './price-exception-account-match';
 
 type OpportunityForForm = {
   name: string;
@@ -83,6 +84,7 @@ export type OpportunityFormInitial = {
     priceExceptionCurrencyCode: string | null;
     priceExceptionSourceQty: string | null;
     priceExceptionAccountIds: number[];
+    priceExceptionAccounts: PriceExceptionAccounts | null;
     odmCustomerPriceId: number | null;
     odmCustomerAccountId: number | null;
     odmCustomerBasePrice: string | null;
@@ -134,6 +136,11 @@ export function serializeOpportunityForForm(opportunity: OpportunityForForm, act
             line.priceExceptionLine.priceException.endUserAccountId,
           ].filter((accountId): accountId is number => accountId !== null)
         : [],
+      priceExceptionAccounts: line.priceExceptionLine && canViewPriceException(actor, line.priceExceptionLine.priceException)
+        ? { distributorAccountId: line.priceExceptionLine.priceException.distributorAccountId,
+            varAccountId: line.priceExceptionLine.priceException.varAccountId,
+            endUserAccountId: line.priceExceptionLine.priceException.endUserAccountId }
+        : null,
       odmCustomerPriceId: line.odmCustomerPriceId,
       odmCustomerAccountId: line.odmCustomerAccountId,
       odmCustomerBasePrice: line.odmCustomerBasePrice?.toFixed(2) ?? null,

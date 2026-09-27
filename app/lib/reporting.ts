@@ -412,7 +412,7 @@ type ProductLineDbRow = Prisma.OpportunityProductGetPayload<{include:typeof prod
 export type ProductMetrics = {currency:string;unit:string;lineValue:string;quantity:number;opportunityCount:number;productLineCount:number;averageUnitPrice:string};
 export type ProductDetailRow = {id:number;opportunityId:number;opportunity:string;accounts:{id:number;name:string}[];owner:string;stage:string;forecastCategory:string;closeDate:string|null;productCategory:string;product:string;productId:number;sku:string;catalogSource:string;odmCustomer:string;quantity:number;unit:string;unitPrice:string;lineValue:string;priceSource:string;currency:string;project:string;peCode:string;groupKeys:string[]};
 export type ProductPerformanceResult = {reportType:'PRODUCT_PERFORMANCE';summary:ProductMetrics[];groups:{key:string;label:string;metrics:ProductMetrics[];lineIds:number[]}[];rows:ProductDetailRow[];currencies:string[];filterCount:number;semanticNote:string};
-const priceSourceLabel = (source:string) => source==='PRICE_EXCEPTION'?'Price Exception':source==='ODM_CUSTOMER'?'ODM Customer':source==='CATALOG'?'Catalog':'Manual';
+const priceSourceLabel = (source:string) => source==='PRICE_EXCEPTION'?'Price Exception':source==='ODM_CUSTOMER'?'Customer Pricing':source==='CATALOG'?'Price List':'Manual price';
 function productGroupValues(row:ProductLineDbRow, groupBy:string|null):{key:string;label:string}[] {
   const opportunity=row.opportunity;
   if(groupBy==='productCategory')return [{key:String(row.product.categoryId??'none'),label:row.product.category?.name??'No Product Category'}];

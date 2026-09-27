@@ -1,6 +1,6 @@
 # Opportunity Product price provenance
 
-`OpportunityProduct.priceSource` has four database values. The UI calls `ODM_CUSTOMER` **Account customer price**. `unitPrice` is the Opportunity unit price; the other amount columns are historical snapshots. A line update replaces provenance for the chosen source, while an unchanged customer price or Price Exception selection retains its original snapshot.
+`OpportunityProduct.priceSource` has four database values. The UI calls `ODM_CUSTOMER` **Customer Pricing**. `unitPrice` is the Opportunity unit price; the other amount columns are historical snapshots. A line update replaces provenance for the chosen source, while an unchanged Customer Pricing or Price Exception selection retains its original snapshot.
 
 | Source | Required fields | Null fields | Optional fields | Provenance relationship |
 | --- | --- | --- | --- | --- |

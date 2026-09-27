@@ -40,8 +40,8 @@ test('Account context and both Opportunity candidate scopes embed the same SALES
   let allQuery;
   const row = { id: 1, priceExceptionId: 2, productSkuId: 9, approvedUnitPrice: new Prisma.Decimal('10'), currencyCode: 'USD', sourceQuantity: new Prisma.Decimal('1'), sourceQuantityRaw: '1', sourceUnit: null, comments: null, sortOrder: 1, priceException: { id: 2, peCode: 'PE', status: 'ACTIVE', archivedAt: null, expirationDate: null, assignedSalesRepUserId: 10, sourceType: 'EXTERNAL_EXPORT', distributorAccountId: 7, varAccountId: null, endUserAccountId: null, distributorSourceName: null, varSourceName: null, endUserSourceName: null, sourceDescription: null, distributorAccount: { id: 7, name: 'Account' }, varAccount: null, endUserAccount: null } };
   const db = { priceExceptionLine: { findMany: async args => { if (args.where.priceException.AND.length === 3) relatedQuery = args.where; else allQuery = args.where; return [row]; } } };
-  await findPriceExceptionCandidates(db, { skuId: 9, currencyCode: 'USD', opportunityAccountIds: [7], relatedOnly: true, actor: sales });
-  await findPriceExceptionCandidates(db, { skuId: 9, currencyCode: 'USD', opportunityAccountIds: [7], relatedOnly: false, actor: sales });
+  await findPriceExceptionCandidates(db, { skuId: 9, currencyCode: 'USD', opportunityParticipants: [{ accountId: 7, roles: ['DISTRIBUTOR'] }], relatedOnly: true, actor: sales });
+  await findPriceExceptionCandidates(db, { skuId: 9, currencyCode: 'USD', opportunityParticipants: [{ accountId: 7, roles: ['DISTRIBUTOR'] }], relatedOnly: false, actor: sales });
   assert.deepEqual(relatedQuery.priceException.AND[1], priceExceptionVisibilityWhere(sales));
   assert.deepEqual(allQuery.priceException.AND[1], priceExceptionVisibilityWhere(sales));
 });
@@ -65,7 +65,7 @@ test('ADMIN can assign, change, and clear without touching source salesperson id
 });
 
 test('hidden PE line cannot be newly submitted, while an unchanged reassigned historical line keeps its snapshot', async () => {
-  const hiddenParent = { id: 40, peCode: 'PE-HIDDEN', status: 'ACTIVE', archivedAt: null, expirationDate: null, assignedSalesRepUserId: 99, sourceType: 'EXTERNAL_EXPORT' };
+  const hiddenParent = { id: 40, peCode: 'PE-HIDDEN', status: 'ACTIVE', archivedAt: null, expirationDate: null, assignedSalesRepUserId: 99, sourceType: 'EXTERNAL_EXPORT', distributorAccountId: null, varAccountId: null, endUserAccountId: 7 };
   const selected = { id: 102, productSkuId: 9, approvedUnitPrice: new Prisma.Decimal('189'), currencyCode: 'USD', sourceQuantity: new Prisma.Decimal('1'), sourceQuantityRaw: '1', sourceUnit: null, priceException: hiddenParent };
   const old = { id: 55, opportunityId: 5, productId: 3, skuId: 9, quantity: 1, estimatedUnitPrice: new Prisma.Decimal('185'), archivedAt: null, priceSource: 'PRICE_EXCEPTION', catalogPriceTier: null, priceExceptionLineId: 102, priceExceptionCode: 'SNAPSHOT', priceExceptionUnitPrice: new Prisma.Decimal('189'), priceExceptionCurrencyCode: 'USD', priceExceptionSourceQty: '1' };
   const makeDb = existing => {

@@ -1,8 +1,9 @@
 import type { ForecastCategory, OpportunityPartyRole, OpportunityProductPriceSource, ProductPriceTier } from "@prisma/client";
+import type { PriceExceptionAccounts } from './price-exception-account-match';
 
 export type ParticipantDraft = { accountId: number; roles: OpportunityPartyRole[] };
 export type ContactDraft = { contactId: number; isPrimary: boolean };
-export type LineDraft = { id: number; productId: number; skuId?: number | null; quantity: string; price: string; priceSource: OpportunityProductPriceSource; catalogPriceTier: ProductPriceTier | null; priceExceptionLineId: number | null; priceExceptionCode: string | null; priceExceptionUnitPrice: string | null; priceExceptionCurrencyCode: string | null; priceExceptionSourceQty: string | null; priceExceptionAccountIds: number[]; odmCustomerPriceId?: number | null; odmCustomerAccountId?: number | null; odmCustomerBasePrice?: string | null; odmCustomerTariffPercent?: string | null; odmCustomerTariffAmount?: string | null; odmCustomerFinalUnitPrice?: string | null };
+export type LineDraft = { id: number; productId: number; skuId?: number | null; quantity: string; price: string; priceSource: OpportunityProductPriceSource; catalogPriceTier: ProductPriceTier | null; priceExceptionLineId: number | null; priceExceptionCode: string | null; priceExceptionUnitPrice: string | null; priceExceptionCurrencyCode: string | null; priceExceptionSourceQty: string | null; priceExceptionAccountIds: number[]; priceExceptionAccounts?: PriceExceptionAccounts | null; odmCustomerPriceId?: number | null; odmCustomerAccountId?: number | null; odmCustomerBasePrice?: string | null; odmCustomerTariffPercent?: string | null; odmCustomerTariffAmount?: string | null; odmCustomerFinalUnitPrice?: string | null };
 export type OpportunityDraft = {
   name: string; description: string; competitorId: string; currentProductBeingUsed: string; customerPainPoints: string; ownerId: string; stageId: string; expectedCloseDate: string;
   probability: string; forecastCategory: ForecastCategory | ""; currencyCode: string; projectIds: number[];
@@ -26,6 +27,12 @@ export function removeParticipant(draft: OpportunityDraft, accountId: number): O
 }
 export function setParticipantRoles(draft: OpportunityDraft, accountId: number, roles: OpportunityPartyRole[]): OpportunityDraft {
   return { ...draft, participants: draft.participants.map((p) => p.accountId === accountId ? { ...p, roles } : p) };
+}
+export function editLineUnitPrice(line: LineDraft, price: string): LineDraft {
+  if (price === line.price || !['CATALOG', 'PRICE_EXCEPTION'].includes(line.priceSource)) return { ...line, price };
+  return { ...line, price, priceSource: 'MANUAL', catalogPriceTier: null, priceExceptionLineId: null,
+    priceExceptionCode: null, priceExceptionUnitPrice: null, priceExceptionCurrencyCode: null,
+    priceExceptionSourceQty: null, priceExceptionAccountIds: [], priceExceptionAccounts: null };
 }
 export function readDraft(raw: string | null, fallback: OpportunityDraft): OpportunityDraft {
   if (!raw) return fallback;

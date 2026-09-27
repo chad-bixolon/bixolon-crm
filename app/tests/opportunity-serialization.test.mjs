@@ -116,6 +116,7 @@ test('Opportunity edit props serialize manual, catalog, PE, and ODM snapshots as
   assert.equal(initial.lines[2].price, '410.25');
   assert.equal(initial.lines[2].priceExceptionUnitPrice, '400.10');
   assert.deepEqual(initial.lines[2].priceExceptionAccountIds, [12, 13]);
+  assert.deepEqual(initial.lines[2].priceExceptionAccounts, { distributorAccountId: 12, varAccountId: 13, endUserAccountId: null });
   assert.equal('priceExceptionLine' in initial.lines[2], false);
   assert.equal(initial.lines[3].odmCustomerBasePrice, '100.00');
   assert.equal(initial.lines[3].odmCustomerTariffPercent, '10.0000');

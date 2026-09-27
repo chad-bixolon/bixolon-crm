@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { Actor } from "./authorization";
 import { priceExceptionVisibilityWhere } from "./price-exception-visibility";
+import { priceExceptionMatchesParticipants, type OpportunityParticipant, type PriceExceptionAccounts } from './price-exception-account-match';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 export type PriceExceptionCandidate = {
@@ -15,6 +16,8 @@ export type PriceExceptionCandidate = {
   comments: string | null;
   parties: { role: string; accountId: number | null; accountName: string | null; sourceName: string | null; matchesOpportunity: boolean }[];
   matchedRoles: string[];
+  accountLinks: PriceExceptionAccounts;
+  applicable: boolean;
 };
 
 export type MoqEligibility = "ELIGIBLE" | "INELIGIBLE" | "UNKNOWN";
@@ -56,9 +59,9 @@ function numericSearch(q: string): Prisma.PriceExceptionLineWhereInput[] {
 
 export async function findPriceExceptionCandidates(
   db: Db,
-  input: { skuId: number; currencyCode: string; opportunityAccountIds: number[]; relatedOnly: boolean; query?: string; today?: Date; actor?: Actor },
+  input: { skuId: number; currencyCode: string; opportunityParticipants: OpportunityParticipant[]; relatedOnly: boolean; query?: string; today?: Date; actor?: Actor },
 ): Promise<PriceExceptionCandidate[]> {
-  const accountIds = [...new Set(input.opportunityAccountIds)];
+  const accountIds = [...new Set(input.opportunityParticipants.map(participant => participant.accountId))];
   const q = input.query?.trim().slice(0, 100) ?? "";
   const where: Prisma.PriceExceptionLineWhereInput = priceExceptionEligibilityWhere(input.skuId, input.currencyCode, input.today);
   if (input.actor) {
@@ -103,9 +106,9 @@ export async function findPriceExceptionCandidates(
       endUserAccount: { select: { id: true, name: true } },
     } } },
   });
-  const participantIds = new Set(accountIds);
   return rows.map((line) => {
     const pe = line.priceException;
+    const accountLinks = { distributorAccountId: pe.distributorAccountId, varAccountId: pe.varAccountId, endUserAccountId: pe.endUserAccountId };
     const parties = [
       { role: "Distributor/OEM", account: pe.distributorAccount, sourceName: pe.distributorSourceName },
       { role: "VAR/ISV", account: pe.varAccount, sourceName: pe.varSourceName },
@@ -115,7 +118,11 @@ export async function findPriceExceptionCandidates(
       accountId: party.account?.id ?? null,
       accountName: party.account?.name ?? null,
       sourceName: party.sourceName,
-      matchesOpportunity: !!party.account && participantIds.has(party.account.id),
+      matchesOpportunity: !!party.account && priceExceptionMatchesParticipants({
+        distributorAccountId: party.role === 'Distributor/OEM' ? party.account.id : null,
+        varAccountId: party.role === 'VAR/ISV' ? party.account.id : null,
+        endUserAccountId: party.role === 'End User' ? party.account.id : null,
+      }, input.opportunityParticipants),
     }));
     return {
       lineId: line.id,
@@ -129,6 +136,8 @@ export async function findPriceExceptionCandidates(
       comments: line.comments ?? pe.sourceDescription,
       parties,
       matchedRoles: parties.filter(party => party.matchesOpportunity).map(party => party.role),
+      accountLinks,
+      applicable: priceExceptionMatchesParticipants(accountLinks, input.opportunityParticipants),
     };
   });
 }

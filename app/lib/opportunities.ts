@@ -6,6 +6,7 @@ import { moqEligibility, priceExceptionSnapshot } from "./opportunity-price-exce
 import type { Actor } from "./authorization";
 import { canViewPriceException } from "./price-exception-visibility";
 import { odmCustomerSnapshot } from './opportunity-odm-pricing';
+import { priceExceptionMatchesParticipants, unrelatedPriceExceptionMessage } from './price-exception-account-match';
 export type Participant = { accountId: number; roles: OpportunityPartyRole[] };
 export type OpportunityContactInput = { contactId: number; isPrimary: boolean };
 export type Line = { id?: number; productId: number; skuId?: number | null; quantity: number; price: string; priceSource?: OpportunityProductPriceSource; catalogPriceTier?: ProductPriceTier | null; priceExceptionLineId?: number | null; odmCustomerPriceId?: number | null; odmCustomerAccountId?: number | null };
@@ -119,7 +120,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       tx.product.findMany({ where: { id: { in: input.lines.map((l) => l.productId) }, active: true, archivedAt: null }, select: { id: true } }),
       tx.project.findMany({ where: { AND: [operationalProjectWhere], id: { in: input.projectIds } }, select: { id: true, archivedAt: true } }),
       input.lines.some(line => line.skuId) ? tx.productSku.findMany({ where: { id: { in: input.lines.flatMap(line => line.skuId ? [line.skuId] : []) } }, select: { id: true, productId: true, active: true, catalogSource: true, odmSubtype: true } }) : Promise.resolve([]),
-      input.lines.some(line => line.priceSource === "CATALOG") ? tx.productPrice.findMany({ where: { OR: input.lines.filter(line => line.priceSource === "CATALOG" && line.skuId && line.catalogPriceTier).map(line => ({ skuId: line.skuId!, currencyCode: input.currencyCode, tier: line.catalogPriceTier! })) }, select: { skuId: true, currencyCode: true, tier: true } }) : Promise.resolve([]),
+      input.lines.some(line => line.priceSource === "CATALOG") ? tx.productPrice.findMany({ where: { OR: input.lines.filter(line => line.priceSource === "CATALOG" && line.skuId && line.catalogPriceTier).map(line => ({ skuId: line.skuId!, currencyCode: input.currencyCode, tier: line.catalogPriceTier! })) }, select: { skuId: true, currencyCode: true, tier: true, amount: true } }) : Promise.resolve([]),
       input.lines.some(line => line.priceSource === "PRICE_EXCEPTION") ? tx.priceExceptionLine.findMany({ where: { id: { in: input.lines.flatMap(line => line.priceExceptionLineId ? [line.priceExceptionLineId] : []) } }, include: { priceException: true } }) : Promise.resolve([]),
       input.lines.some(line => line.priceSource === "ODM_CUSTOMER") ? tx.productSkuOdmCustomerPrice.findMany({ where: { id: { in: input.lines.flatMap(line => line.odmCustomerPriceId ? [line.odmCustomerPriceId] : []) } }, include: { odmCustomer: { include: { sku: true } } } }) : Promise.resolve([]),
     ]);
@@ -149,12 +150,20 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
         const expected = retaining ? old.odmCustomerFinalUnitPrice : selected.finalUnitPrice;
         if (!expected || !expected.equals(line.price)) throw new Error('Opportunity Unit Price must equal the selected customer final price. Choose Manual for a different price.');
       }
-      if (line.priceSource === "CATALOG" && (!line.skuId || skus.some(sku => sku.id === line.skuId && sku.catalogSource === 'ODM' && sku.odmSubtype === 'CUSTOMER_SPECIFIC') || !catalogPrices.some(price => price.skuId === line.skuId && price.currencyCode === input.currencyCode && price.tier === line.catalogPriceTier))) throw new Error("Choose an available catalog price for the Opportunity currency.");
+      if (line.priceSource === "CATALOG") {
+        const selected = catalogPrices.find(price => price.skuId === line.skuId && price.currencyCode === input.currencyCode && price.tier === line.catalogPriceTier);
+        if (!line.skuId || skus.some(sku => sku.id === line.skuId && sku.catalogSource === 'ODM' && sku.odmSubtype === 'CUSTOMER_SPECIFIC') || !selected) throw new Error("Choose an available catalog price for the Opportunity currency.");
+        const old = existingLines.find(candidate => candidate.id === line.id);
+        const unchangedHistoricalPrice = !!old && old.priceSource === 'CATALOG' && old.skuId === line.skuId && old.catalogPriceTier === line.catalogPriceTier && old.estimatedUnitPrice.equals(line.price);
+        if (!unchangedHistoricalPrice && !selected.amount.equals(line.price)) throw new Error('Changing a Price List unit price requires Manual price.');
+      }
       if (line.priceSource === "PRICE_EXCEPTION") {
         if (!line.skuId) throw new Error("Price Exception pricing requires a resolved SKU.");
         const selected = peLines.find(candidate => candidate.id === line.priceExceptionLineId);
         const old = existingLines.find(candidate => candidate.id === line.id);
         const retainingHistoricalSelection = !!selected && old?.priceSource === "PRICE_EXCEPTION" && old.priceExceptionLineId === selected.id && old.skuId === line.skuId && old.priceExceptionCurrencyCode === input.currencyCode;
+        if (!selected) throw new Error("Choose a Price Exception line for this SKU and Opportunity currency.");
+        if (!priceExceptionMatchesParticipants(selected.priceException, input.participants)) throw new Error(unrelatedPriceExceptionMessage);
         const cutoff = new Date(); cutoff.setUTCHours(0, 0, 0, 0);
         if (!retainingHistoricalSelection && (!selected || selected.retiredAt || selected.productSkuId !== line.skuId || !selected.approvedUnitPrice || selected.currencyCode !== input.currencyCode)) throw new Error("Choose a Price Exception line for this SKU and Opportunity currency.");
         if (!retainingHistoricalSelection && (!actor || !canViewPriceException(actor, selected!.priceException))) throw new Error("That Price Exception is not available to this user.");
@@ -163,6 +172,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
         const pricingChanged = !old || old.quantity !== line.quantity || !old.estimatedUnitPrice.equals(line.price) || !retainingHistoricalSelection;
         if (eligibility === "UNKNOWN" && pricingChanged) throw new Error("This Price Exception has no resolved numeric MOQ and cannot be applied directly.");
         if (eligibility === "INELIGIBLE" && pricingChanged) throw new Error("Opportunity quantity does not meet the selected Price Exception MOQ.");
+        if ((!retainingHistoricalSelection || !old.estimatedUnitPrice.equals(line.price)) && !selected!.approvedUnitPrice?.equals(line.price)) throw new Error('Changing a Price Exception unit price requires Manual price.');
       }
     }
     const data = { name: input.name, description: input.description, competitorId: input.competitorId ?? null, currentProductBeingUsed: input.currentProductBeingUsed ?? null, customerPainPoints: input.customerPainPoints ?? null, ownerId: input.ownerId, stageId: input.stageId, expectedCloseDate: input.expectedCloseDate, probability: input.probability, forecastCategory: categoryForStage(stage, input.forecastCategory, existing, input.stageId), currencyCode: input.currencyCode };

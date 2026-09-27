@@ -31,7 +31,7 @@ curl --fail --silent --show-error "$APP_URL/api/health"
 Then use a test Opportunity with a participating Account and eligible SKU to perform these production UI saves in order:
 
 1. Select **Manual price**, enter a unit price, and save. Reopen the line and verify Manual and the entered price.
-2. Select **Account customer price** for an Account with a configured customer price, and save. Reopen the line and verify the Account, customer price, tariff, final unit price, and currency snapshot.
+2. Select **Customer Pricing** for an Account with a configured customer price, and save. Reopen the line and verify the Account, base customer price, tariff, final unit price, and currency snapshot.
 3. Select an eligible **Price Exception** for the SKU and Opportunity currency with a matching participating Account and satisfied MOQ, and save. Reopen the line and verify the Price Exception code, approved price, and MOQ snapshot.
 
 The existing Opportunity UI and Prisma schema already support these selections. The pending constraint migration is the only database change required for these paths.
