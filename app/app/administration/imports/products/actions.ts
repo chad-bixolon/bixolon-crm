@@ -70,7 +70,7 @@ export async function previewProductUpload(form:FormData) {
   if (form.get('catalogSource') === 'SPECIAL_SKU_LIST') return {error:'Use ODM with a subtype for custom SKUs.',sheets:[]};
   const upload=await readProductUpload(form);
   if (!upload.csv) return {error:upload.error ?? 'Upload could not be read.',sheets:'sheets' in upload ? upload.sheets : []};
-  try { return {plan:await planProductImport(prisma,upload.csv,selectedSource(form),reviewChoices(form)),accounts:await prisma.account.findMany({where:{archivedAt:null,status:'ACTIVE'},select:{id:true,name:true},orderBy:{name:'asc'}}),accountRecords:await prisma.account.findMany({select:{id:true,name:true,status:true,archivedAt:true},orderBy:{name:'asc'}}),sheets:'sheets' in upload ? upload.sheets : [],selectedSheet:'selectedSheet' in upload ? upload.selectedSheet : undefined,ignoredSheets:'ignoredSheets' in upload ? upload.ignoredSheets : []}; }
+  try { return {plan:await planProductImport(prisma,upload.csv,selectedSource(form),reviewChoices(form)),accounts:await prisma.account.findMany({where:{archivedAt:null,status:'ACTIVE'},select:{id:true,name:true,businessRoles:{select:{role:true}}},orderBy:{name:'asc'}}),accountRecords:await prisma.account.findMany({select:{id:true,name:true,status:true,archivedAt:true,businessRoles:{select:{role:true}}},orderBy:{name:'asc'}}),sheets:'sheets' in upload ? upload.sheets : [],selectedSheet:'selectedSheet' in upload ? upload.selectedSheet : undefined,ignoredSheets:'ignoredSheets' in upload ? upload.ignoredSheets : []}; }
   catch { return {error:'Could not prepare the catalog preview. Check the file and try again.',sheets:[]}; }
 }
 export async function confirmProductUpload(form:FormData,digest:string) {

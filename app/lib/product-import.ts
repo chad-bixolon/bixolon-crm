@@ -156,7 +156,7 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
     if (skuMatch && normalizeModel(skuMatch.product.name)!==modelKey && skuMatch.product.skus.length>1) messages.push('Changing a model shared by multiple SKUs is ambiguous. Review the Product manually.');
     if (selectedProduct && skuMatch && selectedProduct.id!==skuMatch.product.id) messages.push('Selected Product does not own the resolved SKU.');
     if (selectedProduct && uniqueBase && selectedProduct.id!==uniqueBase.product.id) messages.push('Selected Product differs from the exact standard SKU family; review this relationship.');
-    if (fromOdm && skuMatch && skuMatch.sku.catalogSource!=='ODM') messages.push('Existing SKU is not ODM; review before changing its catalog classification.');
+    if (fromOdm && skuMatch && skuMatch.sku.catalogSource!=='ODM') messages.push('This SKU already exists as a standard SKU. Only change it to ODM if the SKU itself is customized.');
     const product=skuMatch?.product ?? selectedProduct ?? uniqueBase?.product ?? modelMatch;
     const sku=skuMatch?.sku;
     if (catalogSource === 'ODM' && sku && allSkus.some(entry=>entry.sku.baseSkuId===sku.id)) messages.push('An ODM SKU cannot be used as a Base SKU.');
@@ -216,7 +216,7 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
       try { const checked=calculateOdmCustomerPrice({ customerPrice: chosenPrice, previousPrice: [source?.oldPrice,source?.priorPrice].find(value=>value&&value!=='-'&&!/^N\/A$/i.test(value)), tariffPercent: chosenTariffPercent, tariffAmount: chosenTariffAmount, currencyCode: currency || 'USD', notes: source?.note });if(after.odmCustomerAccountId)odmPricing=checked; }
       catch (error) { messages.push(`Customer pricing needs review: ${error instanceof Error ? error.message : 'invalid price or tariff'}`); }
     }
-    if (fromOdm && !['CUSTOMER_SPECIFIC','SPECIAL_CONFIGURATION'].includes(after.odmSubtype ?? '') && (source?.oldPrice || source?.newPrice || source?.tariffPercent || source?.tariffAmount)) messages.push('WARNING: Source prices and tariff retained; this ODM subtype has no active customer pricing.');
+    if (fromOdm && !['CUSTOMER_SPECIFIC','SPECIAL_CONFIGURATION'].includes(after.odmSubtype ?? '') && (source?.oldPrice || source?.newPrice || source?.tariffPercent || source?.tariffAmount)) messages.push('WARNING: Workbook prices and tariff will be kept for reference. Choose Customer-Specific or Special Configuration to import customer pricing for this SKU.');
     for (const spec of tierFields) {
       const old=oldPrices.find(price=>price.tier===spec.tier);
       if (before) before[spec.field]=old?.amount.toFixed(2);
@@ -261,7 +261,7 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
     const key = `${normalizePartNumber(item.after.partNumber)}:${item.after.odmCustomerAccountId}`;
     const prior = pricingByRelationship.get(key);
     if (prior && JSON.stringify(prior.odmPricing) !== JSON.stringify(item.odmPricing)) {
-      for (const conflict of [prior, item]) { conflict.messages.push('Repeated SKU/Account has conflicting customer pricing; skip one source entry or correct the pricing.'); conflict.classes = ['ERROR']; conflict.status='NEEDS REVIEW'; }
+      for (const conflict of [prior, item]) { conflict.messages.push('This customer and SKU appear more than once with different prices. Review the matching rows and choose which price should be active.'); conflict.classes = ['ERROR']; conflict.status='NEEDS REVIEW'; }
     } else if (!prior) pricingByRelationship.set(key, item);
   }
   const odmItems=items.filter(item=>!!item.source);
