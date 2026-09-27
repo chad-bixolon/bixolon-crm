@@ -173,7 +173,7 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
     const relationshipMatches=customer && sku ? (sku.odmCustomers ?? []).filter(link=>link.sourceCustomerName?.split('\n').some(name=>normalizeAccountName(name)===customerKey)).map(link=>accounts.find(account=>account.id===link.accountId)).filter((account):account is typeof accounts[number]=>!!account) : [];
     const relationshipAccount=relationshipMatches.length===1 ? relationshipMatches[0] : undefined;
     if (relationshipMatches.length>1 || (relationshipAccount && matches.length===1 && relationshipAccount.id!==matches[0].id)) messages.push('Existing ODM customer relationship conflicts with Account name; choose the Account.');
-    if (customer && after.odmSubtype==='CUSTOMER_SPECIFIC' && !skipped) {
+    if (customer && ['CUSTOMER_SPECIFIC','SPECIAL_CONFIGURATION'].includes(after.odmSubtype ?? '') && !skipped) {
       const resolved=mapped ?? (matches.length===1 ? matches[0] : undefined) ?? relationshipAccount;
       const status:CustomerResolution['status']=mapped?'Manually Mapped':resolved?'Matched':matches.length>1?'Needs Review':'Unresolved';
       const priorCustomer=customers.get(customerKey);
@@ -186,7 +186,7 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
       const rowAccount=accounts.find(account=>account.id===rowAccountId);
       if (rowAccountId && !rowAccount) messages.push('Selected ODM Customer Account is no longer available.');
       after.odmCustomer=customer || undefined;
-      after.odmCustomerAccountId=after.odmSubtype==='CUSTOMER_SPECIFIC' ? rowAccount?.id ?? mapped?.id ?? (matches.length===1?matches[0].id:undefined) ?? relationshipAccount?.id ?? (!customer && !fromOdm?before?.odmCustomerAccountId:undefined) : undefined;
+      after.odmCustomerAccountId=['CUSTOMER_SPECIFIC','SPECIAL_CONFIGURATION'].includes(after.odmSubtype ?? '') ? rowAccount?.id ?? mapped?.id ?? (matches.length===1?matches[0].id:undefined) ?? relationshipAccount?.id ?? (!customer && !fromOdm?before?.odmCustomerAccountId:undefined) : undefined;
       after.odmCustomerSourceName=customer || before?.odmCustomerSourceName;
       if (after.odmSubtype==='CUSTOMER_SPECIFIC' && !after.odmCustomerAccountId) messages.push('Customer-specific ODM needs an existing SalesHub Account before import.');
       const base=review.baseSkus?.[reviewKey] ?? review.baseSkus?.[key] ?? (get('base_sku') || (review.applyRecommendations && !incomingOdmKeys.has(stem) ? uniqueBase?.sku.partNumber : undefined));
@@ -212,11 +212,11 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
     if (noteChoice==='NOTES' && !notePrices.length) messages.push('Notes have no usable price; enter a corrected price.');
     if (tariffChoice==='CORRECTED' && !chosenTariffPercent && !chosenTariffAmount) messages.push('Enter a corrected tariff percentage or amount.');
     let odmPricing: ReturnType<typeof calculateOdmCustomerPrice> | undefined;
-    if (fromOdm && after.odmSubtype === 'CUSTOMER_SPECIFIC' && chosenPrice && chosenPrice !== '-' && !skipped && !/\bdiscontinued\b/i.test(source?.note ?? '')) {
+    if (fromOdm && ['CUSTOMER_SPECIFIC','SPECIAL_CONFIGURATION'].includes(after.odmSubtype ?? '') && chosenPrice && chosenPrice !== '-' && !skipped && !/\bdiscontinued\b/i.test(source?.note ?? '')) {
       try { const checked=calculateOdmCustomerPrice({ customerPrice: chosenPrice, previousPrice: [source?.oldPrice,source?.priorPrice].find(value=>value&&value!=='-'&&!/^N\/A$/i.test(value)), tariffPercent: chosenTariffPercent, tariffAmount: chosenTariffAmount, currencyCode: currency || 'USD', notes: source?.note });if(after.odmCustomerAccountId)odmPricing=checked; }
       catch (error) { messages.push(`Customer pricing needs review: ${error instanceof Error ? error.message : 'invalid price or tariff'}`); }
     }
-    if (fromOdm && after.odmSubtype !== 'CUSTOMER_SPECIFIC' && (source?.oldPrice || source?.newPrice || source?.tariffPercent || source?.tariffAmount)) messages.push('WARNING: Source prices and tariff retained; non-customer-specific ODM has no active customer pricing.');
+    if (fromOdm && !['CUSTOMER_SPECIFIC','SPECIAL_CONFIGURATION'].includes(after.odmSubtype ?? '') && (source?.oldPrice || source?.newPrice || source?.tariffPercent || source?.tariffAmount)) messages.push('WARNING: Source prices and tariff retained; this ODM subtype has no active customer pricing.');
     for (const spec of tierFields) {
       const old=oldPrices.find(price=>price.tier===spec.tier);
       if (before) before[spec.field]=old?.amount.toFixed(2);
@@ -313,7 +313,7 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
   counts.priceChanges+=changedRelationships.size;
   counts.updatedProducts=productUpdates.size;
   counts.updatedSkus=updatedSkuKeys.size;
-  return {items,customers:[...customers.values()],decisionGroups:productImportDecisionGroups(items),errors:[],notices:odmWorkbook?['Choose an ODM subtype for each SKU candidate. Resolved Customer-Specific prices are saved per SKU and Account.','Workbook pricing is never written to generic catalog tiers. Blank Customer cells are left unresolved.']:[],counts,digest:digestOf(items)};
+  return {items,customers:[...customers.values()],decisionGroups:productImportDecisionGroups(items),errors:[],notices:odmWorkbook?['Choose an ODM subtype for each SKU candidate. Resolved customer prices are saved per SKU and Account for Customer-Specific and Special Configuration.','Workbook pricing is never written to generic catalog tiers. Blank Customer cells are left unresolved.']:[],counts,digest:digestOf(items)};
 }
 
 export function productImportDecisionGroups(items:ProductImportItem[]):ProductImportDecisionGroup[] {
@@ -377,7 +377,7 @@ export async function applyProductImport(db:PrismaClient,csv:string,expectedDige
         const existing=await tx.productSkuOdmCustomer.findUnique({where,select:{sourceCustomerName:true}});
         const names=[...new Set([...(existing?.sourceCustomerName?.split('\n') ?? []),...(value.odmCustomerSourceName ? [value.odmCustomerSourceName] : [])])];
         await tx.productSkuOdmCustomer.upsert({where,create:{skuId,accountId:value.odmCustomerAccountId,sourceCustomerName:names.join('\n') || null},update:{sourceCustomerName:names.join('\n') || null,archivedAt:null}});
-        if (item.odmPricing && value.odmSubtype === 'CUSTOMER_SPECIFIC') {
+        if (item.odmPricing && ['CUSTOMER_SPECIFIC','SPECIAL_CONFIGURATION'].includes(value.odmSubtype ?? '')) {
           const active = await tx.productSkuOdmCustomerPrice.findFirst({where:{skuId,accountId:value.odmCustomerAccountId,archivedAt:null}});
           const terms=item.odmPricing;
           if (!active || active.currencyCode!==terms.currencyCode || !active.customerPrice.equals(terms.customerPrice) || (active.previousPrice?.toFixed(2)??null)!==terms.previousPrice || !active.tariffPercent.equals(terms.tariffPercent) || !active.tariffAmount.equals(terms.tariffAmount) || active.notes!==terms.notes) {

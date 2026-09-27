@@ -7,7 +7,7 @@ import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, filename);
-const { pricesForCurrency, defaultPrice, selectCatalogItem, odmCustomerWarning } = Module.createRequire(import.meta.url)(path.join(root, 'lib/catalog-picker.ts'));
+const { pricesForCurrency, defaultPrice, selectCatalogItem, odmCustomerWarning, matchingOdmCustomers } = Module.createRequire(import.meta.url)(path.join(root, 'lib/catalog-picker.ts'));
 const item = { id: 2, productId: 1, productName: 'SLP-DX220', partNumber: 'DX220-STD', description: 'Desktop printer', prices: [
   { tier: 'RESELLER', currencyCode: 'USD', amount: '80.00' },
   { tier: 'MSRP', currencyCode: 'USD', amount: '120.00' },
@@ -39,6 +39,9 @@ test('ODM customer warning uses participating Account IDs and never blocks prici
   assert.equal(odmCustomerWarning({...odm,odmCustomers:[]},[]),'This customer-specific ODM SKU has no associated Account.');
   assert.equal(odmCustomerWarning({...odm,odmSubtype:null,odmCustomers:[]},[]),'This ODM SKU is not associated with any Account participating in this Opportunity.');
   assert.equal(odmCustomerWarning({...odm,odmSubtype:'SPECIAL_CONFIGURATION',odmCustomers:[]},[]),null);
+  const special={...odm,odmSubtype:'SPECIAL_CONFIGURATION',odmCustomers:[{accountId:7,name:'UPS',prices:[{id:31,currencyCode:'USD'}]},{accountId:8,name:'Other',prices:[{id:32,currencyCode:'USD'}]}]};
+  assert.deepEqual(matchingOdmCustomers(special,[7,8],'USD').map(customer=>customer.price.id),[31,32]);
+  assert.equal(odmCustomerWarning(special,[9]),'This ODM SKU is not associated with any Account participating in this Opportunity.');
   assert.equal(odmCustomerWarning({...odm,odmSubtype:'CABLE_PACKAGING_ACCESSORY',odmCustomers:[]},[]),null);
   assert.equal(odmCustomerWarning({...odm,odmSubtype:'LEGACY_SPECIAL_SKU',odmCustomers:[]},[]),null);
   assert.equal(odmCustomerWarning(item,[]),null);

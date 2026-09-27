@@ -6,7 +6,7 @@ export type OdmCatalogPrice = { id: number; currencyCode: string; customerPrice:
 export type CatalogItem = { id: number; productId: number; productName: string; categoryId: number | null; partNumber: string; description: string | null; catalogSource?: string | null; odmSubtype?: string | null; odmCustomers?: { accountId: number; name: string; prices?: OdmCatalogPrice[] }[]; odmDescription?: string | null; prices: CatalogPrice[] };
 
 export function matchingOdmCustomers(item: CatalogItem | null, accountIds: number[], currencyCode: string) {
-  if (item?.catalogSource !== 'ODM' || item.odmSubtype !== 'CUSTOMER_SPECIFIC') return [];
+  if (item?.catalogSource !== 'ODM' || !['CUSTOMER_SPECIFIC', 'SPECIAL_CONFIGURATION'].includes(item.odmSubtype ?? '')) return [];
   return (item.odmCustomers ?? []).filter(customer => accountIds.includes(customer.accountId)).map(customer => ({ ...customer, price: customer.prices?.find(price => price.currencyCode === currencyCode) ?? null }));
 }
 
@@ -27,7 +27,8 @@ export function selectedProductFitsCategory(selectedCategoryId: number | null, p
 }
 
 export function odmCustomerWarning(item: CatalogItem | null, participatingAccountIds: number[]) {
-  if (item?.catalogSource !== 'ODM' || (item.odmSubtype && item.odmSubtype !== 'CUSTOMER_SPECIFIC')) return null;
+  if (item?.catalogSource !== 'ODM' || (item.odmSubtype && !['CUSTOMER_SPECIFIC', 'SPECIAL_CONFIGURATION'].includes(item.odmSubtype))) return null;
+  if (item.odmSubtype === 'SPECIAL_CONFIGURATION' && !item.odmCustomers?.length) return null;
   if (!item.odmCustomers?.length) return item.odmSubtype === 'CUSTOMER_SPECIFIC' ? 'This customer-specific ODM SKU has no associated Account.' : 'This ODM SKU is not associated with any Account participating in this Opportunity.';
   return item.odmCustomers.some(customer => participatingAccountIds.includes(customer.accountId)) ? null
     : 'This ODM SKU is not associated with any Account participating in this Opportunity.';

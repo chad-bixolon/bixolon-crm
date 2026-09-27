@@ -85,3 +85,9 @@ test('restored ODM fields keep selected ids and labels ready for resubmission', 
   assert.match(html, /name="odmCustomerNames" value="Beta"/);
   assert.match(html, /name="odmDescription" value="RFID customization"/);
 });
+test('Special Configuration edit shows imported Account and its customer pricing fields', () => {
+  const html=renderToStaticMarkup(React.createElement(OdmDetailsFields,{initial:{odmSubtype:'SPECIAL_CONFIGURATION',odmDescription:null,baseSku:null,odmCustomers:[{account:{id:7,name:'UPS'},prices:[{currencyCode:'USD',customerPrice:'120.00',previousPrice:'100.00',tariffPercent:'13.5',tariffAmount:'16.20',finalUnitPrice:'136.20',effectiveDate:'2026-09-01',notes:'Negotiated'}]}]}}));
+  assert.match(html,/name="odmCustomerAccountIds" value="7"/);
+  for(const field of ['odmCustomerPrice','odmTariffPercent','odmTariffAmount','odmCurrencyCode','odmEffectiveDate','odmPricingNotes']) assert.match(html,new RegExp(`name="${field}"`));
+  assert.match(html,/Special Configuration does not require a customer relationship/);
+});

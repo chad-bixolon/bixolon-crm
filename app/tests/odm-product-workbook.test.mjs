@@ -152,7 +152,7 @@ test('real workbook requires classification, keeps complex labels for mapping, a
   const mapped=await planProductImport(fakeDb([{id:7,name:'UPS'},{id:8,name:'Amazon'}]),result.csv,undefined,review);
   assert.equal(mapped.items.find(item=>item.line===4).after.odmCustomerAccountId,8);
   assert.equal(mapped.items.find(item=>item.line===4).after.odmCustomerSourceName,'Amazon (thr BS -> Levata)');
-  assert.equal(mapped.items.find(item=>item.line===5).after.odmCustomerAccountId,undefined);
+  assert.equal(mapped.items.find(item=>item.line===5).after.odmCustomerAccountId,8);
   assert.equal(mapped.items.find(item=>item.line===5).after.catalogSource,'ODM');
   assert.equal(mapped.items.filter(item=>item.classes.includes('PRICE CHANGE')).length,0);
   assert.match(mapped.notices.join(' '),/never written to generic catalog tiers/);
@@ -230,7 +230,7 @@ test('classification and import decisions remain per SKU and repeats consolidate
   assert.equal(rdu.length,2);
   assert.deepEqual(rdu.map(item=>item.after.odmCustomerAccountId),[1,2]);
   assert.equal(nsu.after.catalogSource,'ODM');
-  assert.equal(nsu.after.odmCustomerAccountId,undefined);
+  assert.equal(nsu.after.odmCustomerAccountId,1);
   assert.equal(nsu.line,3);
   assert.equal(plan.counts.newSkus,3); // Includes the unrelated single-line SKU.
   assert.ok(rdu.every(item=>!item.classes.includes('ERROR')));
@@ -249,7 +249,7 @@ test('classification and import decisions remain per SKU and repeats consolidate
   })};
   await applyProductImport(client,csv,plan.digest,undefined,review);
   assert.equal(createdSkus.filter(sku=>sku.partNumber==='SRP-S300LOEK/RDU').length,1);
-  assert.deepEqual(links.map(link=>link.accountId),[1,2]);
+  assert.deepEqual(links.map(link=>link.accountId),[1,1,2]);
 });
 test('Gary Old/New and tariff columns produce reviewed customer pricing and flag inconsistent source math',async()=>{
   const {csv:raw}=syntheticCsv('ODM-PRICED','UPS');
@@ -261,6 +261,25 @@ test('Gary Old/New and tariff columns produce reviewed customer pricing and flag
   const price=valid.items[0].odmPricing;
   assert.deepEqual([price.previousPrice,price.customerPrice,price.tariffPercent,price.tariffAmount,price.finalUnitPrice],['100.00','120.00','13.5000','16.20','136.20']);
   assert.equal(valid.items[0].after.odmCustomerAccountId,7);
+});
+test('Special Configuration import preserves resolved Account, price, and workbook provenance',async()=>{
+  const {csv:raw}=syntheticCsv('ODM-PRICED','UPS');
+  const csv=raw.replace('15.00','16.20');
+  const review={subtypes:{'ODM-PRICED':'SPECIAL_CONFIGURATION','SINGLE-SKU':'OTHER'},createCatalog:{'3:1':'CONFIRM','4:1':'CONFIRM'}};
+  const db=fakeDb([{id:7,name:'UPS'}]);
+  const plan=await planProductImport(db,csv,undefined,review);
+  const item=plan.items[0];
+  assert.equal(item.after.odmCustomerAccountId,7);
+  assert.equal(item.odmPricing?.finalUnitPrice,'136.20');
+  const links=[],prices=[],sources=[];
+  const tx={...db,product:{...db.product,create:async()=>({id:10})},productSku:{create:async()=>({id:20})},productSkuOdmCustomer:{findUnique:async()=>null,upsert:async({create})=>links.push(create)},productSkuOdmCustomerPrice:{findFirst:async()=>null,create:async({data})=>prices.push(data)},odmPricingImportSource:{upsert:async({create})=>sources.push(create)}};
+  await applyProductImport({...db,$transaction:async callback=>callback(tx)},csv,plan.digest,undefined,review);
+  assert.equal(links[0].accountId,7);
+  assert.equal(prices[0].accountId,7);
+  assert.equal(prices[0].sourceType,'GARY_WORKBOOK');
+  assert.equal(prices[0].sourceMetadata.newPrice,item.source.newPrice);
+  assert.equal(sources[0].source.newPrice,item.source.newPrice);
+  assert.equal(sources[0].resolution.subtype,'SPECIAL_CONFIGURATION');
 });
 test('single-line parts stay unchanged and ambiguous multiline cells remain blocked',async()=>{
   const single=syntheticCsv('SINGLE-SKU').rows.find(row=>row.values.odm_source_row==='3');

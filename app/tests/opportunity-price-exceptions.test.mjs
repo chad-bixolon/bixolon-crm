@@ -102,6 +102,9 @@ test('ODM customer source snapshots final price and preserves it after terms cha
   const line={productId:3,skuId:9,quantity:1,price:'110.00',priceSource:'ODM_CUSTOMER',catalogPriceTier:null,priceExceptionLineId:null,odmCustomerPriceId:201,odmCustomerAccountId:7};
   const created=saveDb({odmPrices:[selected]});await saveOpportunity(created.client,input(line));
   assert.equal(created.writes[0].odmCustomerBasePrice.toString(),'100');assert.equal(created.writes[0].odmCustomerTariffAmount.toString(),'10');assert.equal(created.writes[0].odmCustomerFinalUnitPrice.toString(),'110');
+  const special=saveDb({odmPrices:[{...selected,odmCustomer:{...selected.odmCustomer,sku:{catalogSource:'ODM',odmSubtype:'SPECIAL_CONFIGURATION'}}}]});
+  await saveOpportunity(special.client,input(line));
+  assert.equal(special.writes[0].odmCustomerFinalUnitPrice.toString(),'110');
   const existing={...created.writes[0],id:55,opportunityId:5,archivedAt:null,estimatedUnitPrice:new Prisma.Decimal('110')};
   const changed={...selected,customerPrice:new Prisma.Decimal('120'),tariffPercent:new Prisma.Decimal('25'),tariffAmount:new Prisma.Decimal('30'),finalUnitPrice:new Prisma.Decimal('150'),archivedAt:new Date()};
   const historical=saveDb({existingLine:existing,odmPrices:[changed]});await saveOpportunity(historical.client,input({...line,id:55}),5);

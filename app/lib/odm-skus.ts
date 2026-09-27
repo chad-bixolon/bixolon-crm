@@ -69,10 +69,8 @@ export async function saveSkuMetadataInTransaction(tx: Prisma.TransactionClient,
     const retainedIds = new Set(current?.odmCustomers.filter(link => !link.archivedAt).map(link => link.accountId) ?? []);
     const newIds = accountIds.filter(id => !retainedIds.has(id));
     if (accountIds.some(id => !Number.isSafeInteger(id) || id <= 0) || await tx.account.count({ where: { id: { in: newIds }, status: 'ACTIVE', archivedAt: null } }) !== newIds.length) throw new Error('ODM Customer must be an existing active Account.');
-    const relevantChange = !current || current.catalogSource !== 'ODM' || current.odmSubtype !== input.odmSubtype || current.baseSkuId !== input.baseSkuId || current.odmDescription !== input.odmDescription || accountIds.length !== retainedIds.size || accountIds.some(id => !retainedIds.has(id));
-    if (input.odmSubtype === 'CUSTOMER_SPECIFIC' && !accountIds.length && relevantChange) throw new Error('Customer-specific ODM requires at least one active Account.');
-    if (input.odmSubtype === 'CUSTOMER_SPECIFIC' && accountIds.length && relevantChange && await tx.account.count({ where: { id: { in: accountIds }, status: 'ACTIVE', archivedAt: null } }) === 0) throw new Error('Customer-specific ODM requires at least one active Account.');
-    if (input.odmPrices?.length && (input.catalogSource !== 'ODM' || input.odmSubtype !== 'CUSTOMER_SPECIFIC')) throw new Error('Customer pricing requires a Customer-Specific ODM SKU.');
+    if (input.odmSubtype === 'CUSTOMER_SPECIFIC' && (!accountIds.length || await tx.account.count({ where: { id: { in: accountIds }, status: 'ACTIVE', archivedAt: null } }) === 0)) throw new Error('Customer-specific ODM requires at least one active Account.');
+    if (input.odmPrices?.length && (input.catalogSource !== 'ODM' || !['CUSTOMER_SPECIFIC', 'SPECIAL_CONFIGURATION'].includes(input.odmSubtype ?? ''))) throw new Error('Customer pricing requires a Customer-Specific or Special Configuration ODM SKU.');
     if (input.odmPrices?.some(price => !accountIds.includes(price.accountId))) throw new Error('ODM pricing Account must be associated with this SKU.');
     const calculatedPrices = input.odmPrices?.map(price => ({ accountId: price.accountId, ...calculateOdmCustomerPrice(price) })) ?? [];
     if (input.baseSkuId) {
@@ -90,7 +88,7 @@ export async function saveSkuMetadataInTransaction(tx: Prisma.TransactionClient,
     if (current) {
       await tx.productSkuOdmCustomer.updateMany({ where: { skuId: current.id, accountId: { notIn: accountIds }, archivedAt: null }, data: { archivedAt: new Date() } });
       await tx.productSkuOdmCustomerPrice.updateMany({ where: { skuId: current.id, accountId: { notIn: accountIds }, archivedAt: null }, data: { archivedAt: new Date() } });
-      if (input.odmSubtype !== 'CUSTOMER_SPECIFIC') await tx.productSkuOdmCustomerPrice.updateMany({ where: { skuId: current.id, archivedAt: null }, data: { archivedAt: new Date() } });
+      if (input.odmSubtype !== 'CUSTOMER_SPECIFIC' && input.odmSubtype !== 'SPECIAL_CONFIGURATION') await tx.productSkuOdmCustomerPrice.updateMany({ where: { skuId: current.id, archivedAt: null }, data: { archivedAt: new Date() } });
       await tx.productSku.update({ where: { id: current.id }, data });
     }
     const sku = current ?? await tx.productSku.create({ data: { ...data, productId: input.productId } });

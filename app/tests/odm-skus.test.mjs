@@ -52,11 +52,9 @@ test('source changes require ODM subtype and preserve existing ODM history',asyn
   await assert.rejects(saveSkuMetadata(db,{...input,skuId:1,odmSubtype:null}),/subtype is required/);
   const converted=fixture();await saveSkuMetadata(converted.db,{...input,skuId:1,baseSkuId:null});assert.equal(converted.calls.find(call=>call.catalogSource==='ODM').odmSubtype,'CUSTOMER_SPECIFIC');
 });
-test('historical unresolved customer-specific SKU can be edited without inventing an Account',async()=>{
-  const {db,calls}=fixture();
-  await saveSkuMetadata(db,{...input,skuId:2,odmCustomerAccountIds:[],baseSkuId:null,odmDescription:null,active:false});
-  assert.equal(calls.find(call=>call.catalogSource==='ODM').odmSubtype,'CUSTOMER_SPECIFIC');
-  assert.equal(calls.filter(call=>call.accountId).length,0);
+test('historical unresolved customer-specific SKU requires an Account when edited',async()=>{
+  const {db}=fixture();
+  await assert.rejects(saveSkuMetadata(db,{...input,skuId:2,odmCustomerAccountIds:[],baseSkuId:null,odmDescription:null,active:false}),/requires at least one active Account/);
   await assert.rejects(saveSkuMetadata(db,{...input,skuId:2,odmCustomerAccountIds:[],baseSkuId:null,odmDescription:'Changed'}),/requires at least one active Account/);
 });
 test('changing Catalog Source cannot silently remove existing ODM customer links',async()=>{
@@ -114,4 +112,28 @@ test('re-adding an archived ODM Account reuses the SKU and Account association',
   await saveSkuMetadata(db,{...input,skuId:2,baseSkuId:null,odmDescription:null,odmCustomerAccountIds:[7]});
   assert.equal(reused,true);
   assert.equal(archived.archivedAt,null);
+});
+test('Special Configuration accepts zero, one, or multiple Accounts and customer prices',async()=>{
+  for(const accountIds of [[],[7],[7,8]]) {
+    const {db,calls}=fixture();
+    await saveSkuMetadata(db,{...input,odmSubtype:'SPECIAL_CONFIGURATION',odmCustomerAccountIds:accountIds,baseSkuId:null,odmDescription:null,odmPrices:accountIds.map(accountId=>({accountId,customerPrice:'120.00',tariffPercent:'10',currencyCode:'USD'}))});
+    assert.equal(calls.filter(call=>call.customerPrice).length,accountIds.length);
+  }
+});
+test('switching Special Configuration to Customer-Specific recognizes an imported Account and preserves price',async()=>{
+  const {db,rows,tx,calls}=fixture();
+  rows.get(2).odmSubtype='SPECIAL_CONFIGURATION';
+  rows.get(2).odmCustomers=[{accountId:7,archivedAt:null,sourceCustomerName:'UPS'}];
+  tx.productSkuOdmCustomerPrice.updateMany=async args=>calls.push({priceArchive:args.where});
+  await saveSkuMetadata(db,{...input,skuId:2,baseSkuId:null,odmDescription:null,odmCustomerAccountIds:[7]});
+  assert.equal(calls.filter(call=>call.accountId===7).length,1);
+  assert.equal(calls.filter(call=>call.priceArchive).length,1); // Only the removed Account filter, never all prices.
+  assert.deepEqual(calls.find(call=>call.priceArchive).priceArchive.accountId.notIn,[7]);
+});
+test('switching Customer-Specific to Special Configuration retains Account and active price',async()=>{
+  const {db,rows,tx,calls}=fixture();
+  rows.get(2).odmCustomers=[{accountId:7,archivedAt:null}];
+  tx.productSkuOdmCustomerPrice.updateMany=async args=>calls.push({priceArchive:args.where});
+  await saveSkuMetadata(db,{...input,skuId:2,odmSubtype:'SPECIAL_CONFIGURATION',baseSkuId:null,odmDescription:null,odmCustomerAccountIds:[7]});
+  assert.deepEqual(calls.filter(call=>call.priceArchive).map(call=>call.priceArchive),[{skuId:2,accountId:{notIn:[7]},archivedAt:null}]);
 });
