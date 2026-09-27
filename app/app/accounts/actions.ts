@@ -6,14 +6,20 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireMutation } from "@/lib/current-user";
 import { saveFeedbackPath } from "@/lib/save-feedback";
+import { accountSaveReview, type DuplicateMatch } from '@/lib/sales-readiness';
+import type { AccountFields } from '@/lib/account-validation';
 
-export type FormState = { errors: Record<string, string>; message?: string };
+export type FormState = { errors: Record<string, string>; message?: string; matches?: DuplicateMatch[]; values?: AccountFields; reviewToken?: string };
 export async function submitAccount(id: number | null, _state: FormState, form: FormData): Promise<FormState> {
   const actor = await requireMutation('accounts.write');
   const result = parseAccountForm(form);
   if (!result.value) return { errors: result.errors, message: "Please correct the highlighted fields." };
   const references = await checkAccountReferences(prisma, result.value, id ?? undefined);
   if (Object.keys(references).length) return { errors: references, message: "Please correct the highlighted fields." };
+  if (!id) {
+    const review = await accountSaveReview(prisma, result.value, form);
+    if (review) return { errors: {}, ...review };
+  }
   let accountId: number;
   try { accountId = await saveAccount(prisma, result.value, id ?? undefined, actor.id); }
   catch (error) { return { errors: {}, message: error instanceof Error && /Reactivate|not found/.test(error.message) ? error.message : "Account could not be saved. Please try again." }; }
