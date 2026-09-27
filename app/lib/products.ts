@@ -2,6 +2,8 @@ import { Prisma, ProductCatalogSource, type PrismaClient } from "@prisma/client"
 import { field, pageNumber, required, type Errors } from "./crm-validation";
 import { normalizePartNumber } from "./product-import";
 import { DuplicateSkuError, saveSkuMetadataInTransaction, type SkuMetadataInput } from "./odm-skus";
+import type { Actor } from './authorization';
+import { activePriceExceptionLineWhere } from './price-exception-lookup';
 export function parseProduct(form: FormData) {
   const errors: Errors = {};
   const sku = required(form, "sku", "SKU", 100, errors);
@@ -43,14 +45,14 @@ export { catalogSourceLabels } from './product-labels';
 export function productCategoryChoices(client: PrismaClient) {
   return client.productCategory.findMany({ where: { OR: [{ active: true }, { products: { some: {} } }] }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] });
 }
-export type ProductFilters = { q?: string; active?: string; category?: string; catalogSource?: string; page?: string };
+export type ProductFilters = { q?: string; active?: string; category?: string; catalogSource?: string; priceException?: string; page?: string };
 export function productHref(filters: ProductFilters, page?: number) {
   const params = new URLSearchParams();
   for (const [key,value] of Object.entries(filters)) if (value && key !== "page") params.set(key,value);
   if (page !== undefined) params.set("page",String(page));
   return `/products?${params}`;
 }
-export function productWhere(filters: ProductFilters): Prisma.ProductWhereInput {
+export function productWhere(filters: ProductFilters, actor?: Actor, now = new Date()): Prisma.ProductWhereInput {
   const where: Prisma.ProductWhereInput = { archivedAt: null };
   if (filters.q?.trim()) { const q = filters.q.trim().slice(0, 100); where.OR = [{ name: { contains: q, mode: "insensitive" } }, { sku: { contains: q, mode: "insensitive" } }, { skus: { some: { partNumber: { contains: q, mode: "insensitive" } } } }]; }
   if (filters.active === "all") delete where.archivedAt;
@@ -58,12 +60,49 @@ export function productWhere(filters: ProductFilters): Prisma.ProductWhereInput 
   if (filters.active === "inactive") { where.active = false; where.archivedAt = null; }
   if (filters.active === "archived") where.archivedAt = { not: null };
   if (filters.category) where.category = { code: filters.category };
-  if (Object.values(ProductCatalogSource).includes(filters.catalogSource as ProductCatalogSource)) where.skus = { some: { catalogSource: filters.catalogSource as ProductCatalogSource } };
+  const source = Object.values(ProductCatalogSource).includes(filters.catalogSource as ProductCatalogSource)
+    ? filters.catalogSource as ProductCatalogSource : null;
+  if (source) where.skus = { some: { catalogSource: source } };
+  if (actor && (filters.priceException === 'has' || filters.priceException === 'none')) {
+    const sku: Prisma.ProductSkuWhereInput = {
+      ...(source ? { catalogSource: source } : {}),
+      priceExceptionLines: { some: activePriceExceptionLineWhere(actor, {}, now) },
+    };
+    if (filters.priceException === 'has') where.skus = { some: sku };
+    else where.AND = [{ skus: { none: sku } }];
+  }
   return where;
 }
-export async function listProducts(client: PrismaClient, filters: ProductFilters) {
-  const where = productWhere(filters);
+export async function listProducts(client: PrismaClient, filters: ProductFilters, actor?: Actor, now = new Date()) {
+  const where = productWhere(filters, actor, now);
   const count = await client.product.count({ where }); const { page, pages } = pageNumber(filters.page, count);
   const products = await client.product.findMany({ where, include: { skus: { select: { id: true, partNumber: true, catalogSource: true, odmSubtype: true, odmCustomers: { select: { account: { select: { name: true } } } } } } }, orderBy: [{ name: "asc" }, { id: "asc" }], skip: (page - 1) * 20, take: 20 });
-  return { products, count, page, pages };
+  const priceExceptionsByProduct = new Map<number, number[]>();
+  if (actor && products.length) {
+    const selectedSource = Object.values(ProductCatalogSource).includes(filters.catalogSource as ProductCatalogSource)
+      ? filters.catalogSource : null;
+    const skuToProduct = new Map(products.flatMap(product => product.skus
+      .filter(sku => !selectedSource || sku.catalogSource === selectedSource)
+      .map(sku => [sku.id, product.id] as const)));
+    if (skuToProduct.size) {
+      const lineWhere = activePriceExceptionLineWhere(actor, {}, now);
+      lineWhere.productSku = {
+        ...(lineWhere.productSku as Prisma.ProductSkuWhereInput),
+        id: { in: [...skuToProduct.keys()] },
+      };
+      const lines = await client.priceExceptionLine.findMany({
+        where: lineWhere,
+        select: { productSkuId: true, priceExceptionId: true },
+      });
+      const ids = new Map<number, Set<number>>();
+      for (const line of lines) {
+        const productId = line.productSkuId === null ? null : skuToProduct.get(line.productSkuId);
+        if (productId === null || productId === undefined) continue;
+        if (!ids.has(productId)) ids.set(productId, new Set());
+        ids.get(productId)!.add(line.priceExceptionId);
+      }
+      for (const [productId, peIds] of ids) priceExceptionsByProduct.set(productId, [...peIds].sort((a, b) => a - b));
+    }
+  }
+  return { products, count, page, pages, priceExceptionsByProduct };
 }

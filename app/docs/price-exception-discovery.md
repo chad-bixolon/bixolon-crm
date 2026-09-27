@@ -1,0 +1,7 @@
+# Price Exception discovery for Sales
+
+The Products page has a separate Price Exception filter. Its indicator counts distinct Price Exception records with at least one current, visible pricing tier for the Product's active SKU. A current tier has an ACTIVE, unarchived PE; no past expiration date; an active linked Account in one of the PE party roles; an approved price; a positive normalized MOQ; and an unretired line. Sales visibility follows the existing assigned-PE rule. The SKU and Product must also be active.
+
+The Price Exception lookup lists those tiers before an Opportunity exists. Search by linked Account name and SKU or Product name, then verify the exact Account role, SKU, MOQ, currency, and approved price. Each row links to the PE detail and Product. Historical, expired, unresolved, and unpriced records remain available on the existing Price Exceptions history page.
+
+`PE_LIST` remains a SKU catalog-source enum value with explicit template import, manual SKU classification, and existing filter support. The repository has no PE List workbook mapping, but this is not enough evidence that the value is unused in stored data. Keep it as a classification for SKUs explicitly sourced from a PE list; never set it because a PE references a SKU. Remove the Catalog Source option only after a separate inventory of stored `PE_LIST` SKUs and a decision about their replacement classification.

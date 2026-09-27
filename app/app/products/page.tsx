@@ -4,14 +4,17 @@ import { odmSubtypeLabels } from "@/lib/product-labels";
 import { catalogSourceLabels, listProducts, productCategoryChoices, productHref, type ProductFilters } from "@/lib/products";
 import { CrmStateControl } from "@/components/crm-state-control";
 import { prisma } from "@/lib/prisma";
+import { requirePermission } from '@/lib/current-user';
 import { ProductTableRow } from "./product-table-row";
+import { priceExceptionLookupHref } from '@/lib/price-exception-lookup';
 import styles from "./products-page.module.css";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<ProductFilters> }) {
   const filters = await searchParams;
-  const [{ products, count, page, pages }, categories] = await Promise.all([listProducts(prisma, filters), productCategoryChoices(prisma)]);
+  const actor = await requirePermission('pricing.read');
+  const [{ products, count, page, pages, priceExceptionsByProduct }, categories] = await Promise.all([listProducts(prisma, filters, actor), productCategoryChoices(prisma)]);
   const linkFor = (target: number) => productHref(filters, target);
 
   return <Content>
@@ -21,17 +24,21 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
       <div className={`${styles.filterField} ${styles.statusField}`}><label className={styles.filterLabel} htmlFor="active">Status</label><select className={`field ${styles.control}`} name="active" id="active" defaultValue={filters.active ?? ""}><option value="">Current</option><option value="all">All</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="archived">Archived</option></select></div>
       <div className={styles.filterField}><label className={styles.filterLabel} htmlFor="category">Product Category</label><select className={`field ${styles.control}`} name="category" id="category" defaultValue={filters.category ?? ""}><option value="">All</option>{categories.map(category=><option key={category.id} value={category.code}>{category.name}{category.active ? "" : " (inactive)"}</option>)}</select></div>
       <div className={styles.filterField}><label className={styles.filterLabel} htmlFor="catalogSource">Catalog Source</label><select className={`field ${styles.control}`} name="catalogSource" id="catalogSource" defaultValue={filters.catalogSource ?? ""}><option value="">All</option>{Object.entries(catalogSourceLabels).filter(([value])=>value!=='SPECIAL_SKU_LIST').map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div>
+      <div className={styles.filterField}><label className={styles.filterLabel} htmlFor="priceException">Price Exception</label><select className={`field ${styles.control}`} name="priceException" id="priceException" defaultValue={filters.priceException ?? ""}><option value="">Any</option><option value="has">Has active PE</option><option value="none">No active PE</option></select></div>
       <button className={`btn-primary ${styles.action}`}>Apply</button>
       <Link className={`btn-secondary ${styles.action}`} href="/products">Clear</Link>
     </form>
+    <p className="mb-3 text-sm text-slate-600">Need a customer and SKU match? <Link className="text-orange-800 underline" href="/price-exceptions/lookup">Find a valid Price Exception</Link>.</p>
     <div className="panel overflow-x-auto">
       <table className={`w-full min-w-[640px] text-left ${styles.catalog}`}>
-        <thead><tr><th scope="col">SKU</th><th scope="col">Product / Model</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
+        <thead><tr><th scope="col">SKU</th><th scope="col">Product / Model</th><th scope="col">Price Exception</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
         <tbody className="divide-y divide-slate-100">{products.map((p) => {
           const state = p.archivedAt ? "archived" : p.active ? "active" : "inactive";
+          const peIds = priceExceptionsByProduct.get(p.id) ?? [];
           return <ProductTableRow key={p.id} id={p.id} name={p.name}>
             <td className={styles.sku}>{p.sku}{p.skus.filter(sku => sku.catalogSource === 'ODM').slice(0, 2).map(sku => <span key={sku.id} className="ml-2 inline-block rounded bg-orange-50 px-1.5 py-0.5 text-xs font-semibold text-orange-800">{sku.partNumber} · ODM{sku.odmSubtype ? ` · ${odmSubtypeLabels[sku.odmSubtype]}` : ''}{sku.odmCustomers.length ? ` · ${sku.odmCustomers.map(link => link.account.name).join(", ")}` : ''}</span>)}</td>
             <td><Link className={styles.model} href={`/products/${p.id}/edit`}>{p.name}</Link></td>
+            <td>{peIds.length ? <Link className="font-semibold text-orange-800 underline" href={priceExceptionLookupHref({ productId: String(p.id), catalogSource: filters.catalogSource })}>{peIds.length === 1 ? 'Active PE available' : `${peIds.length} active PEs`}</Link> : <span className="text-slate-400">—</span>}</td>
             <td><span className={`${styles.badge} ${styles[state]}`}>{state[0].toUpperCase() + state.slice(1)}</span></td>
             <td><div className={styles.stateAction}><CrmStateControl kind="product" id={p.id} state={state}/></div></td>
           </ProductTableRow>;
