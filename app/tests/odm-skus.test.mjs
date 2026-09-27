@@ -62,6 +62,14 @@ test('changing Catalog Source cannot silently remove existing ODM customer links
   rows.get(2).odmCustomers=[{accountId:7}];
   await assert.rejects(saveSkuMetadata(db,{...input,skuId:2,catalogSource:'PRICE_LIST',odmSubtype:null,odmCustomerAccountIds:[],baseSkuId:null,odmDescription:null}),/cannot change Catalog Source/);
 });
+test('editing a standard SKU preserves negotiated Account pricing links',async()=>{
+  const {db,rows,tx,calls}=fixture();
+  rows.get(1).odmCustomers=[{accountId:7,archivedAt:null}];
+  tx.productSkuOdmCustomerPrice.updateMany=async()=>{throw Error('standard price history must be retained');};
+  await saveSkuMetadata(db,{...input,skuId:1,partNumber:'XT5-STD',catalogSource:'PRICE_LIST',odmSubtype:null,odmCustomerAccountIds:[],baseSkuId:null,odmDescription:null,description:'Updated'});
+  assert.ok(calls.every(call=>!call.archive));
+  assert.equal(rows.get(1).catalogSource,'PRICE_LIST');
+});
 test('editing ODM updates customers and fields without touching prices',async()=>{
   const {db,rows,calls}=fixture();rows.get(2).odmCustomers=[{accountId:7}];
   await saveSkuMetadata(db,{...input,skuId:2,odmCustomerAccountIds:[8],baseSkuId:1,active:false});

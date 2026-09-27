@@ -104,7 +104,7 @@ that behavior. No full UI or authentication/integration features were added.
 From the repository root:
 
 ```sh
-docker build -t bixolon-crm-foundation-test:local app
+docker build --target development -t bixolon-crm-foundation-test:local app
 python3 app/scripts/test-migrations.py
 npm run lint --prefix app
 npm run typecheck --prefix app

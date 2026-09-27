@@ -47,3 +47,10 @@ test('ODM customer warning uses participating Account IDs and never blocks prici
   assert.equal(odmCustomerWarning(item,[]),null);
   assert.deepEqual(selectCatalogItem(odm,'USD'),selectCatalogItem(item,'USD'));
 });
+test('standard SKU negotiated pricing is available to its participating Account',()=>{
+  const standard={...item,catalogSource:'PRICE_LIST',odmSubtype:null,odmCustomers:[{accountId:7,name:'Proax',prices:[{id:41,currencyCode:'USD',customerPrice:'150.65',finalUnitPrice:'150.65'}]},{accountId:8,name:'NCR',prices:[{id:42,currencyCode:'USD',customerPrice:'140.00',finalUnitPrice:'140.00'}]}]};
+  assert.deepEqual(matchingOdmCustomers(standard,[7],'USD').map(customer=>customer.price.id),[41]);
+  assert.deepEqual(matchingOdmCustomers(standard,[8],'USD').map(customer=>customer.price.id),[42]);
+  assert.deepEqual(matchingOdmCustomers(standard,[9],'USD'),[]);
+  assert.equal(odmCustomerWarning(standard,[9]),null);
+});

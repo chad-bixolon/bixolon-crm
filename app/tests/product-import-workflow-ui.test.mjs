@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const workflow=fs.readFileSync(path.join(import.meta.dirname,'../app/administration/imports/products/workflow.tsx'),'utf8');
 const catalog=fs.readFileSync(path.join(import.meta.dirname,'../app/administration/imports/products/catalog-batch-review.tsx'),'utf8');
+const actions=fs.readFileSync(path.join(import.meta.dirname,'../app/administration/imports/products/actions.ts'),'utf8');
 
 test('ODM import explains Account matching and shows existing Account types without editing them',()=>{
   assert.match(workflow,/Match each customer from the workbook to a CRM Account/);
@@ -32,4 +33,11 @@ test('Product and SKU review uses business labels and subtype explanations',()=>
   assert.match(catalog,/Standard SKU this customized SKU is based on/);
   assert.doesNotMatch(workflow,/\(#\$\{/);
   assert.doesNotMatch(catalog,/\(#\$\{/);
+});
+test('standard SKU pricing review hides ODM fields until an explicit classification change',()=>{
+  assert.match(workflow,/Catalog classification: Standard SKU/);
+  assert.match(workflow,/Change catalog classification/);
+  assert.match(workflow,/window\.confirm\(`Change catalog classification/);
+  assert.match(workflow,/\{!standard&&<label className="mt-2 block">Base SKU/);
+  assert.match(actions,/reclassifications:strings\(data\.reclassifications,\['CONFIRM'\]\)/);
 });

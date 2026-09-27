@@ -86,9 +86,11 @@ export async function saveSkuMetadataInTransaction(tx: Prisma.TransactionClient,
       odmDescription: input.catalogSource === 'ODM' ? input.odmDescription : null,
       odmCustomerSourceName: input.catalogSource === 'ODM' ? current?.odmCustomerSourceName ?? null : null };
     if (current) {
-      await tx.productSkuOdmCustomer.updateMany({ where: { skuId: current.id, accountId: { notIn: accountIds }, archivedAt: null }, data: { archivedAt: new Date() } });
-      await tx.productSkuOdmCustomerPrice.updateMany({ where: { skuId: current.id, accountId: { notIn: accountIds }, archivedAt: null }, data: { archivedAt: new Date() } });
-      if (input.odmSubtype !== 'CUSTOMER_SPECIFIC' && input.odmSubtype !== 'SPECIAL_CONFIGURATION') await tx.productSkuOdmCustomerPrice.updateMany({ where: { skuId: current.id, archivedAt: null }, data: { archivedAt: new Date() } });
+      if (input.catalogSource === 'ODM') {
+        await tx.productSkuOdmCustomer.updateMany({ where: { skuId: current.id, accountId: { notIn: accountIds }, archivedAt: null }, data: { archivedAt: new Date() } });
+        await tx.productSkuOdmCustomerPrice.updateMany({ where: { skuId: current.id, accountId: { notIn: accountIds }, archivedAt: null }, data: { archivedAt: new Date() } });
+        if (input.odmSubtype !== 'CUSTOMER_SPECIFIC' && input.odmSubtype !== 'SPECIAL_CONFIGURATION') await tx.productSkuOdmCustomerPrice.updateMany({ where: { skuId: current.id, archivedAt: null }, data: { archivedAt: new Date() } });
+      }
       await tx.productSku.update({ where: { id: current.id }, data });
     }
     const sku = current ?? await tx.productSku.create({ data: { ...data, productId: input.productId } });

@@ -144,10 +144,10 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
         const selected = odmPrices.find(candidate => candidate.id === line.odmCustomerPriceId);
         const old = existingLines.find(candidate => candidate.id === line.id);
         const retaining = !!old && old.priceSource === 'ODM_CUSTOMER' && old.odmCustomerPriceId === line.odmCustomerPriceId && old.odmCustomerAccountId === line.odmCustomerAccountId && old.skuId === line.skuId && old.odmCustomerCurrencyCode === input.currencyCode;
-        if (!selected || selected.skuId !== line.skuId || selected.accountId !== line.odmCustomerAccountId || selected.currencyCode !== input.currencyCode || selected.odmCustomer.sku.catalogSource !== 'ODM' || !['CUSTOMER_SPECIFIC', 'SPECIAL_CONFIGURATION'].includes(selected.odmCustomer.sku.odmSubtype ?? '')) throw new Error('Choose a valid ODM customer price for this SKU and currency.');
-        if (!retaining && (selected.archivedAt || selected.odmCustomer.archivedAt || !input.participants.some(participant => participant.accountId === selected.accountId))) throw new Error('The selected ODM customer price is not active for a participating Account.');
+        if (!selected || selected.skuId !== line.skuId || selected.accountId !== line.odmCustomerAccountId || selected.currencyCode !== input.currencyCode || selected.odmCustomer.sku.catalogSource === 'ODM' && !['CUSTOMER_SPECIFIC', 'SPECIAL_CONFIGURATION'].includes(selected.odmCustomer.sku.odmSubtype ?? '')) throw new Error('Choose a valid customer price for this SKU and currency.');
+        if (!retaining && (selected.archivedAt || selected.odmCustomer.archivedAt || !input.participants.some(participant => participant.accountId === selected.accountId))) throw new Error('The selected customer price is not active for a participating Account.');
         const expected = retaining ? old.odmCustomerFinalUnitPrice : selected.finalUnitPrice;
-        if (!expected || !expected.equals(line.price)) throw new Error('ODM Opportunity Unit Price must equal the selected final price. Choose Manual for a different price.');
+        if (!expected || !expected.equals(line.price)) throw new Error('Opportunity Unit Price must equal the selected customer final price. Choose Manual for a different price.');
       }
       if (line.priceSource === "CATALOG" && (!line.skuId || skus.some(sku => sku.id === line.skuId && sku.catalogSource === 'ODM' && sku.odmSubtype === 'CUSTOMER_SPECIFIC') || !catalogPrices.some(price => price.skuId === line.skuId && price.currencyCode === input.currencyCode && price.tier === line.catalogPriceTier))) throw new Error("Choose an available catalog price for the Opportunity currency.");
       if (line.priceSource === "PRICE_EXCEPTION") {

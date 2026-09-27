@@ -713,6 +713,8 @@ model ProductSku {
   @@index([baseSkuId])
 }
 
+/// SKU/Account relationship used for negotiated customer pricing. The legacy
+/// table name is retained; standard and ODM SKUs may both have these links.
 model ProductSkuOdmCustomer {
   skuId              Int
   accountId          Int
@@ -874,7 +876,8 @@ model PriceExceptionSourceRevision {
 
   @@unique([priceExceptionId, contentHash])
   @@unique([id, priceExceptionId])
-  @@index([priceExceptionId, sourceReviewedAt])
+  // PostgreSQL truncated the migration's 66-byte index name to this 63-byte name.
+  @@index([priceExceptionId, sourceReviewedAt], map: "PriceExceptionSourceRevision_priceExceptionId_sourceReviewedAt_")
 }
 
 enum ProductCatalogSource {

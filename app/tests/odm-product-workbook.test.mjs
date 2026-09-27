@@ -195,8 +195,10 @@ test('existing SKU keeps its Product and category until its classification is ex
   assert.equal(row.skuId,2);
   assert.equal(row.after.model,'XT5-40');
   assert.equal(row.after.category,'LABEL');
-  assert.equal(row.after.catalogSource,'ODM');
-  const reviewed=await planProductImport(fakeDb([], [product]),result.csv,undefined,{subtypes:{'XT5-40S':'SPECIAL_CONFIGURATION'}});
+  assert.equal(row.after.catalogSource,'PRICE_LIST');
+  assert.equal(row.after.odmSubtype,undefined);
+  const reviewed=await planProductImport(fakeDb([], [product]),result.csv,undefined,{reclassifications:{'XT5-40S':'CONFIRM'},subtypes:{'XT5-40S':'SPECIAL_CONFIGURATION'}});
+  assert.equal(reviewed.items.find(item=>item.line===98).after.catalogSource,'ODM');
   assert.equal(reviewed.items.find(item=>item.line===98).after.odmSubtype,'SPECIAL_CONFIGURATION');
   assert.equal(reviewed.items.find(item=>item.line===98).classes.includes('NEW SKU'),false);
 });

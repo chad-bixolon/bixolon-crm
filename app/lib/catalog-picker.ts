@@ -6,7 +6,7 @@ export type OdmCatalogPrice = { id: number; currencyCode: string; customerPrice:
 export type CatalogItem = { id: number; productId: number; productName: string; categoryId: number | null; partNumber: string; description: string | null; catalogSource?: string | null; odmSubtype?: string | null; odmCustomers?: { accountId: number; name: string; prices?: OdmCatalogPrice[] }[]; odmDescription?: string | null; prices: CatalogPrice[] };
 
 export function matchingOdmCustomers(item: CatalogItem | null, accountIds: number[], currencyCode: string) {
-  if (item?.catalogSource !== 'ODM' || !['CUSTOMER_SPECIFIC', 'SPECIAL_CONFIGURATION'].includes(item.odmSubtype ?? '')) return [];
+  if (!item || item.catalogSource === 'ODM' && !['CUSTOMER_SPECIFIC', 'SPECIAL_CONFIGURATION'].includes(item.odmSubtype ?? '')) return [];
   return (item.odmCustomers ?? []).filter(customer => accountIds.includes(customer.accountId)).map(customer => ({ ...customer, price: customer.prices?.find(price => price.currencyCode === currencyCode) ?? null }));
 }
 

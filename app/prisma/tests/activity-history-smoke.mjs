@@ -23,8 +23,8 @@ const value = fields => {
 };
 try {
   const before = await prisma.activity.count();
-  await assert.rejects(saveActivity(prisma, value([['accountId', '102'], ['opportunityId', '100']])), /Opportunity is not associated with the selected Account/);
-  await assert.rejects(saveActivity(prisma, value([['accountId', '102'], ['projectId', '1000']])), /Project is not associated with the selected Account/);
+  await assert.rejects(saveActivity(prisma, value([['accountId', '101'], ['opportunityId', '100']])), /Opportunity is not associated with the selected Account/);
+  await assert.rejects(saveActivity(prisma, value([['accountId', '101'], ['projectId', '1000']])), /Project is not associated with the selected Account/);
   await prisma.opportunityAccount.create({ data: { opportunityId: 102, accountId: 100 } });
   await assert.rejects(saveActivity(prisma, value([['accountId', '100'], ['opportunityId', '102'], ['projectId', '1000']])), /Project is not linked to the selected Opportunity/);
   await assert.rejects(saveActivity(prisma, value([['accountId', '101'], ['contactIds', '100']])), /Contact is not associated with the selected Account/);

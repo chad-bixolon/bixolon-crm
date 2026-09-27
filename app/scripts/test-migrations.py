@@ -38,7 +38,8 @@ def sql_values(database, statement):
 def prisma(database, *args):
     url = f"postgresql://postgres@{DB}:5432/{database}"
     result = run(["docker", "run", "--rm", "--network", NETWORK, "-e", f"DATABASE_URL={url}",
-                  "-v", f"{ROOT / 'prisma/migrations'}:/app/prisma/migrations:ro", IMAGE,
+                  "-v", f"{ROOT / 'prisma/migrations'}:/app/prisma/migrations:ro",
+                  "-v", f"{ROOT / 'prisma/schema.prisma'}:/app/prisma/schema.prisma:ro", IMAGE,
                   "./node_modules/.bin/prisma", *args])
     return result.stdout
 
@@ -103,6 +104,23 @@ try:
     create_database("fresh")
     print(prisma("fresh", "migrate", "deploy"), flush=True)
     print(prisma("fresh", "migrate", "status"), flush=True)
+    revision_index = sql_values("fresh", '''SELECT indexname || ':' || indexdef FROM pg_indexes
+      WHERE schemaname='public' AND tablename='PriceExceptionSourceRevision'
+        AND indexname='PriceExceptionSourceRevision_priceExceptionId_sourceReviewedAt_';''')
+    if len(revision_index) != 1 or '("priceExceptionId", "sourceReviewedAt")' not in revision_index[0]:
+        raise RuntimeError(f'Price Exception source revision index name or columns changed: {revision_index}')
+    sql('fresh', '''INSERT INTO "Account" (id,name,"updatedAt") VALUES (5200,'Standard pricing fixture',now());
+      INSERT INTO "Product" (id,sku,name,"updatedAt") VALUES (5200,'STANDARD-ACCOUNT-PRICE','Standard pricing model',now());
+      INSERT INTO "ProductSku" (id,"productId","partNumber","normalizedPartNumber","catalogSource","updatedAt")
+        VALUES (5200,5200,'STANDARD-ACCOUNT-PRICE','STANDARD-ACCOUNT-PRICE','PRICE_LIST',now());
+      INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","updatedAt") VALUES (5200,5200,now());
+      INSERT INTO "ProductSkuOdmCustomerPrice" ("skuId","accountId","currencyCode","customerPrice","tariffPercent","tariffAmount","finalUnitPrice","sourceType","updatedAt")
+        VALUES (5200,5200,'USD',150.65,0,0,150.65,'GARY_WORKBOOK',now());''')
+    if sql_values('fresh', '''SELECT "catalogSource"::text || ':' || count(*) FROM "ProductSku" s JOIN "ProductSkuOdmCustomerPrice" p ON p."skuId"=s.id WHERE s.id=5200 GROUP BY "catalogSource";''') != ['PRICE_LIST:1']:
+        raise RuntimeError('Standard SKU customer pricing changed classification or failed to persist')
+    if sql('fresh', '''INSERT INTO "ProductSkuOdmCustomerPrice" ("skuId","accountId","currencyCode","customerPrice","tariffPercent","tariffAmount","finalUnitPrice","sourceType","updatedAt") VALUES (5200,5200,'USD',150.65,0,0,150.65,'GARY_WORKBOOK',now());''', check=False).returncode == 0:
+        raise RuntimeError('Standard SKU accepted duplicate active customer pricing')
+    print('PASS: standard SKU retains classification, accepts Account price, and rejects duplicate active revision', flush=True)
     print(prisma("fresh", "migrate", "diff", "--from-schema-datasource", "prisma/schema.prisma",
                  "--to-schema-datamodel", "prisma/schema.prisma", "--exit-code"), flush=True)
     print("PASS: empty database replay and schema parity", flush=True)
@@ -176,7 +194,9 @@ try:
         (5000,5000,'ODM-BASE','ODM-BASE','PRICE_LIST',now()),
         (5001,5000,'ODM-CUSTOM','ODM-CUSTOM','ODM',now());
       UPDATE "ProductSku" SET "baseSkuId"=5000,"odmDescription"='Fixture customization' WHERE id=5001;
-      INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","updatedAt") VALUES (5001,5000,now());''')
+      INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","updatedAt") VALUES (5001,5000,now()), (5000,5000,now());''')
+    if sql_values('upgrade', '''SELECT "catalogSource"::text || ':' || count(*) FROM "ProductSku" s JOIN "ProductSkuOdmCustomer" c ON c."skuId"=s.id WHERE s.id=5000 GROUP BY "catalogSource";''') != ['PRICE_LIST:1']:
+        raise RuntimeError('Standard SKU customer link changed classification or failed to persist')
     for label, statement in {
         'ODM self reference': '''UPDATE "ProductSku" SET "baseSkuId"=5001 WHERE id=5001;''',
         'ODM to ODM base': '''INSERT INTO "ProductSku" (id,"productId","partNumber","normalizedPartNumber","catalogSource","baseSkuId","updatedAt") VALUES (5002,5000,'ODM-CHAIN','ODM-CHAIN','ODM',5001,now());''',
@@ -184,7 +204,7 @@ try:
         'non ODM metadata': '''UPDATE "ProductSku" SET "catalogSource"='PRICE_LIST' WHERE id=5001;''',
         'invalid ODM customer': '''INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","updatedAt") VALUES (5001,999999,now());''',
         'duplicate ODM customer': '''INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","updatedAt") VALUES (5001,5000,now());''',
-        'special SKU customer': '''INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","updatedAt") VALUES (5000,5000,now());''',
+        'duplicate standard SKU customer': '''INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","updatedAt") VALUES (5000,5000,now());''',
     }.items():
         if sql('upgrade', statement, check=False).returncode == 0:
             raise RuntimeError(f'{label} unexpectedly succeeded')
@@ -310,6 +330,17 @@ try:
                         raise RuntimeError('ODM subtype migration failed to reject base-SKU conflict atomically')
                     sql('backfill', '''DELETE FROM "ProductSku" WHERE id=5104;''')
                 sql("backfill", (directory / "migration.sql").read_text())
+                if directory.name == '20260927120000_standard_sku_customer_pricing':
+                    sql('backfill', '''INSERT INTO "ProductSku" (id,"productId","partNumber","normalizedPartNumber","catalogSource","updatedAt")
+                      VALUES (5200,5100,'STANDARD-ACCOUNT-PRICE','STANDARD-ACCOUNT-PRICE','PRICE_LIST',now());
+                      INSERT INTO "ProductSkuOdmCustomer" ("skuId","accountId","updatedAt") VALUES (5200,5100,now());
+                      INSERT INTO "ProductSkuOdmCustomerPrice" ("skuId","accountId","currencyCode","customerPrice","tariffPercent","tariffAmount","finalUnitPrice","sourceType","updatedAt")
+                      VALUES (5200,5100,'USD',150.65,0,0,150.65,'GARY_WORKBOOK',now());''')
+                    if sql_values('backfill', '''SELECT "catalogSource"::text || ':' || count(*) FROM "ProductSku" s JOIN "ProductSkuOdmCustomerPrice" p ON p."skuId"=s.id WHERE s.id=5200 GROUP BY "catalogSource";''') != ['PRICE_LIST:1']:
+                        raise RuntimeError('Standard SKU customer pricing changed classification or failed to persist')
+                    if sql('backfill', '''INSERT INTO "ProductSkuOdmCustomerPrice" ("skuId","accountId","currencyCode","customerPrice","tariffPercent","tariffAmount","finalUnitPrice","sourceType","updatedAt") VALUES (5200,5100,'USD',150.65,0,0,150.65,'GARY_WORKBOOK',now());''', check=False).returncode == 0:
+                        raise RuntimeError('Standard SKU accepted duplicate active customer pricing')
+                    print('PASS: standard SKU retains classification, accepts Account price, and rejects duplicate active revision', flush=True)
                 if directory.name == '20260922120000_odm_customization_subtype':
                     values = sql_values('backfill', '''SELECT "catalogSource"::text || ':' || "odmSubtype"::text || ':' || "odmCustomerSourceName" || ':' || "odmDescription" FROM "ProductSku" WHERE id=5103;''')
                     if values != ['ODM:LEGACY_SPECIAL_SKU:Original source:Original note'] or sql_values('backfill', '''SELECT count(*) FROM "ProductSku" WHERE "catalogSource"='SPECIAL_SKU_LIST';''') != ['0']:
