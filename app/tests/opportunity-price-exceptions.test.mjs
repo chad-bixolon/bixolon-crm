@@ -113,6 +113,52 @@ test('ODM customer source snapshots final price and preserves it after terms cha
   await assert.rejects(saveOpportunity(saveDb({odmPrices:[{...selected,accountId:8}]}).client,input({...line,odmCustomerAccountId:8})),/participating Account/);
 });
 
+test('new and existing lines save zero and nonzero tariff Account prices and switch pricing sources', async () => {
+  const customer = (price, tariff, amount, final) => ({ id: 201, skuId: 9, accountId: 7, customerPrice: new Prisma.Decimal(price), tariffPercent: new Prisma.Decimal(tariff), tariffAmount: new Prisma.Decimal(amount), finalUnitPrice: new Prisma.Decimal(final), currencyCode: 'USD', effectiveDate: null, archivedAt: null, odmCustomer: { archivedAt: null, sku: { catalogSource: 'PRICE_LIST', odmSubtype: null } } });
+  const accountLine = (price, id) => ({ ...(id ? { id } : {}), productId: 3, skuId: 9, quantity: 1000, price, priceSource: 'ODM_CUSTOMER', catalogPriceTier: null, priceExceptionLineId: null, odmCustomerPriceId: 201, odmCustomerAccountId: 7 });
+  const manualLine = id => ({ id, productId: 3, skuId: 9, quantity: 1000, price: '425.70', priceSource: 'MANUAL', catalogPriceTier: null, priceExceptionLineId: null });
+  const old = (data, price) => ({ ...data, id: 55, opportunityId: 5, archivedAt: null, estimatedUnitPrice: new Prisma.Decimal(price) });
+  const zero = customer('425.70', '0', '0', '425.70');
+  const nonzero = customer('400', '10', '40', '440');
+
+  for (const [selection, price] of [[zero, '425.70'], [nonzero, '440.00']]) {
+    const created = saveDb({ odmPrices: [selection] });
+    await saveOpportunity(created.client, input(accountLine(price)));
+    assert.equal(created.writes[0].odmCustomerPriceId, 201);
+    assert.equal(created.writes[0].odmCustomerAccountId, 7);
+    assert.equal(created.writes[0].odmCustomerTariffAmount.toString(), selection.tariffAmount.toString());
+    assert.equal(created.writes[0].odmCustomerFinalUnitPrice.toString(), selection.finalUnitPrice.toString());
+    assert.equal(created.writes[0].odmCustomerCurrencyCode, 'USD');
+    assert.equal(created.writes[0].priceExceptionLineId, null);
+    const existing = saveDb({ existingLine: old(created.writes[0], price), odmPrices: [selection] });
+    await saveOpportunity(existing.client, input(accountLine(price, 55)), 5);
+    assert.equal(existing.writes[0].odmCustomerFinalUnitPrice.toString(), selection.finalUnitPrice.toString());
+  }
+
+  const manual = saveDb();
+  await saveOpportunity(manual.client, input(manualLine()));
+  const fromManual = saveDb({ existingLine: old(manual.writes[0], '425.70'), odmPrices: [zero] });
+  await saveOpportunity(fromManual.client, input(accountLine('425.70', 55)), 5);
+  assert.equal(fromManual.writes[0].odmCustomerPriceId, 201);
+
+  const toManual = saveDb({ existingLine: old(fromManual.writes[0], '425.70') });
+  await saveOpportunity(toManual.client, input(manualLine(55)), 5);
+  assert.equal(toManual.writes[0].priceSource, 'MANUAL');
+  assert.equal(toManual.writes[0].odmCustomerPriceId, null);
+  assert.equal(toManual.writes[0].odmCustomerFinalUnitPrice, null);
+
+  const peLine = { id: 55, productId: 3, skuId: 9, quantity: 1000, price: '189.00', priceSource: 'PRICE_EXCEPTION', catalogPriceTier: null, priceExceptionLineId: 102 };
+  const toPe = saveDb({ existingLine: old(fromManual.writes[0], '425.70'), selectedLines: [selectedLine()] });
+  await saveOpportunity(toPe.client, input(peLine), 5);
+  assert.equal(toPe.writes[0].priceExceptionLineId, 102);
+  assert.equal(toPe.writes[0].odmCustomerPriceId, null);
+  const fromPe = saveDb({ existingLine: old(toPe.writes[0], '189.00'), odmPrices: [zero] });
+  await saveOpportunity(fromPe.client, input(accountLine('425.70', 55)), 5);
+  assert.equal(fromPe.writes[0].odmCustomerPriceId, 201);
+  assert.equal(fromPe.writes[0].priceExceptionLineId, null);
+  assert.equal(fromPe.writes[0].priceExceptionUnitPrice, null);
+});
+
 test('saving an eligible PE price or manual override writes durable relationship and immutable MOQ snapshot', async () => {
   for (const opportunityPrice of ['189.00', '185.00']) {
     const db = saveDb({ selectedLines: [selectedLine()] });

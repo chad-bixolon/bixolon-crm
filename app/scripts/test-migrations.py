@@ -186,6 +186,28 @@ try:
     print(prisma("upgrade", "migrate", "deploy"), flush=True)
     print("PASS: populated upgrade, preservation, integrity, parity, and repeat deployment", flush=True)
 
+    # Exercise the actual CHECK and FKs against synthetic Opportunity rows only.
+    sql('upgrade', (ROOT / 'prisma/tests/opportunity-price-provenance.sql').read_text())
+    for label, statement in {
+        'missing Account price link': '''UPDATE "OpportunityProduct" SET "priceSource"='ODM_CUSTOMER' WHERE id=100;''',
+        'Account price missing snapshot': '''UPDATE "OpportunityProduct" SET "odmCustomerTariffAmount"=NULL WHERE id=6000;''',
+        'Account price mixed with PE': '''UPDATE "OpportunityProduct" SET "priceExceptionCode"='PE' WHERE id=6000;''',
+        'PE missing relationship': '''UPDATE "OpportunityProduct" SET "priceSource"='PRICE_EXCEPTION',"priceExceptionUnitPrice"=425.70,"priceExceptionCurrencyCode"='USD' WHERE id=100;''',
+        'Manual retaining Account provenance': '''UPDATE "OpportunityProduct" SET "priceSource"='MANUAL' WHERE id=6000;''',
+    }.items():
+        if sql('upgrade', statement, check=False).returncode == 0:
+            raise RuntimeError(f'{label}: invalid provenance unexpectedly succeeded')
+    sql('upgrade', '''UPDATE "OpportunityProduct" SET "priceSource"='MANUAL',"unitPrice"=425.70 WHERE id=100;
+      UPDATE "OpportunityProduct" SET "priceSource"='ODM_CUSTOMER',"skuId"=6000,"unitPrice"=425.70,
+        "odmCustomerPriceId"=7000,"odmCustomerAccountId"=100,"odmCustomerBasePrice"=425.70,
+        "odmCustomerTariffPercent"=0,"odmCustomerTariffAmount"=0,"odmCustomerFinalUnitPrice"=425.70,
+        "odmCustomerCurrencyCode"='USD' WHERE id=100;
+      UPDATE "OpportunityProduct" SET "priceSource"='MANUAL',"odmCustomerPriceId"=NULL,
+        "odmCustomerAccountId"=NULL,"odmCustomerBasePrice"=NULL,"odmCustomerTariffPercent"=NULL,
+        "odmCustomerTariffAmount"=NULL,"odmCustomerFinalUnitPrice"=NULL,
+        "odmCustomerCurrencyCode"=NULL WHERE id=100;''')
+    print('PASS: Account price zero/nonzero snapshots, existing/new line, Manual switches, and invalid provenance checks', flush=True)
+
     if sql_values("upgrade", '''SELECT count(*) FROM "ProductSku" WHERE "catalogSource"='ODM';''') != ['0']:
         raise RuntimeError('Existing ProductSku was converted to ODM')
     sql("upgrade", '''INSERT INTO "Account" (id,name,"updatedAt") VALUES (5000,'ODM fixture customer',now());
@@ -329,7 +351,10 @@ try:
                     if blocked.returncode == 0 or sql_values('backfill', '''SELECT count(*) FROM information_schema.columns WHERE table_name='ProductSku' AND column_name='odmSubtype';''') != ['0']:
                         raise RuntimeError('ODM subtype migration failed to reject base-SKU conflict atomically')
                     sql('backfill', '''DELETE FROM "ProductSku" WHERE id=5104;''')
+                provenance_before = all_table_fingerprints('backfill') if directory.name == '20260927180000_opportunity_product_account_price_provenance' else None
                 sql("backfill", (directory / "migration.sql").read_text())
+                if provenance_before is not None and provenance_before != all_table_fingerprints('backfill'):
+                    raise RuntimeError('Opportunity pricing provenance migration changed existing rows')
                 if directory.name == '20260927120000_standard_sku_customer_pricing':
                     sql('backfill', '''INSERT INTO "ProductSku" (id,"productId","partNumber","normalizedPartNumber","catalogSource","updatedAt")
                       VALUES (5200,5100,'STANDARD-ACCOUNT-PRICE','STANDARD-ACCOUNT-PRICE','PRICE_LIST',now());
