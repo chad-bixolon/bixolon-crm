@@ -34,7 +34,7 @@ export function ActivityContactPicker({ contacts, selectedIds, onChange, account
         <input className="field mb-2" id="activityContactSearch" type="search" value={query} onChange={event => { setQuery(event.target.value); setContactToAdd(''); }} placeholder="Search name, email, or company" aria-describedby="activityContactHelp" disabled={!accountSelected}/>
         <select className="field" aria-label="Contact search results" value={contactToAdd} onChange={event => setContactToAdd(event.target.value)} disabled={!accountSelected}>
           <option value="">{accountSelected ? 'Choose Contact' : 'Choose an Account first'}</option>
-          {available.map(contact => <option key={contact.id} value={contact.id}>{activityContactLabel(contact)}{contact.email ? ` · ${contact.email}` : ''}{!contact.active ? ' (inactive, linked)' : ''}</option>)}
+          {available.map(contact => <option key={contact.id} value={contact.id}>{activityContactLabel(contact)}{!contact.active ? ' (inactive, linked)' : ''}</option>)}
         </select>
       </div>
       <button type="button" className="btn-secondary" disabled={!contactToAdd} onClick={addContact}>Add Contact</button>
