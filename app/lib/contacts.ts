@@ -2,7 +2,7 @@ import { MarketingPreference, Prisma, type PrismaClient } from "@prisma/client";
 import { can, type Actor } from "./authorization";
 import { field, optional, pageNumber, phone, positiveId, required, type Errors } from "./crm-validation";
 import { parseAddress, type Address } from "./address";
-export const marketingPreferenceLabels: Record<MarketingPreference,string> = { UNKNOWN: "Unknown / Not Confirmed", OPTED_IN: "Opted In", OPTED_OUT: "Opted Out" };
+export const marketingPreferenceLabels: Record<MarketingPreference,string> = { UNKNOWN: "Not specified", OPTED_IN: "Opted in", OPTED_OUT: "Opted out" };
 export type ContactInput = Address & { accountId: number | null; firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null; mobile: string | null; active: boolean; isPrimary: boolean; marketingPreference: MarketingPreference };
 type ContactWriteClient = Pick<Prisma.TransactionClient,"account"|"contact">;
 export function parseContact(form: FormData) {
@@ -33,7 +33,7 @@ export async function saveContactRecord(tx: ContactWriteClient, input: ContactIn
     const existing = id ? await tx.contact.findUnique({ where: { id } }) : null;
     if (id) { if (!existing) throw new Error("Contact not found."); if (existing.archivedAt) throw new Error("Reactivate this contact before editing it."); }
     const preferenceChanged = id ? existing!.marketingPreference !== input.marketingPreference : input.marketingPreference !== MarketingPreference.UNKNOWN;
-    if (preferenceChanged && (!actor || !can(actor,"marketing.write"))) throw new Error("Only Marketing Managers and Administrators may change Marketing Preference.");
+    if (preferenceChanged && (!actor || !can(actor,"contacts.write"))) throw new Error("Access denied");
     if (input.isPrimary && input.accountId !== null) await tx.contact.updateMany({ where: { accountId: input.accountId, isPrimary: true, ...(id ? { id: { not: id } } : {}) }, data: { isPrimary: false } });
     const audit = preferenceChanged ? { marketingPreferenceUpdatedAt: new Date(), marketingPreferenceUpdatedByUserId: actor!.id } : {};
     const record = id ? await tx.contact.update({ where: { id }, data: {...input,...audit} }) : await tx.contact.create({ data: {...input,...audit} });

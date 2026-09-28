@@ -99,7 +99,7 @@ export function parseAudienceForm(form:FormData){
 export function csvCell(value:unknown){const text=String(value??"");return /[",\r\n]/.test(text)?`"${text.replaceAll('"','""')}"`:text;}
 export function contactsCsv(rows:Prisma.ContactGetPayload<{include:typeof audienceContactInclude}>[]){
   const header=["Contact ID","First Name","Last Name","Email","Phone","Title","Account ID","Account Name","Account Business Roles","Industry","Territory","Account Owner","Marketing Preference"];
-  const lines=rows.map(c=>[c.id,c.firstName,c.lastName,c.email,c.phone,c.title,c.accountId,c.account?.name,c.account?.businessRoles.map(r=>r.role).join("; "),c.account?.industryCategory?.name??c.account?.industry,c.account?.territoryCategory?.name??c.account?.territory,c.account?.owner?`${c.account.owner.firstName} ${c.account.owner.lastName}`:"",c.marketingPreference]);
+  const lines=rows.filter(c=>c.marketingPreference!=="OPTED_OUT").map(c=>[c.id,c.firstName,c.lastName,c.email,c.phone,c.title,c.accountId,c.account?.name,c.account?.businessRoles.map(r=>r.role).join("; "),c.account?.industryCategory?.name??c.account?.industry,c.account?.territoryCategory?.name??c.account?.territory,c.account?.owner?`${c.account.owner.firstName} ${c.account.owner.lastName}`:"",c.marketingPreference]);
   return [header,...lines].map(row=>row.map(csvCell).join(",")).join("\r\n")+"\r\n";
 }
 

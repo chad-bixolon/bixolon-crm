@@ -19,12 +19,12 @@ test('migration gives existing and future Contacts UNKNOWN without inferring sou
   assert.doesNotMatch(resolve,/routing.*OPTED_IN|OPTED_IN.*routing/s);
 });
 
-test('explicit preference changes stamp actor/time and require marketing.write',async()=>{
+test('explicit preference changes stamp actor/time and require contacts.write',async()=>{
   let row={id:4,accountId:null,archivedAt:null,marketingPreference:'UNKNOWN'};
   const tx={account:{findUnique:async()=>null},contact:{findUnique:async()=>row,updateMany:async()=>{},update:async({data})=>(row={...row,...data}),create:async({data})=>(row={id:4,...data})}};
   const client={$transaction:async fn=>fn(tx)},base={accountId:null,firstName:'Ada',lastName:'L',title:null,email:'ada@example.com',phone:null,mobile:null,active:true,isPrimary:false,addressLine1:null,addressLine2:null,city:null,stateProvince:null,postalCode:null,country:null};
-  await assert.rejects(contacts.saveContact(client,{...base,marketingPreference:'OPTED_IN'},4,actor('SALES_MANAGER')),/Marketing Managers/);
-  await contacts.saveContact(client,{...base,marketingPreference:'OPTED_IN'},4,actor('MARKETING_MANAGER'));
+  await assert.rejects(contacts.saveContact(client,{...base,marketingPreference:'OPTED_IN'},4,actor('READ_ONLY')),/Access denied/);
+  await contacts.saveContact(client,{...base,marketingPreference:'OPTED_IN'},4,actor('SALES'));
   assert.equal(row.marketingPreference,'OPTED_IN');assert.equal(row.marketingPreferenceUpdatedByUserId,7);assert.ok(row.marketingPreferenceUpdatedAt instanceof Date);
   const stamped=row.marketingPreferenceUpdatedAt;await contacts.saveContact(client,{...base,marketingPreference:'OPTED_IN'},4,actor('ADMIN',9));assert.equal(row.marketingPreferenceUpdatedAt,stamped);
   await contacts.saveContact(client,{...base,marketingPreference:'OPTED_OUT'},4,actor('ADMIN',9));assert.equal(row.marketingPreferenceUpdatedByUserId,9);
@@ -59,19 +59,29 @@ test('summary distinguishes matched, preference, missing email, and Marketing Re
 
 test('general CSV includes preference and Account context but excludes raw and narrative data; ready rule is strict',()=>{
   const rows=[contact(1,'OPTED_IN','one@example.com'),contact(2,'UNKNOWN','two@example.com'),contact(3,'OPTED_OUT','three@example.com'),contact(4,'OPTED_IN',null)];
-  const csv=audiences.contactsCsv(rows);assert.match(csv,/Account Business Roles,Industry,Territory,Account Owner,Marketing Preference/);assert.match(csv,/Acme/);assert.doesNotMatch(csv,/rawSourceData|Customer Pain Points/);
+  const csv=audiences.contactsCsv(rows);assert.match(csv,/Account Business Roles,Industry,Territory,Account Owner,Marketing Preference/);assert.match(csv,/Acme/);assert.doesNotMatch(csv,/rawSourceData|Customer Pain Points|First3/);assert.match(csv,/First2/);
   assert.deepEqual(rows.filter(x=>x.marketingPreference==='OPTED_IN'&&audiences.validEmail(x.email)).map(x=>x.id),[1]);
 });
 
 test('audience permissions reuse marketing read/write and PERSONAL/SHARED ownership',()=>{
   const personal={ownerId:7,visibility:'PERSONAL'},shared={ownerId:8,visibility:'SHARED'};
   assert.equal(audiences.canManageAudience(actor('ADMIN'),shared),true);assert.equal(audiences.canManageAudience(actor('MARKETING_MANAGER'),personal),true);assert.equal(audiences.canManageAudience(actor('SALES_MANAGER'),personal),false);assert.equal(audiences.canManageAudience(actor('SALES'),personal),false);assert.equal(audiences.canManageAudience(actor('READ_ONLY'),personal),false);
-  assert.equal(audiences.canViewAudience(actor('SALES_MANAGER'),shared),true);assert.equal(audiences.canViewAudience(actor('READ_ONLY'),shared),true);assert.equal(audiences.canViewAudience(actor('READ_ONLY',9),personal),false);
-  assert.equal(audiences.canExportAudience(actor('MARKETING_MANAGER'),shared),true);assert.equal(audiences.canExportAudience(actor('SALES_MANAGER'),shared),false);
-  assert.equal(routeAccess('/marketing/audiences/new',actor('READ_ONLY')),'denied');assert.equal(can(actor('MARKETING_MANAGER'),'marketing.write'),true);
+  for(const role of ['SALES_MANAGER','SALES','READ_ONLY']){
+    assert.equal(can(actor(role),'marketing.read'),false);
+    assert.equal(audiences.canViewAudience(actor(role),shared),false);
+    assert.equal(audiences.canManageAudience(actor(role),shared),false);
+    assert.equal(audiences.canExportAudience(actor(role),shared),false);
+    for(const path of ['/marketing/audiences','/marketing/audiences/1','/marketing/audiences/1/export','/marketing/audiences/new','/marketing/audiences/1/edit'])assert.equal(routeAccess(path,actor(role)),'denied');
+  }
+  assert.equal(audiences.canViewAudience(actor('ADMIN'),personal),true);
+  assert.equal(audiences.canViewAudience(actor('MARKETING_MANAGER'),shared),true);
+  assert.equal(audiences.canViewAudience(actor('MARKETING_MANAGER',9),personal),false);
+  assert.equal(audiences.canExportAudience(actor('MARKETING_MANAGER'),shared),true);
+  for(const role of ['ADMIN','MARKETING_MANAGER'])for(const path of ['/marketing/audiences','/marketing/audiences/1','/marketing/audiences/1/export','/marketing/audiences/new'])assert.equal(routeAccess(path,actor(role)),'allowed');
+  assert.equal(can(actor('MARKETING_MANAGER'),'marketing.write'),true);
 });
 
 test('audience UI is compact, responsive, paginated, and offers both safe exports',()=>{
   const form=fs.readFileSync(path.join(root,'components/marketing-audience-form.tsx'),'utf8'),detail=fs.readFileSync(path.join(root,'app/marketing/audiences/[id]/page.tsx'),'utf8');
-  assert.match(form,/report-primary-filters/);assert.match(form,/report-filter-grid/);assert.match(detail,/PAGE_SIZE=50/);assert.match(detail,/Select All Matching/);assert.match(detail,/Clear Selection/);assert.match(detail,/Export Selected/);assert.match(detail,/Export Marketing-Ready/);assert.match(detail,/TableScroll/);
+  assert.match(form,/report-primary-filters/);assert.match(form,/report-filter-grid/);assert.match(detail,/PAGE_SIZE=50/);assert.match(detail,/Select All Matching/);assert.match(detail,/Clear Selection/);assert.match(detail,/Export Selected/);assert.match(detail,/Review or export selected records internally/);assert.match(detail,/Export Marketing-Ready/);assert.match(detail,/Contacts eligible for marketing communications/);assert.match(detail,/TableScroll/);
 });

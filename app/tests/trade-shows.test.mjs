@@ -62,11 +62,13 @@ test('Trade Show Event Leads uses compact responsive filters and six combined ta
 test('Trade Show roles and row scopes preserve Marketing and Sales boundaries', () => {
   for (const role of ['ADMIN','MARKETING_MANAGER']) {
     assert.equal(can(actor(role), 'trade-shows.manage'), true);
+    assert.equal(shows.canViewTradeShowImportHistory(actor(role)), true);
     assert.equal(routeAccess('/trade-shows/new', actor(role)), 'allowed');
     assert.equal(routeAccess('/trade-shows/1/edit', actor(role)), 'allowed');
   }
   for (const role of ['SALES_MANAGER','SALES','READ_ONLY']) {
     assert.equal(can(actor(role), 'trade-shows.manage'), false);
+    assert.equal(shows.canViewTradeShowImportHistory(actor(role)), false);
     assert.equal(routeAccess('/trade-shows/new', actor(role)), 'denied');
   }
   assert.equal(can(actor('MARKETING_MANAGER'), 'sales.read'), false);
@@ -83,6 +85,8 @@ test('Trade Show roles and row scopes preserve Marketing and Sales boundaries', 
   assert.equal(routeAccess('/trade-shows/1/import', actor('MARKETING_MANAGER')), 'allowed');
   assert.equal(routeAccess('/trade-shows/1/import', actor('SALES_MANAGER')), 'denied');
   assert.equal(routeAccess('/trade-shows/1/import', actor('SALES')), 'denied');
+  assert.equal(routeAccess('/trade-shows/1', actor('SALES_MANAGER')), 'allowed');
+  assert.equal(routeAccess('/trade-shows/1', actor('READ_ONLY')), 'allowed');
   assert.equal(routeAccess('/trade-shows/my-leads', actor('SALES')), 'allowed');
   assert.equal(routeAccess('/trade-shows/my-leads', actor('SALES_MANAGER')), 'allowed');
   assert.equal(routeAccess('/trade-shows/my-leads', actor('ADMIN')), 'allowed');

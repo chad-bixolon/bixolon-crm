@@ -23,6 +23,7 @@ Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(f
 Module._extensions['.tsx'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText, filename);
 const require = Module.createRequire(fileURLToPath(import.meta.url));
 const { Shell } = require(path.join(root, 'components/shell.tsx'));
+const { can } = require(path.join(root, 'lib/authorization.ts'));
 Module._load = originalLoad;
 
 function render(user, route = '/') {
@@ -48,4 +49,12 @@ test('sign-in page does not show authenticated shell controls', () => {
   const html = render({ name: 'Chad Guenther', role: 'ADMIN', canManageUsers: true }, '/sign-in');
   assert.doesNotMatch(html, /Chad Guenther|Administrator|Sign out|href="\/administration"/);
   assert.match(html, /Page content/);
+});
+
+test('Marketing Audience navigation follows the Admin and Marketing role grants', () => {
+  for (const role of ['ADMIN','MARKETING_MANAGER','SALES_MANAGER','SALES','READ_ONLY']) {
+    const html = render({ name: 'Test User', role, canViewMarketing: can({ id: 7, role, active: true, archivedAt: null }, 'marketing.read') });
+    assert.equal(html.includes('href="/marketing/audiences"'), ['ADMIN','MARKETING_MANAGER'].includes(role));
+    assert.match(html, /href="\/trade-shows"/);
+  }
 });

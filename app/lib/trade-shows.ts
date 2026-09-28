@@ -45,6 +45,10 @@ export function canEditTradeShowLead(actor: Actor, lead: { assignedSalesRepUserI
   return can(actor, 'trade-shows.leads.write') && (actor.role !== 'SALES' || lead.assignedSalesRepUserId === actor.id);
 }
 
+export function canViewTradeShowImportHistory(actor: Actor) {
+  return can(actor, 'trade-shows.manage');
+}
+
 export function tradeShowKpis(leads: { assignedSalesRepUserId: number | null; status: TradeShowLeadStatus; routing?:TradeShowLeadRouting }[]) {
   return {
     total: leads.length,

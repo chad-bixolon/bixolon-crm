@@ -8,7 +8,7 @@ import { saveFeedbackMessage } from '@/lib/save-feedback';
 import { prisma } from '@/lib/prisma';
 import { currentUser } from '@/lib/current-user';
 import { can } from '@/lib/authorization';
-import { tradeShowKpis, tradeShowLeadReadWhere, tradeShowReadWhere } from '@/lib/trade-shows';
+import { canViewTradeShowImportHistory, tradeShowKpis, tradeShowLeadReadWhere, tradeShowReadWhere } from '@/lib/trade-shows';
 import { tradeShowTimezoneLabel } from '@/lib/trade-show-timezones';
 import { defaultReportConfiguration, executeTradeShowReport } from '@/lib/reporting';
 import { eligiblePartnerAccountWhere } from '@/lib/trade-show-routing';
@@ -31,6 +31,7 @@ const routingLabels:Record<TradeShowLeadRouting,string>={UNREVIEWED:'Unreviewed'
 const sourceFormatLabels: Record<TradeShowImportFormat, string> = { NRA_NRF: 'NRA / NRF', XPRESSLEADS_MODEX: 'MODEX / XPressLeads', CUSTOM_MAPPING: 'Custom mapping' };
 export default async function TradeShowPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{q?:string;rep?:string;status?:string;routing?:string;account?:string;contact?:string;followUp?:string;bulk?:string;saved?:string}> }) {
   const actor = await currentUser();
+  const viewImportHistory = canViewTradeShowImportHistory(actor);
   const id = Number((await params).id);
   const filters = await searchParams;
   if (!Number.isSafeInteger(id) || id < 1) notFound();
@@ -42,7 +43,7 @@ export default async function TradeShowPage({ params, searchParams }: { params: 
     include: {
       marketingOwner: { select: { firstName: true, lastName: true } },
       leads: { where: leadFilter, select: { id: true, firstName: true, lastName: true, title: true, sourceCompany: true, email: true, phone: true, followUpAt: true, assignedSalesRepUserId: true, status: true,routing:true,routedPartnerAccount:{select:{name:true}}, assignedSalesRep: { select: { firstName: true, lastName: true } }, account:{select:{name:true}},contact:{select:{firstName:true,lastName:true}},convertedOpportunity:{select:{id:true}} }, orderBy: { id: 'desc' }, take: 100 },
-      imports: { select: { id: true, format:true, mappingName:true, sourceFileName: true, sourceSheet: true, fileSha256:true, uploadedAt: true, rowCount: true, createdCount: true, existingCount: true, skippedCount: true,uploadedBy:{select:{firstName:true,lastName:true}} }, orderBy: { uploadedAt: 'desc' }, take: 20 },
+      imports: { where: viewImportHistory ? {} : { id: -1 }, select: { id: true, format:true, mappingName:true, sourceFileName: true, sourceSheet: true, fileSha256:true, uploadedAt: true, rowCount: true, createdCount: true, existingCount: true, skippedCount: true,uploadedBy:{select:{firstName:true,lastName:true}} }, orderBy: { uploadedAt: 'desc' }, take: 20 },
     },
   }),prisma.user.findMany({where:{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true,firstName:true,lastName:true},orderBy:{firstName:'asc'}}),prisma.account.findMany({where:eligiblePartnerAccountWhere,select:{id:true,name:true},orderBy:{name:'asc'}})]);
   if (!show) notFound();
@@ -101,6 +102,6 @@ export default async function TradeShowPage({ params, searchParams }: { params: 
       </form>
       {!show.leads.length && <p className="p-8 text-center text-sm text-slate-500">No leads match these filters.</p>}
     </section>
-    <section className="panel p-5"><h2 className="text-lg font-semibold">Import History</h2>{show.imports.length ? <ul className="mt-3 divide-y">{show.imports.map(item => <li className="min-w-0 py-3 text-sm" key={item.id}><strong className="block break-all text-slate-900">{item.sourceFileName}</strong><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-slate-600"><span>{sourceFormatLabels[item.format]}</span>{item.mappingName&&<span>Mapping: {item.mappingName}</span>}<span>Sheet: {item.sourceSheet}</span><span>Uploaded by {item.uploadedBy.firstName} {item.uploadedBy.lastName}</span><span>{dateTime(item.uploadedAt)}</span></div><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-slate-500"><span>{item.rowCount} rows</span><span>{item.createdCount} new</span><span>{item.existingCount} existing</span><span>{item.skippedCount} skipped</span></div></li>)}</ul> : <p className="mt-3 text-sm text-slate-500">No confirmed imports yet.</p>}</section>
+    {viewImportHistory && <section className="panel p-5"><h2 className="text-lg font-semibold">Import History</h2>{show.imports.length ? <ul className="mt-3 divide-y">{show.imports.map(item => <li className="min-w-0 py-3 text-sm" key={item.id}><strong className="block break-all text-slate-900">{item.sourceFileName}</strong><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-slate-600"><span>{sourceFormatLabels[item.format]}</span>{item.mappingName&&<span>Mapping: {item.mappingName}</span>}<span>Sheet: {item.sourceSheet}</span><span>Uploaded by {item.uploadedBy.firstName} {item.uploadedBy.lastName}</span><span>{dateTime(item.uploadedAt)}</span></div><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-slate-500"><span>{item.rowCount} rows</span><span>{item.createdCount} new</span><span>{item.existingCount} existing</span><span>{item.skippedCount} skipped</span></div></li>)}</ul> : <p className="mt-3 text-sm text-slate-500">No confirmed imports yet.</p>}</section>}
   </Content>;
 }
