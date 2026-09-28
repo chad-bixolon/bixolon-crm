@@ -1,5 +1,5 @@
 export type RelatedOption = { id: number; name: string; accountIds: number[]; projectIds?: number[]; opportunityIds?: number[] };
-export type ContactOption = { id: number; name: string; accountId: number | null; active: boolean };
+export type ContactOption = { id: number; name: string; accountId: number | null; accountName?: string | null; email?: string | null; active: boolean };
 
 export function activityChoices(accountId: number, originalAccountId: number, opportunities: RelatedOption[], projects: RelatedOption[], contacts: ContactOption[], historical: { opportunityId?: number; projectId?: number; contactIds: number[] }, selected: { opportunityId?: number; projectId?: number } = {}) {
   const sameAccount = accountId > 0 && accountId === originalAccountId;

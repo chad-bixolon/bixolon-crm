@@ -10,6 +10,7 @@ Module._extensions['.ts']=(mod,filename)=>mod._compile(ts.transpileModule(fs.rea
 const require=Module.createRequire(fileURLToPath(import.meta.url));
 const work=require(path.join(root,'lib/work.ts'));
 const activityRelations=require(path.join(root,'lib/activity-relations.ts'));
+const activityContactPicker=require(path.join(root,'lib/activity-contact-picker.ts'));
 const analytics=require(path.join(root,'lib/analytics.ts'));
 const { submitGate }=require(path.join(root,'lib/submit-gate.ts'));
 function form(entries){const f=new FormData();for(const [k,v] of entries)f.append(k,v);return f;}
@@ -98,6 +99,32 @@ test('Activity choices follow Account opportunity, Project, and Contact relation
  assert.ok(historical.projects.some(x=>x.id===23));
  assert.ok(historical.contacts.some(x=>x.id===33));
  assert.ok(!activityRelations.activityChoices(2,1,opportunities,projects,contacts,{contactIds:[33]}).contacts.some(x=>x.id===33));
+});
+test('Activity Contact picker searches eligible people by name, email, and company and labels each Account',()=>{
+ const contacts=[
+  {id:30,name:'Chris Filippi',email:'chris@example.com',accountId:1,accountName:'7-Eleven',active:true},
+  {id:31,name:'Sam Baskar',email:'sam@example.com',accountId:null,accountName:null,active:true},
+  {id:32,name:'Other Person',email:'other@example.com',accountId:2,accountName:'Other Company',active:true},
+ ];
+ const eligible=activityRelations.activityChoices(1,0,[],[],contacts,{contactIds:[]}).contacts;
+ assert.deepEqual(eligible.map(contact=>contact.id),[30,31]);
+ assert.equal(activityContactPicker.activityContactLabel(eligible[0]),'Chris Filippi — 7-Eleven');
+ assert.equal(activityContactPicker.activityContactLabel(eligible[1]),'Sam Baskar — No Account');
+ assert.deepEqual(activityContactPicker.searchActivityContacts(eligible,'filippi',[]).map(contact=>contact.id),[30]);
+ assert.deepEqual(activityContactPicker.searchActivityContacts(eligible,'SAM@EXAMPLE.COM',[]).map(contact=>contact.id),[31]);
+ assert.deepEqual(activityContactPicker.searchActivityContacts(eligible,'7-eleven',[]).map(contact=>contact.id),[30]);
+ assert.deepEqual(activityContactPicker.searchActivityContacts(eligible,'Other Company',[]),[]);
+ const selected=[30,31];
+ assert.deepEqual(activityContactPicker.searchActivityContacts(eligible,'',selected),[]);
+ assert.deepEqual(selected.map(id=>activityContactPicker.activityContactLabel(eligible.find(contact=>contact.id===id))),['Chris Filippi — 7-Eleven','Sam Baskar — No Account']);
+});
+test('Activity Contact picker retains linked history only for the original Account',()=>{
+ const contacts=[{id:30,name:'Historical Person',email:'history@example.com',accountId:2,accountName:'Former Company',active:false}];
+ const history={contactIds:[30]};
+ const original=activityRelations.activityChoices(1,1,[],[],contacts,history).contacts;
+ assert.deepEqual(activityContactPicker.searchActivityContacts(original,'Former Company',[]).map(contact=>contact.id),[30]);
+ assert.deepEqual(activityRelations.retainedActivitySelections(1,1,[],[],contacts,history,{opportunityId:0,projectId:0,contactIds:[30]}).contactIds,[30]);
+ assert.deepEqual(activityRelations.retainedActivitySelections(2,1,[],[],contacts,history,{opportunityId:0,projectId:0,contactIds:[30]}).contactIds,[]);
 });
 test('Activity choices narrow in both directions and keep only compatible selections',()=>{
  const opportunities=[{id:10,name:'One',accountIds:[1,2],projectIds:[20]},{id:11,name:'Two',accountIds:[1],projectIds:[21]},{id:12,name:'Other account',accountIds:[2],projectIds:[20]}];
