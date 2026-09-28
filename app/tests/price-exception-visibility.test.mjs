@@ -49,7 +49,7 @@ test('Account context and both Opportunity candidate scopes embed the same SALES
 function assignmentDb(initial = {}) {
   const record = { id: 44, assignedSalesRepUserId: null, sourceSalesRepName: 'Rosa source', sourceSalesRepEmail: 'rosa@example.com', distributorSalesRep: 'Wally DeBurgh', ...initial };
   const users = new Map([[10, { id: 10, role: 'SALES', active: true, archivedAt: null }], [11, { id: 11, role: 'SALES_MANAGER', active: true, archivedAt: null }]]);
-  return { record, priceException: { findUnique: async () => ({ id: record.id }), update: async ({ data }) => Object.assign(record, data) }, user: { findUnique: async ({ where }) => users.get(where.id) ?? null } };
+  return { record, priceException: { findUnique: async () => ({ id: record.id, assignedSalesRepUserId: record.assignedSalesRepUserId }), update: async ({ data }) => Object.assign(record, data) }, user: { findUnique: async ({ where }) => users.get(where.id) ?? null } };
 }
 
 test('ADMIN can assign, change, and clear without touching source salesperson identity; non-Admin is rejected', async () => {
@@ -64,13 +64,21 @@ test('ADMIN can assign, change, and clear without touching source salesperson id
   await assert.rejects(updatePriceExceptionSalesRep(db, 44, actor('SALES_MANAGER'), 10), /Access denied/);
 });
 
+test('historical Price Exception rep can remain assigned but cannot be newly selected', async () => {
+  const db = assignmentDb({ assignedSalesRepUserId: 99 });
+  await updatePriceExceptionSalesRep(db, 44, actor('ADMIN', 91), 99);
+  assert.equal(db.record.assignedSalesRepUserId, 99);
+  await updatePriceExceptionSalesRep(db, 44, actor('ADMIN', 91), null);
+  await assert.rejects(updatePriceExceptionSalesRep(db, 44, actor('ADMIN', 91), 99), error => /Sales or Sales Manager/.test(error.errors?.assignedSalesRepUserId));
+});
+
 test('hidden PE line cannot be newly submitted, while an unchanged reassigned historical line keeps its snapshot', async () => {
   const hiddenParent = { id: 40, peCode: 'PE-HIDDEN', status: 'ACTIVE', archivedAt: null, expirationDate: null, assignedSalesRepUserId: 99, sourceType: 'EXTERNAL_EXPORT', distributorAccountId: null, varAccountId: null, endUserAccountId: 7 };
   const selected = { id: 102, productSkuId: 9, approvedUnitPrice: new Prisma.Decimal('189'), currencyCode: 'USD', sourceQuantity: new Prisma.Decimal('1'), sourceQuantityRaw: '1', sourceUnit: null, priceException: hiddenParent };
   const old = { id: 55, opportunityId: 5, productId: 3, skuId: 9, quantity: 1, estimatedUnitPrice: new Prisma.Decimal('185'), archivedAt: null, priceSource: 'PRICE_EXCEPTION', catalogPriceTier: null, priceExceptionLineId: 102, priceExceptionCode: 'SNAPSHOT', priceExceptionUnitPrice: new Prisma.Decimal('189'), priceExceptionCurrencyCode: 'USD', priceExceptionSourceQty: '1' };
-  const makeDb = existing => {
+  const makeDb = (existing, ownerRole = 'SALES') => {
     const writes = [];
-    const tx = { opportunity: { findUnique: async () => existing ? { id: 5, ownerId: 10, archivedAt: null, stageId: 1, projects: [] } : null, create: async () => ({ id: 5 }), update: async () => ({}) }, opportunityProduct: { findMany: async () => existing ? [old] : [], create: async ({ data }) => writes.push(data), update: async ({ data }) => writes.push(data) }, salesStage: { findUnique: async () => ({ id: 1, active: true, isClosed: false, isWon: false }) }, currency: { findUnique: async () => ({ active: true }) }, user: { findUnique: async () => ({ id: 10, active: true, archivedAt: null }) }, account: { findMany: async () => [{ id: 7 }] }, product: { findMany: async () => [{ id: 3 }] }, project: { findMany: async () => [] }, productSku: { findMany: async () => [{ id: 9, productId: 3, active: true }] }, productPrice: { findMany: async () => [] }, priceExceptionLine: { findMany: async () => [selected] }, opportunityProject: { delete: async () => ({}), create: async () => ({}) }, opportunityAccount: { findMany: async () => [], delete: async () => ({}), upsert: async () => ({}) }, opportunityAccountRole: { deleteMany: async () => ({}), create: async () => ({}) } };
+    const tx = { opportunity: { findUnique: async () => existing ? { id: 5, ownerId: 10, archivedAt: null, stageId: 1, projects: [] } : null, create: async () => ({ id: 5 }), update: async () => ({}) }, opportunityProduct: { findMany: async () => existing ? [old] : [], create: async ({ data }) => writes.push(data), update: async ({ data }) => writes.push(data) }, salesStage: { findUnique: async () => ({ id: 1, active: true, isClosed: false, isWon: false }) }, currency: { findUnique: async () => ({ active: true }) }, user: { findUnique: async () => ({ id: 10, role: ownerRole, active: true, archivedAt: null }) }, account: { findMany: async () => [{ id: 7 }] }, product: { findMany: async () => [{ id: 3 }] }, project: { findMany: async () => [] }, productSku: { findMany: async () => [{ id: 9, productId: 3, active: true }] }, productPrice: { findMany: async () => [] }, priceExceptionLine: { findMany: async () => [selected] }, opportunityProject: { delete: async () => ({}), create: async () => ({}) }, opportunityAccount: { findMany: async () => [], delete: async () => ({}), upsert: async () => ({}) }, opportunityAccountRole: { deleteMany: async () => ({}), create: async () => ({}) } };
     return { writes, client: { $transaction: async fn => fn(tx) } };
   };
   const input = line => ({ name: 'Deal', description: null, ownerId: 10, projectIds: [], stageId: 1, expectedCloseDate: null, probability: null, forecastCategory: null, currencyCode: 'USD', participants: [{ accountId: 7, roles: ['END_USER'] }], lines: [line] });
@@ -78,6 +86,9 @@ test('hidden PE line cannot be newly submitted, while an unchanged reassigned hi
   await assert.rejects(saveOpportunity(makeDb(false).client, input({ productId: 3, skuId: 9, quantity: 1, price: '189.00', priceSource: 'PRICE_EXCEPTION', catalogPriceTier: null, priceExceptionLineId: 102 }), undefined, sales), /not available to this user/);
   const historical = makeDb(true);
   await saveOpportunity(historical.client, input({ id: 55, productId: 3, skuId: 9, quantity: 1, price: '185.00', priceSource: 'PRICE_EXCEPTION', catalogPriceTier: null, priceExceptionLineId: 102 }), 5, sales);
+  const readOnlyOwner = makeDb(true, 'READ_ONLY');
+  await saveOpportunity(readOnlyOwner.client, input({ id: 55, productId: 3, skuId: 9, quantity: 1, price: '185.00', priceSource: 'PRICE_EXCEPTION', catalogPriceTier: null, priceExceptionLineId: 102 }), 5, actor('ADMIN'));
+  await assert.rejects(saveOpportunity(makeDb(false, 'READ_ONLY').client, input({ productId: 3, skuId: 9, quantity: 1, price: '189.00', priceSource: 'PRICE_EXCEPTION', catalogPriceTier: null, priceExceptionLineId: 102 }), undefined, actor('ADMIN')), /eligible owner/);
   assert.equal(historical.writes[0].priceExceptionCode, 'SNAPSHOT');
   assert.equal(historical.writes[0].estimatedUnitPrice, '185.00');
 });

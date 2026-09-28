@@ -12,8 +12,8 @@ type OwnerOption = { id: number; firstName: string; lastName: string };
 type Initial = { name: string; primaryAccountId: number | null; primaryAccountRole: ProjectPartyRole; ownerId: number | null;
   status: ProjectStatus; startDate: Date | null; targetEndDate: Date | null; description: string | null;
   participants: { accountId: number; roles: ProjectPartyRole[] }[] };
-export function ProjectForm({ id, initial, accounts, owners, primaryAccountId: preselected }: {
-  id?: number; initial?: Initial; accounts: AccountOption[]; owners: OwnerOption[]; primaryAccountId?: number;
+export function ProjectForm({ id, initial, accounts, owners, currentOwner, primaryAccountId: preselected }: {
+  id?: number; initial?: Initial; accounts: AccountOption[]; owners: OwnerOption[]; currentOwner?: {firstName:string;lastName:string}|null; primaryAccountId?: number;
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(submitProject.bind(null, id ?? null), { errors: {} } as ProjectFormState);
@@ -27,8 +27,6 @@ export function ProjectForm({ id, initial, accounts, owners, primaryAccountId: p
   useEffect(() => { if (state.redirectTo) router.push(state.redirectTo); }, [state.redirectTo, router]);
   const error = (key: string) => state.errors[key] && <p className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
   const accountOptions = [...accounts];
-  const ownerOptions = [...owners];
-  if (initial?.ownerId && !ownerOptions.some(o => o.id === initial.ownerId)) ownerOptions.push({ id: initial.ownerId, firstName: 'Current owner', lastName: '(inactive)' });
   for (const p of initial?.participants ?? []) if (!accountOptions.some(a => a.id === p.accountId)) accountOptions.push({ id: p.accountId, name: `Account #${p.accountId} (inactive)` });
   if (initial?.primaryAccountId && !accountOptions.some(a => a.id === initial.primaryAccountId)) accountOptions.push({ id: initial.primaryAccountId, name: `Account #${initial.primaryAccountId} (inactive)` });
   const available = accountOptions.filter(a => a.id !== primaryId && !participants.some(p => p.accountId === a.id));
@@ -38,7 +36,7 @@ export function ProjectForm({ id, initial, accounts, owners, primaryAccountId: p
     {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     <section className="grid gap-4 sm:grid-cols-2"><h2 className="sm:col-span-2 text-lg font-semibold">Overview</h2>
       <div className="sm:col-span-2"><label className="label" htmlFor="name">Project name *</label><input className="field" id="name" name="name" required maxLength={200} defaultValue={val('name', initial?.name ?? '')}/>{error('name')}</div>
-      <div><label className="label" htmlFor="ownerId">Owner</label><select className="field" id="ownerId" name="ownerId" defaultValue={val('ownerId', initial?.ownerId ?? '')}><option value="">Unassigned</option>{ownerOptions.map(o => <option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select>{error('ownerId')}</div>
+      <div><label className="label" htmlFor="ownerId">Owner</label><select className="field" id="ownerId" name="ownerId" defaultValue={val('ownerId', initial?.ownerId ?? '')}><option value="">Unassigned</option>{id && initial?.ownerId && !owners.some(o => o.id === initial.ownerId) && <optgroup label="Current assignment"><option value={initial.ownerId}>{currentOwner ? `${currentOwner.firstName} ${currentOwner.lastName}` : `User #${initial.ownerId}`} (no longer eligible)</option></optgroup>}{owners.map(o => <option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select>{error('ownerId')}</div>
       <div><label className="label" htmlFor="status">Status *</label><select className="field" id="status" name="status" defaultValue={val('status', initial?.status ?? 'PLANNING')}>{Object.entries(projectStatusLabels).map(([code,label]) => <option key={code} value={code}>{label}</option>)}</select>{error('status')}</div>
       <div><label className="label" htmlFor="startDate">Start date</label><input className="field" type="date" id="startDate" name="startDate" defaultValue={val('startDate', initial?.startDate?.toISOString().slice(0,10) ?? '')}/>{error('startDate')}</div>
       <div><label className="label" htmlFor="targetEndDate">Target end date</label><input className="field" type="date" id="targetEndDate" name="targetEndDate" defaultValue={val('targetEndDate', initial?.targetEndDate?.toISOString().slice(0,10) ?? '')}/>{error('targetEndDate')}</div>

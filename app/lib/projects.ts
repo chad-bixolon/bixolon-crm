@@ -3,6 +3,7 @@ import { can, type Actor } from './authorization';
 import { field, optional, positiveId, required, type Errors } from './crm-validation';
 import { dateField } from './work';
 import { projectRoleLabels } from './project-labels';
+import { eligibleUserWhere } from './assignment-eligibility';
 export { projectRoleLabels, projectStatusLabels } from './project-labels';
 export type ProjectParticipant = { accountId: number; roles: ProjectPartyRole[] };
 export type ProjectInput = {
@@ -100,10 +101,10 @@ export async function saveProject(client: PrismaClient, input: ProjectInput, act
     const ids = [...(input.primaryAccountId ? [input.primaryAccountId] : []), ...input.participants.map(p => p.accountId)];
     const [accounts, owner] = await Promise.all([
       tx.account.findMany({ where: { id: { in: ids }, status: 'ACTIVE', archivedAt: null }, select: { id: true } }),
-      input.ownerId ? tx.user.findFirst({ where: { id: input.ownerId, active: true, archivedAt: null } }) : null,
+      input.ownerId && input.ownerId !== existing?.ownerId ? tx.user.findFirst({ where: { id: input.ownerId, ...eligibleUserWhere('projects.write') } }) : null,
     ]);
     if (accounts.length !== ids.length) throw new Error('Choose active Accounts for the Primary Account and all participants.');
-    if (input.ownerId && !owner) throw new Error('Choose an active owner.');
+    if (input.ownerId && input.ownerId !== existing?.ownerId && !owner) throw new Error('Choose an eligible owner.');
     const data = { name: input.name, primaryAccountId: input.primaryAccountId, primaryAccountRole: input.primaryAccountRole,
       ownerId: input.ownerId, status: input.status, startDate: input.startDate, targetEndDate: input.targetEndDate,
       description: input.description, updatedById: actor.id };

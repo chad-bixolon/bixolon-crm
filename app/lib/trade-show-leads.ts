@@ -83,7 +83,7 @@ export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId:
     const requestedPartnerAccountId = form.has('routedPartnerAccountId') ? input.routedPartnerAccountId : lead.routedPartnerAccountId;
     const partnerAccountId = routing==='REFERRED_TO_PARTNER' ? requestedPartnerAccountId : lead.routedPartnerAccountId;
     const notes = routing==='REFERRED_TO_PARTNER'&&form.has('referralNotes') ? input.referralNotes : lead.referralNotes;
-    if (form.has('routing') || form.has('routedPartnerAccountId')) await validateTradeShowRouting(tx,routing,repId,partnerAccountId);
+    if (form.has('routing') || form.has('routedPartnerAccountId')) await validateTradeShowRouting(tx,routing,repId,partnerAccountId,repId===lead.assignedSalesRepUserId&&(routing===lead.routing||routing!=='BIXOLON_SALES')?repId:null);
     if (!can(actor, 'trade-shows.resolve') && (form.has('accountId') || form.has('contactId'))) throw new Error('Access denied to CRM resolution.');
     const accountId = can(actor, 'trade-shows.resolve') ? input.accountId : lead.accountId;
     const contactId = can(actor, 'trade-shows.resolve') ? input.contactId : lead.contactId;

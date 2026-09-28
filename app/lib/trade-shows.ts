@@ -69,7 +69,7 @@ export async function saveTradeShow(client: PrismaClient, input: TradeShowInput,
   return client.$transaction(async tx => {
     const existing = id ? await tx.tradeShow.findUnique({ where: { id } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Trade Show not found or archived.');
-    if (input.marketingOwnerId) {
+    if (input.marketingOwnerId && input.marketingOwnerId !== existing?.marketingOwnerId) {
       const owner = await tx.user.findFirst({ where: { id: input.marketingOwnerId, role: 'MARKETING_MANAGER', active: true, archivedAt: null } });
       if (!owner) throw new Error('Choose an active Marketing Manager.');
     }

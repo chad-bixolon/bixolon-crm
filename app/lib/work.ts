@@ -3,6 +3,7 @@ import { operationalOpportunityWhere, operationalTaskWhere } from './operational
 import { ActivityDirection, Prisma, TaskPriority, TaskStatus, type PrismaClient } from '@prisma/client';
 import { field, optional, positiveId, required, type Errors } from './crm-validation';
 import { archivedWhere, recordVisibility } from './record-visibility';
+import { eligibleUserWhere } from './assignment-eligibility';
 export const taskStatuses = Object.values(TaskStatus);
 export const taskPriorities = Object.values(TaskPriority);
 export function dateField(raw: string, key: string, errors: Errors) {
@@ -47,9 +48,9 @@ export async function saveTask(
   }
   try { return await client.$transaction(async tx => {
     await checkRelations(tx, value.accountId, value.opportunityId, value.projectId);
-    if (value.assignedToId && !(await tx.user.findFirst({ where: { id: value.assignedToId, active: true, archivedAt: null } }))) throw new Error('Choose an active assignee.');
     const existing = id ? await tx.task.findUnique({ where: { id } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Task not found or archived.');
+    if (value.assignedToId && value.assignedToId !== existing?.assignedToId && !(await tx.user.findFirst({ where: { id: value.assignedToId, ...eligibleUserWhere('tasks.write') } }))) throw new Error('Choose an eligible assignee.');
     const completedAt = value.status === 'COMPLETED' ? existing?.completedAt ?? new Date() : null;
    const data = {
   ...value,
@@ -151,7 +152,7 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
     }
     if (existing?.accountId != null && existing.accountId !== value.accountId && await tx.activityContact.count({ where: { activityId: id } })) throw new Error('Account cannot change while Contact history is linked.');
     if (!(await tx.activityType.findFirst({ where: { code: value.type, active: true } })) && existing?.type !== value.type) throw new Error('Choose an active activity type.');
-    if (value.userId && !(await tx.user.findFirst({ where: { id: value.userId, active: true, archivedAt: null } }))) throw new Error('Choose an active responsible user.');
+    if (value.userId && value.userId !== existing?.userId && !(await tx.user.findFirst({ where: { id: value.userId, ...eligibleUserWhere('tasks.write') } }))) throw new Error('Choose an eligible responsible user.');
     const { contactIds: suppliedContactIds, createFollowUpTask, followUpTaskCreateKey, ...data } = value;
     const contactIds = suppliedContactIds ?? [];
     if (contactIds.length) {

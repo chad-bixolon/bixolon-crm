@@ -2,6 +2,7 @@ import { AccountBusinessRoleCode, AccountStatus, Prisma, type PrismaClient } fro
 import { createHash } from 'node:crypto';
 import { parseImportCsv, type CsvRow, type ImportHeader } from './import-csv';
 import { isRetiredSpecialAccountTerritory } from './accounts';
+import { eligibleUser } from './assignment-eligibility';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Account = Prisma.AccountGetPayload<{include:{businessRoles:true}}>;
@@ -49,7 +50,7 @@ export async function planImport(db:Db, csv:string):Promise<ImportPlan> {
     for (const [field,limit] of Object.entries({website:500,phone:50,territory:100,industry:100,addressLine1:200,addressLine2:200,city:100,stateProvince:100,postalCode:30,country:100})) if (typeof data[field] === 'string' && (data[field] as string).length > limit) messages.push(`${field} exceeds ${limit} characters.`);
     if (has(row,'account_status')) { const status = v(row,'account_status').toUpperCase(); if (!['ACTIVE','INACTIVE'].includes(status)) messages.push('Account status must be ACTIVE or INACTIVE.'); else data.status = status as AccountStatus; }
     if (has(row,'strategic_account')) { const value = bool(v(row,'strategic_account')); if (value === null) messages.push('Strategic account must be true or false.'); else data.strategicAccount = value; }
-    if (has(row,'owner_email')) { const matches = users.filter(u => email(u.email) === email(v(row,'owner_email')) && u.active && !u.archivedAt); if (matches.length !== 1) messages.push('Owner email must match one active CRM user.'); else data.ownerId = matches[0].id; }
+    if (has(row,'owner_email')) { const matches = users.filter(u => email(u.email) === email(v(row,'owner_email')) && (u.id === match?.ownerId || eligibleUser(u, 'accounts.write'))); if (matches.length !== 1) messages.push('Owner email must match one eligible Account owner.'); else data.ownerId = matches[0].id; }
     if (has(row,'territory_code') && v(row,'territory_code') !== match?.territory && !territories.some(t => t.code === v(row,'territory_code') && t.active && !isRetiredSpecialAccountTerritory(t))) messages.push('Unknown, inactive, or retired Territory code.');
     if (has(row,'industry_code') && !industries.some(i => i.code === v(row,'industry_code') && i.active)) messages.push('Unknown or inactive Industry code.');
     let roles:AccountBusinessRoleCode[]|undefined;

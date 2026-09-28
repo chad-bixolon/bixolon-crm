@@ -122,7 +122,8 @@ test('Trade Show create/edit validates eligible owner and archive stays reversib
   await assert.rejects(shows.saveTradeShow(client, { ...input, timezone: '' }, actor('ADMIN'), 3), /approved event timezone/);
   await assert.rejects(shows.saveTradeShow(client, { ...input, timezone: 'Europe/London' }, actor('ADMIN'), 3), /approved event timezone/);
   owner = { ...owner, active: false };
-  await assert.rejects(shows.saveTradeShow(client, input, actor('ADMIN'), 3), /active Marketing Manager/);
+  assert.equal(await shows.saveTradeShow(client, input, actor('ADMIN'), 3), 3);
+  await assert.rejects(shows.saveTradeShow(client, input, actor('ADMIN')), /active Marketing Manager/);
   await assert.rejects(shows.saveTradeShow(client, input, actor('READ_ONLY')), /Access denied/);
   await shows.setTradeShowArchived(client, 3, true, actor('MARKETING_MANAGER'));
   assert.ok(saved.archivedAt);

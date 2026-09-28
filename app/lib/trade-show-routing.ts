@@ -16,13 +16,13 @@ export const eligiblePartnerAccountWhere = {
 } satisfies Prisma.AccountWhereInput;
 
 type RoutingClient = Pick<PrismaClient,'user'|'account'>;
-export async function validateTradeShowRouting(client: RoutingClient, routing: TradeShowLeadRouting, repId: number|null, partnerAccountId: number|null) {
+export async function validateTradeShowRouting(client: RoutingClient, routing: TradeShowLeadRouting, repId: number|null, partnerAccountId: number|null, unchangedHistoricalRepId: number|null = null) {
   if (routing === 'BIXOLON_SALES') {
     if (!repId) throw new Error('Select an active Sales rep for BIXOLON Sales routing.');
-    const rep = await client.user.findFirst({where:{id:repId,active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true}});
+    const rep = repId === unchangedHistoricalRepId || await client.user.findFirst({where:{id:repId,active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true}});
     if (!rep) throw new Error('Choose an active Sales rep.');
   } else if (repId) {
-    const rep = await client.user.findFirst({where:{id:repId,active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true}});
+    const rep = repId === unchangedHistoricalRepId || await client.user.findFirst({where:{id:repId,active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true}});
     if (!rep) throw new Error('Choose an active Sales rep.');
   }
   if (routing === 'REFERRED_TO_PARTNER') {

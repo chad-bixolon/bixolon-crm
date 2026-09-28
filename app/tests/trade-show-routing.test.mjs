@@ -44,6 +44,18 @@ test('role authorization permits managers and own-lead Sales routing but keeps R
   assert.equal(routing.canRouteTradeShowLead(actor('READ_ONLY'),{assignedSalesRepUserId:7}),false);
 });
 
+test('Lead edit preserves a historical rep during ordinary edits and rejects new sales routing',async()=>{
+  let stored={id:2,tradeShowId:1,routing:'BIXOLON_SALES',assignedSalesRepUserId:8,convertedOpportunityId:null,routedPartnerAccountId:null,accountId:null,contactId:null,competitorId:null,tradeShow:{archivedAt:null}};
+  const tx={tradeShowLead:{findFirst:async()=>stored,update:async({data})=>(stored={...stored,...data})},user:{findFirst:async()=>null},account:{findFirst:async()=>null},contact:{findFirst:async()=>null},competitorOption:{findFirst:async()=>null}};
+  const client={$transaction:async callback=>callback(tx)};
+  await leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','BIXOLON_SALES'],['assignedSalesRepUserId','8']]),actor('ADMIN'));
+  assert.equal(stored.assignedSalesRepUserId,8);
+  await assert.rejects(leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','BIXOLON_SALES'],['assignedSalesRepUserId','9']]),actor('ADMIN')), /active Sales rep/);
+  await leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','MARKETING_FOLLOW_UP'],['assignedSalesRepUserId','8']]),actor('ADMIN'));
+  assert.equal(stored.assignedSalesRepUserId,8);
+  await assert.rejects(leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','BIXOLON_SALES'],['assignedSalesRepUserId','8']]),actor('ADMIN')), /active Sales rep/);
+});
+
 test('individual partner referral records actor/time and later rerouting preserves referral audit fields',async()=>{
   let stored={id:2,tradeShowId:1,routing:'UNREVIEWED',routedPartnerAccountId:null,referredAt:null,referredByUserId:null,referralNotes:null,assignedSalesRepUserId:null,convertedOpportunityId:null,accountId:null,contactId:null,competitorId:null,tradeShow:{archivedAt:null}};
   const tx={tradeShowLead:{findFirst:async()=>stored,update:async({data})=>(stored={...stored,...data})},user:{findFirst:async()=>null},account:{findFirst:async({where})=>where.id===20?{id:20}:null},contact:{findFirst:async()=>null},competitorOption:{findFirst:async()=>null}};

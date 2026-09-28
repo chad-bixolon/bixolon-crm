@@ -10,9 +10,9 @@ export default async function EditTradeShowPage({ params }: { params: Promise<{ 
   const id = Number((await params).id);
   if (!Number.isSafeInteger(id) || id < 1) notFound();
   const [show, owners] = await Promise.all([
-    prisma.tradeShow.findUnique({ where: { id } }),
+    prisma.tradeShow.findUnique({ where: { id }, include: { marketingOwner: { select: { firstName: true, lastName: true } } } }),
     prisma.user.findMany({ where: { role: 'MARKETING_MANAGER', active: true, archivedAt: null }, select: { id: true, firstName: true, lastName: true }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
   ]);
   if (!show) notFound();
-  return <Content><PageHeader eyebrow="Trade Shows" title={`Edit ${show.name}`}/>{show.archivedAt ? <div className="panel p-6">Reactivate this Trade Show before editing it.</div> : <TradeShowForm id={id} initial={show} owners={owners}/>}</Content>;
+  return <Content><PageHeader eyebrow="Trade Shows" title={`Edit ${show.name}`}/>{show.archivedAt ? <div className="panel p-6">Reactivate this Trade Show before editing it.</div> : <TradeShowForm id={id} initial={show} owners={owners} currentOwner={show.marketingOwner}/>}</Content>;
 }

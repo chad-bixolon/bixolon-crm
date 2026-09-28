@@ -38,7 +38,7 @@ function fixture({convertedOpportunityId=null,contactAccountId=10,failCreate=fal
   const lead={id:2,tradeShowId:1,routing:'REFERRED_TO_PARTNER',routedPartnerAccountId:30,referredAt:new Date('2026-09-01'),referredByUserId:6,referralNotes:'Prior referral',assignedSalesRepUserId:7,convertedOpportunityId,accountId:10,contactId:20,tradeShow:{archivedAt:null},contact:{accountId:contactAccountId,active:true,archivedAt:null}};
   const tx={
     $queryRaw:async()=>[],tradeShowLead:{findFirst:async()=>lead,updateMany:async({data})=>{converted=data;return{count:1};}},
-    salesStage:{findUnique:async()=>({id:1,active:true,isClosed:false,isWon:false})},currency:{findUnique:async()=>({code:'USD',active:true})},user:{findUnique:async()=>({id:7,active:true,archivedAt:null})},
+    salesStage:{findUnique:async()=>({id:1,active:true,isClosed:false,isWon:false})},currency:{findUnique:async()=>({code:'USD',active:true})},user:{findUnique:async()=>({id:7,role:'SALES',active:true,archivedAt:null})},
     account:{findMany:async()=>[{id:10}]},contact:{findMany:async()=>[{id:20,accountId:10}]},product:{findMany:async()=>[]},project:{findMany:async()=>[]},
     opportunity:{create:async()=>{if(failCreate)throw new Error('write failed');created++;return{id:55};}},
     opportunityAccount:{findMany:async()=>[],upsert:async()=>({})},opportunityAccountRole:{create:async()=>({})},

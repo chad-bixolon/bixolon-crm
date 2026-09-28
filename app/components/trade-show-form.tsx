@@ -9,17 +9,15 @@ import { isApprovedTradeShowTimezone, TRADE_SHOW_TIMEZONE_GROUPS } from '@/lib/t
 type Owner = { id: number; firstName: string; lastName: string };
 type Initial = { name: string; startDate: Date | null; endDate: Date | null; location: string | null; timezone: string | null; description: string | null; marketingOwnerId: number | null };
 
-export function TradeShowForm({ id, initial, owners }: { id?: number; initial?: Initial; owners: Owner[] }) {
+export function TradeShowForm({ id, initial, owners, currentOwner }: { id?: number; initial?: Initial; owners: Owner[]; currentOwner?: {firstName:string;lastName:string}|null }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(submitTradeShow.bind(null, id ?? null), { errors: {} } as TradeShowFormState);
   const guard = useSubmitGuard(state);
   const val = (key: string, fallback = '') => state.values?.[key] ?? fallback;
   const error = (key: string) => state.errors[key] && <p className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
   useEffect(() => { if (state.redirectTo) router.push(state.redirectTo); }, [state.redirectTo, router]);
-  const ownerOptions = [...owners];
   const selectedTimezone = val('timezone', initial?.timezone ?? '');
   const unsupportedTimezone = selectedTimezone && !isApprovedTradeShowTimezone(selectedTimezone) ? selectedTimezone : null;
-  if (initial?.marketingOwnerId && !ownerOptions.some(owner => owner.id === initial.marketingOwnerId)) ownerOptions.push({ id: initial.marketingOwnerId, firstName: 'Current owner', lastName: '(inactive)' });
   return <form key={JSON.stringify(state.values ?? {})} action={action} onSubmit={guard} className="panel max-w-3xl space-y-4 p-5 sm:p-6" aria-label={id ? 'Edit Trade Show' : 'Create Trade Show'}>
     {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     <div className="min-w-0"><label className="label" htmlFor="name">Name *</label><input className="field h-11 min-w-0" id="name" name="name" required maxLength={200} defaultValue={val('name', initial?.name ?? '')}/>{error('name')}</div>
@@ -30,7 +28,7 @@ export function TradeShowForm({ id, initial, owners }: { id?: number; initial?: 
     <div className="min-w-0"><label className="label" htmlFor="location">Location</label><input className="field h-11 min-w-0" id="location" name="location" maxLength={300} defaultValue={val('location', initial?.location ?? '')}/>{error('location')}</div>
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="min-w-0"><label className="label" htmlFor="timezone">Event Timezone *</label><select className="field h-11 min-w-0" id="timezone" name="timezone" required defaultValue={selectedTimezone}><option value="">Select event timezone</option>{unsupportedTimezone && <option value={unsupportedTimezone} disabled>Unsupported timezone: {unsupportedTimezone} — select another</option>}{TRADE_SHOW_TIMEZONE_GROUPS.map(group => <optgroup key={group.label} label={group.label}>{group.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</optgroup>)}</select><p className="mt-1 text-xs text-slate-500">Used for imported lead timestamps.</p>{error('timezone')}</div>
-      <div className="min-w-0"><label className="label" htmlFor="marketingOwnerId">Marketing Owner</label><select className="field h-11 min-w-0" id="marketingOwnerId" name="marketingOwnerId" defaultValue={val('marketingOwnerId', initial?.marketingOwnerId?.toString() ?? '')}><option value="">Unassigned</option>{ownerOptions.map(owner => <option key={owner.id} value={owner.id}>{owner.firstName} {owner.lastName}</option>)}</select>{error('marketingOwnerId')}</div>
+      <div className="min-w-0"><label className="label" htmlFor="marketingOwnerId">Marketing Owner</label><select className="field h-11 min-w-0" id="marketingOwnerId" name="marketingOwnerId" defaultValue={val('marketingOwnerId', initial?.marketingOwnerId?.toString() ?? '')}><option value="">Unassigned</option>{id && initial?.marketingOwnerId && !owners.some(owner => owner.id === initial.marketingOwnerId) && <optgroup label="Current assignment"><option value={initial.marketingOwnerId}>{currentOwner ? `${currentOwner.firstName} ${currentOwner.lastName}` : `User #${initial.marketingOwnerId}`} (no longer eligible)</option></optgroup>}{owners.map(owner => <option key={owner.id} value={owner.id}>{owner.firstName} {owner.lastName}</option>)}</select>{error('marketingOwnerId')}</div>
     </div>
     <div className="min-w-0"><label className="label" htmlFor="description">Description / Notes</label><textarea className="field min-h-24 resize-y" rows={3} id="description" name="description" maxLength={5000} defaultValue={val('description', initial?.description ?? '')}/>{error('description')}</div>
     <div className="flex flex-wrap justify-end gap-2"><Link className="btn-secondary" href={id ? `/trade-shows/${id}` : '/trade-shows'}>Cancel</Link><button className="btn-primary" type="submit" disabled={pending}>{pending ? 'Saving…' : id ? 'Save Trade Show' : 'Create Trade Show'}</button></div>

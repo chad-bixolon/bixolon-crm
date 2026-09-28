@@ -2,6 +2,7 @@ import { AccountBusinessRoleCode, AccountStatus, Prisma, type PrismaClient, type
 import type { AccountFields } from "./account-validation";
 import { parseAccountForm } from "./account-validation";
 import { assertPermission, type Actor } from "./authorization";
+import { eligibleUserWhere } from './assignment-eligibility';
 
 export const PAGE_SIZE = 20;
 const retiredSpecialAccountTerritories = new Set(['strategic_sales', 'strategic', 'strategic / national accounts', 'strategic / national account', 'strategic/national account', 'national account']);
@@ -85,22 +86,22 @@ export async function accountOptions(client: PrismaClient) {
   const [industries, territories, owners] = await Promise.all([
     client.industry.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     client.territory.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }).then(items => items.filter(item => !isRetiredSpecialAccountTerritory(item))),
-    client.user.findMany({ where: { active: true, archivedAt: null }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
+    client.user.findMany({ where: eligibleUserWhere('accounts.write'), orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
   ]);
   return { industries, territories, owners };
 }
 
 export async function checkAccountReferences(client: PrismaClient, input: AccountFields, id?: number) {
-  const existing = id ? await client.account.findUnique({ where: { id }, select: { industry: true, territory: true } }) : null;
+  const existing = id ? await client.account.findUnique({ where: { id }, select: { industry: true, territory: true, ownerId: true } }) : null;
   const [industry, territory, owner] = await Promise.all([
     input.industry && input.industry !== existing?.industry ? client.industry.findFirst({ where: { code: input.industry, active: true } }) : null,
     input.territory && input.territory !== existing?.territory ? client.territory.findFirst({ where: { code: input.territory, active: true } }) : null,
-    input.ownerId ? client.user.findFirst({ where: { id: input.ownerId, active: true, archivedAt: null } }) : null,
+    input.ownerId && input.ownerId !== existing?.ownerId ? client.user.findFirst({ where: { id: input.ownerId, ...eligibleUserWhere('accounts.write') } }) : null,
   ]);
   const errors: Record<string, string> = {};
   if (input.industry && input.industry !== existing?.industry && !industry) errors.industry = "Choose an active industry.";
   if (input.territory && input.territory !== existing?.territory && (!territory || isRetiredSpecialAccountTerritory(territory))) errors.territory = "Choose an active territory.";
-  if (input.ownerId && !owner) errors.ownerId = "Choose an active owner.";
+  if (input.ownerId && input.ownerId !== existing?.ownerId && !owner) errors.ownerId = "Choose an eligible owner.";
   return errors;
 }
 
@@ -114,10 +115,11 @@ export function accountWriteData(input: AccountFields) {
 export async function saveAccount(client: PrismaClient, input: AccountFields, id?: number, actorId?: number) {
   const data = accountWriteData(input);
   return client.$transaction(async (tx) => {
+    const existing = id ? await tx.account.findUnique({ where: { id }, select: { status: true, ownerId: true } }) : null;
+    if (id && !existing) throw new Error("Account not found.");
+    if (input.ownerId && input.ownerId !== existing?.ownerId && !(await tx.user.findFirst({ where: { id: input.ownerId, ...eligibleUserWhere('accounts.write') } }))) throw new Error("Choose an eligible owner.");
     if (id) {
-      const existing = await tx.account.findUnique({ where: { id }, select: { status: true } });
-      if (!existing) throw new Error("Account not found.");
-      if (existing.status === "ARCHIVED") throw new Error("Reactivate this account before editing it.");
+      if (existing?.status === "ARCHIVED") throw new Error("Reactivate this account before editing it.");
       await tx.account.update({ where: { id }, data: { ...data, updatedById: actorId } });
       await tx.accountBusinessRole.deleteMany({ where: { accountId: id } });
       if (input.roles.length) await tx.accountBusinessRole.createMany({ data: input.roles.map((role) => ({ accountId: id, role })) });

@@ -41,11 +41,11 @@ export async function updatePriceExceptionSalesRep(db: Db, priceExceptionId: num
   assertPermission(actor, 'users.manage');
   if (!Number.isSafeInteger(priceExceptionId) || priceExceptionId <= 0) throw new PriceExceptionAccountValidationError({ form: 'Invalid Price Exception.' });
   const [priceException, user] = await Promise.all([
-    db.priceException.findUnique({ where: { id: priceExceptionId }, select: { id: true } }),
+    db.priceException.findUnique({ where: { id: priceExceptionId }, select: { id: true, assignedSalesRepUserId: true } }),
     assignedSalesRepUserId ? db.user.findUnique({ where: { id: assignedSalesRepUserId }, select: { id: true, role: true, active: true, archivedAt: true } }) : null,
   ]);
   if (!priceException) throw new PriceExceptionAccountValidationError({ form: 'Price Exception not found.' });
-  if (assignedSalesRepUserId && (!user || !user.active || user.archivedAt || !['SALES', 'SALES_MANAGER'].includes(user.role))) throw new PriceExceptionAccountValidationError({ assignedSalesRepUserId: 'Choose a Sales or Sales Manager user.' });
+  if (assignedSalesRepUserId && assignedSalesRepUserId !== priceException.assignedSalesRepUserId && (!user || !user.active || user.archivedAt || !['SALES', 'SALES_MANAGER'].includes(user.role))) throw new PriceExceptionAccountValidationError({ assignedSalesRepUserId: 'Choose a Sales or Sales Manager user.' });
   await db.priceException.update({ where: { id: priceExceptionId }, data: { assignedSalesRepUserId, updatedById: actor.id } });
 }
 

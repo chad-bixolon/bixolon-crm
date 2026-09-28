@@ -34,6 +34,6 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     </Content>;
   }
 
-  const options = await workOptions();
+  const options = await workOptions({ userId: row.assignedToId });
   return <Content><PageHeader title={`Edit task: ${row.subject}`} eyebrow="Tasks"/><WorkForm kind="task" id={id} {...options} initial={{ subject: row.subject, description: row.description, accountId: row.accountId, opportunityId: row.opportunityId, projectId: row.projectId, assignedToId: row.assignedToId, status: row.status, priority: row.priority, dueDate: row.dueDate?.toISOString().slice(0, 10) ?? '' }}/></Content>;
 }

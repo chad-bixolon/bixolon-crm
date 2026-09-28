@@ -6,6 +6,7 @@ import { can } from '@/lib/authorization';
 import { prisma } from '@/lib/prisma';
 import { forecastForRep, quarters } from '@/lib/forecast';
 import { formatCurrency } from '@/lib/display-format';
+import { activeSalesRepWhere } from '@/lib/assignment-eligibility';
 export const dynamic = 'force-dynamic';
 type Filters = { userId?: string; year?: string; quarter?: string; currencyCode?: string };
 export default async function ForecastPage({ searchParams }: { searchParams: Promise<Filters> }) {
@@ -13,7 +14,7 @@ export default async function ForecastPage({ searchParams }: { searchParams: Pro
   if (!can(actor, 'sales.read')) notFound();
   const f = await searchParams;
   const [users, currencies] = await Promise.all([
-    prisma.user.findMany({ where: { role: { in: ['SALES','SALES_MANAGER'] }, active: true, archivedAt: null, ...(actor.role === 'SALES' ? { id: actor.id } : {}) }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
+    prisma.user.findMany({ where: { ...activeSalesRepWhere(), ...(actor.role === 'SALES' ? { id: actor.id } : {}) }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
     prisma.currency.findMany({ where: { active: true }, orderBy: { code: 'asc' } }),
   ]);
   const today = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: 'numeric' }).formatToParts(new Date());

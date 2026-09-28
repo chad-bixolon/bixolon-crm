@@ -7,6 +7,7 @@ import type { Actor } from "./authorization";
 import { canViewPriceException } from "./price-exception-visibility";
 import { odmCustomerSnapshot } from './opportunity-odm-pricing';
 import { priceExceptionMatchesParticipants, unrelatedPriceExceptionMessage } from './price-exception-account-match';
+import { eligibleUser, eligibleUserWhere } from './assignment-eligibility';
 export type Participant = { accountId: number; roles: OpportunityPartyRole[] };
 export type OpportunityContactInput = { contactId: number; isPrimary: boolean };
 export type Line = { id?: number; productId: number; skuId?: number | null; quantity: number; price: string; priceSource?: OpportunityProductPriceSource; catalogPriceTier?: ProductPriceTier | null; priceExceptionLineId?: number | null; odmCustomerPriceId?: number | null; odmCustomerAccountId?: number | null };
@@ -96,7 +97,7 @@ export async function opportunityOptions(client: PrismaClient) {
   const [accounts, contacts, owners, stages, currencies, productCount, projects, productCategories, competitors] = await Promise.all([
     client.account.findMany({ where: operationalAccountWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     client.contact ? client.contact.findMany({ where: operationalContactWhere, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true, email: true, accountId: true } }) : Promise.resolve([]),
-    client.user.findMany({ where: { active: true, archivedAt: null }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
+    client.user.findMany({ where: eligibleUserWhere('sales.write'), orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
     client.salesStage.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { id: true, name: true, probability: true, isClosed: true, isWon: true } }),
     client.currency.findMany({ where: { active: true }, orderBy: { code: "asc" }, select: { code: true, name: true } }),
     client.product.count({ where: { active: true, archivedAt: null } }),
@@ -131,7 +132,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
     }
     if (actor?.role === 'SALES' && (input.ownerId !== actor.id || (existing && existing.ownerId !== actor.id))) throw new Error('Sales users may edit only their own Opportunities.');
     if (!currency?.active) throw new Error("Choose an available currency.");
-    if (input.ownerId && (!owner?.active || owner.archivedAt)) throw new Error("Choose an active owner.");
+    if (input.ownerId && input.ownerId !== existing?.ownerId && !eligibleUser(owner, 'sales.write')) throw new Error("Choose an eligible owner.");
     if (new Set(input.projectIds).size !== input.projectIds.length || projects.length !== input.projectIds.length || projects.some(project => project.archivedAt && !existing?.projects.some(link => link.projectId === project.id))) throw new Error("Choose each active Project only once.");
     if (accounts.length !== input.participants.length) throw new Error("Choose active accounts for all participants.");
     if (contacts.length !== input.contacts.length) throw new Error("Choose active Contacts.");
