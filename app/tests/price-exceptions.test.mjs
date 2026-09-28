@@ -1,6 +1,6 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import Module from 'node:module';import path from 'node:path';import ts from 'typescript';import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');Module._extensions['.ts']=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,filename);const require=Module.createRequire(fileURLToPath(import.meta.url));
-const {parseLegacyPriceExceptionWorkbook,planPriceExceptionImport,parseLegacyDate,normalizeAccountName}=require(path.join(root,'lib/price-exception-import.ts'));const {priceExceptionWhere,accountPriceExceptionRoles,accountPriceExceptionWhere}=require(path.join(root,'lib/price-exceptions.ts'));const {parsePriceExceptionAccountPatch,PriceExceptionAccountValidationError,updatePriceExceptionAccountLinks}=require(path.join(root,'lib/price-exception-resolution.ts'));const {can,routeAccess}=require(path.join(root,'lib/authorization.ts'));
+const {parseLegacyPriceExceptionWorkbook,planPriceExceptionImport,parseLegacyDate,normalizeAccountName}=require(path.join(root,'lib/price-exception-import.ts'));const {priceExceptionWhere,listPriceExceptions,accountPriceExceptionRoles,accountPriceExceptionWhere}=require(path.join(root,'lib/price-exceptions.ts'));const {priceExceptionListSummary}=require(path.join(root,'lib/price-exception-list-summary.ts'));const {parsePriceExceptionAccountPatch,PriceExceptionAccountValidationError,updatePriceExceptionAccountLinks}=require(path.join(root,'lib/price-exception-resolution.ts'));const {can,routeAccess}=require(path.join(root,'lib/authorization.ts'));
 const workbook=fs.readFileSync(path.join(root,'../reference-data/Distributor Price Exceptions 02052020 - Copy.xlsx'));
 const row=(overrides={})=>({sheet:'Active Disty PEs',rowNumber:2,status:'ACTIVE',distributor:'Blue Star',varName:'Reseller',rep:'Rep',endUser:'Customer',code:'PE-1',oldCode:null,expirationDate:'2026-12-31',sku:'SRP-S300LOSK',price:'200',quantity:'100',comments:null,competitor:null,rawValues:[],...overrides});
 const parsed=(rows,skippedRows=0)=>({rows,skippedRows,errors:[]});
@@ -16,6 +16,28 @@ test('unresolved SKU imports, USD default is explicit, dates parse, and re-previ
 test('malformed legacy values remain auditable without blocking valid finalized records',async()=>{const plan=await planPriceExceptionImport(db(),parsed([row({price:'not money',quantity:'unknown',expirationDate:'not a date'})],2),'legacy.xlsx');assert.equal(plan.counts.errors,0);assert.equal(plan.counts.skippedRows,2);assert.ok(plan.digest);assert.equal(plan.errors.length,0);assert.equal(plan.items[0].lines[0].price,null);assert.equal(plan.items[0].lines[0].sourceQuantity,null);assert.match(plan.items[0].messages.join(' '),/original value was kept/i)});
 test('schema permits unresolved parties/SKUs, duplicate display codes, and multiple lines',()=>{const schema=fs.readFileSync(path.join(root,'prisma/schema.prisma'),'utf8');assert.match(schema,/peCode\s+String\?/);assert.match(schema,/distributorAccountId\s+Int\?/);assert.match(schema,/productSkuId\s+Int\?/);assert.match(schema,/@@unique\(\[sourceType, sourceKey\]\)/);assert.match(schema,/@@unique\(\[priceExceptionId, sourceLineKey\]\)/);assert.doesNotMatch(schema,/@@unique\(\[priceExceptionId, productSkuId\]\)/)});
 test('list filters, account role de-duplication, and authorization follow CRM conventions',()=>{assert.deepEqual(accountPriceExceptionRoles({distributorAccountId:7,varAccountId:7,endUserAccountId:null},7),['Distributor/OEM','VAR/ISV']);const where=priceExceptionWhere({q:'PE-1',status:'ACTIVE',unresolved:'yes'});assert.ok(where.AND.length>=3);for(const role of ['ADMIN','SALES_MANAGER','SALES','MARKETING_MANAGER','READ_ONLY'])assert.equal(can({id:1,role,active:true},'pricing.read'),true);assert.equal(routeAccess('/price-exceptions',{id:1,role:'READ_ONLY',active:true}),'allowed');assert.equal(routeAccess('/administration/imports/price-exceptions',{id:1,role:'SALES_MANAGER',active:true}),'denied')});
+
+test('list summary uses resolved model and exact SKU, deduplicates quantity tiers, and counts distinct SKUs',()=>{
+ const line=(sku,quantity,product='SRP-350plusV')=>({sourceSku:sku,sourceQuantity:{toString:()=>quantity},sourceQuantityRaw:quantity,productSku:{partNumber:sku,product:{name:product}}});
+ const single=priceExceptionListSummary([line('SRP-350PlusVK','500')]);assert.deepEqual(single.product,{product:'SRP-350plusV',sku:'SRP-350PlusVK'});assert.equal(single.skuCount,1);assert.equal(single.tierText,'MOQ: 500');
+ const tiers=priceExceptionListSummary([line('SRP-350PlusVK','500'),line('SRP-350PlusVK','100'),line('SRP-350PlusVK','250.000')]);assert.equal(tiers.skuCount,1);assert.equal(tiers.tierText,'100 / 250 / 500');
+ const multiple=priceExceptionListSummary([line('A','100'),line('B','100'),line('C','100')]);assert.equal(multiple.skuCount,3);assert.equal(multiple.product.sku,'A');
+ assert.deepEqual(priceExceptionListSummary([{sourceSku:'Unresolved-SKU',sourceQuantity:null,sourceQuantityRaw:'500',productSku:null}]).product,{product:null,sku:'Unresolved-SKU'});
+ assert.equal(priceExceptionListSummary([line('A','100'),line('A','250'),line('A','500'),line('A','1000')]).tierText,'4 tiers');
+});
+
+test('list query keeps filters and loads active lines with resolved product, SKU, and MOQ',async()=>{
+ let query;const db={priceException:{count:async({where})=>{query=where;return 1},findMany:async(args)=>{assert.equal(args.where,query);assert.deepEqual(args.include.lines.where,{retiredAt:null});assert.equal(args.include.lines.select.productSku.select.product.select.name,true);assert.equal(args.include.lines.select.productSku.select.partNumber,true);assert.equal(args.include.lines.select.sourceQuantity,true);return []}},user:{findMany:async()=>[]}};
+ const filters={q:'SRP-350PlusVK',status:'ACTIVE',distributor:'Blue Star',varName:'VAR',endUser:'End',expiration:'future',unresolved:'yes',salesRep:'42'};
+ await listPriceExceptions(db,filters,{id:1,role:'ADMIN',active:true});const all=JSON.stringify(query);for(const value of ['SRP-350PlusVK','ACTIVE','Blue Star','VAR','End','productSkuId','assignedSalesRepUserId','expirationDate'])assert.ok(all.includes(value),value);
+});
+
+test('list UI retains filters and uses a readable horizontal-scroll table at narrow widths',()=>{
+ const page=fs.readFileSync(path.join(root,'app/price-exceptions/page.tsx'),'utf8');
+ for(const name of ['q','status','distributor','varName','endUser','expiration','unresolved','salesRep'])assert.match(page,new RegExp(`name="${name}"`));
+ for(const label of ['Find a valid PE','Product / SKU','MOQ / tiers','Expiration'])assert.ok(page.includes(label));
+ assert.match(page,/overflow-x-auto/);assert.match(page,/min-w-\[1200px\]/);assert.match(page,/px-3 py-2/);assert.match(page,/priceExceptionListSummary\(row.lines\)/);assert.doesNotMatch(page,/>Lines<\/th>/);
+});
 
 const actor=(role='ADMIN')=>({id:91,role,active:true});
 function resolutionDb({accounts=[{id:1},{id:2},{id:3}],priceException={id:44,distributorAccountId:null,varAccountId:null,endUserAccountId:null,distributorSourceName:'Bstar',varSourceName:'Levata source',endUserSourceName:'IPOURIT'}}={}){

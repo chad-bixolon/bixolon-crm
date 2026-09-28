@@ -4,9 +4,10 @@ import { requirePermission } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { listPriceExceptions, priceExceptionHref, type PriceExceptionFilters } from '@/lib/price-exceptions';
 import { priceExceptionStatusLabel } from '@/lib/price-exception-labels';
+import { priceExceptionListSummary } from '@/lib/price-exception-list-summary';
 
 export const dynamic='force-dynamic';
-const Party=({account,raw}:{account:{id:number;name:string}|null;raw:string|null})=>account?<Link className="text-orange-800 underline" href={`/accounts/${account.id}`}>{account.name}</Link>:raw?<span title="Unresolved source name">{raw} <span className="text-amber-700">?</span></span>:<>—</>;
+const Party=({account,raw}:{account:{id:number;name:string}|null;raw:string|null})=>account?<Link className="block max-w-44 truncate text-orange-800 underline" title={account.name} href={`/accounts/${account.id}`}>{account.name}</Link>:raw?<span className="block max-w-44 truncate" title={`Unresolved: ${raw}`}>{raw} <span className="text-amber-700">?</span></span>:<>—</>;
 
 export default async function PriceExceptionsPage({searchParams}:{searchParams:Promise<PriceExceptionFilters>}) {
   const actor=await requirePermission('pricing.read'),filters=await searchParams;
@@ -25,7 +26,36 @@ export default async function PriceExceptionsPage({searchParams}:{searchParams:P
       {actor.role!=='SALES'&&<label className="label">BIXOLON Sales Rep<select className={control} name="salesRep" defaultValue={filters.salesRep??''}><option value="">All Sales Reps</option><option value="unassigned">Unassigned / Legacy</option>{salesReps.map(rep=><option key={rep.id} value={rep.id}>{rep.firstName} {rep.lastName}{!rep.active||rep.archivedAt?' (inactive)':''}</option>)}</select></label>}
       <div className="filter-actions"><button className="btn-filter-primary">Apply</button><Link className="btn-filter-secondary" href="/price-exceptions">Clear</Link></div>
     </form>
-    <div className="panel overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead className="border-b bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">PE #</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">BIXOLON Sales Rep</th><th className="px-4 py-3">Distributor / OEM</th><th className="px-4 py-3">VAR / ISV</th><th className="px-4 py-3">End User</th><th className="px-4 py-3">Expiration</th><th className="px-4 py-3">Lines</th></tr></thead><tbody className="divide-y">{rows.map(row=>{const unresolved=(!row.distributorAccountId&&row.distributorSourceName)||(!row.varAccountId&&row.varSourceName)||(!row.endUserAccountId&&row.endUserSourceName)||row.lines.length>0;return <tr key={row.id} className="even:bg-slate-50/60 hover:bg-orange-50/50 focus-within:bg-orange-50/50"><td className="px-4 py-3"><Link className="font-semibold text-orange-800" href={`/price-exceptions/${row.id}`}>{row.peCode??'(unnumbered)'}</Link>{unresolved&&<span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900">Unresolved</span>}</td><td className="px-4 py-3">{priceExceptionStatusLabel(row.status)}</td><td className="px-4 py-3">{row.assignedSalesRepUser?`${row.assignedSalesRepUser.firstName} ${row.assignedSalesRepUser.lastName}`:row.sourceType==='LEGACY_WORKBOOK'?'Legacy / Unassigned':'Unassigned'}</td><td className="px-4 py-3"><Party account={row.distributorAccount} raw={row.distributorSourceName}/></td><td className="px-4 py-3"><Party account={row.varAccount} raw={row.varSourceName}/></td><td className="px-4 py-3"><Party account={row.endUserAccount} raw={row.endUserSourceName}/></td><td className="px-4 py-3">{row.expirationDate?.toISOString().slice(0,10)??'—'}</td><td className="px-4 py-3">{row._count.lines}</td></tr>})}</tbody></table>{!rows.length&&<p className="p-8 text-center text-sm text-slate-500">No Price Exceptions match these filters.</p>}</div>
+    <div className="panel overflow-x-auto">
+      <table className="w-full min-w-[1200px] text-left text-sm" aria-label="Price Exceptions">
+        <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500"><tr>
+          <th scope="col" className="w-32 whitespace-nowrap px-3 py-2">PE #</th>
+          <th scope="col" className="w-20 whitespace-nowrap px-3 py-2">Status</th>
+          <th scope="col" className="w-32 px-3 py-2">BIXOLON Sales Rep</th>
+          <th scope="col" className="w-44 px-3 py-2">Distributor / OEM</th>
+          <th scope="col" className="w-40 px-3 py-2">VAR / ISV</th>
+          <th scope="col" className="w-40 px-3 py-2">End User</th>
+          <th scope="col" className="w-48 px-3 py-2">Product / SKU</th>
+          <th scope="col" className="w-36 whitespace-nowrap px-3 py-2">MOQ / tiers</th>
+          <th scope="col" className="w-28 whitespace-nowrap px-3 py-2">Expiration</th>
+        </tr></thead>
+        <tbody className="divide-y">{rows.map(row=>{
+          const unresolved=(!row.distributorAccountId&&row.distributorSourceName)||(!row.varAccountId&&row.varSourceName)||(!row.endUserAccountId&&row.endUserSourceName)||row.lines.some(line=>!line.productSku);
+          const summary=priceExceptionListSummary(row.lines);
+          return <tr key={row.id} className="even:bg-slate-50/60 hover:bg-orange-50/50 focus-within:bg-orange-50/50">
+            <td className="whitespace-nowrap px-3 py-2 align-top"><Link className="font-semibold text-orange-800" href={`/price-exceptions/${row.id}`}>{row.peCode??'(unnumbered)'}</Link>{unresolved&&<span className="mt-0.5 block w-fit rounded bg-amber-100 px-1 text-[11px] leading-4 text-amber-900">Unresolved</span>}</td>
+            <td className="whitespace-nowrap px-3 py-2 align-top">{priceExceptionStatusLabel(row.status)}</td>
+            <td className="px-3 py-2 align-top"><span className="block max-w-32 truncate" title={row.assignedSalesRepUser?`${row.assignedSalesRepUser.firstName} ${row.assignedSalesRepUser.lastName}`:undefined}>{row.assignedSalesRepUser?`${row.assignedSalesRepUser.firstName} ${row.assignedSalesRepUser.lastName}`:row.sourceType==='LEGACY_WORKBOOK'?'Legacy / Unassigned':'Unassigned'}</span></td>
+            <td className="px-3 py-2 align-top"><Party account={row.distributorAccount} raw={row.distributorSourceName}/></td>
+            <td className="px-3 py-2 align-top"><Party account={row.varAccount} raw={row.varSourceName}/></td>
+            <td className="px-3 py-2 align-top"><Party account={row.endUserAccount} raw={row.endUserSourceName}/></td>
+            <td className="px-3 py-2 align-top">{summary.product?<div className="max-w-48 leading-5">{summary.product.product&&<span className="block truncate font-medium" title={summary.product.product}>{summary.product.product}</span>}<span className="block truncate font-mono text-xs" title={summary.product.sku}>{summary.product.sku}</span>{summary.skuCount>1&&<span className="block text-xs text-slate-500">+{summary.skuCount-1} more SKU{summary.skuCount===2?'':'s'}</span>}</div>:<span>—</span>}</td>
+            <td className="whitespace-nowrap px-3 py-2 align-top font-medium" title={summary.tierTitle||undefined}>{summary.tierText}</td>
+            <td className="whitespace-nowrap px-3 py-2 align-top">{row.expirationDate?.toISOString().slice(0,10)??'—'}</td>
+          </tr>})}</tbody>
+      </table>
+      {!rows.length&&<p className="p-8 text-center text-sm text-slate-500">No Price Exceptions match these filters.</p>}
+    </div>
     <div className="mt-4 flex justify-between text-sm text-slate-600"><span>{count} Price Exceptions · Page {page} of {pages}</span><div className="flex gap-2">{page>1&&<Link className="btn-secondary" href={priceExceptionHref(filters,page-1)}>Previous</Link>}{page<pages&&<Link className="btn-secondary" href={priceExceptionHref(filters,page+1)}>Next</Link>}</div></div>
   </Content>;
 }
