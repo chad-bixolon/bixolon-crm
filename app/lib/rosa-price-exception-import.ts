@@ -22,9 +22,9 @@ export type RosaPlanGroup = {
   requestedAt:string; reviewedAt:string; requestedBy:RosaResolution; reviewedBy:RosaResolution;
   customer:RosaResolution; varAccount:RosaResolution; endUser:RosaResolution;
   expirationDate:string; currency:string; description:string; tiers:RosaPlanTier[];
-  disposition:RosaDisposition; messages:string[]; conflictingFields:string[]; conflictOptions:{field:RosaHeaderChoiceField;values:{line:number;value:string}[]}[]; changedFields:string[]; existingId:number|null; fingerprint:string;
+  disposition:RosaDisposition; messages:string[]; conflictingFields:string[]; conflictOptions:{field:RosaHeaderChoiceField;values:{line:number;value:string}[]}[]; changedFields:string[]; revisionDifferences:{field:string;current:string;proposed:string}[]; existingId:number|null; fingerprint:string;
   currentRevision:{id:number|null;fileName:string;header:Record<string,string>;tiers:string[]}|null;
-  revisionAction:'PROMOTE'|'OLDER'|'NONE';
+  revisionAction:'PROMOTE'|'OLDER'|'SAME_TIME'|'NONE';
   revisionRecorded:boolean;
 };
 export type RosaPlan = { groups:RosaPlanGroup[]; counts:Record<RosaDisposition,number>; sourceRowCount:number; errors:string[]; digest:string; fileName:string; choices:{accounts:RosaChoice[];users:RosaChoice[];skus:RosaChoice[]}; restoredChoices:RosaManualChoices };
@@ -89,6 +89,17 @@ function canonicalTier(row:RosaSourceRow){const raw=row.values;return JSON.strin
 function sortedTierValues(rows:RosaSourceRow[]){return rows.map(canonicalTier).sort();}
 function existingTierValues(lines:{sourceSku:string|null;sourceQuantityRaw:string|null;sourceQuantity:Prisma.Decimal|null;approvedUnitPrice:Prisma.Decimal|null;currencyCode:string;sourceMetadata:Prisma.JsonValue}[]){return lines.map(line=>JSON.stringify([normalizePartNumber(line.sourceSku??''),line.sourceQuantity?.toFixed(3)??line.sourceQuantityRaw, decimal((line.sourceMetadata as {originalPrice?:string}|null)?.originalPrice??'',2,10)??(line.sourceMetadata as {originalPrice?:string}|null)?.originalPrice??null,line.approvedUnitPrice?.toFixed(2)??null,line.currencyCode.trim().toUpperCase()])).sort();}
 const same=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
+function tierDifferences(current:string[],proposed:string[]){
+  const fields=['SKU','Quantity','Original Price','Approved Price','Currency'];
+  const values=(tiers:string[],index:number)=>tiers.map(tier=>{const parsed=JSON.parse(tier) as (string|null)[];return parsed[index]??'—';}).sort();
+  const changes=fields.flatMap((field,index)=>{
+    const before=values(current,index),after=values(proposed,index);
+    return same(before,after)?[]:[{field,current:before.join('; ')||'—',proposed:after.join('; ')||'—'}];
+  });
+  if(changes.length||same(current,proposed))return changes;
+  const describe=(tiers:string[])=>tiers.map(tier=>(JSON.parse(tier) as string[]).join(' · ')).join('; ')||'—';
+  return [{field:'Pricing tier combinations',current:describe(current),proposed:describe(proposed)}];
+}
 function conflictingHeaderFields(rows:RosaSourceRow[]){const first=canonicalHeader(rows[0]);return headerFields.filter(field=>rows.some(row=>canonicalHeader(row)[field]!==first[field]));}
 function headerConflictMessage(field:HeaderField,rows:RosaSourceRow[]){return `${field} differs across source lines: ${rows.map(row=>`${row.line}=${JSON.stringify(row.values[field].slice(0,100))}`).join('; ')}.`;}
 function safeHeaderConflict(field:HeaderField,rows:RosaSourceRow[]):field is RosaHeaderChoiceField{
@@ -146,7 +157,7 @@ export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:s
     const accountIds=checkedRecord(groupChoice.accountIds??{},'Account choices');checkedKeys(accountIds,accountFields,'Account choice');
     const userIds=checkedRecord(groupChoice.userIds??{},'user choices');checkedKeys(userIds,userFields,'user choice');
     const skuIds=checkedRecord(groupChoice.skuIds??{},'SKU choices');
-    const first=sourceRows[0],raw={...first.values},peNumber=raw['PE Number'].trim(),code=key(peNumber),messages:string[]=[],changedFields:string[]=[];
+    const first=sourceRows[0],raw={...first.values},peNumber=raw['PE Number'].trim(),code=key(peNumber),messages:string[]=[],changedFields:string[]=[],revisionDifferences:RosaPlanGroup['revisionDifferences']=[];
     let invalid=false;const sourceError=(message:string)=>{messages.push(message);invalid=true;};
     const allConflicts=conflictingHeaderFields(sourceRows);
     const safeConflicts=allConflicts.filter(field=>safeHeaderConflict(field,sourceRows));
@@ -223,25 +234,29 @@ export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:s
       const originalSourceValues=(record.sourceMetadata as {rosaRawRows?:RosaSourceRow[]}|null)?.rosaRawRows?.[0]?.values;
       currentRevision=oldHeader?{id:current?.id??null,fileName:current?.sourceFileName??record.sourceFileName??'',header:currentSourceValues??originalSourceValues??oldHeader,tiers:existingTierValues(record.lines)}:null;
       if(oldHeader){
-        for(const field of headerFields)if(oldHeader[field]!==header[field])changedFields.push(field);
-        if(!same(existingTierValues(record.lines),sortedTierValues(sourceRows)))changedFields.push('Pricing tiers');
-        const prior=current?{}:metadata?.rosaReviewedChoices??{};
-        if(!current&&!same({headerLines:prior.headerLines??{},accountIds:prior.accountIds??{},userIds:prior.userIds??{},skuIds:prior.skuIds??{}},reviewedChoice))changedFields.push('Reviewed resolutions');
+        for(const field of headerFields)if(oldHeader[field]!==header[field]){
+          changedFields.push(field);
+          revisionDifferences.push({field,current:currentRevision?.header[field]??oldHeader[field],proposed:raw[field]});
+        }
+        const currentTiers=existingTierValues(record.lines),proposedTiers=sortedTierValues(sourceRows);
+        if(!same(currentTiers,proposedTiers)){
+          changedFields.push('Pricing tiers');
+          revisionDifferences.push(...tierDifferences(currentTiers,proposedTiers));
+        }
         identical=changedFields.length===0;
       }else changedFields.push('Existing PE has no comparable Rosa group metadata.');
       const priorReviewedAt=current?.sourceReviewedAt.toISOString()??timestamp((record.sourceMetadata as {reviewedAt?:string}|null)?.reviewedAt??'');
-      const newer=!!priorReviewedAt&&!!reviewedAt&&reviewedAt>priorReviewedAt;
-      if(!identical)revisionAction=newer?'PROMOTE':'OLDER';
-      messages.push(identical?'Existing PE and all pricing tiers are identical.':revisionAction==='PROMOTE'?'Needs review — Newer source revision available.':'Existing PE differs or is older; current pricing will not change.');
+      if(!identical)revisionAction=priorReviewedAt&&reviewedAt&&reviewedAt>priorReviewedAt?'PROMOTE':priorReviewedAt&&reviewedAt&&reviewedAt<priorReviewedAt?'OLDER':'SAME_TIME';
+      messages.push(identical?'Already imported / No changes.':revisionAction==='PROMOTE'?'Newer submission available.':revisionAction==='OLDER'?'Older submission detected. This Price Exception already has a newer reviewed submission. No pricing changes will be made.':'Submission needs review. Its reviewed time is the same as the current submission or cannot be compared. No pricing changes will be made.');
     }else if(matching.length>1){changedFields.push('Multiple existing PEs share this number.');messages.push('Multiple existing PEs share this number.');}
     const siblingSubmissions=[...grouped].filter(([,rows])=>key(rows[0].values['PE Number'])===code);
     const earliest=siblingSubmissions.sort((a,b)=>(timestamp(a[1][0].values['Reviewed At'])??'').localeCompare(timestamp(b[1][0].values['Reviewed At'])??''))[0]?.[0];
     const pendingSibling=!matching.length&&siblingSubmissions.length>1&&earliest!==groupKey;
     if(pendingSibling)messages.push('Another submission for this PE Number appears earlier in this file. Import it first, then review this revision for promotion.');
-    const needsReview=pendingSibling||conflictingFields.length>0||changedFields.length>0||[requestedBy,reviewedBy,customer,varAccount,endUser].some(item=>!!item.issue)||tiers.some(tier=>!!tier.sku.issue);
-    const disposition:RosaDisposition=invalid?'ERROR':needsReview?'REVIEW REQUIRED':matching.length?'EXISTING / NO CHANGE':'READY';
+    const needsReview=pendingSibling||conflictingFields.length>0||changedFields.length>0||!identical&&[requestedBy,reviewedBy,customer,varAccount,endUser].some(item=>!!item.issue)||!identical&&tiers.some(tier=>!!tier.sku.issue);
+    const disposition:RosaDisposition=identical?'EXISTING / NO CHANGE':invalid?'ERROR':needsReview?'REVIEW REQUIRED':matching.length?'EXISTING / NO CHANGE':'READY';
     counts[disposition]++;
-    groups.push({groupKey,peNumber,sourceLines:sourceRows.map(row=>row.line),statusSource,statusMapped,requestedAt:raw['Requested At'],reviewedAt:raw['Reviewed At'],requestedBy,reviewedBy,customer,varAccount,endUser,expirationDate:expirationDate??raw['Expiration Date'],currency:raw.Currency,description:raw.Description,tiers,disposition,messages,conflictingFields:[...conflictingFields],conflictOptions,changedFields,existingId:matching[0]?.id??null,fingerprint,currentRevision,revisionAction,revisionRecorded});
+    groups.push({groupKey,peNumber,sourceLines:sourceRows.map(row=>row.line),statusSource,statusMapped,requestedAt:raw['Requested At'],reviewedAt:raw['Reviewed At'],requestedBy,reviewedBy,customer,varAccount,endUser,expirationDate:expirationDate??raw['Expiration Date'],currency:raw.Currency,description:raw.Description,tiers,disposition,messages,conflictingFields:[...conflictingFields],conflictOptions,changedFields,revisionDifferences,existingId:matching[0]?.id??null,fingerprint,currentRevision,revisionAction,revisionRecorded});
   }
   return {groups,counts,sourceRowCount:parsed.rows.length,errors:[],digest:hash(JSON.stringify({fileName,groups,manualChoices:restoredChoices})),fileName,choices:{accounts:accountChoices.map(({id,name})=>({id,name})),users:userChoices.map(({id,name})=>({id,name})),skus:skuChoices.map(({id,name,productName})=>({id,name:productName?`${name} · ${productName}`:name}))},restoredChoices};
 }

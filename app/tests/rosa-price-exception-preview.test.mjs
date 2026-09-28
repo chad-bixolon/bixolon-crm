@@ -35,12 +35,14 @@ function render(preview, confirmed = false, busy = false) {
 test('zero-ready preview explains the next step and hides confirmation and import action', () => {
   const html = render(plan([], [2]));
   assert.match(html, /No Price Exceptions are ready to import yet\. Resolve the review items and errors above, then preview the file again\./);
+  assert.match(html, /1 Price Exception still needs review and will not be imported\./);
   assert.doesNotMatch(html, /type="checkbox"|<button|PE headers|pricing lines/);
 });
 
 test('one-ready preview uses singular button text and accurate tier count', () => {
   const html = render(plan([2], [4]), true);
   assert.match(html, /This import will create 1 Price Exception with 2 pricing tiers\./);
+  assert.match(html, /1 Price Exception still needs review and will not be imported\./);
   assert.match(html, /type="checkbox"[^>]*checked=""/);
   assert.match(html, /I confirm the 1 Price Exception ready to import/);
   assert.match(html, /<button[^>]*>Import 1 Price Exception<\/button>/);
@@ -50,9 +52,20 @@ test('one-ready preview uses singular button text and accurate tier count', () =
 test('multiple-ready preview uses plural button text and excludes review tiers from counts', () => {
   const html = render(plan([2, 3], [7]), true);
   assert.match(html, /This import will create 2 Price Exceptions with 5 pricing tiers\./);
+  assert.match(html, /1 Price Exception still needs review and will not be imported\./);
   assert.match(html, /I confirm the 2 Price Exceptions ready to import/);
   assert.match(html, /<button[^>]*>Import 2 Price Exceptions<\/button>/);
   assert.doesNotMatch(html, /12 pricing tiers|PE headers/);
+});
+
+test('bottom summary dynamically counts 15 review and error records while Ready-only import count stays 4',()=>{
+  const preview=plan([1,1,1,1],Array(14).fill(1));
+  preview.groups.push({disposition:'ERROR',tiers:[{}]});
+  preview.groups.push({disposition:'EXISTING / NO CHANGE',tiers:[{}]});
+  const html=render(preview);
+  assert.match(html,/This import will create 4 Price Exceptions with 4 pricing tiers\./);
+  assert.match(html,/15 Price Exceptions still need review and will not be imported\./);
+  assert.match(html,/Import 4 Price Exceptions/);
 });
 
 test('confirmation, busy state, and preview errors still disable apply', () => {

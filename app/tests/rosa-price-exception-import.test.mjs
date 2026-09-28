@@ -36,16 +36,30 @@ test('unmatched Account parties require review and keep every source name withou
 test('three quantity tiers for the same SKU create one header and three distinct lines',async()=>{const input=parsed(row(2,{Quantity:'100','Approved Price':'180.00'}),row(3,{Quantity:'250','Approved Price':'170.00'}),row(4,{Quantity:'500','Approved Price':'160.00'})),client=db();const plan=await planRosaPriceExceptions(client,input,'rosa.csv');assert.equal(plan.groups.length,1);assert.equal(plan.groups[0].disposition,'READY');assert.equal(plan.groups[0].tiers.length,3);assert.equal(new Set(plan.groups[0].tiers.map(tier=>tier.sourceLineKey)).size,3);const result=await applyRosaPriceExceptions(client,input,'rosa.csv',plan.digest,true,91);assert.deepEqual([result.created,result.lines],[1,3]);assert.equal(client.writes.length,1);const lines=client.writes[0].lines.create;assert.deepEqual(lines.map(line=>line.sourceQuantity.toString()),['100','250','500']);assert.deepEqual(lines.map(line=>line.approvedUnitPrice.toString()),['180','170','160']);assert.ok(lines.every(line=>line.productSkuId===20));assert.deepEqual(lines.map(line=>line.sourceMetadata.sourceLine),[2,3,4]);assert.deepEqual(lines.map(line=>line.sourceMetadata.originalPrice),['193.60','193.60','193.60'])});
 test('multiple SKUs under the same PE become separate lines',async()=>{const input=parsed(row(2),row(3,{SKU:'SECOND-SKU',Quantity:'250'})),client=db();const plan=await planRosaPriceExceptions(client,input,'rosa.csv');assert.equal(plan.groups[0].disposition,'READY');await applyRosaPriceExceptions(client,input,'rosa.csv',plan.digest,true,91);assert.deepEqual(client.writes[0].lines.create.map(line=>line.productSkuId),[20,21])});
 test('meaningful header conflicts block the whole PE and name each field; harmless description whitespace does not',async()=>{const consistent=await planRosaPriceExceptions(db(),parsed(row(2),row(3,{Description:`  ${first.values.Description}   `})),'rosa.csv');assert.equal(consistent.groups[0].disposition,'READY');const conflict=await planRosaPriceExceptions(db(),parsed(row(2),row(3,{Customer:'Different Customer',Description:'Another offer'})),'rosa.csv');assert.equal(conflict.groups[0].disposition,'REVIEW REQUIRED');assert.deepEqual(conflict.groups[0].conflictingFields,['Customer','Description']);assert.match(conflict.groups[0].messages.join(' '),/source lines: 2=/);assert.equal(conflict.groups[0].tiers.length,2)});
-test('identical grouped re-import is no change; changed tiers require review without appending or overwriting',async()=>{const input=parsed(row(2,{Quantity:'100'}),row(3,{Quantity:'250'})),client=db();const firstPlan=await planRosaPriceExceptions(client,input,'rosa.csv');await applyRosaPriceExceptions(client,input,'rosa.csv',firstPlan.digest,true,91);const repeat=await planRosaPriceExceptions(client,input,'rosa.csv');assert.equal(repeat.groups[0].disposition,'EXISTING / NO CHANGE');assert.equal(repeat.counts['EXISTING / NO CHANGE'],1);await assert.rejects(applyRosaPriceExceptions(client,input,'rosa.csv',repeat.digest,true,91),/No Price Exceptions ready to import/);const changed=parsed(row(2,{Quantity:'100'}),row(3,{Quantity:'250','Approved Price':'165.00'}));const conflict=await planRosaPriceExceptions(client,changed,'rosa.csv');assert.equal(conflict.groups[0].disposition,'REVIEW REQUIRED');assert.deepEqual(conflict.groups[0].changedFields,['Pricing tiers']);assert.equal(client.writes.length,1);assert.equal(client.writes[0].lines.create.length,2)});
+test('identical grouped re-import is no change; changed tiers require review without appending or overwriting',async()=>{const input=parsed(row(2,{Quantity:'100'}),row(3,{Quantity:'250'})),client=db();const firstPlan=await planRosaPriceExceptions(client,input,'rosa.csv');await applyRosaPriceExceptions(client,input,'rosa.csv',firstPlan.digest,true,91);const repeat=await planRosaPriceExceptions(client,input,'rosa.csv');assert.equal(repeat.groups[0].disposition,'EXISTING / NO CHANGE');assert.equal(repeat.groups[0].revisionAction,'NONE');assert.deepEqual(repeat.groups[0].revisionDifferences,[]);assert.equal(repeat.counts['EXISTING / NO CHANGE'],1);await assert.rejects(applyRosaPriceExceptions(client,input,'rosa.csv',repeat.digest,true,91),/No Price Exceptions ready to import/);const changed=parsed(row(2,{Quantity:'100'}),row(3,{Quantity:'250','Approved Price':'165.00'}));const conflict=await planRosaPriceExceptions(client,changed,'rosa.csv');assert.equal(conflict.groups[0].disposition,'REVIEW REQUIRED');assert.deepEqual(conflict.groups[0].changedFields,['Pricing tiers']);assert.equal(client.writes.length,1);assert.equal(client.writes[0].lines.create.length,2)});
+test('older submissions stay in review and newer submissions list only the fields whose values changed',async()=>{
+ const client=db(),original=parsed(row(2));const firstPlan=await planRosaPriceExceptions(client,original,'same.csv');await applyRosaPriceExceptions(client,original,'same.csv',firstPlan.digest,true,91);
+ const newer=parsed(row(2,{'Reviewed At':'2026-09-27T00:00:00+00:00',Quantity:'750','Approved Price':'165.00','End User':'Bluestar'}));
+ const newerPlan=await planRosaPriceExceptions(client,newer,'same.csv');assert.equal(newerPlan.groups[0].revisionAction,'PROMOTE');assert.deepEqual(newerPlan.groups[0].revisionDifferences.map(change=>change.field),['Reviewed At','End User','Quantity','Approved Price']);
+ await promoteRosaRevision(client,newer,'same.csv',newerPlan.digest,newerPlan.groups[0].groupKey,true,91);
+ const olderPlan=await planRosaPriceExceptions(client,original,'same.csv');assert.equal(olderPlan.groups[0].revisionAction,'OLDER');assert.equal(olderPlan.groups[0].disposition,'REVIEW REQUIRED');assert.match(olderPlan.groups[0].messages.join(' '),/Older submission detected/);assert.equal(client.revisions.length,2);
+});
 test('newer changed PE submission stays in review and preserves the original header and tiers',async()=>{
   const client=db(),input=parsed(row(2)),original=await planRosaPriceExceptions(client,input,'rosa.csv');
   await applyRosaPriceExceptions(client,input,'rosa.csv',original.digest,true,91);
   const newer=parsed(row(2,{'Reviewed At':'2026-09-27T00:00:00+00:00','Approved Price':'165.00'}));
   const preview=await planRosaPriceExceptions(client,newer,'rosa.csv');
   assert.equal(preview.groups[0].disposition,'REVIEW REQUIRED');
-  assert.match(preview.groups[0].messages.join(' '),/Newer source revision available/);
+  assert.match(preview.groups[0].messages.join(' '),/Newer submission available/);
   assert.equal(client.writes.length,1);
   assert.equal(client.writes[0].lines.create.length,1);
+});
+test('mixed preview applies only Ready PEs and leaves unresolved submissions untouched',async()=>{
+ const client=db(),input=parsed(row(2),row(3,{'PE Number':'REVIEW-ONLY',SKU:'UNKNOWN-SKU'}));
+ const preview=await planRosaPriceExceptions(client,input,'same.csv');
+ assert.deepEqual([preview.counts.READY,preview.counts['REVIEW REQUIRED']],[1,1]);
+ const result=await applyRosaPriceExceptions(client,input,'same.csv',preview.digest,true,91);
+ assert.equal(result.created,1);assert.equal(client.source.existing.length,1);assert.equal(client.source.existing[0].peCode,first.values['PE Number']);assert.equal(client.revisions.length,1);
 });
 test('existing PE from another source requires review even if the number matches',async()=>{const existing=[{id:7,peCode:first.values['PE Number'],sourceType:'LEGACY_WORKBOOK',sourceKey:'OLD',sourceMetadata:null,lines:[]}];const plan=await planRosaPriceExceptions(db({existing}),parsed(row(2)),'rosa.csv');assert.equal(plan.groups[0].disposition,'REVIEW REQUIRED');assert.equal(plan.groups[0].existingId,7)});
 test('supplied CSV separates distinct submissions under the same exact PE Number',async()=>{
@@ -169,8 +183,9 @@ test('fresh preview restores matching reviewed choices and drops inactive mappin
   assert.deepEqual(repeat.restoredChoices,choices);
   client.source.accounts=client.source.accounts.map(account=>account.id===10?{...account,archivedAt:new Date()}:account);
   client.source.skus=client.source.skus.map(sku=>sku.id===21?{...sku,active:false}:sku);
+  client.source.currencies=client.source.currencies.map(currency=>({...currency,active:false}));
   const stale=await planRosaPriceExceptions(client,input,'rosa.csv');
-  assert.equal(stale.groups[0].disposition,'REVIEW REQUIRED');
+  assert.equal(stale.groups[0].disposition,'EXISTING / NO CHANGE');
   assert.equal(stale.restoredChoices[initial.groups[0].groupKey].accountIds.Customer,undefined);
   assert.deepEqual(stale.restoredChoices[initial.groups[0].groupKey].skuIds,{});
 });

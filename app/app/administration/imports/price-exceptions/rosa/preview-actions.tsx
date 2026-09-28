@@ -10,8 +10,10 @@ type PreviewActionsProps = {
 
 export function PreviewActions({ plan, confirmed, busy, onConfirm, onApply }: PreviewActionsProps) {
   const readyCount = plan.counts.READY;
+  const reviewCount = plan.groups.filter(group => group.disposition === 'REVIEW REQUIRED' || group.disposition === 'ERROR').length;
 
   return <div className="mt-5 border-t pt-4">
+    {reviewCount > 0 && <p className="mb-2 text-sm text-amber-800">{reviewCount} Price Exception{reviewCount === 1 ? '' : 's'} still need{reviewCount === 1 ? 's' : ''} review and will not be imported.</p>}
     {readyCount === 0 ? (
       <p className="text-sm text-slate-600">No Price Exceptions are ready to import yet. Resolve the review items and errors above, then preview the file again.</p>
     ) : (

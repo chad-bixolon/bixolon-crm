@@ -53,12 +53,22 @@ test('shared picker displays complete selected Account names at review panel wid
   assert.match(html,/aria-label="Search CRM VAR"/);
   assert.match(html,/aria-label="CRM VAR"/);
 });
-test('changed existing PE shows current and proposed source and explicit promotion actions',()=>{
-  const group={groupKey:'PE-1',peNumber:'PE-1',sourceLines:[2],statusSource:'Approved',statusMapped:'ACTIVE',requestedAt:'2026-09-04T00:00:00Z',reviewedAt:'2026-09-04T01:00:00Z',requestedBy:resolved('Amber Smith',1,'Amber Smith'),reviewedBy:resolved('Gary Lee',3,'Gary Lee'),customer:resolved('Bluestar',10,'Bluestar'),varAccount:resolved('Sonda in Chile',11,'Sonda in Chile'),endUser:resolved('New End User',12,'New End User'),expirationDate:'2027-06-30',currency:'USD',description:'Offer',tiers:[{line:2,sku:resolved('ABC123',21,'ABC123'),quantity:'1001',currency:'USD',originalPrice:'10.00',approvedPrice:'9.00'}],disposition:'REVIEW REQUIRED',messages:[],conflictOptions:[],conflictingFields:[],changedFields:['Requested At','End User','Pricing tiers'],currentRevision:{id:1,fileName:'old.csv',header:{'Requested At':'2026-09-03T00:00:00Z','End User':'Original End User'},tiers:[JSON.stringify(['ABC123','1000','10.00','9.00','USD'])]},revisionAction:'PROMOTE'};
-  const html=renderToStaticMarkup(React.createElement(RosaReviewCard,{group,plan:{fileName:'new.csv',choices:{accounts:[],users:[],skus:[]}},disabled:false,onResolve(){},onPromote(){},onKeep(){}}));
-  assert.match(html,/Newer source revision available/);
+test('newer changed submission shows only changed fields and explicit promotion actions, even with the same filename',()=>{
+  const group={groupKey:'PE-1',peNumber:'PE-1',sourceLines:[2],statusSource:'Approved',statusMapped:'ACTIVE',requestedAt:'2026-09-04T00:00:00Z',reviewedAt:'2026-09-04T01:00:00Z',requestedBy:resolved('Amber Smith',1,'Amber Smith'),reviewedBy:resolved('Gary Lee',3,'Gary Lee'),customer:resolved('Bluestar',10,'Bluestar'),varAccount:resolved('Sonda in Chile',11,'Sonda in Chile'),endUser:resolved('New End User',12,'New End User'),expirationDate:'2027-06-30',currency:'USD',description:'Offer',tiers:[{line:2,sku:resolved('ABC123',21,'ABC123'),quantity:'1001',currency:'USD',originalPrice:'10.00',approvedPrice:'9.00'}],disposition:'REVIEW REQUIRED',messages:[],conflictOptions:[],conflictingFields:[],changedFields:['Requested At','End User','Pricing tiers'],revisionDifferences:[{field:'Requested At',current:'2026-09-03T00:00:00Z',proposed:'2026-09-04T00:00:00Z'},{field:'End User',current:'Original End User',proposed:'New End User'},{field:'Quantity',current:'1000',proposed:'1001'}],currentRevision:{id:1,fileName:'same.csv',header:{'Requested At':'2026-09-03T00:00:00Z','End User':'Original End User'},tiers:[JSON.stringify(['ABC123','1000','10.00','9.00','USD'])]},revisionAction:'PROMOTE'};
+  const html=renderToStaticMarkup(React.createElement(RosaReviewCard,{group,plan:{fileName:'same.csv',choices:{accounts:[],users:[],skus:[]}},disabled:false,onResolve(){},onPromote(){},onKeep(){}}));
+  assert.match(html,/Newer submission available/);
   assert.match(html,/Original End User/);
   assert.match(html,/New End User/);
+  assert.match(html,/>Quantity<\/th>/);
+  assert.doesNotMatch(html,/Current imported revision|New source revision|>Currency<\/th>/);
   assert.match(html,/Keep Current/);
   assert.match(html,/Promote New Revision/);
+});
+
+test('older submission explains no pricing change and hides the comparison table',()=>{
+  const group={groupKey:'PE-1',peNumber:'PE-1',sourceLines:[],statusSource:'Approved',statusMapped:'ACTIVE',requestedAt:'old',reviewedAt:'old',requestedBy:resolved('A',1,'A'),reviewedBy:resolved('B',2,'B'),customer:resolved('C',3,'C'),varAccount:resolved('V',4,'V'),endUser:resolved('E',5,'E'),expirationDate:'2027-06-30',currency:'USD',description:'Offer',tiers:[],disposition:'REVIEW REQUIRED',messages:[],conflictOptions:[],conflictingFields:[],changedFields:['Pricing tiers'],revisionDifferences:[],currentRevision:{id:1,fileName:'same.csv',header:{},tiers:[]},revisionAction:'OLDER'};
+  const html=renderToStaticMarkup(React.createElement(RosaReviewCard,{group,plan:{fileName:'same.csv',choices:{accounts:[],users:[],skus:[]}},disabled:false,onResolve(){}}));
+  assert.match(html,/Older submission detected/);
+  assert.match(html,/This Price Exception already has a newer reviewed submission\. No pricing changes will be made\./);
+  assert.doesNotMatch(html,/Changed field|Keep Current|Promote New Revision|Current imported revision/);
 });
