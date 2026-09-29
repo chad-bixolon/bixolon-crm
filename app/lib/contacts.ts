@@ -53,7 +53,28 @@ export async function setContactState(client: PrismaClient, id: number, state: "
   }
   await client.contact.update({ where: { id }, data: { active: state === "active", archivedAt: state === "archived" ? new Date() : null, isPrimary: state === "active" ? existing.isPrimary && !existing.archivedAt : false } });
 }
-export type ContactFilters = { q?: string; active?: string; accountId?: string; marketingPreference?: string; page?: string };
+export type ContactSort = "name" | "account" | "title" | "email" | "status";
+export type ContactFilters = { q?: string; active?: string; accountId?: string; marketingPreference?: string; title?: string; primary?: string; assignment?: string; sort?: string; dir?: string; page?: string; pageSize?: string };
+const listQueryKeys = ["q", "active", "accountId", "marketingPreference", "title", "primary", "assignment", "sort", "dir", "pageSize"] as const;
+export function contactListUrl(filters: ContactFilters, changes: Record<string, string | undefined> = {}) {
+  const params = new URLSearchParams();
+  for (const key of listQueryKeys) if (filters[key]) params.set(key, filters[key]);
+  for (const [key, value] of Object.entries(changes)) { if (value) params.set(key, value); else params.delete(key); }
+  return `/contacts${params.size ? `?${params}` : ""}`;
+}
+export function contactListState(filters: ContactFilters) {
+  const pageSize = [25, 50, 100].includes(Number(filters.pageSize)) ? Number(filters.pageSize) : 25;
+  const sort = (["name", "account", "title", "email", "status"] as const).find(value => value === filters.sort);
+  const dir: Prisma.SortOrder = filters.dir === "desc" ? "desc" : "asc";
+  return { pageSize, sort, dir };
+}
+export function contactOrderBy(filters: ContactFilters): Prisma.ContactOrderByWithRelationInput[] {
+  const { sort, dir } = contactListState(filters);
+  if (sort === "account") return [{ account: { name: dir } }, { lastName: "asc" }, { firstName: "asc" }, { id: "asc" }];
+  if (sort === "title" || sort === "email") return [{ [sort]: { sort: dir, nulls: "last" } }, { lastName: "asc" }, { firstName: "asc" }, { id: "asc" }];
+  if (sort === "status") return [{ archivedAt: { sort: dir, nulls: dir === "asc" ? "first" : "last" } }, { active: dir }, { lastName: "asc" }, { firstName: "asc" }, { id: "asc" }];
+  return [{ lastName: sort === "name" ? dir : "asc" }, { firstName: sort === "name" ? dir : "asc" }, { id: "asc" }];
+}
 export function contactWhere(filters: ContactFilters): Prisma.ContactWhereInput {
   const where: Prisma.ContactWhereInput = { archivedAt: null, OR: [{ accountId: null }, { account: { is: { archivedAt: null, status: 'ACTIVE' } } }] };
   if (filters.q?.trim()) {
@@ -62,6 +83,7 @@ export function contactWhere(filters: ContactFilters): Prisma.ContactWhereInput 
       { firstName: { contains: q, mode: 'insensitive' } },
       { lastName: { contains: q, mode: 'insensitive' } },
       { email: { contains: q, mode: 'insensitive' } },
+      { title: { contains: q, mode: 'insensitive' } },
     ] }];
   }
   if (filters.active === "all") { delete where.archivedAt; delete where.OR; }
@@ -71,11 +93,19 @@ export function contactWhere(filters: ContactFilters): Prisma.ContactWhereInput 
   if (filters.accountId === "unassigned") where.accountId = null;
   else { const accountId = positiveId(filters.accountId ?? ""); if (accountId) where.accountId = accountId; }
   if (Object.values(MarketingPreference).includes(filters.marketingPreference as MarketingPreference)) where.marketingPreference = filters.marketingPreference as MarketingPreference;
+  if (filters.title?.trim()) where.title = { contains: filters.title.trim().slice(0, 200), mode: "insensitive" };
+  if (filters.primary === "yes") where.isPrimary = true;
+  if (filters.primary === "no") where.isPrimary = false;
+  if (filters.assignment === "assigned" && where.accountId === undefined) where.accountId = { not: null };
+  if (filters.assignment === "unassigned" && where.accountId === undefined) where.accountId = null;
+  if (filters.assignment === "assigned" && where.accountId === null) where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), { accountId: { not: null } }];
+  if (filters.assignment === "unassigned" && where.accountId !== undefined && where.accountId !== null) where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), { accountId: null }];
   return where;
 }
 export async function listContacts(client: PrismaClient, filters: ContactFilters) {
   const where = contactWhere(filters), count = await client.contact.count({ where });
-  const { page, pages } = pageNumber(filters.page, count);
-  const contacts = await client.contact.findMany({ where, include: { account: { select: { name: true } } }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }, { id: "asc" }], skip: (page - 1) * 20, take: 20 });
-  return { contacts, count, page, pages };
+  const { pageSize } = contactListState(filters);
+  const { page, pages } = pageNumber(filters.page, count, pageSize);
+  const contacts = await client.contact.findMany({ where, include: { account: { select: { name: true } } }, orderBy: contactOrderBy(filters), skip: (page - 1) * pageSize, take: pageSize });
+  return { contacts, count, page, pages, pageSize };
 }
