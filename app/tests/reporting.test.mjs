@@ -19,7 +19,7 @@ const row=(id,currency='USD',overrides={})=>({id,name:`Deal ${id}`,currencyCode:
 
 test('report discovery follows runnable type and built-in authorization',()=>{
  const tradeShowBuiltIns=['TRADE_SHOW_CURRENT_YEAR','LEADS_BY_TRADE_SHOW','LEADS_BY_SALES_REP','LEADS_BY_ROUTING','TRADE_SHOW_CONVERSION_FUNNEL','TRADE_SHOW_PIPELINE','TRADE_SHOW_FOLLOW_UP_NEEDED'];
- const salesBuiltIns=['MY_OPEN_PIPELINE','PIPELINE_THIS_QUARTER','PIPELINE_BY_SALES_REP','ACCOUNT_ENGAGEMENT','PRODUCT_THIS_QUARTER','PIPELINE_BY_PRODUCT','PIPELINE_BY_PARTNER','PIPELINE_BY_PARTNER_TYPE','MEDIA_PARTNER_PIPELINE','ACTIVE_PROJECTS','PIPELINE_BY_PROJECT','PROJECTS_NEAR_TARGET','PE_USAGE_THIS_QUARTER','PE_USAGE_BY_SALES_REP','PE_USAGE_BY_PRODUCT','PRICE_OVERRIDES','PES_BELOW_MOQ',...tradeShowBuiltIns];
+ const salesBuiltIns=['MY_OPEN_PIPELINE','PIPELINE_THIS_QUARTER','PIPELINE_BY_SALES_REP','ACCOUNT_ENGAGEMENT','PRODUCT_THIS_QUARTER','PIPELINE_BY_PRODUCT','PIPELINE_BY_PARTNER','PIPELINE_BY_PARTNER_TYPE','MEDIA_PARTNER_PIPELINE','ACTIVE_PROJECTS','PIPELINE_BY_PROJECT','PROJECTS_NEAR_TARGET','DEMO_INVENTORY','PE_USAGE_THIS_QUARTER','PE_USAGE_BY_SALES_REP','PE_USAGE_BY_PRODUCT','PRICE_OVERRIDES','PES_BELOW_MOQ',...tradeShowBuiltIns];
  for(const role of ['ADMIN','SALES_MANAGER','SALES']){
   assert.deepEqual(reporting.getVisibleBuiltInReports(actor(role)),salesBuiltIns);
   assert.deepEqual(reporting.getVisibleReportTypes(actor(role)),['PIPELINE','ACCOUNT_ACTIVITY','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE','TRADE_SHOW']);
@@ -30,7 +30,7 @@ test('report discovery follows runnable type and built-in authorization',()=>{
  assert.deepEqual(reporting.getVisibleReportTypes(actor('MARKETING_MANAGER')),['TRADE_SHOW']);
  assert.deepEqual(reporting.getCreatableReportTypes(actor('MARKETING_MANAGER')),['TRADE_SHOW']);
  assert.equal(reporting.canAccessReports(actor('MARKETING_MANAGER')),true);
- assert.deepEqual(reporting.getVisibleBuiltInReports(actor('READ_ONLY')),tradeShowBuiltIns);
+ assert.deepEqual(reporting.getVisibleBuiltInReports(actor('READ_ONLY')),['DEMO_INVENTORY',...tradeShowBuiltIns]);
  assert.deepEqual(reporting.getVisibleReportTypes(actor('READ_ONLY')),['PIPELINE','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE','TRADE_SHOW']);
  assert.deepEqual(reporting.getCreatableReportTypes(actor('READ_ONLY')),[]);
  assert.equal(reporting.canAccessReports(actor('READ_ONLY')),true);
