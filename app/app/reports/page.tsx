@@ -18,23 +18,19 @@ type BuiltInCard = {
 
 const builtInGroups: { title: string; cards: BuiltInCard[] }[] = [
   {
-    title: 'Trade Shows',
-    cards: [
-      { id: 'TRADE_SHOW_CURRENT_YEAR', title: 'Trade Show Performance — Current Year', description: 'Current-year leads, conversions, pipeline, and won outcomes.', href: '/reports/trade-shows?configured=1&showDatePreset=THIS_YEAR&groupBy=tradeShow' },
-      { id: 'LEADS_BY_TRADE_SHOW', title: 'Leads by Trade Show', description: 'Compare lead follow-up and conversion across events.', href: '/reports/trade-shows?configured=1&groupBy=tradeShow' },
-      { id: 'LEADS_BY_SALES_REP', title: 'Leads by Sales Rep', description: 'Compare assigned leads and outcomes by sales rep.', href: '/reports/trade-shows?configured=1&groupBy=assignedRep' },
-      { id: 'LEADS_BY_ROUTING', title: 'Leads by Routing', description: 'Compare direct sales, partner referral, marketing, and unreviewed leads.', href: '/reports/trade-shows?configured=1&groupBy=routing' },
-      { id: 'TRADE_SHOW_CONVERSION_FUNNEL', title: 'Trade Show Conversion Funnel', description: 'Review contacted, qualified, converted, and disqualified lead counts.', href: '/reports/trade-shows?configured=1&groupBy=leadStatus&metrics=totalLeads&metrics=contactedLeads&metrics=qualifiedLeads&metrics=convertedLeads&metrics=disqualifiedLeads&metrics=conversionRate' },
-      { id: 'TRADE_SHOW_PIPELINE', title: 'Trade Show Pipeline', description: 'Pipeline, weighted pipeline, commit, and wins attributed to event conversions.', href: '/reports/trade-shows?configured=1&groupBy=tradeShow&metrics=opportunityCount&metrics=pipeline&metrics=weightedPipeline&metrics=commit&metrics=closedWonValue&metrics=closedWonOpportunityCount' },
-      { id: 'TRADE_SHOW_FOLLOW_UP_NEEDED', title: 'Trade Show Follow-Up Needed', description: 'Open leads whose follow-up date is overdue.', href: '/reports/trade-shows?configured=1&followUpStatus=OVERDUE&groupBy=assignedRep' },
-    ],
-  },
-  {
     title: 'Pipeline & Forecast',
     cards: [
       { id: 'MY_OPEN_PIPELINE', title: 'My Open Pipeline', description: 'Your open opportunities.', href: actorId => `/reports/new?configured=1&status=OPEN&ownerId=${actorId}&metrics=pipeline&metrics=weightedPipeline&metrics=opportunityCount&columns=opportunity&columns=account&columns=owner&columns=stage&columns=closeDate&columns=value&columns=weightedValue&columns=currency` },
       { id: 'PIPELINE_THIS_QUARTER', title: 'Pipeline This Quarter', description: 'Open opportunities expected to close this quarter.', href: '/reports/new?configured=1&status=OPEN&closeDatePreset=THIS_QUARTER&groupBy=stage&metrics=pipeline&metrics=opportunityCount&columns=opportunity&columns=account&columns=owner&columns=stage&columns=closeDate&columns=value&columns=currency' },
       { id: 'PIPELINE_BY_SALES_REP', title: 'Pipeline by Sales Rep', description: 'Compare pipeline across the sales team.', href: '/reports/new?configured=1&status=OPEN&groupBy=owner&metrics=pipeline&metrics=opportunityCount&columns=opportunity&columns=account&columns=owner&columns=stage&columns=closeDate&columns=value&columns=currency' },
+    ],
+  },
+  {
+    title: 'Projects',
+    cards: [
+      { id: 'ACTIVE_PROJECTS', title: 'Active Projects', description: 'Active projects and their open opportunities.', href: '/reports/new?reportType=PROJECT_INITIATIVE&configured=1&projectStatus=ACTIVE&status=OPEN&groupBy=project' },
+      { id: 'PIPELINE_BY_PROJECT', title: 'Pipeline by Project', description: 'Open pipeline by project.', href: '/reports/new?reportType=PROJECT_INITIATIVE&configured=1&status=OPEN&groupBy=project' },
+      { id: 'PROJECTS_NEAR_TARGET', title: 'Projects Near Target Date', description: 'Active projects due within 30 days.', href: '/reports/new?reportType=PROJECT_INITIATIVE&configured=1&projectStatus=ACTIVE&status=OPEN&targetEndDatePreset=NEXT_30_DAYS&groupBy=project' },
     ],
   },
   {
@@ -48,14 +44,6 @@ const builtInGroups: { title: string; cards: BuiltInCard[] }[] = [
     ],
   },
   {
-    title: 'Projects',
-    cards: [
-      { id: 'ACTIVE_PROJECTS', title: 'Active Projects', description: 'Active projects and their open opportunities.', href: '/reports/new?reportType=PROJECT_INITIATIVE&configured=1&projectStatus=ACTIVE&status=OPEN&groupBy=project' },
-      { id: 'PIPELINE_BY_PROJECT', title: 'Pipeline by Project', description: 'Open pipeline by project.', href: '/reports/new?reportType=PROJECT_INITIATIVE&configured=1&status=OPEN&groupBy=project' },
-      { id: 'PROJECTS_NEAR_TARGET', title: 'Projects Near Target Date', description: 'Active projects due within 30 days.', href: '/reports/new?reportType=PROJECT_INITIATIVE&configured=1&projectStatus=ACTIVE&status=OPEN&targetEndDatePreset=NEXT_30_DAYS&groupBy=project' },
-    ],
-  },
-  {
     title: 'Price Exceptions',
     cards: [
       { id: 'PE_USAGE_THIS_QUARTER', title: 'PE Usage This Quarter', description: 'Review opportunity product lines using Price Exception pricing with an expected close this quarter.', href: '/reports/new?reportType=PRICE_EXCEPTION_USAGE&configured=1&closeDatePreset=THIS_QUARTER&groupBy=priceException' },
@@ -63,6 +51,18 @@ const builtInGroups: { title: string; cards: BuiltInCard[] }[] = [
       { id: 'PE_USAGE_BY_PRODUCT', title: 'PE Usage by Product', description: 'Analyze quantity, line value, and approved PE pricing by product.', href: '/reports/new?reportType=PRICE_EXCEPTION_USAGE&configured=1&groupBy=product&metrics=quantity&metrics=lineValue&metrics=opportunityCount&metrics=averageApprovedUnitPrice&metrics=averageActualUnitPrice' },
       { id: 'PRICE_OVERRIDES', title: 'Price Overrides', description: 'Find opportunity lines where the entered price differs from the approved PE price.', href: '/reports/new?reportType=PRICE_EXCEPTION_USAGE&configured=1&overrideStatus=APPLIED&groupBy=priceException' },
       { id: 'PES_BELOW_MOQ', title: 'PE Usage Below MOQ', description: 'Find opportunity lines where quantity is below the approved PE MOQ.', href: '/reports/new?reportType=PRICE_EXCEPTION_USAGE&configured=1&moqStatus=NOT_MET&groupBy=priceException' },
+    ],
+  },
+  {
+    title: 'Trade Shows',
+    cards: [
+      { id: 'TRADE_SHOW_CURRENT_YEAR', title: 'Trade Show Performance — Current Year', description: 'Current-year leads, conversions, pipeline, and won outcomes.', href: '/reports/trade-shows?configured=1&showDatePreset=THIS_YEAR&groupBy=tradeShow' },
+      { id: 'LEADS_BY_TRADE_SHOW', title: 'Leads by Trade Show', description: 'Compare lead follow-up and conversion across events.', href: '/reports/trade-shows?configured=1&groupBy=tradeShow' },
+      { id: 'LEADS_BY_SALES_REP', title: 'Leads by Sales Rep', description: 'Compare assigned leads and outcomes by sales rep.', href: '/reports/trade-shows?configured=1&groupBy=assignedRep' },
+      { id: 'LEADS_BY_ROUTING', title: 'Leads by Routing', description: 'Compare direct sales, partner referral, marketing, and unreviewed leads.', href: '/reports/trade-shows?configured=1&groupBy=routing' },
+      { id: 'TRADE_SHOW_CONVERSION_FUNNEL', title: 'Trade Show Conversion Funnel', description: 'Review contacted, qualified, converted, and disqualified lead counts.', href: '/reports/trade-shows?configured=1&groupBy=leadStatus&metrics=totalLeads&metrics=contactedLeads&metrics=qualifiedLeads&metrics=convertedLeads&metrics=disqualifiedLeads&metrics=conversionRate' },
+      { id: 'TRADE_SHOW_PIPELINE', title: 'Trade Show Pipeline', description: 'Pipeline, weighted pipeline, commit, and wins attributed to event conversions.', href: '/reports/trade-shows?configured=1&groupBy=tradeShow&metrics=opportunityCount&metrics=pipeline&metrics=weightedPipeline&metrics=commit&metrics=closedWonValue&metrics=closedWonOpportunityCount' },
+      { id: 'TRADE_SHOW_FOLLOW_UP_NEEDED', title: 'Trade Show Follow-Up Needed', description: 'Open leads whose follow-up date is overdue.', href: '/reports/trade-shows?configured=1&followUpStatus=OVERDUE&groupBy=assignedRep' },
     ],
   },
   {
