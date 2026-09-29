@@ -30,7 +30,7 @@ export function DocumentUpload({ parent, types, compact = false }: { parent: Par
     finally { setBusy(false); }
   }
   return <>
-    <button className="btn-primary" type="button" onClick={() => { setOpen(value => !value); setError(null); }}>{open ? 'Cancel' : 'Upload Document'}</button>
+    <button className="btn-primary" type="button" onClick={() => { setOpen(value => !value); setError(null); }}>{open ? 'Cancel' : 'Add document'}</button>
     {open && <form ref={formRef} className={`mt-4 grid w-full gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 ${compact ? '' : 'sm:grid-cols-2'}`} action={submit}>
       <label className={compact ? '' : 'sm:col-span-2'}><span className="label">File</span><input className="field" required name="file" type="file" accept={ACCEPTED_DOCUMENT_EXTENSIONS}/><span className="mt-1 block text-xs text-slate-500">PDF, Word, Excel, or PowerPoint · maximum 25 MB</span></label>
       <label><span className="label">Document Type</span><select className="field" required name="documentType" defaultValue=""><option value="" disabled>Choose a type</option>{types.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>

@@ -69,11 +69,12 @@ test('Opportunity summary links every Project and shows a single unlinked field 
 test('supporting cards keep compact states, grid breakpoints, and Demo link actions', async () => {
   opportunity = fixture(); demos = []; demoOptions = [];
   const empty = await render();
-  assert.match(empty, /grid items-start gap-5 md:grid-cols-2 xl:grid-cols-3/);
+  assert.equal((empty.match(/grid items-stretch gap-5 md:grid-cols-2 xl:grid-cols-3/g) ?? []).length, 1);
+  assert.match(empty, /grid items-stretch gap-5 md:grid-cols-2 xl:grid-cols-3 \[&amp;&gt;section\]:h-full/);
   assert.match(empty, /Opportunity Contacts \(0\).*No contacts linked\./);
   assert.match(empty, /Demos \(0\).*No demos linked\./);
   assert.match(empty, /data-compact="true"/);
-  assert.match(empty, /tasks.*activities.*notes/);
+  assert.match(empty, /Opportunity Contacts \(0\).*Demos \(0\).*id="documents".*tasks.*activities.*notes/);
   demos = [{ id: 2, demoNumber: 'DEMO-2', requestedById: 1, project: null }];
   demoOptions = [{ id: 3, demoNumber: 'DEMO-3', account: { name: 'Customer' } }];
   const linked = await render();
@@ -88,7 +89,7 @@ const documentMocks = {
   '@prisma/client': { DocumentType: { OTHER: 'OTHER' } },
   '@/lib/prisma': { prisma: { document: { findMany: async () => documentRows } } },
   '@/lib/documents': { assertDocumentParentAccess: async () => {}, documentTypeLabels: { OTHER: 'Other' }, documentWhere: (_, archived) => ({ archived }) },
-  './document-controls': { DocumentArchive: ({ archived }) => React.createElement('button', null, archived ? 'Restore' : 'Archive'), DocumentFeedback: () => null, DocumentUpload: () => React.createElement('button', null, 'Upload Document') },
+  './document-controls': { DocumentArchive: ({ archived }) => React.createElement('button', null, archived ? 'Restore' : 'Archive'), DocumentFeedback: () => null, DocumentUpload: () => React.createElement('button', null, 'Add document') },
 };
 let documentRows = [];
 Module._load = function(specifier, parent, isMain) { return specifier in documentMocks ? documentMocks[specifier] : originalLoad.call(this, specifier, parent, isMain); };
@@ -100,7 +101,8 @@ test('compact Documents preserves upload, filters, open/archive/restore, and con
   documentRows = [];
   const empty = await renderDocuments();
   assert.match(empty, /No documents uploaded\./);
-  assert.match(empty, /Upload Document/);
+  assert.match(empty, /Add document/);
+  assert.match(fs.readFileSync(path.join(root, 'components/document-controls.tsx'), 'utf8'), /className="btn-primary" type="button"[^\n]*'Add document'/);
   assert.match(empty, /href="\/opportunities\/7#documents"/);
   assert.match(empty, /href="\/opportunities\/7\?documentsView=archived#documents"/);
   assert.match(await renderDocuments('archived'), /No documents archived\./);
