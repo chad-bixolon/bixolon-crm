@@ -1,0 +1,1 @@
+ALTER TABLE "DemoRequest" ADD COLUMN "sourceMethod" TEXT NOT NULL DEFAULT 'ROSA_CSV';

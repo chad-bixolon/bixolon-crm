@@ -1,5 +1,4 @@
 'use server';
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireMutation } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
@@ -14,28 +13,6 @@ const optionalId = (value: FormDataEntryValue | null) => {
   if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Choose a valid relationship.');
   return id;
 };
-
-export async function createDemoRequest(accountId: number, form: FormData) {
-  const actor = await requireMutation('sales.write');
-  const skuValues = form.getAll('skuId').map(String), quantityValues = form.getAll('quantity').map(String);
-  const durationValue = Number(form.get('durationValue'));
-  const durationUnit = String(form.get('durationUnit') ?? '');
-  const projectId = optionalId(form.get('projectId')), opportunityId = optionalId(form.get('opportunityId'));
-  const shippingAddress = String(form.get('shippingAddress') ?? '').trim(), notes = String(form.get('notes') ?? '').trim();
-  if (!Number.isSafeInteger(accountId) || accountId <= 0 || skuValues.length !== quantityValues.length || skuValues.length < 1 || skuValues.length > 5 || !Number.isSafeInteger(durationValue) || durationValue <= 0 || !['day', 'week', 'month'].includes(durationUnit) || shippingAddress.length > 4000 || notes.length > 10000) throw new Error('Enter valid Demo details.');
-  const lines = skuValues.map((value, index) => ({ skuId: Number(value), quantity: Number(quantityValues[index]) })).filter(line => line.skuId || line.quantity);
-  if (!lines.length || lines.some(line => !Number.isSafeInteger(line.skuId) || line.skuId <= 0 || !Number.isSafeInteger(line.quantity) || line.quantity <= 0)) throw new Error('Choose a SKU and positive quantity for each item.');
-  const skus = await prisma.productSku.findMany({ where: { id: { in: lines.map(line => line.skuId) }, active: true, product: { active: true, archivedAt: null } }, select: { id: true, partNumber: true } });
-  if (skus.length !== new Set(lines.map(line => line.skuId)).size) throw new Error('A SKU is no longer active.');
-  const result = await prisma.$transaction(async tx => {
-    await assertDemoContext(tx, actor, accountId, projectId, opportunityId);
-    return tx.demoRequest.create({ data: { status: 'PENDING', requestedAt: new Date(), requestedById: actor.id, accountId, projectId, opportunityId, shippingAddress: shippingAddress || null, durationValue, durationUnit, notes: notes || null, items: { create: lines.map((line, index) => ({ sourceLineKey: `MANUAL:${index + 1}`, sourceRowNumber: 0, sourceSku: skus.find(sku => sku.id === line.skuId)!.partNumber, productSkuId: line.skuId, quantity: line.quantity, serialNumbers: [], trackingNumbers: [], inventoryLocations: [], sourceValues: { origin: 'CRM' }, units: { create: Array.from({ length: line.quantity }, (_, ordinal) => ({ ordinal: ordinal + 1 })) } })) } } });
-  });
-  revalidatePath(`/accounts/${accountId}`);
-  if (projectId) revalidatePath(`/projects/${projectId}`);
-  if (opportunityId) revalidatePath(`/opportunities/${opportunityId}`);
-  redirect(`/demos/${result.id}`);
-}
 
 export async function updateDemoContext(id: number, form: FormData) {
   const actor = await requireMutation('sales.write');

@@ -738,6 +738,7 @@ model ProductSku {
 model DemoRequest {
   id Int @id @default(autoincrement())
   sourceRequestId String? @unique @db.Uuid
+  sourceMethod String @default("ROSA_CSV")
   demoNumber String?
   status DemoStatus @default(PENDING)
   requestedAt DateTime

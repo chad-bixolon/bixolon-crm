@@ -34,7 +34,7 @@ export function routeAccess(path: string, actor: Actor | null): 'sign-in' | 'den
   if (!actor) return 'sign-in';
   if (!actor.active || actor.archivedAt) return 'denied';
   if (path === '/demos' && actor.role !== 'ADMIN') return 'denied';
-  if (path.startsWith('/demos/') && path !== '/demos/new' && !/^\/demos\/\d+$/.test(path)) return 'denied';
+  if (path.startsWith('/demos/') && !/^\/demos\/\d+$/.test(path)) return 'denied';
   if (path === '/trade-shows/my-leads' && !['ADMIN','SALES_MANAGER','SALES'].includes(actor.role)) return 'denied';
   // The Reports landing page, saved reports, and builder perform report-type
   // authorization server-side. This lets Marketing use Trade Show reporting
