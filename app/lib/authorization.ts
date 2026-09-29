@@ -20,6 +20,7 @@ export function permissionForPath(path: string): Permission | null {
   if (path.startsWith('/administration')) return 'users.manage';
   if (path.startsWith('/integrations')) return 'integrations.manage';
   if (path.startsWith('/pipeline') || path.startsWith('/opportunities')) return 'sales.read';
+  if (path.startsWith('/demos')) return 'sales.read';
   if (path.startsWith('/projects')) return 'projects.read';
   if (path.startsWith('/accounts')) return 'accounts.read';
   if (path.startsWith('/contacts')) return 'contacts.read';
@@ -32,6 +33,8 @@ export function routeAccess(path: string, actor: Actor | null): 'sign-in' | 'den
   if (path === '/sign-in' || path === '/access-denied' || path === '/brand/bixolon-logo.png' || path.startsWith('/api/auth/') || path === '/api/health') return 'allowed';
   if (!actor) return 'sign-in';
   if (!actor.active || actor.archivedAt) return 'denied';
+  if (path === '/demos' && actor.role !== 'ADMIN') return 'denied';
+  if (path.startsWith('/demos/') && path !== '/demos/new' && !/^\/demos\/\d+$/.test(path)) return 'denied';
   if (path === '/trade-shows/my-leads' && !['ADMIN','SALES_MANAGER','SALES'].includes(actor.role)) return 'denied';
   // The Reports landing page, saved reports, and builder perform report-type
   // authorization server-side. This lets Marketing use Trade Show reporting
@@ -51,7 +54,7 @@ export function routeAccess(path: string, actor: Actor | null): 'sign-in' | 'den
   if (/^\/trade-shows\/\d+\/import$/.test(path) && !can(actor, 'trade-shows.manage')) return 'denied';
   if (path.startsWith('/trade-shows')) return 'allowed';
   if (path.endsWith('/new') || path.endsWith('/edit')) {
-    const write: Permission = path.startsWith('/accounts') ? 'accounts.write' : path.startsWith('/contacts') ? 'contacts.write' : path.startsWith('/marketing') ? 'marketing.write' : path.startsWith('/opportunities') ? 'sales.write' : path.startsWith('/projects') ? 'projects.write' : path.startsWith('/products') ? 'products.write' : path.startsWith('/administration') ? 'users.manage' : 'tasks.write';
+    const write: Permission = path.startsWith('/accounts') ? 'accounts.write' : path.startsWith('/contacts') ? 'contacts.write' : path.startsWith('/marketing') ? 'marketing.write' : path.startsWith('/opportunities') || path.startsWith('/demos') ? 'sales.write' : path.startsWith('/projects') ? 'projects.write' : path.startsWith('/products') ? 'products.write' : path.startsWith('/administration') ? 'users.manage' : 'tasks.write';
     if (!can(actor, write)) return 'denied';
   }
   return 'allowed';

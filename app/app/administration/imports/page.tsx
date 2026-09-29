@@ -4,6 +4,11 @@ import { requirePermission } from '@/lib/current-user';
 
 const workflows = [
   {
+    title: 'Demo Requests · CSV',
+    href: '/administration/imports/demos',
+    description: 'Preview and review Rosa Demo Requests, including shipment updates, before importing.',
+  },
+  {
     title: 'Accounts & Contacts',
     href: '/administration/imports/accounts-contacts',
     description: 'Upload and review Account and Contact records before applying changes.',

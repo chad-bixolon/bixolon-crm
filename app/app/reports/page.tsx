@@ -5,6 +5,7 @@ import { Content, PageHeader } from '@/components/shell';
 import { currentUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { canAccessReports, canEditReportDefinition, getCreatableReportTypes, getVisibleBuiltInReports, getVisibleReportTypes, reportRegistry, savedReportWhere, type BuiltInReportType } from '@/lib/reporting';
+import { can } from '@/lib/authorization';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,6 +86,7 @@ export default async function ReportsPage({searchParams}:{searchParams:Promise<{
 
   return <Content>
     <PageHeader eyebrow="Management reporting" title="Reports" description="Create, save, and review reports using current SalesHub data." action={creatableReportTypes.length ? <Link className="btn-primary" href={creatableReportTypes.includes('PIPELINE')?'/reports/new':'/reports/new?reportType=TRADE_SHOW'}>Create Report</Link> : undefined} />
+    {can(actor, 'sales.read') && <section className="panel mb-6 p-5"><h2 className="text-lg font-semibold">Demo Inventory / Deployment</h2><p className="mt-1 text-sm text-slate-600">Track outstanding and returned Demo units, overdue equipment, and associated Opportunity results.</p><Link className="mt-3 inline-block text-sm font-semibold text-orange-800 underline" href="/reports/demo-inventory">Open Demo report</Link></section>}
     {visibleReportTypes.includes('PIPELINE')&&<section className="-mt-1 mb-6">
       <Link className="group flex flex-col gap-3 rounded-lg border border-orange-200 bg-orange-50/70 p-4 transition-colors hover:border-orange-400 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600 sm:flex-row sm:items-center sm:justify-between" href="/reports/forecast">
         <div className="min-w-0"><h2 className="text-lg font-semibold text-slate-950">Quarterly Forecast</h2><p className="mt-1 text-sm leading-6 text-slate-600">View targets, open pipeline, commit, and coverage by sales rep and currency.</p></div>

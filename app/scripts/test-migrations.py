@@ -156,6 +156,8 @@ try:
     INSERT INTO "Note" ("id", "projectId", "body", "updatedAt")
       VALUES (1000, 1000, 'Project note', CURRENT_TIMESTAMP);
     SELECT count(*) AS project_roles FROM "ProjectAccountRole" WHERE "projectId" = 1000;''').stdout, flush=True)
+    print(sql("upgrade", (ROOT / "prisma/tests/demo-context.sql").read_text()).stdout, flush=True)
+    print("PASS: Demo Account required, optional context, compatible links, and orphan guards", flush=True)
     rejected = {
         "duplicate participant": '''INSERT INTO "ProjectAccount" ("projectId", "accountId", "updatedAt") VALUES (1000, 1003, CURRENT_TIMESTAMP);''',
         "duplicate role": '''INSERT INTO "ProjectAccountRole" ("projectId", "accountId", "role", "updatedAt") VALUES (1000, 1003, 'SERVICE_PROVIDER', CURRENT_TIMESTAMP);''',
