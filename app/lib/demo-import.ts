@@ -44,6 +44,22 @@ export function mapDemoSourceAccount(plan:DemoPlan,choices:DemoChoices,requestId
   return next;
 }
 
+/** A reviewed source part number has one CRM SKU mapping throughout an upload. */
+export function mapDemoSourceSku(plan:DemoPlan,choices:DemoChoices,requestId:string,line:number,skuId:number|null):DemoChoices {
+  const target=plan.groups.find(group=>group.requestId===requestId)?.items.find(item=>item.line===line);
+  if(!target?.sourceSku.trim())throw new Error('Source SKU was not found. Preview again.');
+  if(skuId!==null&&!plan.choices.skus.some(sku=>sku.id===choiceId(skuId)))throw new Error('SKU choice is no longer active.');
+  const key=normSku(target.sourceSku),next={...choices};
+  for(const group of plan.groups)for(const item of group.items){
+    if(normSku(item.sourceSku)!==key)continue;
+    if(skuId!==null&&item.sku.id!==null&&normSku(item.sku.name??'')===key&&item.sku.id!==skuId)throw new Error('SKU mapping conflicts with an exact match.');
+    const skuIds={...next[group.requestId]?.skuIds};
+    if(skuId===null)delete skuIds[item.line];else skuIds[item.line]=skuId;
+    next[group.requestId]={...next[group.requestId],skuIds};
+  }
+  return next;
+}
+
 /** RFC-style CSV reader with physical line numbers and no source-specific assumptions. */
 export function parseDemoCsv(input:string):DemoParsed {
   if(!input||Buffer.byteLength(input)>2_000_000)return {rows:[],errors:['Choose a UTF-8 Demo CSV smaller than 2 MB.']};
@@ -74,11 +90,11 @@ function resolve(source:string,candidates:{id:number;name:string}[],normalizer:(
   const matches=candidates.filter(item=>normalizer(item.name)===normalizer(source));
   return matches.length===1?{source,id:matches[0].id,name:matches[0].name,issue:null}:{source,id:null,name:null,issue:matches.length?'Multiple CRM matches.':'No CRM match.'};
 }
-function resolveUser(source:string,candidates:{id:number;name:string}[],optional:boolean):DemoResolution {
-  if(!source.trim())return {source,id:null,name:null,issue:optional?null:'Missing source user.'};
+function resolveUser(source:string,candidates:{id:number;name:string}[],required:boolean):DemoResolution {
+  if(!source.trim())return {source,id:null,name:null,issue:required?'Missing source user.':null};
   const full=candidates.filter(item=>norm(item.name)===norm(source));
   const first=full.length?full:candidates.filter(item=>norm(item.name.split(' ')[0])===norm(source));
-  return first.length===1?{source,id:first[0].id,name:first[0].name,issue:null}:{source,id:null,name:null,issue:first.length?'Multiple CRM users match.':'No CRM user matches.'};
+  return first.length===1?{source,id:first[0].id,name:first[0].name,issue:null}:{source,id:null,name:null,issue:required?first.length?'Multiple CRM users match.':'No CRM user matches.':null};
 }
 function canonical(field:string,value:string){if(['Requested At','Reviewed At','Shipped At'].includes(field))return date(value)??value.trim();if(field==='Status')return value.trim().toUpperCase();if(field==='Duration Unit')return norm(value).replace(/s$/,'');if(field==='VAR')return normalizeAccountName(value);return value.normalize('NFKC').trim().replace(/\s+/g,' ');}
 const show=(value:unknown)=>value===null||value===undefined||value===''?'—':Array.isArray(value)?value.join('; ')||'—':String(value);
@@ -135,8 +151,8 @@ export async function planDemoImport(db:Db,parsed:DemoParsed,fileName:string,man
     const autoAccount=resolve(header.VAR,result.choices.accounts,normalizeAccountName);
     const account=selected.accountId===undefined?autoAccount:(()=>{if(!autoAccount.issue&&autoAccount.id!==selected.accountId)throw new Error('Account mapping conflicts with exact match.');const item=result.choices.accounts.find(item=>item.id===choiceId(selected.accountId));if(!item)throw new Error('Account choice is no longer active.');return {source:header.VAR,id:item.id,name:item.name,issue:null};})();
     const resolvedUsers={} as DemoPlanGroup['users'];for(const field of userFields){
-      const auto=resolveUser(header[field],result.choices.users,field!=='Requested By');const choice=selected.userIds?.[field];
-      if(choice!==undefined){if(!header[field].trim()||!auto.issue&&auto.id!==choice)throw new Error('User mapping conflicts with source.');const item=result.choices.users.find(item=>item.id===choiceId(choice));if(!item)throw new Error('User choice is no longer active.');resolvedUsers[field]={source:header[field],id:item.id,name:item.name,issue:null};}
+      const auto=resolveUser(header[field],result.choices.users,field==='Requested By');const choice=selected.userIds?.[field];
+      if(choice!==undefined){if(!header[field].trim()||auto.id!==null&&auto.id!==choice)throw new Error('User mapping conflicts with source.');const item=result.choices.users.find(item=>item.id===choiceId(choice));if(!item)throw new Error('User choice is no longer active.');resolvedUsers[field]={source:header[field],id:item.id,name:item.name,issue:null};}
       else resolvedUsers[field]=auto;
     }
     const occurrence=new Map<string,number>();const items:DemoPlanItem[]=[];
@@ -150,7 +166,7 @@ export async function planDemoImport(db:Db,parsed:DemoParsed,fileName:string,man
       items.push({line:row.line,sourceSku,sku,quantity:quantity??0,serialNumbers,trackingNumbers:multi(raw['Tracking Numbers']),inventoryLocations:multi(raw['Inventory Locations']),sourceLineKey:`${skuKey}:${index}`,raw});
     }
     for(const line of Object.keys(selected.skuIds??{}))if(!rows.some(row=>String(row.line)===line))throw new Error('SKU choice no longer matches a source row.');
-    for(const field of userFields)if(resolvedUsers[field].issue)issues.push(`${field}: ${resolvedUsers[field].issue}`);
+    if(resolvedUsers['Requested By'].issue)issues.push(`Requested By: ${resolvedUsers['Requested By'].issue}`);
     if(account.issue)issues.push(`VAR: ${account.issue}`);
     for(const item of items)if(item.sku.issue)issues.push(`Line ${item.line} SKU: ${item.sku.issue}`);
     const current=existing.find(item=>item.sourceRequestId?.toLowerCase()===requestId);

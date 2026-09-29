@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 Module._extensions['.ts']=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,filename);
 const require=Module.createRequire(fileURLToPath(import.meta.url));
-const {demoHeaders,parseDemoCsv,planDemoImport,applyDemoImport,mapDemoSourceAccount}=require(path.join(root,'lib/demo-import.ts'));
+const {demoHeaders,parseDemoCsv,planDemoImport,applyDemoImport,mapDemoSourceAccount,mapDemoSourceSku}=require(path.join(root,'lib/demo-import.ts'));
 const {can,permissionForPath,routeAccess}=require(path.join(root,'lib/authorization.ts'));
 const {assertDemoContext,demoLabel,demoReadWhere}=require(path.join(root,'lib/demos.ts'));
 const {demoPreviewDate,demoPreviewFieldLabel,demoPreviewIssue,demoPreviewItemSummary,demoPreviewShipping}=require(path.join(root,'lib/demo-preview-display.ts'));
@@ -60,7 +60,93 @@ test('Demo preview formats dates, item counts, shipping, and Account issues for 
 });
 test('same Request ID groups items, while same customer with different Request IDs stays separate',async()=>{const client=db(),plan=await planDemoImport(client,parsed,'demo.csv');assert.equal(plan.groups.length,6);assert.equal(plan.groups.filter(item=>item.items.length===2).length,2);assert.equal(plan.groups.filter(item=>item.header.VAR==='CoreGroup Displays').length,2);assert.equal(group(plan,par[0].values['Request ID']).items.length,2);assert.equal(group(plan,ups[0].values['Request ID']).items.length,2);assert.equal(plan.groups.some(item=>item.conflicts.length>0),false);});
 test('serials, tracking, and locations are separate lists without losing duplicate source values',async()=>{const item=(await planDemoImport(db(),input(shipped),'demo.csv')).groups[0].items[0];assert.deepEqual(item.serialNumbers,['USANNBKA26060001','USANNBKA26060002']);assert.deepEqual(item.trackingNumbers,['535005300502','535005300502']);assert.deepEqual(item.inventoryLocations,['HQ B12:A1','HQ B12:A1']);assert.equal(item.raw['Tracking Numbers'],shipped.values['Tracking Numbers']);});
+test('exact SKU auto-matches and one reviewed SKU choice applies to repeated source values',async()=>{
+  const exact=await planDemoImport(db(),input(first),'demo.csv');
+  assert.equal(exact.groups[0].items[0].sku.name,first.values['SKU / Model']);
+  assert.equal(exact.groups[0].disposition,'Ready to import');
+  const second=parsed.rows.find(item=>item.values['Request ID']!==first.values['Request ID']);
+  const source=input(row(first,{'SKU / Model':'ROSA-NEW'}),row(second,{'SKU / Model':'ROSA-NEW'}));
+  const catalogSkus=[...sourceSkus],client=db({skus:catalogSkus});
+  const initial=await planDemoImport(client,source,'demo.csv');
+  assert.equal(initial.counts['Needs review'],2);
+  const existingSkuId=catalogSkus.indexOf(first.values['SKU / Model'])+1;
+  const selected=mapDemoSourceSku(initial,{},first.values['Request ID'],first.line,existingSkuId);
+  assert.equal(Object.keys(selected).length,2);
+  const reviewed=await planDemoImport(client,source,'demo.csv',selected);
+  assert.equal(reviewed.counts['Ready to import'],2);
+  await applyDemoImport(client,source,'demo.csv',reviewed.digest,true,100,selected);
+  assert.ok(client.state.items.every(item=>item.sourceSku==='ROSA-NEW'&&item.productSkuId===existingSkuId&&item.sourceValues['SKU / Model']==='ROSA-NEW'));
+  assert.ok(client.state.revisions.every(revision=>revision.sourceRows[0].values['SKU / Model']==='ROSA-NEW'));
+});
+test('new catalog SKU immediately makes every matching Demo request ready without re-upload',async()=>{
+  const second=parsed.rows.find(item=>item.values['Request ID']!==first.values['Request ID']);
+  const source=input(row(first,{'SKU / Model':'ROSA-NEW'}),row(second,{'SKU / Model':'ROSA-NEW'}));
+  const catalogSkus=[...sourceSkus],client=db({skus:catalogSkus});
+  const initial=await planDemoImport(client,source,'demo.csv');
+  assert.equal(initial.counts['Needs review'],2);
+  catalogSkus.push('CRM-NEW');
+  const refreshed=await planDemoImport(client,source,'demo.csv');
+  const choices=mapDemoSourceSku(refreshed,{},first.values['Request ID'],first.line,catalogSkus.length);
+  const ready=await planDemoImport(client,source,'demo.csv',choices);
+  assert.equal(ready.counts['Ready to import'],2);
+  assert.ok(ready.groups.every(group=>group.items[0].sku.name==='CRM-NEW'&&group.items[0].sourceSku==='ROSA-NEW'));
+});
 test('unresolved Account, user, and SKU need explicit choices; optional blank users do not',async()=>{for(const [overrides,field] of [[{accounts:[]},'VAR'],[{users:sourceUsers.filter(name=>name!=='Amber')},'Requested By'],[{skus:[]},'SKU']]){const plan=await planDemoImport(db(overrides),input(first),'demo.csv');assert.equal(plan.groups[0].disposition,'Needs review');assert.match(plan.groups[0].issues.join(' '),new RegExp(field));}const plan=await planDemoImport(db(),input(first),'demo.csv');assert.equal(plan.groups[0].users['Shipped By'].issue,null);});
+test('unmatched Reviewed By imports without manual selection and retains source provenance',async()=>{
+  const source=input(row(first,{'Reviewed By':'Gary'})),client=db({users:sourceUsers.filter(name=>name!=='Gary')});
+  const plan=await planDemoImport(client,source,'demo.csv');
+  assert.equal(plan.counts['Ready to import'],1);
+  assert.equal(plan.counts['Needs review'],0);
+  assert.deepEqual(plan.groups[0].issues,[]);
+  assert.deepEqual(plan.groups[0].users['Reviewed By'],{source:'Gary',id:null,name:null,issue:null});
+  assert.equal((await applyDemoImport(client,source,'demo.csv',plan.digest,true,100)).created,1);
+  assert.equal(client.state.requests[0].reviewedById,null);
+  assert.equal(client.state.requests[0].sourceHeader['Reviewed By'],'Gary');
+  assert.equal(client.state.revisions[0].sourceRows[0].values['Reviewed By'],'Gary');
+  assert.equal(client.state.revisions[0].reviewedMappings.userIds['Reviewed By'],null);
+});
+test('deterministic Reviewed By match retains CRM relationship; requester and Account still block',async()=>{
+  const source=input(row(first,{'Reviewed By':'Gary'})),client=db({users:[...new Set([...sourceUsers,'Gary'])]});
+  const plan=await planDemoImport(client,source,'demo.csv');
+  const reviewerId=plan.groups[0].users['Reviewed By'].id;
+  assert.equal(plan.groups[0].disposition,'Ready to import');
+  assert.ok(reviewerId);
+  await applyDemoImport(client,source,'demo.csv',plan.digest,true,100);
+  assert.equal(client.state.requests[0].reviewedById,reviewerId);
+  assert.equal(client.state.revisions[0].reviewedMappings.userIds['Reviewed By'],reviewerId);
+  for(const [options,issue] of [[{users:sourceUsers.filter(name=>name!=='Amber'&&name!=='Gary')},'Requested By'],[{accounts:[]},'VAR']]){
+    const blocked=await planDemoImport(db(options),source,'demo.csv');
+    assert.equal(blocked.groups[0].disposition,'Needs review');
+    assert.match(blocked.groups[0].issues.join(' '),new RegExp(issue));
+    assert.doesNotMatch(blocked.groups[0].issues.join(' '),/Reviewed By/);
+  }
+});
+test('unmatched Shipped By imports without a manual user choice and preserves source provenance',async()=>{
+  const source=input(row(shipped,{'Shipped By':'Jorge'})),client=db({users:sourceUsers.filter(name=>name!=='Jorge')});
+  const plan=await planDemoImport(client,source,'demo.csv');
+  assert.equal(plan.groups[0].disposition,'Ready to import');
+  assert.deepEqual(plan.groups[0].issues,[]);
+  assert.deepEqual(plan.groups[0].users['Shipped By'],{source:'Jorge',id:null,name:null,issue:null});
+  assert.equal((await applyDemoImport(client,source,'demo.csv',plan.digest,true,100)).created,1);
+  assert.equal(client.state.requests[0].shippedById,null);
+  assert.equal(client.state.requests[0].sourceHeader['Shipped By'],'Jorge');
+  assert.equal(client.state.revisions[0].sourceRows[0].values['Shipped By'],'Jorge');
+  assert.equal(client.state.revisions[0].reviewedMappings.userIds['Shipped By'],null);
+});
+test('deterministic Shipped By match retains CRM relationship; unrelated issues still block',async()=>{
+  const source=input(row(shipped,{'Shipped By':'Jorge'})),client=db({users:[...new Set([...sourceUsers,'Jorge'])]});
+  const plan=await planDemoImport(client,source,'demo.csv');
+  assert.equal(plan.groups[0].disposition,'Ready to import');
+  const shipperId=plan.groups[0].users['Shipped By'].id;
+  assert.ok(shipperId);
+  await applyDemoImport(client,source,'demo.csv',plan.digest,true,100);
+  assert.equal(client.state.requests[0].shippedById,shipperId);
+  assert.equal(client.state.revisions[0].reviewedMappings.userIds['Shipped By'],shipperId);
+  const missingSku=await planDemoImport(db({skus:[],users:sourceUsers.filter(name=>name!=='Jorge')}),source,'demo.csv');
+  assert.equal(missingSku.groups[0].disposition,'Needs review');
+  assert.match(missingSku.groups[0].issues.join(' '),/SKU/);
+  assert.doesNotMatch(missingSku.groups[0].issues.join(' '),/Shipped By/);
+});
 test('manual choices resolve review without changing source strings',async()=>{const client=db({accounts:['Other'],users:['Other'],skus:['Other']}),id=first.values['Request ID'];const plan=await planDemoImport(client,input(first),'demo.csv',{[id]:{accountId:1,userIds:{'Requested By':1,'Reviewed By':1},skuIds:{[first.line]:1}}});assert.equal(plan.groups[0].disposition,'Ready to import');assert.equal(plan.groups[0].header.VAR,first.values.VAR);assert.equal(plan.groups[0].items[0].sourceSku,first.values['SKU / Model']);});
 test('selecting an existing Account maps the same unresolved source across distinct CoreGroup requests',async()=>{
   const core=parsed.rows.filter(item=>item.values.VAR==='CoreGroup Displays'),client=db({accounts:['CoreGroup CRM']}),source=input(...core),prior=await planDemoImport(client,source,'demo.csv');
