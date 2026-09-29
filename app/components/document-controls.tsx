@@ -7,7 +7,7 @@ import { ACCEPTED_DOCUMENT_EXTENSIONS, MAX_DOCUMENT_BYTES } from '@/lib/document
 
 type Parent = { type: 'account' | 'project' | 'opportunity'; id: number };
 
-export function DocumentUpload({ parent, types }: { parent: Parent; types: { value: string; label: string }[] }) {
+export function DocumentUpload({ parent, types, compact = false }: { parent: Parent; types: { value: string; label: string }[]; compact?: boolean }) {
   const router = useRouter();
   const pathname = usePathname(), searchParams = useSearchParams();
   const formRef = useRef<HTMLFormElement>(null);
@@ -31,12 +31,12 @@ export function DocumentUpload({ parent, types }: { parent: Parent; types: { val
   }
   return <>
     <button className="btn-primary" type="button" onClick={() => { setOpen(value => !value); setError(null); }}>{open ? 'Cancel' : 'Upload Document'}</button>
-    {open && <form ref={formRef} className="mt-4 grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2" action={submit}>
-      <label className="sm:col-span-2"><span className="label">File</span><input className="field" required name="file" type="file" accept={ACCEPTED_DOCUMENT_EXTENSIONS}/><span className="mt-1 block text-xs text-slate-500">PDF, Word, Excel, or PowerPoint · maximum 25 MB</span></label>
+    {open && <form ref={formRef} className={`mt-4 grid w-full gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 ${compact ? '' : 'sm:grid-cols-2'}`} action={submit}>
+      <label className={compact ? '' : 'sm:col-span-2'}><span className="label">File</span><input className="field" required name="file" type="file" accept={ACCEPTED_DOCUMENT_EXTENSIONS}/><span className="mt-1 block text-xs text-slate-500">PDF, Word, Excel, or PowerPoint · maximum 25 MB</span></label>
       <label><span className="label">Document Type</span><select className="field" required name="documentType" defaultValue=""><option value="" disabled>Choose a type</option>{types.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
       <label><span className="label">Description <span className="font-normal normal-case">(optional)</span></span><input className="field" name="description" maxLength={2000}/></label>
-      {error && <p className="sm:col-span-2 text-sm font-medium text-red-700" role="alert">{error}</p>}
-      <div className="sm:col-span-2"><button className="btn-primary" disabled={busy}>{busy ? 'Uploading…' : 'Upload'}</button></div>
+      {error && <p className={`${compact ? '' : 'sm:col-span-2'} text-sm font-medium text-red-700`} role="alert">{error}</p>}
+      <div className={compact ? '' : 'sm:col-span-2'}><button className="btn-primary" disabled={busy}>{busy ? 'Uploading…' : 'Upload'}</button></div>
     </form>}
   </>;
 }
