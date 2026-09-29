@@ -5,11 +5,11 @@ The authoritative development fixture is `reference-data/demo-requests-2026-09-2
 | Source field | CRM destination |
 | --- | --- |
 | Request ID | `DemoRequest.sourceRequestId`, unique UUID source key |
-| Demo Number | `DemoRequest.demoNumber`; Sales pages show `Pending (short ID)` when blank |
+| Demo Number | `DemoRequest.demoNumber`; CRM pages show `Pending Demo` when blank |
 | Status | `DemoRequest.status`: pending, approved, shipped |
 | Requested At / Requested By | `requestedAt` / `requestedById` → eligible `User` |
 | Reviewed At / Reviewed By | `reviewedAt` / `reviewedById` → eligible `User` |
-| VAR | `accountId` → active `Account` |
+| VAR | Customer / Account receiving the Demo equipment → `accountId` on an active `Account`, regardless of business role |
 | Shipping Address | `shippingAddress` |
 | Shipping Carrier | `shippingCarrier` |
 | Carrier Account Number | `carrierAccountNumber` |
@@ -25,7 +25,9 @@ The authoritative development fixture is `reference-data/demo-requests-2026-09-2
 
 Every raw source field, including the original semicolon-delimited strings and source row numbers, is retained in an append-only `DemoSourceRevision`. The revision also records the source filename, content digest, reviewed CRM mappings, resolved values, source lifecycle timestamp, applying Admin, and application time. PostgreSQL blocks revision updates and deletes. Changed item lines are retired, not deleted; revisions retain the prior item values.
 
-Preview is read-only. The Admin must resolve ambiguous or missing Account, User, and SKU matches and grouped header conflicts. An unresolved VAR appears directly in the preview with an existing Account picker and inline Account creation. Creation uses the shared guarded Account validation and duplicate review, including normalized name, website domain, and entered address signals. Possible matches can be selected; creating anyway requires explicit review. Creation adds the Account immediately, updates the current preview without another upload, and leaves Demo application pending. One reviewed VAR mapping applies to all matching source VAR values in the upload, while each Request ID remains a separate Demo Request. Original VAR text stays in source revision rows and the selected Account ID stays in reviewed mappings. Exact normalized active Account names, full or unique first-name users, and exact active SKU part numbers resolve automatically. Blank optional reviewer or shipper fields require no mapping.
+Rosa names the source customer column `VAR`, but Demo equipment may go to an end customer, VAR, distributor, partner, or another Account. CRM presents this value as the Customer or Customer Account receiving the Demo and resolves it to a CRM Account regardless of that Account's business role. The original `VAR` column name and value remain in CSV parsing and source revision evidence. Creating an Account from the Demo preview does not assign a business role unless the Admin selects one.
+
+Preview is read-only. The Admin must resolve ambiguous or missing Account, User, and SKU matches and grouped header conflicts. A Customer Account that cannot be found appears directly in the preview with an existing Account picker and inline Account creation. Creation uses the shared guarded Account validation and duplicate review, including normalized name, website domain, and entered address signals. Possible matches can be selected; creating anyway requires explicit review. Creation adds the Account immediately, updates the current preview without another upload, and leaves Demo application pending. One reviewed Account selection applies to all matching source customer names in the upload, while each Source Request ID remains a separate Demo Request. Original `VAR` text stays in source revision rows and the selected Account ID stays in reviewed mappings. Exact normalized active Account names, full or unique first-name users, and exact active SKU part numbers resolve automatically. Blank optional reviewer or shipper fields require no mapping.
 
 Apply requires a fresh preview digest and explicit confirmation. Each source update also needs its own approval checkbox. Apply replans under a single serializable database transaction, so a failed item prevents all requests in the batch from writing. Identical submissions write nothing. Older submissions cannot regress status or source timestamp. Request ID uniqueness prevents duplicate imported headers. The Demo Request, Item, Unit, Return Event, and Source Revision tables are new because this checkout had no Demo schema or workflow before this change; Accounts, Users, and ProductSkus are reused.
 

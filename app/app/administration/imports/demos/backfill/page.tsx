@@ -21,7 +21,7 @@ export default async function RosaBackfillPage({ searchParams }: { searchParams:
         <label>Demo Number (if assigned)<input className="field mt-1 w-full" name="demoNumber"/></label>
         <label>Rosa status *<select className="field mt-1 w-full" name="status" required><option value="">Choose status</option><option value="PENDING">Pending</option><option value="APPROVED">Approved</option><option value="SHIPPED">Shipped</option></select></label>
         <label>CRM Account *<select className="field mt-1 w-full" name="accountId" required><option value="">Choose Account</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
-        <label>Rosa VAR / Account name *<input className="field mt-1 w-full" name="sourceAccount" required/></label>
+        <label>Customer name in Rosa (VAR column) *<input className="field mt-1 w-full" name="sourceAccount" required/></label>
         <label>Requested date *<input className="field mt-1 w-full" name="requestedAt" type="date" required/></label>
         <label>Rosa requester *<input className="field mt-1 w-full" name="requestedBy" required/></label>
         <label>Reviewed date<input className="field mt-1 w-full" name="reviewedAt" type="date"/></label>

@@ -12,6 +12,7 @@ const require=Module.createRequire(fileURLToPath(import.meta.url));
 const {demoHeaders,parseDemoCsv,planDemoImport,applyDemoImport,mapDemoSourceAccount}=require(path.join(root,'lib/demo-import.ts'));
 const {can,permissionForPath,routeAccess}=require(path.join(root,'lib/authorization.ts'));
 const {assertDemoContext,demoLabel,demoReadWhere}=require(path.join(root,'lib/demos.ts'));
+const {demoPreviewDate,demoPreviewFieldLabel,demoPreviewIssue,demoPreviewItemSummary,demoPreviewShipping}=require(path.join(root,'lib/demo-preview-display.ts'));
 const fixture=fs.readFileSync(path.join(root,'../reference-data/demo-requests-2026-09-28.csv'),'utf8');
 const parsed=parseDemoCsv(fixture);
 const row=(source,changes={},line=source.line)=>({line,values:{...source.values,...changes}});
@@ -41,6 +42,22 @@ test('authoritative Demo fixture has exact headers, 8 rows, 6 requests, and two 
   assert.equal(parsed.rows.length,8);const groups=new Map();for(const item of parsed.rows){const key=item.values['Request ID'];groups.set(key,[...(groups.get(key)??[]),item]);}assert.equal(groups.size,6);assert.deepEqual([...groups.values()].filter(rows=>rows.length>1).map(rows=>rows.map(row=>row.values['SKU / Model'])),[['XD5-40dEK','XL5-40CtEG'],['PM5-UPSDP','XM7-40RFIWK/UPS']]);assert.equal([...groups.values()].filter(rows=>!rows[0].values['Demo Number']).length,4);assert.equal([...groups.values()].filter(rows=>rows[0].values.Status==='shipped').length,4);
 });
 test('one row forms one request; blank Demo Number is valid and source key stays Request ID',async()=>{const client=db(),plan=await planDemoImport(client,input(first),'demo.csv');assert.equal(plan.groups.length,1);assert.equal(plan.groups[0].disposition,'Ready to import');assert.equal(plan.groups[0].demoNumber,'');assert.equal(plan.groups[0].requestId,first.values['Request ID']);assert.equal(stateCount(client),0);});
+test('Demo preview formats dates, item counts, shipping, and Account issues for display',async()=>{
+  const one=(await planDemoImport(db(),input(first),'demo.csv')).groups[0];
+  assert.equal(demoPreviewDate('2026-09-25T00:00:00.000Z'),'Sep 25, 2026');
+  assert.equal(demoPreviewDate(one.requestedAt),new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(one.requestedAt)));
+  assert.equal(demoPreviewItemSummary(one),'1 line · 1 unit');
+  assert.equal(demoPreviewShipping(one),'Not shipped');
+  const two={...one,items:[...one.items,{...one.items[0],quantity:3}],shippedAt:'2026-09-25T14:00:00.000Z',header:{...one.header,'Shipping Carrier':'UPS'}};
+  assert.equal(demoPreviewItemSummary(two),'2 lines · 4 units');
+  assert.equal(demoPreviewShipping(two),'Sep 25, 2026 · UPS');
+  assert.equal(demoPreviewShipping({...two,items:two.items.map(item=>({...item,trackingNumbers:['1Z123']}))}),'Sep 25, 2026 · UPS · Tracking: 1Z123');
+  const unmatched=(await planDemoImport(db({accounts:[]}),input(first),'demo.csv')).groups[0];
+  assert.equal(demoPreviewIssue('VAR: No CRM match.',unmatched),'Account match: Not found');
+  assert.equal(demoPreviewIssue('VAR differs across source rows.',unmatched),'Customer differs across source rows.');
+  assert.equal(demoPreviewFieldLabel('VAR'),'Customer');
+  assert.equal(unmatched.account.issue,'No CRM match.');
+});
 test('same Request ID groups items, while same customer with different Request IDs stays separate',async()=>{const client=db(),plan=await planDemoImport(client,parsed,'demo.csv');assert.equal(plan.groups.length,6);assert.equal(plan.groups.filter(item=>item.items.length===2).length,2);assert.equal(plan.groups.filter(item=>item.header.VAR==='CoreGroup Displays').length,2);assert.equal(group(plan,par[0].values['Request ID']).items.length,2);assert.equal(group(plan,ups[0].values['Request ID']).items.length,2);assert.equal(plan.groups.some(item=>item.conflicts.length>0),false);});
 test('serials, tracking, and locations are separate lists without losing duplicate source values',async()=>{const item=(await planDemoImport(db(),input(shipped),'demo.csv')).groups[0].items[0];assert.deepEqual(item.serialNumbers,['USANNBKA26060001','USANNBKA26060002']);assert.deepEqual(item.trackingNumbers,['535005300502','535005300502']);assert.deepEqual(item.inventoryLocations,['HQ B12:A1','HQ B12:A1']);assert.equal(item.raw['Tracking Numbers'],shipped.values['Tracking Numbers']);});
 test('unresolved Account, user, and SKU need explicit choices; optional blank users do not',async()=>{for(const [overrides,field] of [[{accounts:[]},'VAR'],[{users:sourceUsers.filter(name=>name!=='Amber')},'Requested By'],[{skus:[]},'SKU']]){const plan=await planDemoImport(db(overrides),input(first),'demo.csv');assert.equal(plan.groups[0].disposition,'Needs review');assert.match(plan.groups[0].issues.join(' '),new RegExp(field));}const plan=await planDemoImport(db(),input(first),'demo.csv');assert.equal(plan.groups[0].users['Shipped By'].issue,null);});
@@ -88,7 +105,7 @@ test('Account is required while Project and Opportunity are independently option
   await assert.rejects(assertDemoContext(mock,actor,1,11,null),/Project is not available/);
   await assert.rejects(assertDemoContext(mock,actor,1,null,21),/Opportunity is not available/);
   await assert.rejects(assertDemoContext(mock,{...actor,role:'READ_ONLY'},1,null,null),/Access denied/);
-  assert.equal(demoLabel({id:1,demoNumber:null,sourceRequestId:'560fbee9-9b3b-48a9-990a-720adc67291c'}),'Pending (560fbee9)');
+  assert.equal(demoLabel({id:1,demoNumber:null,sourceRequestId:'560fbee9-9b3b-48a9-990a-720adc67291c'}),'Pending Demo');
 });
 
 test('source Account change cannot strand linked Project or Opportunity context',async()=>{

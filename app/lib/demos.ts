@@ -4,7 +4,7 @@ import { accountProjectsWhere, canEditProject, projectReadWhere } from './projec
 
 type Db = PrismaClient | Prisma.TransactionClient;
 export const demoLabel = (demo: { demoNumber: string | null; sourceRequestId: string | null; id: number }) =>
-  demo.demoNumber || `Pending (${demo.sourceRequestId?.slice(0, 8) ?? demo.id})`;
+  demo.demoNumber || 'Pending Demo';
 
 export function demoReadWhere(actor: Actor): Prisma.DemoRequestWhereInput {
   if (!can(actor, 'accounts.read') || !can(actor, 'sales.read')) return { id: -1 };

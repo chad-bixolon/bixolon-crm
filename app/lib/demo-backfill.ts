@@ -54,12 +54,12 @@ export async function backfillExistingRosaDemo(db: PrismaClient, actor: Actor, f
   if (status === 'SHIPPED' && !shippedBy) throw new Error('Shipped by is required.');
   const accountId = Number(field(form, 'accountId', 20));
   const sourceAccount = field(form, 'sourceAccount', 200);
-  if (!Number.isSafeInteger(accountId) || accountId <= 0 || !sourceAccount) throw new Error('Choose an Account and enter the Rosa VAR name.');
+  if (!Number.isSafeInteger(accountId) || accountId <= 0 || !sourceAccount) throw new Error('Choose an Account and enter the customer name from Rosa.');
   const accounts = await db.account.findMany({ where: { status: 'ACTIVE', archivedAt: null }, select: { id: true, name: true } });
   const account = accounts.find(item => item.id === accountId);
   if (!account) throw new Error('Choose an active Account.');
   const matches = accounts.filter(item => normalizeAccountName(item.name) === normalizeAccountName(sourceAccount));
-  if (matches.some(item => item.id !== accountId)) throw new Error(`Rosa VAR also matches Account ${matches.filter(item => item.id !== accountId).map(item => `${item.name} (#${item.id})`).join(', ')}. Review Account mapping before saving.`);
+  if (matches.some(item => item.id !== accountId)) throw new Error(`The Rosa customer name also matches Account ${matches.filter(item => item.id !== accountId).map(item => `${item.name} (#${item.id})`).join(', ')}. Review Account mapping before saving.`);
   const durationRaw = field(form, 'durationValue', 10), durationValue = Number(durationRaw);
   const durationUnit = field(form, 'durationUnit', 10);
   if (!Number.isSafeInteger(durationValue) || durationValue < 1 || !['day','week','month'].includes(durationUnit)) throw new Error('Enter a positive duration and unit.');
