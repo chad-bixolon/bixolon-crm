@@ -6,7 +6,7 @@ const workflows = [
   {
     title: 'Demo Requests · CSV',
     href: '/administration/imports/demos',
-    description: 'Preview and review Rosa Demo Requests, including shipment updates, before importing.',
+    description: 'Preview and review Demo Requests, including shipment updates, before importing.',
   },
   {
     title: 'Accounts & Contacts',

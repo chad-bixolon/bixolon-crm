@@ -37,7 +37,7 @@ test('authenticated shell shows only the logo in its brand area and keeps user c
     const html = render({ name: 'Chad Guenther', role, canManageUsers: role === 'ADMIN' });
     assert.match(html, /Chad Guenther/);
     assert.match(html, /src="\/brand\/bixolon-logo\.png" alt="BIXOLON"/);
-    assert.doesNotMatch(html, />CRM</);
+    assert.match(html, /<nav[^>]*>.*>CRM<\/p>/);
     assert.doesNotMatch(html, /BIXOLON America CRM|bg-orange-600/);
     assert.ok(html.includes(`>${label}</div>`));
     assert.match(html, /Sign out/);
@@ -56,5 +56,17 @@ test('Marketing Audience navigation follows the Admin and Marketing role grants'
     const html = render({ name: 'Test User', role, canViewMarketing: can({ id: 7, role, active: true, archivedAt: null }, 'marketing.read') });
     assert.equal(html.includes('href="/marketing/audiences"'), ['ADMIN','MARKETING_MANAGER'].includes(role));
     assert.match(html, /href="\/trade-shows"/);
+  }
+});
+
+test('navigation groups preserve role visibility and Admin-only Demos', () => {
+  for (const role of ['ADMIN', 'SALES_MANAGER', 'SALES', 'MARKETING_MANAGER', 'READ_ONLY']) {
+    const actor = { id: 7, role, active: true, archivedAt: null };
+    const html = render({ name: 'Test User', role, canManageUsers: role === 'ADMIN', canViewReports: can(actor, 'reports.view'), canViewMarketing: can(actor, 'marketing.read'), canViewSales: can(actor, 'sales.read') });
+    for (const section of ['CRM', 'Sales', 'Programs', 'Catalog', 'Admin']) assert.match(html, new RegExp(`>${section}</p>`));
+    assert.equal(html.includes('href="/demos"'), role === 'ADMIN');
+    assert.equal(html.includes('href="/administration"'), role === 'ADMIN');
+    assert.equal(html.includes('href="/marketing/audiences"'), can(actor, 'marketing.read'));
+    assert.equal(html.includes('href="/reports"'), can(actor, 'reports.view'));
   }
 });

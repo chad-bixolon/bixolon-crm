@@ -28,7 +28,7 @@ const skuKey = (value: string) => value.normalize('NFKC').trim().toUpperCase().r
 export async function backfillExistingRosaDemo(db: PrismaClient, actor: Actor, form: FormData) {
   if (actor.role !== 'ADMIN' || !actor.active || actor.archivedAt) throw new Error('Administrator access required.');
   const requestId = field(form, 'requestId', 100).toLowerCase();
-  if (!uuid.test(requestId)) throw new Error('A valid Rosa Request ID is required. CRM cannot generate one.');
+  if (!uuid.test(requestId)) throw new Error('A valid Source Request ID is required. CRM cannot generate one.');
   const existing = await db.demoRequest.findUnique({ where: { sourceRequestId: requestId }, select: { id: true } });
   if (existing) throw new ExistingDemoError(existing.id);
   const demoNumber = field(form, 'demoNumber', 100);
@@ -37,11 +37,11 @@ export async function backfillExistingRosaDemo(db: PrismaClient, actor: Actor, f
     if (duplicate) throw new Error(`Demo Number is already used by Demo ${duplicate.id}. Review that record before backfilling.`);
   }
   const status = field(form, 'status', 20);
-  if (status !== 'PENDING' && status !== 'APPROVED' && status !== 'SHIPPED') throw new Error('Choose a valid Rosa status.');
+  if (status !== 'PENDING' && status !== 'APPROVED' && status !== 'SHIPPED') throw new Error('Choose a valid source status.');
   const requestedAt = optionalDate(form, 'requestedAt');
   const reviewedAt = optionalDate(form, 'reviewedAt');
   const shippedAt = optionalDate(form, 'shippedAt');
-  if (!requestedAt) throw new Error('Rosa requested date is required.');
+  if (!requestedAt) throw new Error('Source requested date is required.');
   if (status !== 'PENDING' && !reviewedAt) throw new Error('Approved and shipped Demos require a reviewed date.');
   if (status === 'SHIPPED' && !shippedAt) throw new Error('Shipped Demos require a shipment date.');
   if (status !== 'SHIPPED' && shippedAt) throw new Error('A shipment date requires SHIPPED status.');
@@ -49,22 +49,22 @@ export async function backfillExistingRosaDemo(db: PrismaClient, actor: Actor, f
   const requestedBy = field(form, 'requestedBy', 200);
   const reviewedBy = field(form, 'reviewedBy', 200);
   const shippedBy = field(form, 'shippedBy', 200);
-  if (!requestedBy) throw new Error('Rosa requester is required.');
+  if (!requestedBy) throw new Error('Source requester is required.');
   if (status !== 'PENDING' && !reviewedBy) throw new Error('Reviewed by is required.');
   if (status === 'SHIPPED' && !shippedBy) throw new Error('Shipped by is required.');
   const accountId = Number(field(form, 'accountId', 20));
   const sourceAccount = field(form, 'sourceAccount', 200);
-  if (!Number.isSafeInteger(accountId) || accountId <= 0 || !sourceAccount) throw new Error('Choose an Account and enter the customer name from Rosa.');
+  if (!Number.isSafeInteger(accountId) || accountId <= 0 || !sourceAccount) throw new Error('Choose an Account and enter the source customer name.');
   const accounts = await db.account.findMany({ where: { status: 'ACTIVE', archivedAt: null }, select: { id: true, name: true } });
   const account = accounts.find(item => item.id === accountId);
   if (!account) throw new Error('Choose an active Account.');
   const matches = accounts.filter(item => normalizeAccountName(item.name) === normalizeAccountName(sourceAccount));
-  if (matches.some(item => item.id !== accountId)) throw new Error(`The Rosa customer name also matches Account ${matches.filter(item => item.id !== accountId).map(item => `${item.name} (#${item.id})`).join(', ')}. Review Account mapping before saving.`);
+  if (matches.some(item => item.id !== accountId)) throw new Error(`The source customer name also matches Account ${matches.filter(item => item.id !== accountId).map(item => `${item.name} (#${item.id})`).join(', ')}. Review Account mapping before saving.`);
   const durationRaw = field(form, 'durationValue', 10), durationValue = Number(durationRaw);
   const durationUnit = field(form, 'durationUnit', 10);
   if (!Number.isSafeInteger(durationValue) || durationValue < 1 || !['day','week','month'].includes(durationUnit)) throw new Error('Enter a positive duration and unit.');
   const rawItems = Array.from({ length: 5 }, (_, i) => ({ sku: field(form, `sku${i}`, 200), quantity: field(form, `quantity${i}`, 10), serials: split(field(form, `serials${i}`)), tracking: split(field(form, `tracking${i}`)), locations: split(field(form, `locations${i}`)) })).filter(item => item.sku || item.quantity || item.serials.length || item.tracking.length || item.locations.length);
-  if (!rawItems.length) throw new Error('Enter at least one Rosa SKU and quantity.');
+  if (!rawItems.length) throw new Error('Enter at least one source SKU and quantity.');
   const skus = await db.productSku.findMany({ where: { active: true, product: { active: true, archivedAt: null } }, select: { id: true, partNumber: true } });
   const items = rawItems.map(item => {
     const matches = skus.filter(sku => skuKey(sku.partNumber) === skuKey(item.sku));
