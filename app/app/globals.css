@@ -48,6 +48,16 @@ select.filter-control { padding-right: 2rem; overflow: visible; }
 .report-builder .label { min-width: 0; margin-bottom: 0; font-size: .8125rem; line-height: 1rem; }
 .report-builder .field { display: block; box-sizing: border-box; min-width: 0; height: 2.25rem; min-height: 2.25rem; margin-top: .125rem; padding: .375rem .625rem; font-size: .875rem; line-height: 1.25rem; }
 .report-builder select.field { padding-right: 2rem; overflow: visible; }
+.trade-show-import { container-type: inline-size; }
+.trade-show-import input.field, .trade-show-import select.field { box-sizing: border-box; min-width: 0; height: 2.125rem; min-height: 2.125rem; padding: .3125rem .625rem; font-size: .875rem; line-height: 1.25rem; }
+.trade-show-import select.field { padding-right: 2rem; overflow: visible; }
+.trade-show-import textarea.field { box-sizing: border-box; min-width: 0; padding: .5rem; line-height: 1.25rem; }
+.trade-show-import-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: .375rem; }
+.trade-show-import-defaults { display: grid; grid-template-columns: minmax(0, 1fr); gap: .625rem; }
+@container (min-width: 32rem) { .trade-show-import-defaults { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (min-width: 48rem) { .trade-show-import-defaults { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.trade-show-import .import-search-picker-selected { margin-top: .125rem; font-size: .6875rem; line-height: 1rem; color: #64748b; }
+.trade-show-import .import-search-picker [role="status"] { margin-top: .125rem; font-size: .6875rem; line-height: 1rem; }
 .report-builder .report-days-input { width: 8rem; max-width: 100%; }
 .report-metrics { min-width: 0; border: 1px solid #fed7aa; border-radius: .375rem; background: #fff7ed80; padding: .3rem .6rem .4rem; }
 .report-metrics-title { padding-inline: .2rem; color: #9a3412; font-size: .8rem; font-weight: 700; }
