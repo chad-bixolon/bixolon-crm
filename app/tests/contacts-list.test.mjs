@@ -9,7 +9,9 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 Module._extensions['.ts']=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,filename);
 const require=Module.createRequire(import.meta.url);
 const {contactWhere,contactOrderBy,contactListState,contactListUrl,listContacts}=require(path.join(root,'lib/contacts.ts'));
+const {routeAccess}=require(path.join(root,'lib/authorization.ts'));
 const page=fs.readFileSync(path.join(root,'app/contacts/page.tsx'),'utf8');
+const detail=fs.readFileSync(path.join(root,'app/contacts/[id]/page.tsx'),'utf8');
 const route=fs.readFileSync(path.join(root,'app/contacts/account-search/route.ts'),'utf8');
 
 test('search includes name, email, and title in the database predicate',()=>{
@@ -33,6 +35,44 @@ test('account, status, marketing, title, primary and assignment filters compose 
   assert.equal(contactWhere({assignment:'unassigned'}).accountId,null);
   assert.equal(contactWhere({accountId:'unassigned'}).accountId,null);
   assert.deepEqual(contactWhere({accountId:'unassigned',assignment:'assigned'}).AND,[{accountId:{not:null}}]);
+});
+test('Contact status filters retain their existing predicates and default visibility',()=>{
+  const accountVisibility=[{accountId:null},{account:{is:{archivedAt:null,status:'ACTIVE'}}}];
+  assert.deepEqual(contactWhere({}),{archivedAt:null,OR:accountVisibility});
+  assert.deepEqual(contactWhere({active:'active'}),{archivedAt:null,OR:accountVisibility,active:true});
+  assert.deepEqual(contactWhere({active:'inactive'}),{archivedAt:null,OR:accountVisibility,active:false});
+  assert.deepEqual(contactWhere({active:'archived'}),{archivedAt:{not:null}});
+  assert.deepEqual(contactWhere({active:'all'}),{});
+  assert.match(page,/<option value="">Not Archived<\/option>/);
+  assert.doesNotMatch(page,/<option[^>]*>Current<\/option>/);
+  assert.match(page,/defaultValue=\{filters\.active\?\?""\}/);
+  assert.match(page,/c\.archivedAt\?"Archived":c\.active\?"Active":"Inactive"/);
+  assert.match(detail,/state === "active" \? "Active" : state === "inactive" \? "Inactive" : "Archived"/);
+  assert.doesNotMatch(detail,/"Current"/);
+});
+test('Contact list status selections return the expected active, inactive and archived rows',async()=>{
+  const rows=[
+    {id:1,active:true,archivedAt:null,accountId:null},
+    {id:2,active:false,archivedAt:null,accountId:null},
+    {id:3,active:false,archivedAt:new Date('2026-01-01'),accountId:null},
+    {id:4,active:true,archivedAt:null,accountId:9,account:{status:'INACTIVE',archivedAt:null}},
+  ];
+  const matches=where=>rows.filter(row=>
+    (where.archivedAt===undefined||where.archivedAt===null ? where.archivedAt===undefined||row.archivedAt===null : row.archivedAt!==null)
+    && (where.active===undefined||row.active===where.active)
+    && (where.OR===undefined||row.accountId===null||row.account?.status==='ACTIVE'&&row.account.archivedAt===null)
+  );
+  const client={contact:{count:async({where})=>matches(where).length,findMany:async({where})=>matches(where)}};
+  for(const [filter,expected] of [[undefined,[1,2]],['active',[1]],['inactive',[2]],['archived',[3]],['all',[1,2,3,4]]]){
+    const result=await listContacts(client,filter?{active:filter}:{});
+    assert.deepEqual(result.contacts.map(row=>row.id),expected,filter??'default');
+    assert.equal(result.count,expected.length);
+  }
+});
+test('Contacts read access remains available to existing roles',()=>{
+  for(const role of ['ADMIN','SALES_MANAGER','SALES','MARKETING_MANAGER','READ_ONLY'])
+    assert.equal(routeAccess('/contacts',{id:7,role,active:true,archivedAt:null}),'allowed');
+  assert.equal(routeAccess('/contacts',{id:7,role:'SALES',active:false,archivedAt:null}),'denied');
 });
 test('each sortable column supports ascending and descending with stable ties',()=>{
   for(const sort of ['name','account','title','email','status']){

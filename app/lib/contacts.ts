@@ -76,6 +76,7 @@ export function contactOrderBy(filters: ContactFilters): Prisma.ContactOrderByWi
   return [{ lastName: sort === "name" ? dir : "asc" }, { firstName: sort === "name" ? dir : "asc" }, { id: "asc" }];
 }
 export function contactWhere(filters: ContactFilters): Prisma.ContactWhereInput {
+  // The default ("Not Archived") includes active and inactive Contacts with a working Account or no Account.
   const where: Prisma.ContactWhereInput = { archivedAt: null, OR: [{ accountId: null }, { account: { is: { archivedAt: null, status: 'ACTIVE' } } }] };
   if (filters.q?.trim()) {
     const q = filters.q.trim().slice(0, 100);
