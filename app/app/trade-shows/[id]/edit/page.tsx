@@ -10,7 +10,7 @@ export default async function EditTradeShowPage({ params }: { params: Promise<{ 
   const id = Number((await params).id);
   if (!Number.isSafeInteger(id) || id < 1) notFound();
   const [show, owners] = await Promise.all([
-    prisma.tradeShow.findUnique({ where: { id }, include: { marketingOwner: { select: { firstName: true, lastName: true } } } }),
+    prisma.tradeShow.findUnique({ where: { id }, include: { marketingOwner: { select: { firstName: true, lastName: true } }, resourceLinks: { orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] } } }),
     prisma.user.findMany({ where: { role: 'MARKETING_MANAGER', active: true, archivedAt: null }, select: { id: true, firstName: true, lastName: true }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
   ]);
   if (!show) notFound();

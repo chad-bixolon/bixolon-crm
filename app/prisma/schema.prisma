@@ -1359,6 +1359,7 @@ model ProjectAccountRole {
 model TradeShow {
   id               Int               @id @default(autoincrement())
   name             String
+  boothNumber      String?
   startDate        DateTime?         @db.Date
   endDate          DateTime?         @db.Date
   location         String?
@@ -1375,11 +1376,25 @@ model TradeShow {
   archivedBy       User?             @relation("TradeShowArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
   imports          TradeShowImport[]
   leads            TradeShowLead[]
+  resourceLinks    TradeShowResourceLink[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
   @@index([archivedAt, startDate])
   @@index([marketingOwnerId])
+}
+
+model TradeShowResourceLink {
+  id          Int       @id @default(autoincrement())
+  tradeShowId Int
+  tradeShow   TradeShow @relation(fields: [tradeShowId], references: [id], onDelete: Restrict)
+  label       String
+  url         String
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([tradeShowId, sortOrder])
 }
 
 model TradeShowImport {
