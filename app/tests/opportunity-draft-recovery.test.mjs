@@ -11,7 +11,7 @@ Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(f
 const require = Module.createRequire(fileURLToPath(import.meta.url));
 const drafts = require(path.join(root, 'lib/opportunity-draft.ts'));
 const source = file => fs.readFileSync(path.join(root, file), 'utf8');
-const blank = { name: '', description: '', competitorId: '', currentProductBeingUsed: '', customerPainPoints: '', ownerId: '7', stageId: '', expectedCloseDate: '', probability: '', forecastCategory: 'PIPELINE', currencyCode: 'USD', projectIds: [], participants: [], contacts: [], lines: [] };
+const blank = { name: '', description: '', competitorId: '', currentProductBeingUsed: '', competitivePricing: '', customerPainPoints: '', ownerId: '7', stageId: '', expectedCloseDate: '', probability: '', forecastCategory: 'PIPELINE', currencyCode: 'USD', projectIds: [], participants: [], contacts: [], lines: [] };
 function storage() {
   const items = new Map();
   return { items, getItem: key => items.get(key) ?? null, setItem: (key, value) => items.set(key, value), removeItem: key => items.delete(key) };

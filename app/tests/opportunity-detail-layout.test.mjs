@@ -53,9 +53,20 @@ Module._load = originalLoad;
 function fixture(projects = []) {
   return { id: 7, name: 'Expansion', ownerId: 1, owner: null, archivedAt: null, stage: { name: 'Open', probability: 50, isClosed: false },
     probability: null, products: [], projects, contacts: [], participants: [], competitor: null, originatingTradeShowLead: null,
-    currencyCode: 'USD', forecastCategory: null, expectedCloseDate: null, description: null, currentProductBeingUsed: null, customerPainPoints: null };
+    currencyCode: 'USD', forecastCategory: null, expectedCloseDate: null, description: null, currentProductBeingUsed: null, competitivePricing: null, customerPainPoints: null };
 }
 async function render() { return renderToStaticMarkup(await OpportunityPage({ params: Promise.resolve({ id: '7' }), searchParams: Promise.resolve({}) })); }
+
+test('Customer Context shows saved model and pricing, and hides blank pricing', async () => {
+  opportunity = { ...fixture(), currentProductBeingUsed: 'Zebra ZT411', competitivePricing: '$399 + service', customerPainPoints: 'Slow labels\nHigh maintenance' };
+  const filled = await render();
+  assert.match(filled, /<dt class="label">Competitive Model<\/dt><dd[^>]*>Zebra ZT411<\/dd>/);
+  assert.match(filled, /<dt class="label">Competitive Pricing<\/dt><dd[^>]*>\$399 \+ service<\/dd>/);
+  assert.match(filled, /<dt class="label">Customer Pain Points<\/dt><dd[^>]*>Slow labels\nHigh maintenance<\/dd>/);
+  assert.doesNotMatch(filled, /Current Product Being Used/);
+  opportunity = fixture();
+  assert.doesNotMatch(await render(), /Competitive Pricing/);
+});
 
 test('Opportunity summary links every Project and shows a single unlinked field when empty', async () => {
   opportunity = fixture([{ projectId: 12, project: { name: 'North rollout' } }, { projectId: 13, project: { name: 'South rollout' } }]);

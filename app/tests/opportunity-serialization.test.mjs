@@ -45,6 +45,7 @@ const opportunity = products => ({
   description: null,
   competitorId: null,
   currentProductBeingUsed: null,
+  competitivePricing: null,
   customerPainPoints: null,
   ownerId: 7,
   stageId: 2,
@@ -134,4 +135,10 @@ test('Opportunity edit props remain plain with zero product lines and no close d
   assert.equal(initial.expectedCloseDate, null);
   assertNoNonPlainValues(initial);
   assert.deepEqual(JSON.parse(JSON.stringify(initial)), initial);
+});
+
+test('existing Competitive Model and free-form Competitive Pricing reload into edit props', () => {
+  const initial = serializeOpportunityForForm({ ...opportunity([]), currentProductBeingUsed: 'Zebra ZT411', competitivePricing: '$399 + service' }, actor);
+  assert.equal(initial.currentProductBeingUsed, 'Zebra ZT411');
+  assert.equal(initial.competitivePricing, '$399 + service');
 });

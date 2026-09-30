@@ -597,6 +597,7 @@ model Opportunity {
   competitorId            Int?
   competitor              CompetitorOption?    @relation(fields: [competitorId], references: [id], onDelete: Restrict)
   currentProductBeingUsed String?
+  competitivePricing      String?
   customerPainPoints      String?              @db.Text
   expectedCloseDate       DateTime?
   probability             Int?

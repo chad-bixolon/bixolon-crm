@@ -11,7 +11,7 @@ import { eligibleUser, eligibleUserWhere } from './assignment-eligibility';
 export type Participant = { accountId: number; roles: OpportunityPartyRole[] };
 export type OpportunityContactInput = { contactId: number; isPrimary: boolean };
 export type Line = { id?: number; productId: number; skuId?: number | null; quantity: number; price: string; priceSource?: OpportunityProductPriceSource; catalogPriceTier?: ProductPriceTier | null; priceExceptionLineId?: number | null; odmCustomerPriceId?: number | null; odmCustomerAccountId?: number | null };
-export type OpportunityInput = { name: string; description: string | null; competitorId?: number | null; currentProductBeingUsed?: string | null; customerPainPoints?: string | null; ownerId: number | null; projectIds: number[]; stageId: number; expectedCloseDate: Date | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: Participant[]; contacts: OpportunityContactInput[]; lines: Line[] };
+export type OpportunityInput = { name: string; description: string | null; competitorId?: number | null; currentProductBeingUsed?: string | null; competitivePricing?: string | null; customerPainPoints?: string | null; ownerId: number | null; projectIds: number[]; stageId: number; expectedCloseDate: Date | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: Participant[]; contacts: OpportunityContactInput[]; lines: Line[] };
 export function categoryForStage(stage: { isClosed: boolean; isWon: boolean }, requested: ForecastCategory | null, previous?: { stageId: number; forecastCategory: ForecastCategory } | null, stageId?: number): ForecastCategory {
   if (stage.isClosed) return stage.isWon ? ForecastCategory.CLOSED : ForecastCategory.OMITTED;
   if (requested === ForecastCategory.CLOSED) {
@@ -27,6 +27,7 @@ export function parseOpportunity(form: FormData) {
   const competitorRaw = field(form, "competitorId"), competitorId = competitorRaw ? positiveId(competitorRaw) : null;
   if (competitorRaw && !competitorId) errors.competitorId = "Choose a valid competitor.";
   const currentProductBeingUsed = optional(form, "currentProductBeingUsed", 500, errors);
+  const competitivePricing = optional(form, "competitivePricing", 500, errors);
   const customerPainPoints = optional(form, "customerPainPoints", 20000, errors);
   const ownerRaw = field(form, "ownerId"), ownerId = ownerRaw ? positiveId(ownerRaw) : null;
   if (ownerRaw && !ownerId) errors.ownerId = "Choose a valid owner.";
@@ -88,7 +89,7 @@ export function parseOpportunity(form: FormData) {
     lines.push({ id: id ?? undefined, productId, ...(skuId ? { skuId } : {}), quantity, price, ...(priceSources[i] ? { priceSource: priceSource!, catalogPriceTier, priceExceptionLineId: priceExceptionLineId ?? null, odmCustomerPriceId, odmCustomerAccountId } : {}) });
   }
   if (new Set(lines.map((line) => line.id).filter(Boolean)).size !== lines.filter((line) => line.id).length) errors.lines = "Duplicate line item.";
-  return { errors, value: Object.keys(errors).length ? undefined : { name, description, competitorId, currentProductBeingUsed, customerPainPoints, ownerId, projectIds: projectIds as number[], stageId: stageId!, expectedCloseDate, probability, forecastCategory, currencyCode, participants, contacts, lines } satisfies OpportunityInput };
+  return { errors, value: Object.keys(errors).length ? undefined : { name, description, competitorId, currentProductBeingUsed, competitivePricing, customerPainPoints, ownerId, projectIds: projectIds as number[], stageId: stageId!, expectedCloseDate, probability, forecastCategory, currencyCode, participants, contacts, lines } satisfies OpportunityInput };
 }
 export function lineTotal(line: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number }) { return new Prisma.Decimal(line.estimatedUnitPrice).mul(line.quantity); }
 export function opportunityTotal(lines: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number; archivedAt?: Date | null }[]) { return lines.reduce((sum, line) => line.archivedAt ? sum : sum.add(lineTotal(line)), new Prisma.Decimal(0)); }
@@ -176,7 +177,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
         if ((!retainingHistoricalSelection || !old.estimatedUnitPrice.equals(line.price)) && !selected!.approvedUnitPrice?.equals(line.price)) throw new Error('Changing a Price Exception unit price requires Manual price.');
       }
     }
-    const data = { name: input.name, description: input.description, competitorId: input.competitorId ?? null, currentProductBeingUsed: input.currentProductBeingUsed ?? null, customerPainPoints: input.customerPainPoints ?? null, ownerId: input.ownerId, stageId: input.stageId, expectedCloseDate: input.expectedCloseDate, probability: input.probability, forecastCategory: categoryForStage(stage, input.forecastCategory, existing, input.stageId), currencyCode: input.currencyCode };
+    const data = { name: input.name, description: input.description, competitorId: input.competitorId ?? null, currentProductBeingUsed: input.currentProductBeingUsed ?? null, competitivePricing: input.competitivePricing ?? null, customerPainPoints: input.customerPainPoints ?? null, ownerId: input.ownerId, stageId: input.stageId, expectedCloseDate: input.expectedCloseDate, probability: input.probability, forecastCategory: categoryForStage(stage, input.forecastCategory, existing, input.stageId), currencyCode: input.currencyCode };
     if (id) { await tx.opportunity.update({ where: { id }, data }); }
     else { const created = await tx.opportunity.create({ data }); id = created.id; }
     const opportunityId = id;

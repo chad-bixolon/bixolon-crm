@@ -14,6 +14,7 @@ type OpportunityForForm = {
   description: string | null;
   competitorId: number | null;
   currentProductBeingUsed: string | null;
+  competitivePricing: string | null;
   customerPainPoints: string | null;
   ownerId: number | null;
   stageId: number;
@@ -60,6 +61,7 @@ export type OpportunityFormInitial = {
   description: string | null;
   competitorId: number | null;
   currentProductBeingUsed: string | null;
+  competitivePricing: string | null;
   customerPainPoints: string | null;
   ownerId: number | null;
   projectIds: number[];
@@ -100,6 +102,7 @@ export function serializeOpportunityForForm(opportunity: OpportunityForForm, act
     description: opportunity.description,
     competitorId: opportunity.competitorId,
     currentProductBeingUsed: opportunity.currentProductBeingUsed,
+    competitivePricing: opportunity.competitivePricing,
     customerPainPoints: opportunity.customerPainPoints,
     ownerId: opportunity.ownerId,
     projectIds: opportunity.projects.map(link => link.projectId),
