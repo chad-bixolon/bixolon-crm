@@ -12,6 +12,7 @@ app/reports/
 
 postgres/data
 backups/
+compose.override.yml
 
 *.log
 .DS_Store
