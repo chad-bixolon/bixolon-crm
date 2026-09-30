@@ -110,28 +110,36 @@ test('opportunity draft restores every editable field after remount without chan
   assert.equal(drafts.readDraft('{broken', fallback), fallback);
   assert.deepEqual(fallback.participants, []);
 });
-test('local opportunity draft survives blank remount defaults and waits for hydration before writes', () => {
+test('Opportunity draft recovery is explicit, user scoped, and waits for hydration before writes', () => {
   const storage = new Map();
   const localStorage = { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: (key) => storage.delete(key) };
-  const key = drafts.draftKey();
-  assert.equal(key, 'opportunity-draft:new');
-  assert.equal(drafts.draftKey(42), 'opportunity-draft:42');
+  const key = drafts.draftKey(7);
+  assert.equal(key, 'opportunity-draft:7:new');
+  assert.equal(drafts.draftKey(7, 42), 'opportunity-draft:7:edit:42');
+  assert.equal(drafts.draftKey(7, undefined, 42), 'opportunity-draft:7:conversion:42');
+  assert.notEqual(drafts.draftKey(7), drafts.draftKey(8));
+  assert.notEqual(drafts.draftKey(7, 42), drafts.draftKey(7, 43));
   const blank = { name: '', description: '', ownerId: '', stageId: '', expectedCloseDate: '', probability: '', forecastCategory: '', currencyCode: 'USD', projectIds: [], participants: [], lines: [] };
   const saved = { ...blank, name: 'Fleet rollout', description: 'Call next week', ownerId: '4', stageId: '2', expectedCloseDate: '2026-10-01', probability: '70', forecastCategory: 'COMMIT', currencyCode: 'EUR', participants: [{ accountId: 11, roles: ['END_USER', 'OEM'] }], lines: [{ id: 0, productId: 3, quantity: '2', price: '19.95' }] };
-  storage.set(key, JSON.stringify(saved));
+  assert.equal(drafts.readStoredDraft(localStorage, key, blank), null);
+  storage.set(key, JSON.stringify({ draft: saved, savedAt: 42 }));
   const storedBeforeHydration = storage.get(key);
   assert.equal(drafts.persistDraft(localStorage, key, blank, null), false);
   assert.equal(storage.get(key), storedBeforeHydration);
+  assert.deepEqual(drafts.readStoredDraft(localStorage, key, blank), { draft: saved, savedAt: 42 });
+  assert.equal(drafts.readStoredDraft(localStorage, drafts.draftKey(8), blank), null);
+  assert.equal(drafts.readStoredDraft(localStorage, drafts.draftKey(7, 42), blank), null);
   const restored = drafts.restoreDraft(localStorage, key, blank);
   assert.deepEqual(restored, saved);
-  assert.equal(drafts.persistDraft(localStorage, key, restored, key), true);
-  assert.deepEqual(JSON.parse(storage.get(key)), saved);
+  assert.equal(drafts.persistDraft(localStorage, key, restored, key, 99), true);
+  assert.deepEqual(JSON.parse(storage.get(key)), { draft: saved, savedAt: 99 });
   const remounted = drafts.restoreDraft(localStorage, key, blank);
   assert.deepEqual(remounted, saved);
   assert.equal(drafts.persistDraft(localStorage, key, blank, 'opportunity-draft:other'), false);
-  assert.deepEqual(JSON.parse(storage.get(key)), saved);
+  assert.deepEqual(JSON.parse(storage.get(key)), { draft: saved, savedAt: 99 });
   drafts.clearDraft(localStorage, key); // successful save
   assert.equal(storage.has(key), false);
+  assert.equal(drafts.readStoredDraft(localStorage, key, blank), null); // next New Opportunity
   storage.set(key, JSON.stringify(saved));
   drafts.clearDraft(localStorage, key); // explicit Cancel
   assert.equal(storage.has(key), false);

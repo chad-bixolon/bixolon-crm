@@ -92,12 +92,15 @@ test('price tiers, manual overrides and reopened prices retain existing semantic
 });
 const Picker = () => null;
 function form(lines) {
-  return harness('components/opportunity-form.tsx', { initial: { name: 'Deal', projectIds: [], participants: [], lines, stageId: 1, currencyCode: 'USD' }, accounts: [], projects: [], productCategories: [], owners: [], stages: [], currencies: [], productCount: 5 }, {
+  const h = harness('components/opportunity-form.tsx', { userId: 7, initial: { name: 'Deal', projectIds: [], participants: [], lines, stageId: 1, currencyCode: 'USD' }, accounts: [], projects: [], productCategories: [], owners: [], stages: [], currencies: [], productCount: 5 }, {
     '@/lib/submit-guard': { useSubmitGuard: () => () => {} },
     'next/navigation': { useRouter: () => ({}) },
     '@/app/opportunities/actions': { submitOpportunity() {} },
     '@/components/product-picker': { ProductPicker: Picker },
   });
+  h.render(); // The harness does not run the storage check effect.
+  h.slots[4] = null;
+  return h;
 }
 test('five lines keep values, totals and identities when adding, changing and removing neighbors', () => {
   const h = form(Array.from({ length: 5 }, (_, i) => ({ id: 0, productId: i + 1, skuId: i + 10, quantity: 1000, price: '990.22' })));

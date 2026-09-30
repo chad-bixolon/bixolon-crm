@@ -10,6 +10,7 @@ export type OpportunityDraft = {
   participants: ParticipantDraft[]; contacts: ContactDraft[]; lines: LineDraft[];
 };
 type DraftStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+export type StoredOpportunityDraft = { draft: OpportunityDraft; savedAt: number | null };
 const forecastCategories = ["OMITTED", "PIPELINE", "BEST_CASE", "COMMIT", "CLOSED"];
 const partyRoles = ["END_USER", "VAR_RESELLER", "DISTRIBUTOR", "ISV_PARTNER", "OEM", "OTHER", "MEDIA_PARTNER", "SERVICE_PARTNER"];
 const priceSources = ["MANUAL", "CATALOG", "PRICE_EXCEPTION", "ODM_CUSTOMER"];
@@ -17,7 +18,10 @@ const catalogTiers = ["STANDARD", "MSRP", "RESELLER", "DISTRIBUTOR"];
 const isId = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 const isLineId = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
-export function draftKey(id?: number) { return `opportunity-draft:${id ?? "new"}`; }
+export function draftKey(userId: number, id?: number, conversionLeadId?: number) {
+  if (!isId(userId)) throw new Error('A user is required for an Opportunity draft.');
+  return `opportunity-draft:${userId}:${conversionLeadId ? `conversion:${conversionLeadId}` : id ? `edit:${id}` : 'new'}`;
+}
 export function addParticipant(draft: OpportunityDraft, accountId: number): OpportunityDraft {
   if (!accountId || draft.participants.some((p) => p.accountId === accountId)) return draft;
   return { ...draft, participants: [...draft.participants, { accountId, roles: [] }] };
@@ -72,12 +76,24 @@ export function readDraft(raw: string | null, fallback: OpportunityDraft): Oppor
     return value as OpportunityDraft;
   } catch { return fallback; }
 }
-export function restoreDraft(storage: DraftStorage, key: string, fallback: OpportunityDraft): OpportunityDraft {
-  try { return readDraft(storage.getItem(key), fallback); } catch { return fallback; }
+export function readStoredDraft(storage: DraftStorage, key: string, fallback: OpportunityDraft): StoredOpportunityDraft | null {
+  try {
+    const raw = storage.getItem(key);
+    if (!raw) return null;
+    const stored: unknown = JSON.parse(raw);
+    const envelope = isRecord(stored) && 'draft' in stored ? stored : { draft: stored, savedAt: null };
+    if (!isRecord(envelope)) return null;
+    const draft = readDraft(JSON.stringify(envelope.draft), fallback);
+    if (draft === fallback || JSON.stringify(draft) === JSON.stringify(fallback)) return null;
+    return { draft, savedAt: typeof envelope.savedAt === 'number' && envelope.savedAt > 0 && envelope.savedAt <= 8.64e15 ? envelope.savedAt : null };
+  } catch { return null; }
 }
-export function persistDraft(storage: DraftStorage, key: string, draft: OpportunityDraft, hydratedKey: string | null): boolean {
+export function restoreDraft(storage: DraftStorage, key: string, fallback: OpportunityDraft): OpportunityDraft {
+  return readStoredDraft(storage, key, fallback)?.draft ?? fallback;
+}
+export function persistDraft(storage: DraftStorage, key: string, draft: OpportunityDraft, hydratedKey: string | null, savedAt = Date.now()): boolean {
   if (hydratedKey !== key) return false;
-  try { storage.setItem(key, JSON.stringify(draft)); return true; } catch { return false; }
+  try { storage.setItem(key, JSON.stringify({ draft, savedAt })); return true; } catch { return false; }
 }
 export function clearDraft(storage: DraftStorage, key: string): void {
   try { storage.removeItem(key); } catch { /* Storage can be unavailable in private browsing. */ }
