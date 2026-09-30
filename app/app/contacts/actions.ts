@@ -6,14 +6,17 @@ import { parseContact, saveContact, setContactState } from "@/lib/contacts";
 import { friendlyError } from "@/lib/crm-validation";
 import { requireMutation } from "@/lib/current-user";
 import { saveFeedbackPath } from "@/lib/save-feedback";
-export type FormState = { errors: Record<string, string>; message?: string; values?: Record<string, string> };
+import { contactSaveReview, type ContactDuplicateMatch } from "@/lib/contact-duplicates";
+export type FormState = { errors: Record<string, string>; message?: string; values?: Record<string, string>; matches?: ContactDuplicateMatch[]; reviewToken?: string };
 function retainedValues(form: FormData) { const values=Object.fromEntries([...form.entries()].filter((entry): entry is [string,string] => typeof entry[1] === "string")); values.isPrimary=form.has("isPrimary")?"true":"false"; return values; }
 export async function submitContact(id: number | null, _state: FormState, form: FormData): Promise<FormState> {
   const actor = await requireMutation("contacts.write");
   const values=retainedValues(form);
   const parsed = parseContact(form); if (!parsed.value) return { errors: parsed.errors, message: "Please correct the highlighted fields.", values };
   let contactId: number;
-  const previous = id ? await prisma.contact.findUnique({ where: { id }, select: { accountId: true } }) : null;
+  const previous = id ? await prisma.contact.findUnique({ where: { id }, select: { accountId: true, firstName: true, lastName: true, email: true } }) : null;
+  const review = await contactSaveReview(prisma, parsed.value, form, id ?? undefined, previous);
+  if (review) return { errors: {}, values, ...review };
   try { contactId = await saveContact(prisma, parsed.value, id ?? undefined, actor); }
   catch (error) { return { errors: {}, message: friendlyError(error, "Contact could not be saved. Check whether another contact is primary for this account."), values }; }
   revalidatePath("/contacts");
