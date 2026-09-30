@@ -20,6 +20,11 @@ export default async function EditOpportunityPage({ params }: { params: Promise<
     const currentCompetitor = await prisma.competitorOption.findUnique({ where: { id: opportunity.competitorId }, select: { id: true, name: true, active: true } });
     if (currentCompetitor) options.competitors.push(currentCompetitor);
   }
+  const linkedAccountIds = opportunity.participants.map(participant => participant.accountId).filter(accountId => !options.accounts.some(account => account.id === accountId));
+  if (linkedAccountIds.length) {
+    const linkedAccounts = await prisma.account.findMany({ where: { id: { in: linkedAccountIds } }, select: { id: true, name: true } });
+    options.accounts.push(...linkedAccounts.map(account => ({ ...account, name: `${account.name} (inactive)` })));
+  }
   const initial = serializeOpportunityForForm(opportunity, actor);
   return <Content><PageHeader eyebrow="Opportunities" title={`Edit ${opportunity.name}`}/>{opportunity.archivedAt ? <div className="panel p-6">Reactivate this opportunity before editing it.</div> : <OpportunityForm key={id} id={id} initial={initial} {...options} owners={actor.role === 'SALES' ? options.owners.filter(owner => owner.id === actor.id) : options.owners} currentOwner={opportunity.owner} labels={labels}/>}</Content>;
 }

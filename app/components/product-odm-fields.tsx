@@ -34,7 +34,7 @@ function BaseSkuChoice({ initial, values }: { initial?: Initial['baseSku']; valu
 
 function AccountChoices({ initial = [], values, customerSpecific }: { initial?: Initial['odmCustomers']; values?: ProductSubmittedValues; customerSpecific: boolean }) {
   const uid = useId();
-  const [selected, setSelected] = useState<OdmCustomerChoice[]>(values ? values.odmCustomerAccountIds.map((id, index) => ({ id: Number(id), label: values.odmCustomerNames[index] ?? `Account #${id}` })) : initial.map(row => ({ id: row.account.id, label: row.account.name })));
+  const [selected, setSelected] = useState<OdmCustomerChoice[]>(values ? values.odmCustomerAccountIds.map((id, index) => ({ id: Number(id), label: values.odmCustomerNames[index] ?? "Account unavailable" })) : initial.map(row => ({ id: row.account.id, label: row.account.name })));
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<Choice[]>([]);
   const [fetchedQuery, setFetchedQuery] = useState('');

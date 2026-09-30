@@ -16,6 +16,12 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
   ]);
   if (!project) notFound();
   if (!canEditProject(actor, project)) redirect('/access-denied');
+  const linkedAccountIds = [project.primaryAccountId, ...project.participants.map(participant => participant.accountId)]
+    .filter((accountId): accountId is number => accountId !== null && !accounts.some(account => account.id === accountId));
+  if (linkedAccountIds.length) {
+    const linkedAccounts = await prisma.account.findMany({ where: { id: { in: linkedAccountIds } }, select: { id: true, name: true } });
+    accounts.push(...linkedAccounts.map(account => ({ ...account, name: `${account.name} (inactive)` })));
+  }
   const initial = { ...project, participants: project.participants.map(p => ({ accountId: p.accountId, roles: p.roles.map(r => r.role) })) };
   return <Content><PageHeader eyebrow="Projects" title={`Edit ${project.name}`}/>{project.archivedAt ? <div className="panel p-6">Reactivate this Project before editing it.</div> : <ProjectForm id={id} initial={initial} accounts={accounts} owners={owners} currentOwner={project.owner}/>}</Content>;
 }

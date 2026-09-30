@@ -1,7 +1,7 @@
 import type { ContactOption } from './activity-relations';
 
 export function activityContactLabel(contact: ContactOption) {
-  return `${contact.name} — ${contact.accountId === null ? 'No Account' : contact.accountName || `Account #${contact.accountId}`}`;
+  return `${contact.name} — ${contact.accountId === null ? 'No Account' : contact.accountName || 'Account unavailable'}`;
 }
 
 export function searchActivityContacts(contacts: ContactOption[], query: string, selectedIds: number[]) {
