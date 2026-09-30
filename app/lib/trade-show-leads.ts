@@ -4,6 +4,8 @@ import { field, optional, positiveId, type Errors } from './crm-validation';
 import { dateField } from './work';
 import { canEditTradeShowLead } from './trade-shows';
 import { canRouteTradeShowLead, referralData, TRADE_SHOW_ROUTINGS, validateTradeShowRouting } from './trade-show-routing';
+import { syncTradeShowFollowUp } from './trade-show-follow-up';
+import { tradeShowFollowUpBusinessDays } from './configuration';
 
 const statuses = Object.values(TradeShowLeadStatus);
 export const actionableTradeShowLeadStatuses: TradeShowLeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED'];
@@ -65,6 +67,7 @@ export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId:
   const parsed = parseTradeShowLeadUpdate(form);
   if (!parsed.value) return { errors: parsed.errors, message: 'Correct the highlighted fields.' };
   const input = parsed.value;
+  const businessDays = await tradeShowFollowUpBusinessDays(client);
   return client.$transaction(async tx => {
     const lead = await tx.tradeShowLead.findFirst({ where: { id: leadId, tradeShowId }, include: { tradeShow: { select: { archivedAt: true } } } });
     if (!lead || lead.tradeShow.archivedAt) throw new Error('Trade Show Lead not found or archived.');
@@ -101,7 +104,7 @@ export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId:
       const competitor = await tx.competitorOption.findFirst({ where: { id: input.competitorId, active: true } });
       if (!competitor && input.competitorId !== lead.competitorId) throw new Error('Choose an active Competitor.');
     }
-    await tx.tradeShowLead.update({ where: { id: leadId }, data: {
+    const updated = await tx.tradeShowLead.update({ where: { id: leadId }, data: {
       status: input.status, followUpAt: input.followUpAt, lastContactedAt: input.lastContactedAt,
       salesNotes: input.salesNotes, productInterest: input.productInterest,
       competitorSourceText: input.competitorSourceText, competitorId: input.competitorId,
@@ -109,6 +112,7 @@ export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId:
       assignedSalesRepUserId: repId, routing, routedPartnerAccountId:partnerAccountId,
       ...referralData(routing,lead.routing,actor.id,notes,lead.referredAt), accountId, contactId,
     } });
+    await syncTradeShowFollowUp(tx, lead, updated, actor.id, new Date(), businessDays);
     return { errors: {} };
   });
 }

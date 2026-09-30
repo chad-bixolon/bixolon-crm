@@ -3,6 +3,8 @@ import { can, type Actor } from './authorization';
 import { applyReviewedOverrides, inspectTradeShowWorkbook, mappingCompatibility, parseTradeShowWorkbook, validateMapping, validateReviewedOverrides, type MappingDefinition, type ParsedLead, type ParsedWorkbook } from './trade-show-import-parser';
 import type { ReviewedOverrides } from './trade-show-import-fields';
 import { PARTNER_ACCOUNT_ROLES } from './trade-show-routing';
+import { syncTradeShowFollowUp } from './trade-show-follow-up';
+import { tradeShowFollowUpBusinessDays } from './configuration';
 
 export type ReviewedRow = { originalSourceKey:string; reviewedOverrides:ReviewedOverrides };
 export type ImportChoice = ReviewedRow & { sourceKey: string; routing:TradeShowLeadRouting|null; repId: number | null; partnerAccountId:number|null; accountId: number | null; contactId: number | null; refresh: boolean };
@@ -104,6 +106,7 @@ export async function confirmTradeShowImport(client:PrismaClient,showId:number,b
   const rows=parsed.rows.map((row,index)=>applyReviewedOverrides(showId,parsed.format,row,choices[index].reviewedOverrides??{}));
   if(choices.some((choice,index)=>choice.sourceKey!==rows[index].sourceKey))throw new Error('Preview choices changed. Preview again.');
   if(rows.some((row,index)=>Object.keys(choices[index].reviewedOverrides??{}).length&&row.correctionErrors.length))throw new Error('Correct invalid reviewed values before importing.');
+  const businessDays=await tradeShowFollowUpBusinessDays(client);
   return client.$transaction(async tx=>{
     if(mapping?.id){const saved=await tx.tradeShowImportMapping.findFirst({where:{id:mapping.id,archivedAt:null},select:{name:true,mappings:true}});if(!saved||stableJson(saved.mappings)!==stableJson(mapping.definition))throw new Error('Saved mapping changed. Preview again.');mapping.name=saved.name;}
     const effective=choices.map(choice=>({routing:choice.routing??defaultRouting,repId:choice.repId??defaultRepId,partnerAccountId:choice.partnerAccountId??defaultPartnerAccountId}));
@@ -138,7 +141,8 @@ export async function confirmTradeShowImport(client:PrismaClient,showId:number,b
       const correctionsChanged=old&&stableJson(storedOverrides(old.reviewedOverrides))!==stableJson(reviewedOverrides);
       if(old){existing++;if(correctionsChanged||choice.refresh&&stableJson(old.rawSourceData)!==stableJson(rawRow.rawSourceData))await tx.tradeShowLead.update({where:{id:old.id},data:source});continue;}
       const route=effective[i];
-      await tx.tradeShowLead.create({data:{tradeShowId:showId,firstImportId:record.id,sourceFileName:filename,sourceSheet:parsed.sheet,sourceRow:row.sourceRow,...source,routing:route.routing,assignedSalesRepUserId:route.repId,routedPartnerAccountId:route.partnerAccountId,referralNotes:null,...(route.routing==='REFERRED_TO_PARTNER'?{referredAt:new Date(),referredByUserId:actor.id}:{}),accountId:choice.accountId,contactId:choice.contactId,status:'NEW'}});created++;
+      const createdLead=await tx.tradeShowLead.create({data:{tradeShowId:showId,firstImportId:record.id,sourceFileName:filename,sourceSheet:parsed.sheet,sourceRow:row.sourceRow,...source,routing:route.routing,assignedSalesRepUserId:route.repId,routedPartnerAccountId:route.partnerAccountId,referralNotes:null,...(route.routing==='REFERRED_TO_PARTNER'?{referredAt:new Date(),referredByUserId:actor.id}:{}),accountId:choice.accountId,contactId:choice.contactId,status:'NEW'}});created++;
+      if(route.routing==='BIXOLON_SALES')await syncTradeShowFollowUp(tx,null,createdLead,actor.id,new Date(),businessDays);
     }
     await tx.tradeShowImport.update({where:{id:record.id},data:{createdCount:created,existingCount:existing,skippedCount:skipped}});
     if(mapping?.id)await tx.tradeShowImportMapping.update({where:{id:mapping.id},data:{lastUsedAt:new Date()}});

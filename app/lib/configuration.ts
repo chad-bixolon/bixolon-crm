@@ -34,6 +34,7 @@ export async function restoreLabel(client: PrismaClient, key: string, actorId: n
 export const settingDefinitions = {
   STALE_ACCOUNT_WARNING_DAYS: { label: "Stale account warning (days)", defaultValue: 90, min: 1, max: 3650 },
   ACTIVITY_LOOKBACK_DAYS: { label: "Default activity lookback (days)", defaultValue: 30, min: 1, max: 365 },
+  TRADE_SHOW_FOLLOW_UP_BUSINESS_DAYS: { label: "Trade Show lead follow-up due", description: "Number of business days after assignment before the follow-up Task is due.", defaultValue: 2, min: 1, max: 30 },
 } as const;
 export type SettingKey = keyof typeof settingDefinitions;
 export function isSettingKey(value: string): value is SettingKey { return Object.hasOwn(settingDefinitions, value); }
@@ -46,5 +47,19 @@ export function parseSetting(key: string, raw: string) {
 }
 export async function getSettings(client: PrismaClient) {
   const rows = await client.systemSetting.findMany();
-  return Object.fromEntries(Object.entries(settingDefinitions).map(([key, definition]) => [key, rows.find(row => row.key === key)?.value ?? definition.defaultValue])) as Record<SettingKey, number>;
+  return Object.fromEntries(Object.entries(settingDefinitions).map(([key, definition]) => {
+    const value = rows.find(row => row.key === key)?.value;
+    return [key, Number.isSafeInteger(value) && value! >= definition.min && value! <= definition.max ? value : definition.defaultValue];
+  })) as Record<SettingKey, number>;
+}
+
+// Read before lead transactions so an unavailable setting never poisons the lead write.
+export async function tradeShowFollowUpBusinessDays(client: Pick<PrismaClient, 'systemSetting'>) {
+  const definition = settingDefinitions.TRADE_SHOW_FOLLOW_UP_BUSINESS_DAYS;
+  try {
+    const value = (await client.systemSetting.findUnique({ where: { key: 'TRADE_SHOW_FOLLOW_UP_BUSINESS_DAYS' }, select: { value: true } }))?.value;
+    return Number.isSafeInteger(value) && value! >= definition.min && value! <= definition.max ? value! : definition.defaultValue;
+  } catch {
+    return definition.defaultValue;
+  }
 }

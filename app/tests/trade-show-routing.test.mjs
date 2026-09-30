@@ -11,6 +11,7 @@ Module._extensions['.ts']=(mod,filename)=>mod._compile(ts.transpileModule(fs.rea
 const require=Module.createRequire(import.meta.url);
 const routing=require(path.join(root,'lib/trade-show-routing.ts'));
 const leads=require(path.join(root,'lib/trade-show-leads.ts'));
+const followUp=require(path.join(root,'lib/trade-show-follow-up.ts'));
 const {can}=require(path.join(root,'lib/authorization.ts'));
 const actor=(role,id=7)=>({id,role,active:true,archivedAt:null});
 const form=entries=>{const value=new FormData();for(const [key,item] of entries)value.set(key,item);return value};
@@ -44,10 +45,29 @@ test('role authorization permits managers and own-lead Sales routing but keeps R
   assert.equal(routing.canRouteTradeShowLead(actor('READ_ONLY'),{assignedSalesRepUserId:7}),false);
 });
 
+test('individual assignment and bulk routing create follow-up Tasks through their transactions',async()=>{
+  const base={id:2,tradeShowId:1,routing:'UNREVIEWED',assignedSalesRepUserId:null,referredAt:null,routedPartnerAccountId:null,convertedOpportunityId:null,accountId:null,contactId:null,competitorId:null,firstName:'Jane',lastName:'Smith',sourceCompany:'Acme',email:null,productInterest:null};
+  for(const mode of ['individual','bulk']){
+    let stored={...base,tradeShow:{archivedAt:null}},created=null;
+    const tx={
+      user:{findFirst:async()=>({id:8})},
+      tradeShow:{findUnique:async()=>({name:'NRF',archivedAt:null})},
+      tradeShowLead:{findFirst:async()=>stored,findMany:async()=>[stored],update:async({data})=>(stored={...stored,...data})},
+      task:{findFirst:async()=>null,create:async({data})=>(created={id:10,...data})},
+      taskAssignmentEvent:{create:async()=>({})},
+      account:{findFirst:async()=>null},contact:{findFirst:async()=>null},competitorOption:{findFirst:async()=>null},
+    };
+    const now=new Date();const client={systemSetting:{findUnique:async()=>({value:5})},$transaction:async callback=>callback(tx)};
+    if(mode==='individual')await leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','BIXOLON_SALES'],['assignedSalesRepUserId','8']]),actor('ADMIN'));
+    else await routing.bulkRouteTradeShowLeads(client,1,[2],'BIXOLON_SALES',8,null,null,actor('ADMIN'));
+    assert.equal(created.assignedToId,8);assert.equal(created.tradeShowLeadId,2);assert.equal(created.source,'TRADE_SHOW_LEAD_FOLLOW_UP');assert.equal(created.dueDate.toISOString(),followUp.followUpDueDate(now,5).toISOString());
+  }
+});
+
 test('Lead edit preserves a historical rep during ordinary edits and rejects new sales routing',async()=>{
   let stored={id:2,tradeShowId:1,routing:'BIXOLON_SALES',assignedSalesRepUserId:8,convertedOpportunityId:null,routedPartnerAccountId:null,accountId:null,contactId:null,competitorId:null,tradeShow:{archivedAt:null}};
   const tx={tradeShowLead:{findFirst:async()=>stored,update:async({data})=>(stored={...stored,...data})},user:{findFirst:async()=>null},account:{findFirst:async()=>null},contact:{findFirst:async()=>null},competitorOption:{findFirst:async()=>null}};
-  const client={$transaction:async callback=>callback(tx)};
+  tx.task={findFirst:async()=>null};const client={$transaction:async callback=>callback(tx)};
   await leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','BIXOLON_SALES'],['assignedSalesRepUserId','8']]),actor('ADMIN'));
   assert.equal(stored.assignedSalesRepUserId,8);
   await assert.rejects(leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','BIXOLON_SALES'],['assignedSalesRepUserId','9']]),actor('ADMIN')), /active Sales rep/);

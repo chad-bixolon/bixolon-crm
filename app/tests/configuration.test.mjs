@@ -86,6 +86,8 @@ test('sales stages validate bounds and closed/won invariants, retaining immutabl
 test('settings reject unknown keys and unsafe ranges', () => {
   assert.equal(config.parseSetting('STALE_ACCOUNT_WARNING_DAYS', '90'), 90);
   assert.throws(() => config.parseSetting('STALE_ACCOUNT_WARNING_DAYS', '0'), /1–3650/);
+  for (const days of [1, 2, 5, 30]) assert.equal(config.parseSetting('TRADE_SHOW_FOLLOW_UP_BUSINESS_DAYS', String(days)), days);
+  for (const invalid of ['0', '-1', '31', '1.5', 'abc', '']) assert.throws(() => config.parseSetting('TRADE_SHOW_FOLLOW_UP_BUSINESS_DAYS', invalid), /1–30/);
   assert.throws(() => config.parseSetting('UNSAFE', '1'), /Unknown/);
 });
 

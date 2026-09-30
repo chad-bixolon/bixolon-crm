@@ -1,5 +1,7 @@
 import { AccountBusinessRoleCode, TradeShowLeadRouting, type Prisma, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
+import { syncTradeShowFollowUp } from './trade-show-follow-up';
+import { tradeShowFollowUpBusinessDays } from './configuration';
 
 export const TRADE_SHOW_ROUTINGS = Object.values(TradeShowLeadRouting);
 export const PARTNER_ACCOUNT_ROLES: AccountBusinessRoleCode[] = ['DISTRIBUTOR','VAR','ISV','OEM','PARTNER'];
@@ -47,12 +49,13 @@ export function referralData(routing: TradeShowLeadRouting, priorRouting: TradeS
 export async function bulkRouteTradeShowLeads(client:PrismaClient,tradeShowId:number,leadIds:number[],routing:TradeShowLeadRouting,repId:number|null,partnerAccountId:number|null,notes:string|null,actor:Actor){
   if(!can(actor,'trade-shows.assign')||!can(actor,'trade-shows.route'))throw new Error('Access denied');
   const ids=[...new Set(leadIds)];if(!ids.length)throw new Error('Select at least one lead.');
+  const businessDays=await tradeShowFollowUpBusinessDays(client);
   return client.$transaction(async tx=>{
     const show=await tx.tradeShow.findUnique({where:{id:tradeShowId},select:{archivedAt:true}});if(!show||show.archivedAt)throw new Error('Trade Show not found or archived.');
-    const leads=await tx.tradeShowLead.findMany({where:{tradeShowId,id:{in:ids}},select:{id:true,routing:true,referredAt:true}});
+    const leads=await tx.tradeShowLead.findMany({where:{tradeShowId,id:{in:ids}},select:{id:true,tradeShowId:true,routing:true,assignedSalesRepUserId:true,referredAt:true,firstName:true,lastName:true,sourceCompany:true,email:true,productInterest:true,accountId:true,contactId:true}});
     if(leads.length!==ids.length)throw new Error('One or more selected leads are unavailable.');
     await validateTradeShowRouting(tx,routing,repId,partnerAccountId);
-    for(const lead of leads)await tx.tradeShowLead.update({where:{id:lead.id},data:{routing,assignedSalesRepUserId:repId,...(routing==='REFERRED_TO_PARTNER'?{routedPartnerAccountId:partnerAccountId}:{}),...referralData(routing,lead.routing,actor.id,notes,lead.referredAt)}});
+    for(const lead of leads){const updated=await tx.tradeShowLead.update({where:{id:lead.id},data:{routing,assignedSalesRepUserId:repId,...(routing==='REFERRED_TO_PARTNER'?{routedPartnerAccountId:partnerAccountId}:{}),...referralData(routing,lead.routing,actor.id,notes,lead.referredAt)}});await syncTradeShowFollowUp(tx,lead,updated,actor.id,new Date(),businessDays);}
     return leads.length;
   });
 }
