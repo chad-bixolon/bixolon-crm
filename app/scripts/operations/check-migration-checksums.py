@@ -43,12 +43,17 @@ def main(argv=None):
         'exec psql -X -qAt -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT migration_name, checksum, finished_at IS NOT NULL, rolled_back_at IS NOT NULL FROM _prisma_migrations ORDER BY started_at"'],
         cwd=ROOT, capture_output=True, text=True, check=True)
     applied = {}
+    historical = {}
     for line in result.stdout.strip().splitlines():
         name, checksum, finished, rolled_back = line.split('|')
-        if finished != 't' or rolled_back != 'f' or name in applied:
+        if (finished, rolled_back) not in {('t', 'f'), ('f', 't')} or name in historical and historical[name] != checksum:
             raise SystemExit(f'Unexpected migration history state: {name}')
-        applied[name] = checksum
-    for name, checksum in applied.items():
+        historical[name] = checksum
+        if finished == 't':
+            if name in applied:
+                raise SystemExit(f'Unexpected duplicate applied migration: {name}')
+            applied[name] = checksum
+    for name, checksum in historical.items():
         file = ROOT / 'app/prisma/migrations' / name / 'migration.sql'
         if not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != checksum:
             raise SystemExit(f'Migration checksum mismatch: {name}')
