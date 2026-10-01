@@ -113,12 +113,14 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
   const run = async (tx: Prisma.TransactionClient) => {
     const existing = id ? await tx.opportunity.findUnique({ where: { id }, include: { projects: true } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Opportunity not found or archived.');
+    const existingContacts = id && tx.opportunityContact ? await tx.opportunityContact.findMany({ where: { opportunityId: id }, select: { contactId: true } }) : [];
+    const existingContactIds = new Set(existingContacts.map(link => link.contactId));
     const existingLines = id ? await tx.opportunityProduct.findMany({ where: { opportunityId: id, archivedAt: null } }) : [];
     const [stage, currency, owner, accounts, contacts, products, projects, skus, catalogPrices, peLines, odmPrices] = await Promise.all([
       tx.salesStage.findUnique({ where: { id: input.stageId } }), tx.currency.findUnique({ where: { code: input.currencyCode } }),
       input.ownerId ? tx.user.findUnique({ where: { id: input.ownerId } }) : null,
       tx.account.findMany({ where: { id: { in: input.participants.map((p) => p.accountId) }, status: "ACTIVE", archivedAt: null }, select: { id: true } }),
-      input.contacts.length ? tx.contact.findMany({ where: { id: { in: input.contacts.map(contact => contact.contactId) }, AND: [operationalContactWhere] }, select: { id: true, accountId: true } }) : Promise.resolve([]),
+      input.contacts.length ? tx.contact.findMany({ where: { id: { in: input.contacts.map(contact => contact.contactId) } }, select: { id: true, accountId: true, active: true, archivedAt: true } }) : Promise.resolve([]),
       tx.product.findMany({ where: { id: { in: input.lines.map((l) => l.productId) }, active: true, archivedAt: null }, select: { id: true } }),
       tx.project.findMany({ where: { AND: [operationalProjectWhere], id: { in: input.projectIds } }, select: { id: true, archivedAt: true } }),
       input.lines.some(line => line.skuId) ? tx.productSku.findMany({ where: { id: { in: input.lines.flatMap(line => line.skuId ? [line.skuId] : []) } }, select: { id: true, productId: true, active: true, catalogSource: true, odmSubtype: true } }) : Promise.resolve([]),
@@ -136,7 +138,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
     if (input.ownerId && input.ownerId !== existing?.ownerId && !eligibleUser(owner, 'sales.write')) throw new Error("Choose an eligible owner.");
     if (new Set(input.projectIds).size !== input.projectIds.length || projects.length !== input.projectIds.length || projects.some(project => project.archivedAt && !existing?.projects.some(link => link.projectId === project.id))) throw new Error("Choose each active Project only once.");
     if (accounts.length !== input.participants.length) throw new Error("Choose active accounts for all participants.");
-    if (contacts.length !== input.contacts.length) throw new Error("Choose active Contacts.");
+    if (contacts.length !== input.contacts.length || contacts.some(contact => !existingContactIds.has(contact.id) && (!contact.active || contact.archivedAt))) throw new Error("Choose active Contacts.");
     const participantIds = new Set(input.participants.map(participant => participant.accountId));
     if (contacts.some(contact => contact.accountId && !participantIds.has(contact.accountId))) throw new Error("Each selected Contact must belong to a participating Account, or be unassigned.");
     if (input.contacts.filter(contact => contact.isPrimary).length > 1) throw new Error("Choose at most one Primary Contact.");
@@ -195,7 +197,6 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       for (const role of participant.roles.filter((r) => !old.includes(r))) await tx.opportunityAccountRole.create({ data: { opportunityId, accountId: participant.accountId, role } });
     }
     if (tx.opportunityContact) {
-      const existingContacts = await tx.opportunityContact.findMany({ where: { opportunityId } });
       for (const link of existingContacts.filter(link => !input.contacts.some(contact => contact.contactId === link.contactId))) await tx.opportunityContact.delete({ where: { opportunityId_contactId: { opportunityId, contactId: link.contactId } } });
       // Clear first so switching primaries cannot transiently violate the partial unique index.
       await tx.opportunityContact.updateMany({ where: { opportunityId, isPrimary: true }, data: { isPrimary: false } });

@@ -40,7 +40,7 @@ export function ActivityContactPicker({ contacts, selectedIds, onChange, account
         {accountSelected && searchActive && <p id="activityContactMatchCount" className="mb-2 text-xs text-slate-600" aria-live="polite">{matches.length === 0 ? 'No contacts match' : `${matches.length} ${matches.length === 1 ? 'contact matches' : 'contacts match'}`}</p>}
         <select className="field" aria-label="Contact search results" value={contactToAdd} onChange={event => setContactToAdd(event.target.value)} disabled={!accountSelected}>
           <option value="">{accountSelected ? searchActive ? 'Choose from filtered contacts' : 'Choose Contact' : 'Choose an Account first'}</option>
-          {available.map(contact => <option key={contact.id} value={contact.id}>{activityContactLabel(contact)}{!contact.active ? ' (inactive, linked)' : ''}</option>)}
+          {available.map(contact => <option key={contact.id} value={contact.id}>{activityContactLabel(contact)}</option>)}
         </select>
       </div>
       <button type="button" className="btn-secondary" disabled={!contactToAdd} onClick={addContact}>Add Contact</button>
@@ -48,7 +48,7 @@ export function ActivityContactPicker({ contacts, selectedIds, onChange, account
     {accountSelected && !searchActive && available.length === 0 && <p className="mt-2 text-sm text-slate-500">No matching Contacts.</p>}
     {selected.length ? <div className="mt-3 space-y-2" aria-label="Selected Contacts">{selected.map(({ id, contact }) => <div key={id} className="flex flex-wrap items-center gap-3 rounded border border-slate-200 p-3 text-sm">
       <input type="hidden" name="contactIds" value={id}/>
-      <span className="min-w-0 flex-1 break-words">{contact ? activityContactLabel(contact) : `Contact #${id} (review relationship)`}</span>
+      <span className="min-w-0 flex-1 break-words">{contact ? activityContactLabel(contact) : `Contact #${id} (review relationship)`}{contact?.archivedAt ? <span className="ml-2 text-xs text-slate-500">Archived</span> : contact && !contact.active ? <span className="ml-2 text-xs text-slate-500">Inactive</span> : null}</span>
       <button type="button" className="btn-secondary" aria-label={`Remove ${contact?.name ?? `Contact #${id}`}`} onClick={() => onChange(selectedIds.filter(selectedId => selectedId !== id))}>Remove</button>
     </div>)}</div> : <p className="mt-3 text-sm text-slate-500">No Contacts selected.</p>}
     {error && <p className="mt-2 text-sm text-red-700">{error}</p>}

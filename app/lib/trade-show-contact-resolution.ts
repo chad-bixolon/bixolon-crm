@@ -7,7 +7,7 @@ export type ResolutionLead = {
   accountId:number|null; sourceCompany?:string|null; addressLine1?:string|null; addressLine2?:string|null;
   city?:string|null; stateProvince?:string|null; postalCode?:string|null; country?:string|null;
 };
-export type ResolutionContact = {id:number;firstName:string;lastName:string;email:string|null;accountId:number|null};
+export type ResolutionContact = {id:number;firstName:string;lastName:string;email:string|null;accountId:number|null;active?:boolean};
 
 export function canManageContactResolution(actor:Actor|null|undefined) {
   return !!actor && (actor.role==='ADMIN'||actor.role==='MARKETING_MANAGER') && can(actor,'trade-shows.resolve') && can(actor,'contacts.write');

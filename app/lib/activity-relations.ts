@@ -1,5 +1,5 @@
 export type RelatedOption = { id: number; name: string; accountIds: number[]; projectIds?: number[]; opportunityIds?: number[] };
-export type ContactOption = { id: number; name: string; accountId: number | null; accountName?: string | null; email?: string | null; active: boolean };
+export type ContactOption = { id: number; name: string; accountId: number | null; accountName?: string | null; email?: string | null; active: boolean; archivedAt?: Date | null };
 
 export function activityChoices(accountId: number, originalAccountId: number, opportunities: RelatedOption[], projects: RelatedOption[], contacts: ContactOption[], historical: { opportunityId?: number; projectId?: number; contactIds: number[] }, selected: { opportunityId?: number; projectId?: number } = {}) {
   const sameAccount = accountId > 0 && accountId === originalAccountId;
@@ -7,7 +7,7 @@ export function activityChoices(accountId: number, originalAccountId: number, op
   return {
     opportunities: opportunities.filter(item => accountId > 0 && (item.accountIds.includes(accountId) || (sameAccount && item.id === historical.opportunityId)) && (!selected.projectId || item.projectIds?.includes(selected.projectId) || (historicalPair && item.id === historical.opportunityId))),
     projects: projects.filter(item => accountId > 0 && (item.accountIds.includes(accountId) || (sameAccount && item.id === historical.projectId)) && (!selected.opportunityId || item.opportunityIds?.includes(selected.opportunityId) || (historicalPair && item.id === historical.projectId))),
-    contacts: contacts.filter(item => accountId > 0 && ((item.active && (item.accountId === accountId || item.accountId === null)) || (sameAccount && historical.contactIds.includes(item.id)))),
+    contacts: contacts.filter(item => accountId > 0 && ((item.active && !item.archivedAt && (item.accountId === accountId || item.accountId === null)) || (historical.contactIds.includes(item.id) && (!item.active || !!item.archivedAt || sameAccount)))),
   };
 }
 

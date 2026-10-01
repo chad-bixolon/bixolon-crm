@@ -36,7 +36,7 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
         <div><dt className="label">Account</dt><dd className="text-sm">{task.account ? <Link className="text-orange-800" href={`/accounts/${task.accountId}`}>{task.account.name}</Link> : 'None'}</dd></div>
         <div><dt className="label">Opportunity</dt><dd className="text-sm">{task.opportunity ? <Link className="text-orange-800" href={`/opportunities/${task.opportunityId}`}>{task.opportunity.name}</Link> : 'None'}</dd></div>
         <div><dt className="label">Project</dt><dd className="text-sm">{task.project ? <Link className="text-orange-800" href={`/projects/${task.projectId}`}>{task.project.name}</Link> : 'None'}</dd></div>
-        {task.contact && <div><dt className="label">Contact</dt><dd className="text-sm"><Link className="text-orange-800" href={`/contacts/${task.contactId}`}>{task.contact.firstName} {task.contact.lastName}</Link></dd></div>}
+        {task.contact && <div><dt className="label">Contact</dt><dd className="text-sm"><Link className="text-orange-800" href={`/contacts/${task.contactId}`}>{task.contact.firstName} {task.contact.lastName}</Link>{task.contact.archivedAt ? <span className="ml-2 text-xs text-slate-500">Archived</span> : !task.contact.active && <span className="ml-2 text-xs text-slate-500">Inactive</span>}</dd></div>}
         {task.tradeShowLead && <div><dt className="label">Trade Show Lead</dt><dd className="text-sm"><Link className="text-orange-800" href={`/trade-shows/${task.tradeShowLead.tradeShowId}/leads/${task.tradeShowLeadId}`}>{task.tradeShowLead.firstName} {task.tradeShowLead.lastName} · {task.tradeShowLead.tradeShow.name}</Link></dd></div>}
       </dl>
     </section>

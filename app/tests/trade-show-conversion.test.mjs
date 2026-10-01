@@ -33,13 +33,13 @@ test('Opportunity parser supports multiple optional Contacts and one reviewed pr
   assert.match(bad.errors.contacts,/Primary Contact/);
 });
 
-function fixture({convertedOpportunityId=null,contactAccountId=10,failCreate=false}={}){
+function fixture({convertedOpportunityId=null,contactAccountId=10,contactActive=true,failCreate=false}={}){
   let converted=null,created=0,links=[];
-  const lead={id:2,tradeShowId:1,routing:'REFERRED_TO_PARTNER',routedPartnerAccountId:30,referredAt:new Date('2026-09-01'),referredByUserId:6,referralNotes:'Prior referral',assignedSalesRepUserId:7,convertedOpportunityId,accountId:10,contactId:20,tradeShow:{archivedAt:null},contact:{accountId:contactAccountId,active:true,archivedAt:null}};
+  const lead={id:2,tradeShowId:1,routing:'REFERRED_TO_PARTNER',routedPartnerAccountId:30,referredAt:new Date('2026-09-01'),referredByUserId:6,referralNotes:'Prior referral',assignedSalesRepUserId:7,convertedOpportunityId,accountId:10,contactId:20,tradeShow:{archivedAt:null},contact:{accountId:contactAccountId,active:contactActive,archivedAt:null}};
   const tx={
     $queryRaw:async()=>[],tradeShowLead:{findFirst:async()=>lead,updateMany:async({data})=>{converted=data;return{count:1};}},
     salesStage:{findUnique:async()=>({id:1,active:true,isClosed:false,isWon:false})},currency:{findUnique:async()=>({code:'USD',active:true})},user:{findUnique:async()=>({id:7,role:'SALES',active:true,archivedAt:null})},
-    account:{findMany:async()=>[{id:10}]},contact:{findMany:async()=>[{id:20,accountId:10}]},product:{findMany:async()=>[]},project:{findMany:async()=>[]},
+    account:{findMany:async()=>[{id:10}]},contact:{findMany:async()=>[{id:20,accountId:10,active:true,archivedAt:null}]},product:{findMany:async()=>[]},project:{findMany:async()=>[]},
     opportunity:{create:async()=>{if(failCreate)throw new Error('write failed');created++;return{id:55};}},
     opportunityAccount:{findMany:async()=>[],upsert:async()=>({})},opportunityAccountRole:{create:async()=>({})},
     opportunityContact:{findMany:async()=>[],delete:async()=>({}),updateMany:async()=>({count:0}),upsert:async({create})=>{links.push(create);return create;}},
@@ -66,6 +66,7 @@ test('conversion permissions, duplicate protection, Account/Contact consistency,
   assert.equal(conversion.canConvertTradeShowLead(actor('READ_ONLY'),{assignedSalesRepUserId:7}),false);
   const duplicate=fixture({convertedOpportunityId:44});await assert.rejects(conversion.convertTradeShowLead(duplicate.client,1,2,input,actor('SALES')),/already been converted/);assert.equal(duplicate.created,0);
   await assert.rejects(conversion.convertTradeShowLead(fixture({contactAccountId:11}).client,1,2,input,actor('SALES')),/different Account/);
+  await assert.rejects(conversion.convertTradeShowLead(fixture({contactActive:false}).client,1,2,input,actor('SALES')),/active Contact/);
   const failed=fixture({failCreate:true});await assert.rejects(conversion.convertTradeShowLead(failed.client,1,2,input,actor('SALES')),/write failed/);assert.equal(failed.converted,null);
 });
 

@@ -1,4 +1,4 @@
-import { operationalProjectWhere, operationalContactWhere, operationalAccountWhere } from './operational-where';
+import { operationalProjectWhere, operationalAccountWhere } from './operational-where';
 import { operationalOpportunityWhere, operationalTaskWhere } from './operational-where';
 import { ActivityDirection, Prisma, TaskPriority, TaskStatus, type PrismaClient } from '@prisma/client';
 import { field, optional, positiveId, required, type Errors } from './crm-validation';
@@ -155,15 +155,17 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
     if (value.userId && value.userId !== existing?.userId && !(await tx.user.findFirst({ where: { id: value.userId, ...eligibleUserWhere('tasks.write') } }))) throw new Error('Choose an eligible responsible user.');
     const { contactIds: suppliedContactIds, createFollowUpTask, followUpTaskCreateKey, ...data } = value;
     const contactIds = suppliedContactIds ?? [];
+    const linked = id && tx.activityContact ? await tx.activityContact.findMany({ where: { activityId: id }, select: { contactId: true } }) : [];
+    const linkedIds = new Set(linked.map(link => link.contactId));
     if (contactIds.length) {
-      const contacts = await tx.contact.findMany({ where: { id: { in: contactIds }, AND: [operationalContactWhere] }, select: { id: true, accountId: true, active: true } });
-      const linked = id ? await tx.activityContact.findMany({ where: { activityId: id }, select: { contactId: true } }) : [];
+      const contacts = await tx.contact.findMany({ where: { id: { in: contactIds } }, select: { id: true, accountId: true, active: true, archivedAt: true } });
       if (contacts.length !== contactIds.length || contacts.some(c => {
-        const alreadyLinked = linked.some(l => l.contactId === c.id);
-        return (!alreadyLinked || accountChanged) && (!c.active || (c.accountId !== null && c.accountId !== value.accountId));
+        return !linkedIds.has(c.id) && (!c.active || c.archivedAt || (c.accountId !== null && c.accountId !== value.accountId));
       })) throw new Error('This Contact is not associated with the selected Account. Choose an active Contact at this Account or an unassigned Contact.');
     }
     const row = id ? await tx.activity.update({ where: { id }, data }) : await tx.activity.create({ data });
+    const removedContactIds = linked.filter(link => !contactIds.includes(link.contactId)).map(link => link.contactId);
+    if (removedContactIds.length) await tx.activityContact.deleteMany({ where: { activityId: row.id, contactId: { in: removedContactIds } } });
     for (const contactId of contactIds) await tx.activityContact.createMany({ data: [{ activityId: row.id, contactId }], skipDuplicates: true });
     if (!id && createFollowUpTask) {
       if (!value.followUpDate) throw new Error('Choose a valid Follow-Up Date to create a Task.');

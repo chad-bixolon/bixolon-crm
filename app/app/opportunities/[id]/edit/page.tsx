@@ -26,5 +26,6 @@ export default async function EditOpportunityPage({ params }: { params: Promise<
     options.accounts.push(...linkedAccounts.map(account => ({ ...account, name: `${account.name} (inactive)` })));
   }
   const initial = serializeOpportunityForForm(opportunity, actor);
-  return <Content><PageHeader eyebrow="Opportunities" title={`Edit ${opportunity.name}`}/>{opportunity.archivedAt ? <div className="panel p-6">Reactivate this opportunity before editing it.</div> : <OpportunityForm key={id} id={id} userId={actor.id} initial={initial} {...options} owners={actor.role === 'SALES' ? options.owners.filter(owner => owner.id === actor.id) : options.owners} currentOwner={opportunity.owner} labels={labels}/>}</Content>;
+  const linkedContacts = opportunity.contacts.length ? await prisma.contact.findMany({ where: { id: { in: opportunity.contacts.map(link => link.contactId) } }, select: { id: true, firstName: true, lastName: true, email: true, accountId: true, active: true, archivedAt: true } }) : [];
+  return <Content><PageHeader eyebrow="Opportunities" title={`Edit ${opportunity.name}`}/>{opportunity.archivedAt ? <div className="panel p-6">Reactivate this opportunity before editing it.</div> : <OpportunityForm key={id} id={id} userId={actor.id} initial={initial} {...options} linkedContacts={linkedContacts} owners={actor.role === 'SALES' ? options.owners.filter(owner => owner.id === actor.id) : options.owners} currentOwner={opportunity.owner} labels={labels}/>}</Content>;
 }

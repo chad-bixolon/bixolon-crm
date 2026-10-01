@@ -98,7 +98,7 @@ test('Activity choices follow Account opportunity, Project, and Contact relation
  assert.ok(historical.opportunities.some(x=>x.id===12));
  assert.ok(historical.projects.some(x=>x.id===23));
  assert.ok(historical.contacts.some(x=>x.id===33));
- assert.ok(!activityRelations.activityChoices(2,1,opportunities,projects,contacts,{contactIds:[33]}).contacts.some(x=>x.id===33));
+ assert.ok(activityRelations.activityChoices(2,1,opportunities,projects,contacts,{contactIds:[33]}).contacts.some(x=>x.id===33));
 });
 test('Activity Contact picker searches eligible people by name, email, and company and labels each Account',()=>{
  const contacts=[
@@ -118,13 +118,14 @@ test('Activity Contact picker searches eligible people by name, email, and compa
  assert.deepEqual(activityContactPicker.searchActivityContacts(eligible,'',selected),[]);
  assert.deepEqual(selected.map(id=>activityContactPicker.activityContactLabel(eligible.find(contact=>contact.id===id))),['Chris Filippi — 7-Eleven','Sam Baskar — No Account']);
 });
-test('Activity Contact picker retains linked history only for the original Account',()=>{
+test('Activity Contact picker retains inactive linked history across Account changes without offering it as a new choice',()=>{
  const contacts=[{id:30,name:'Historical Person',email:'history@example.com',accountId:2,accountName:'Former Company',active:false}];
  const history={contactIds:[30]};
  const original=activityRelations.activityChoices(1,1,[],[],contacts,history).contacts;
- assert.deepEqual(activityContactPicker.searchActivityContacts(original,'Former Company',[]).map(contact=>contact.id),[30]);
+ assert.deepEqual(activityContactPicker.searchActivityContacts(original,'Former Company',[]).map(contact=>contact.id),[]);
  assert.deepEqual(activityRelations.retainedActivitySelections(1,1,[],[],contacts,history,{opportunityId:0,projectId:0,contactIds:[30]}).contactIds,[30]);
- assert.deepEqual(activityRelations.retainedActivitySelections(2,1,[],[],contacts,history,{opportunityId:0,projectId:0,contactIds:[30]}).contactIds,[]);
+ assert.deepEqual(activityRelations.retainedActivitySelections(2,1,[],[],contacts,history,{opportunityId:0,projectId:0,contactIds:[30]}).contactIds,[30]);
+ assert.deepEqual(activityContactPicker.searchActivityContacts(activityRelations.activityChoices(2,1,[],[],contacts,history).contacts,'',[]),[]);
 });
 test('Activity choices narrow in both directions and keep only compatible selections',()=>{
  const opportunities=[{id:10,name:'One',accountIds:[1,2],projectIds:[20]},{id:11,name:'Two',accountIds:[1],projectIds:[21]},{id:12,name:'Other account',accountIds:[2],projectIds:[20]}];
