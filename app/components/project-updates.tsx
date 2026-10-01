@@ -1,5 +1,5 @@
 'use client';
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { submitProjectUpdate } from '@/app/project-update-actions';
 import type { UpdateContext } from '@/lib/project-updates';
 
@@ -24,9 +24,13 @@ function UpdateForm({ context, update, options }: { context: UpdateContext; upda
 }
 
 export function ProjectUpdates({ context, rows, options, editable, editableIds }: { context: UpdateContext; rows: Row[]; options: Option[]; editable: boolean; editableIds: number[] }) {
-  return <section className="panel p-6" aria-label="Project Updates">
-    <h2 className="text-lg font-semibold">Project Updates ({rows.length})</h2>
-    {editable && <details className="mt-4 text-sm"><summary className="btn-primary inline-block cursor-pointer">Add update</summary><UpdateForm context={context} options={options}/></details>}
+  const [adding, setAdding] = useState(false);
+  return <section className="panel min-w-0 p-6" aria-label="Project Updates">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <h2 className="text-lg font-semibold">Project Updates ({rows.length})</h2>
+      {editable && <button className="btn-primary" type="button" aria-expanded={adding} onClick={() => setAdding(open => !open)}>Add update</button>}
+    </div>
+    {editable && adding && <div className="text-sm"><UpdateForm context={context} options={options}/></div>}
     {rows.length ? <ul className="mt-4 divide-y">{rows.map(row => <li key={row.id} className="py-4"><p className="whitespace-pre-wrap text-sm">{row.body}</p><p className="mt-2 text-xs text-slate-500">{row.createdBy.firstName} {row.createdBy.lastName} · {row.createdAt.toISOString().slice(0, 10)}{row.updatedAt.getTime() !== row.createdAt.getTime() ? ' · edited' : ''}</p>{editableIds.includes(row.id) && <details className="mt-2 text-sm"><summary className="cursor-pointer text-orange-800">Edit update</summary><UpdateForm context={context} update={row} options={options}/></details>}</li>)}</ul> : <p className="mt-4 text-sm text-slate-500">No Project Updates yet.</p>}
   </section>;
 }
