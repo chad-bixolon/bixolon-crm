@@ -22,7 +22,7 @@ export function coverage(amount: Prisma.Decimal, target: Prisma.Decimal | null) 
 }
 
 type Target = { targetAmount: Prisma.Decimal } | null;
-type TeamUser = { id: number; role: UserRole };
+type TeamUser = { id: number; role: UserRole; active?: boolean; archivedAt?: Date | null };
 
 // A Sales target is required for SALES; a SALES_MANAGER opts into quota by
 // having an active target for this exact period and currency.
@@ -78,17 +78,32 @@ export async function forecastForRep(client: PrismaClient, actor: Actor, input: 
 // calculated from the summed amounts and target, never from rep ratios.
 export async function forecastForTeam(client: PrismaClient, actor: Actor, input: { users: TeamUser[]; year: number; quarter: SalesQuarter; currencyCode: string }) {
   if (!can(actor, 'sales.read') || actor.role === 'SALES') throw new Error('Access denied');
-  const users = [...new Map(input.users.map(user => [user.id, user])).values()];
+  const users = [...new Map(input.users.filter(user=>user.active!==false&&!user.archivedAt&&['SALES','SALES_MANAGER'].includes(user.role)).map(user => [user.id, user])).values()];
   const participants = await getQuotaParticipants(client, users, { year: input.year, quarter: input.quarter, currencyCode: input.currencyCode });
-  const reps = await Promise.all(participants.map(async user => ({
-    ...await forecastForRepWithTarget(client, actor, { ...input, userId: user.id }, user.target),
-    targetStatus: user.targetStatus,
-  })));
-  const sum = (key: 'pipeline' | 'weightedPipeline' | 'commit' | 'target') => reps.reduce((amount, rep) => amount.add(rep[key] ?? 0), new Prisma.Decimal(0));
-  const pipeline = sum('pipeline'), weightedPipeline = sum('weightedPipeline'), commit = sum('commit'), target = sum('target');
+  const { start, endExclusive } = quarterBounds(input.year, input.quarter);
+  const rows = users.length ? await client.opportunity.findMany({ where: { AND: [operationalOpportunityWhere, opportunityScope(actor), { ownerId: { in: users.map(user => user.id) }, stage: { isClosed: false }, forecastCategory: { in: [ForecastCategory.PIPELINE, ForecastCategory.BEST_CASE, ForecastCategory.COMMIT] }, currencyCode: input.currencyCode, expectedCloseDate: { gte: start, lt: endExclusive } }] }, select: { ownerId: true, forecastCategory: true, probability: true, stage: { select: { probability: true } }, products: { where: { archivedAt: null }, select: { quantity: true, estimatedUnitPrice: true } } } }) : [];
+  const byOwner = new Map<number, typeof rows>();
+  for (const row of rows) { const owned = byOwner.get(row.ownerId!) ?? []; owned.push(row); byOwner.set(row.ownerId!, owned); }
+  const quota = new Map(participants.map(user => [user.id, user]));
+  const reps = users.map(user => {
+    const targetEntry = quota.get(user.id), target = targetEntry?.target?.targetAmount ?? null;
+    let pipeline = new Prisma.Decimal(0), weightedPipeline = new Prisma.Decimal(0), bestCase = new Prisma.Decimal(0), commit = new Prisma.Decimal(0);
+    const opportunities = byOwner.get(user.id) ?? [];
+    for (const row of opportunities) {
+      const value = opportunityTotal(row.products);
+      pipeline = pipeline.add(value);
+      weightedPipeline = weightedPipeline.add(weightedValue(value, row.probability ?? row.stage.probability));
+      if (row.forecastCategory === ForecastCategory.BEST_CASE) bestCase = bestCase.add(value);
+      if (row.forecastCategory === ForecastCategory.COMMIT) commit = commit.add(value);
+    }
+    return { userId: user.id, year: input.year, quarter: input.quarter, currencyCode: input.currencyCode, periodStart: start.toISOString().slice(0,10), periodEnd: new Date(endExclusive.getTime()-86400000).toISOString().slice(0,10), target: target?.toFixed(2) ?? null, targetStatus: targetEntry?.targetStatus ?? 'NON_QUOTA' as const, pipeline: pipeline.toFixed(2), weightedPipeline: weightedPipeline.toFixed(2), bestCase: bestCase.toFixed(2), commit: commit.toFixed(2), pipelineCoverage: coverage(pipeline,target), weightedCoverage: coverage(weightedPipeline,target), commitCoverage: coverage(commit,target), opportunityCount: opportunities.length, commitCount: opportunities.filter(row=>row.forecastCategory===ForecastCategory.COMMIT).length, bestCaseCount: opportunities.filter(row=>row.forecastCategory===ForecastCategory.BEST_CASE).length, commitGap: target?.sub(commit).toFixed(2) ?? null, weightedGap: target?.sub(weightedPipeline).toFixed(2) ?? null };
+  });
+  const sum = (key: 'pipeline' | 'weightedPipeline' | 'bestCase' | 'commit') => reps.reduce((amount, rep) => amount.add(rep[key]), new Prisma.Decimal(0));
+  const pipeline = sum('pipeline'), weightedPipeline = sum('weightedPipeline'), bestCase = sum('bestCase'), commit = sum('commit');
+  const target = participants.reduce((amount, rep) => amount.add(rep.target?.targetAmount ?? 0), new Prisma.Decimal(0));
   const hasTarget = reps.some(rep => rep.target !== null), missingSalesTarget = reps.some(rep => rep.targetStatus === 'MISSING_TARGET');
   const coverageTarget = !missingSalesTarget && hasTarget ? target : null;
-  return { ...input, pipeline: pipeline.toFixed(2), weightedPipeline: weightedPipeline.toFixed(2), commit: commit.toFixed(2), target: hasTarget ? target.toFixed(2) : null,
+  return { ...input, pipeline: pipeline.toFixed(2), weightedPipeline: weightedPipeline.toFixed(2), bestCase: bestCase.toFixed(2), commit: commit.toFixed(2), target: hasTarget ? target.toFixed(2) : null,
     targetStatus: missingSalesTarget ? 'PARTIAL_TARGET' as const : !hasTarget ? 'NO_TARGET' as const : target.isZero() ? 'ZERO_TARGET' as const : 'SET' as const,
-    pipelineCoverage: coverage(pipeline, coverageTarget), weightedCoverage: coverage(weightedPipeline, coverageTarget), commitCoverage: coverage(commit, coverageTarget), reps };
+    pipelineCoverage: coverage(pipeline, coverageTarget), weightedCoverage: coverage(weightedPipeline, coverageTarget), commitCoverage: coverage(commit, coverageTarget), targetConfigured: participants.filter(rep=>rep.targetStatus==='SET'||rep.targetStatus==='ZERO_TARGET').length, targetRequired: participants.length, missingTargetCount: participants.filter(rep=>rep.targetStatus==='MISSING_TARGET').length, reps };
 }

@@ -49,7 +49,7 @@ test('team forecast sums rep values and target before calculating coverage, by c
   const targets = { 7: { USD: '1000000', EUR: '200' }, 8: { USD: '500000', EUR: '300' } };
   const client = {
     salesTarget: { findMany: async ({ where }) => where.userId.in.map(userId => ({ userId, targetAmount: new Prisma.Decimal(targets[userId][where.currencyCode]) })) },
-    opportunity: { findMany: async ({ where }) => { const f = where.AND[1]; observed.push(f); return rows[f.ownerId][f.currencyCode].map(item => ({ forecastCategory: item.forecastCategory, probability: item.probability, stage: { probability: 50 }, products: [{ quantity: 1, estimatedUnitPrice: new Prisma.Decimal(item.amount) }] })); } },
+    opportunity: { findMany: async ({ where }) => { const f = where.AND[2]; observed.push(f); return f.ownerId.in.flatMap(ownerId => rows[ownerId][f.currencyCode].map(item => ({ ownerId, forecastCategory: item.forecastCategory, probability: item.probability, stage: { probability: 50 }, products: [{ quantity: 1, estimatedUnitPrice: new Prisma.Decimal(item.amount) }] }))); } },
   };
   const input = { users: [{ id: 7, role: 'SALES' }, { id: 8, role: 'SALES' }], year: 2026, quarter: 'Q3' };
   const usd = await forecastForTeam(client, actor('SALES_MANAGER'), { ...input, currencyCode: 'USD' });
@@ -57,9 +57,28 @@ test('team forecast sums rep values and target before calculating coverage, by c
   assert.deepEqual([usd.pipelineCoverage,usd.weightedCoverage,usd.commitCoverage], ['2.33','1.33','0.33']);
   const eur = await forecastForTeam(client, actor('SALES_MANAGER'), { ...input, currencyCode: 'EUR' });
   assert.deepEqual([eur.pipeline,eur.commit,eur.target,eur.pipelineCoverage], ['100.00','100.00','500.00','0.20']);
+  assert.equal(observed.length,2,'one Opportunity query per team/currency');
   assert.ok(observed.every(f => f.expectedCloseDate.gte.toISOString().startsWith('2026-07-01') && f.expectedCloseDate.lt.toISOString().startsWith('2026-10-01')));
   assert.ok(observed.every(f => f.forecastCategory.in.join(',') === 'PIPELINE,BEST_CASE,COMMIT'));
   await assert.rejects(forecastForTeam(client, actor('SALES'), { ...input, currencyCode: 'USD' }), /Access denied/);
+});
+
+test('team forecast excludes inactive users but includes untargeted active manager amounts and Best Case once',async()=>{
+  let ownerIds, whereSeen;
+  const client={salesTarget:{findMany:async()=>[{userId:7,targetAmount:new Prisma.Decimal(100)}]},opportunity:{findMany:async({where})=>{
+    whereSeen=where;
+    ownerIds=where.AND[2].ownerId.in;
+    return [{ownerId:7,forecastCategory:ForecastCategory.BEST_CASE,probability:null,stage:{probability:50},products:[{quantity:1,estimatedUnitPrice:new Prisma.Decimal(40)}]},{ownerId:8,forecastCategory:ForecastCategory.COMMIT,probability:100,stage:{probability:50},products:[{quantity:1,estimatedUnitPrice:new Prisma.Decimal(60)}]}];
+  }}};
+  const result=await forecastForTeam(client,actor('ADMIN'),{users:[{id:7,role:'SALES',active:true},{id:8,role:'SALES_MANAGER',active:true},{id:9,role:'SALES',active:false},{id:10,role:'SALES',archivedAt:new Date()}],year:2026,quarter:'Q4',currencyCode:'USD'});
+  assert.deepEqual(ownerIds,[7,8]);
+  assert.equal(whereSeen.AND[0].archivedAt,null);
+  assert.equal(whereSeen.AND[2].stage.isClosed,false);
+  assert.equal(result.pipeline,'100.00');
+  assert.equal(result.bestCase,'40.00');
+  assert.equal(result.commit,'60.00');
+  assert.equal(result.reps.find(rep=>rep.userId===8).targetStatus,'NON_QUOTA');
+  assert.equal(result.reps.find(rep=>rep.userId===7).commitGap,'100.00');
 });
 
 test('missing team target keeps partial amount but does not produce misleading coverage', async () => {
@@ -87,19 +106,16 @@ test('target participation separates Sales requirements from manager visibility'
       },
       findFirst: async ({ where }) => amounts.has(where.userId) ? { targetAmount: new Prisma.Decimal(amounts.get(where.userId)) } : null,
     },
-    opportunity: { findMany: async ({ where }) => {
-      const ownerId = where.AND[1].ownerId;
-      return [{ forecastCategory: ForecastCategory.PIPELINE, probability: 50, stage: { probability: 50 }, products: [{ quantity: 1, estimatedUnitPrice: new Prisma.Decimal(pipelines.get(ownerId)) }] }];
-    } },
+    opportunity: { findMany: async ({ where }) => (where.AND[2]?.ownerId?.in??[where.AND[1].ownerId]).map(ownerId => ({ ownerId, forecastCategory: ForecastCategory.PIPELINE, probability: 50, stage: { probability: 50 }, products: [{ quantity: 1, estimatedUnitPrice: new Prisma.Decimal(pipelines.get(ownerId)) }] })) },
   };
   const input = { users, year: 2026, quarter: 'Q3', currencyCode: 'USD' };
   const result = await forecastForTeam(client, actor('SALES_MANAGER', 10), input);
-  assert.deepEqual(result.reps.map(rep => [rep.userId, rep.targetStatus]), [[7, 'SET'], [8, 'SET'], [9, 'SET']]);
+  assert.deepEqual(result.reps.map(rep => [rep.userId, rep.targetStatus]), [[7, 'SET'], [8, 'SET'], [9, 'SET'], [10, 'NON_QUOTA']]);
   assert.equal(result.target, '2250000.00');
-  assert.equal(result.pipeline, '4500000.00');
-  assert.equal(result.weightedPipeline, '2250000.00');
-  assert.equal(result.pipelineCoverage, '2.00');
-  assert.equal(result.weightedCoverage, '1.00');
+  assert.equal(result.pipeline, '8500000.00');
+  assert.equal(result.weightedPipeline, '4250000.00');
+  assert.equal(result.pipelineCoverage, '3.78');
+  assert.equal(result.weightedCoverage, '1.89');
   assert.equal(result.targetStatus, 'SET');
   assert.deepEqual(targetQueries[0].userId.in, [7,8,9,10]);
   assert.deepEqual([targetQueries[0].year, targetQueries[0].quarter, targetQueries[0].currencyCode, targetQueries[0].archivedAt], [2026, 'Q3', 'USD', null]);
@@ -114,7 +130,7 @@ test('target participation separates Sales requirements from manager visibility'
   amounts.delete(8);
   const missing = await forecastForTeam(client, actor('ADMIN'), input);
   assert.equal(missing.target, '1750000.00');
-  assert.equal(missing.pipeline, '4500000.00');
+  assert.equal(missing.pipeline, '8500000.00');
   assert.equal(missing.targetStatus, 'PARTIAL_TARGET');
   assert.deepEqual([missing.pipelineCoverage, missing.weightedCoverage, missing.commitCoverage], [null, null, null]);
   const blaise = missing.reps.find(rep => rep.userId === 8);
@@ -122,7 +138,7 @@ test('target participation separates Sales requirements from manager visibility'
   assert.equal(blaise.pipeline, '500000.00');
   assert.equal(blaise.target, null);
   assert.equal(blaise.pipelineCoverage, null);
-  assert.ok(!missing.reps.some(rep => rep.userId === 10));
+  assert.equal(missing.reps.find(rep => rep.userId === 10).targetStatus,'NON_QUOTA');
 });
 
 test('SalesTarget lookup accepts only period and eligible IDs for Mark, Gary, and Ryan', async () => {
@@ -139,8 +155,7 @@ test('SalesTarget lookup accepts only period and eligible IDs for Mark, Gary, an
     opportunity: { findMany: async () => [] },
   };
   const result = await forecastForTeam(client, actor('ADMIN'), { users, year: 2026, quarter: 'Q3', currencyCode: 'USD' });
-  assert.deepEqual(result.reps.map(rep => [rep.userId, rep.targetStatus]), [[11, 'MISSING_TARGET'], [12, 'SET']]);
-  assert.equal(result.reps.some(rep => rep.userId === 13), false);
+  assert.deepEqual(result.reps.map(rep => [rep.userId, rep.targetStatus]), [[11, 'MISSING_TARGET'], [12, 'SET'], [13, 'NON_QUOTA']]);
   assert.equal(result.target, '100.00');
   assert.equal(result.targetStatus, 'PARTIAL_TARGET');
   assert.equal(result.pipelineCoverage, null);

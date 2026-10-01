@@ -9,7 +9,7 @@ import { canViewSalesLeadQueue } from './trade-show-leads';
 export type DashboardSection = 'forecast' | 'reps' | 'closing' | 'stage' | 'category' | 'stale' | 'tasks' | 'activities' | 'tradeShowLeads' | 'admin' | 'marketing';
 export type DashboardView = { title: string; sections: readonly DashboardSection[] };
 
-export const dashboardWidgetKeys = ['FORECAST_SUMMARY','PIPELINE_BY_REP','PIPELINE_BY_STAGE','PIPELINE_BY_PRODUCT_CATEGORY','CLOSING_OPPORTUNITIES','STALE_ACCOUNTS','OVERDUE_TASKS','RECENT_ACTIVITY','MY_TRADE_SHOW_LEADS','MARKETING_SUMMARY','ADMIN_SHORTCUTS'] as const;
+export const dashboardWidgetKeys = ['FORECAST_SUMMARY','FORECAST_ATTENTION','PIPELINE_BY_REP','PIPELINE_BY_STAGE','PIPELINE_BY_PRODUCT_CATEGORY','CLOSING_OPPORTUNITIES','STALE_ACCOUNTS','OVERDUE_TASKS','RECENT_ACTIVITY','MY_TRADE_SHOW_LEADS','MARKETING_SUMMARY','ADMIN_SHORTCUTS'] as const;
 export type DashboardWidgetKey = typeof dashboardWidgetKeys[number];
 export type DashboardWidgetSize = 'HALF'|'FULL';
 export type SavedReportWidgetStyle = 'KPI'|'COMPACT_TABLE'|'GROUPED_SUMMARY';
@@ -31,6 +31,7 @@ export type DashboardLayoutConfiguration = { version:1; items:DashboardLayoutIte
 type WidgetDefinition = { title:string; description:string; sizes:readonly DashboardWidgetSize[]; defaultSize:DashboardWidgetSize; hideable:boolean; section:DashboardSection; presentationSection:Exclude<DashboardPresentationSection,'PINNED_REPORTS'>; roles:readonly UserRole[]; drillDown?:string };
 export const dashboardWidgetRegistry: Record<DashboardWidgetKey,WidgetDefinition> = {
   FORECAST_SUMMARY:{title:'Forecast Summary',description:'Pipeline, commit, targets, and coverage for the current quarter.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'forecast',presentationSection:'FORECAST',roles:['ADMIN','SALES_MANAGER','SALES','READ_ONLY'],drillDown:'/reports/forecast'},
+  FORECAST_ATTENTION:{title:'Forecast Attention',description:'Open Opportunities needing forecast follow-up.',sizes:['HALF','FULL'],defaultSize:'FULL',hideable:true,section:'forecast',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES','READ_ONLY'],drillDown:'/reports/forecast?attention=1'},
   PIPELINE_BY_REP:{title:'Sales Rep Forecast',description:'Team pipeline and forecast grouped by Sales Rep.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'reps',presentationSection:'PIPELINE',roles:['ADMIN','SALES_MANAGER','READ_ONLY']},
   PIPELINE_BY_STAGE:{title:'Pipeline by Stage',description:'Current-quarter pipeline grouped by stage.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'stage',presentationSection:'PIPELINE',roles:['ADMIN','SALES_MANAGER','SALES','READ_ONLY']},
   PIPELINE_BY_PRODUCT_CATEGORY:{title:'Pipeline by Product Category',description:'Current-quarter pipeline grouped by Product Category.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'category',presentationSection:'PIPELINE',roles:['ADMIN','SALES_MANAGER','READ_ONLY']},
@@ -59,10 +60,10 @@ const views: Record<UserRole, DashboardView> = {
 
 const item=(key:DashboardWidgetKey,size?:DashboardWidgetSize):DashboardBuiltinItem=>({kind:'BUILTIN',key,size:size??dashboardWidgetRegistry[key].defaultSize});
 export const systemDashboardDefaults: Record<UserRole,DashboardLayoutConfiguration> = {
-  SALES:{version:1,items:[item('FORECAST_SUMMARY'),item('PIPELINE_BY_STAGE'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('MY_TRADE_SHOW_LEADS')]},
-  SALES_MANAGER:{version:1,items:[item('FORECAST_SUMMARY'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY')]},
-  ADMIN:{version:1,items:[item('FORECAST_SUMMARY'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('ADMIN_SHORTCUTS')]},
-  READ_ONLY:{version:1,items:[item('FORECAST_SUMMARY'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES')]},
+  SALES:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('PIPELINE_BY_STAGE'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('MY_TRADE_SHOW_LEADS')]},
+  SALES_MANAGER:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY')]},
+  ADMIN:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('ADMIN_SHORTCUTS')]},
+  READ_ONLY:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES')]},
   MARKETING_MANAGER:{version:1,items:[item('MARKETING_SUMMARY'),item('OVERDUE_TASKS')]},
 };
 
