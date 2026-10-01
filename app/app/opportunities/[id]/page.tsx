@@ -19,6 +19,8 @@ import { demoSummary } from "@/lib/demo-operations";
 import { demoLabel } from "@/lib/demos";
 import { can } from "@/lib/authorization";
 import { linkDemoFromOpportunity, updateDemoContext } from "@/app/demos/actions";
+import { ProjectUpdates } from "@/components/project-updates";
+import { canEditProject, projectReadWhere } from "@/lib/projects";
 export const dynamic = "force-dynamic";
 export default async function OpportunityPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tasksView?: string; activitiesView?: string; notesView?: string; documentsView?: string; saved?: string }> }) {
   const id = Number((await params).id); if (!Number.isSafeInteger(id) || id <= 0) notFound();
@@ -29,6 +31,10 @@ export default async function OpportunityPage({ params, searchParams }: { params
   const outstandingDemoUnits = demos.reduce((total, demo) => total + demoSummary(demo).outstanding, 0);
   const demoEditable = can(actor, 'sales.write') && !o.archivedAt && (actor.role !== 'SALES' || o.ownerId === actor.id);
   const demoOptions = demoEditable ? await prisma.demoRequest.findMany({ where: { accountId: { in: o.participants.map(participant => participant.accountId) }, opportunityId: null, ...(actor.role === 'SALES' ? { requestedById: actor.id } : {}) }, select: { id: true, demoNumber: true, sourceRequestId: true, account: { select: { name: true } } }, orderBy: [{ requestedAt: 'desc' }, { id: 'desc' }], take: 100 }) : [];
+  const updates = await prisma.projectUpdate.findMany({ where: { opportunityId: id }, include: { createdBy: { select: { firstName: true, lastName: true } } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
+  const updateProjects = demoEditable && can(actor, 'projects.write') ? await prisma.project.findMany({ where: { AND: [projectReadWhere(actor), { opportunities: { some: { opportunityId: id } }, archivedAt: null }] }, select: { id: true, name: true, ownerId: true, primaryAccount: { select: { ownerId: true } } }, orderBy: { name: 'asc' } }) : [];
+  const eligibleUpdateProjects = updateProjects.filter(project => canEditProject(actor, project));
+  const editableUpdateIds = demoEditable ? updates.filter(update => !update.projectId || eligibleUpdateProjects.some(project => project.id === update.projectId)).map(update => update.id) : [];
   const partyLabels = opportunityPartyLabels(await getLabels(prisma));
   const lastActivity = await prisma.activity.findFirst({where:{opportunityId:id,archivedAt:null},orderBy:[{activityDate:'desc'},{id:'desc'}],select:{activityDate:true}});
   const total = opportunityTotal(o.products), probability = o.probability ?? o.stage.probability;
@@ -46,6 +52,7 @@ export default async function OpportunityPage({ params, searchParams }: { params
       <section className="panel min-w-0 p-6"><h2 className="mb-4 text-lg font-semibold">Opportunity Contacts ({o.contacts.length})</h2>{o.contacts.length ? <ul className="divide-y">{o.contacts.map(link => <li className="flex flex-wrap gap-3 py-3 text-sm" key={link.contactId}><Link className="text-orange-800" href={`/contacts/${link.contactId}`}>{link.contact.firstName} {link.contact.lastName}</Link>{link.isPrimary && <span className="rounded bg-orange-50 px-2 text-xs text-orange-900">Primary</span>}{link.contact.archivedAt ? <span className="text-xs text-slate-500">Archived</span> : !link.contact.active && <span className="text-xs text-slate-500">Inactive</span>}<span className="text-slate-600">{link.contact.account?.name ?? 'Unassigned'}</span></li>)}</ul> : <p className="text-sm text-slate-500">No contacts linked.</p>}</section>
       <section className="panel min-w-0 p-6"><h2 className="mb-4 text-lg font-semibold">Demos ({demos.length})</h2>{o.stage.isClosed && outstandingDemoUnits > 0 && <p className="mb-3 rounded bg-amber-50 p-3 text-sm text-amber-900">Demo equipment still outstanding: {outstandingDemoUnits} unit{outstandingDemoUnits === 1 ? "" : "s"}. Review returns in the linked Demo.</p>}<DemoList rows={demos} empty="No demos linked." compact/>{demoEditable && <><div className="mt-4 space-y-2">{demos.filter(demo => actor.role !== 'SALES' || demo.requestedById === actor.id).map(demo => <form key={demo.id} action={updateDemoContext.bind(null, demo.id)}><input type="hidden" name="projectId" value={demo.project?.id ?? ''}/><button className="text-sm text-orange-800 underline">Unlink {demoLabel(demo)} from Opportunity</button></form>)}</div>{demoOptions.length > 0 && <form className="mt-4 flex flex-wrap gap-2" action={linkDemoFromOpportunity.bind(null, id)}><select className="field" name="demoId" required><option value="">Choose an existing Demo</option>{demoOptions.map(demo => <option key={demo.id} value={demo.id}>{demoLabel(demo)} · {demo.account.name}</option>)}</select><button className="btn-secondary">Link Demo</button></form>}</>}</section>
       <DocumentsSection parentType="opportunity" parentId={id} actor={actor} view={workViews.documentsView} basePath={`/opportunities/${id}`} compact/>
+      <ProjectUpdates context={{ kind: 'opportunity', id }} rows={updates} options={eligibleUpdateProjects.map(project => ({ id: project.id, name: project.name }))} editable={demoEditable} editableIds={editableUpdateIds}/>
       <RelatedWork opportunityId={id} kind="tasks" visibility={workViews.tasksView}/>
       <RelatedWork opportunityId={id} kind="activities" visibility={workViews.activitiesView}/>
       <RelatedWork opportunityId={id} kind="notes" visibility={workViews.notesView}/>
