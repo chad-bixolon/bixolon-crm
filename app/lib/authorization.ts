@@ -30,7 +30,7 @@ export function permissionForPath(path: string): Permission | null {
   return null;
 }
 export function routeAccess(path: string, actor: Actor | null): 'sign-in' | 'denied' | 'allowed' {
-  if (path === '/sign-in' || path === '/access-denied' || path === '/brand/bixolon-logo.png' || path.startsWith('/api/auth/') || path === '/api/health') return 'allowed';
+  if (path === '/sign-in' || path === '/access-denied' || path === '/brand/bixolon-logo.png' || path === '/icon.png' || path.startsWith('/api/auth/') || path === '/api/health') return 'allowed';
   if (!actor) return 'sign-in';
   if (!actor.active || actor.archivedAt) return 'denied';
   if (path === '/demos' && actor.role !== 'ADMIN') return 'denied';
