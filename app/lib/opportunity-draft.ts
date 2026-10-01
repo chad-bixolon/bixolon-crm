@@ -18,9 +18,9 @@ const catalogTiers = ["STANDARD", "MSRP", "RESELLER", "DISTRIBUTOR"];
 const isId = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 const isLineId = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
-export function draftKey(userId: number, id?: number, conversionLeadId?: number) {
+export function draftKey(userId: number, id?: number, conversionLeadId?: number, accountId?: number) {
   if (!isId(userId)) throw new Error('A user is required for an Opportunity draft.');
-  return `opportunity-draft:${userId}:${conversionLeadId ? `conversion:${conversionLeadId}` : id ? `edit:${id}` : 'new'}`;
+  return `opportunity-draft:${userId}:${conversionLeadId ? `conversion:${conversionLeadId}` : id ? `edit:${id}` : accountId ? `new:account:${accountId}` : 'new'}`;
 }
 export function addParticipant(draft: OpportunityDraft, accountId: number): OpportunityDraft {
   if (!accountId || draft.participants.some((p) => p.accountId === accountId)) return draft;

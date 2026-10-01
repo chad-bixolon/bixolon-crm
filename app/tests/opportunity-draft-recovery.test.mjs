@@ -75,17 +75,42 @@ test('form wiring requires explicit recovery and keeps Cancel and successful-sav
   assert.match(form, /if \(state\.redirectTo\) \{ clearDraft\(localStorage, draftKey\)/);
   assert.match(form, /JSON\.stringify\(draft\) === JSON\.stringify\(original\.current\)/);
   assert.match(form, /Unfinished Opportunity draft saved on this device/);
-  assert.match(source('app/opportunities/new/page.tsx'), /<OpportunityForm key="new" userId=\{actor\.id\}/);
+  assert.match(source('app/opportunities/new/page.tsx'), /<OpportunityForm key=\{accountContextId \? `new-account-\$\{accountContextId\}` : "new"\} userId=\{actor\.id\}/);
   assert.match(source('app/opportunities/[id]/edit/page.tsx'), /<OpportunityForm key=\{id\} id=\{id\} userId=\{actor\.id\} initial=\{initial\}/);
   assert.match(source('app/trade-shows/[id]/leads/[leadId]/convert/page.tsx'), /<OpportunityForm userId=\{actor\.id\}/);
 });
 
 test('normal New Opportunity has no Account, Project, or pricing context prefill', () => {
   const page = source('app/opportunities/new/page.tsx');
-  assert.doesNotMatch(page, /initial=|accountId=|projectId=|priceExceptionLineId=/);
+  assert.match(page, /accountContextId = rawAccountId === undefined \? undefined/);
+  assert.doesNotMatch(page, /initial=|projectId=|priceExceptionLineId=/);
   const form = source('components/opportunity-form.tsx');
-  assert.match(form, /participants: initial\?\.participants \?\? \[\]/);
+  assert.match(form, /participants: initial\?\.participants \?\? \(accountContextId \? \[\{ accountId: accountContextId, roles: \[\] \}\] : \[\]\)/);
   assert.match(form, /contacts: initial\?\.contacts \?\? \[\]/);
   assert.match(form, /projectIds: initial\?\.projectIds \?\? \[\]/);
   assert.match(form, /lines: initial\?\.lines\.map/);
+});
+
+test('Account launches preselect only the Account and use isolated, explicit draft recovery', () => {
+  const store = storage();
+  const general = drafts.draftKey(7);
+  const account = drafts.draftKey(7, undefined, undefined, 11);
+  const another = drafts.draftKey(7, undefined, undefined, 12);
+  assert.notEqual(account, general);
+  assert.notEqual(account, another);
+  drafts.persistDraft(store, general, { ...blank, name: 'Unrelated', participants: [{ accountId: 99, roles: ['OEM'] }] }, general);
+  assert.equal(drafts.readStoredDraft(store, account, { ...blank, participants: [{ accountId: 11, roles: [] }] }), null);
+  const accountDraft = { ...blank, name: 'Account pursuit', participants: [{ accountId: 11, roles: ['END_USER'] }] };
+  drafts.persistDraft(store, account, accountDraft, account);
+  assert.deepEqual(drafts.readStoredDraft(store, account, blank)?.draft, accountDraft);
+  assert.equal(drafts.readStoredDraft(store, another, blank), null);
+  drafts.clearDraft(store, account);
+  assert.equal(drafts.readStoredDraft(store, account, blank), null);
+  assert.equal(drafts.readStoredDraft(store, general, blank)?.draft.name, 'Unrelated');
+  const form = source('components/opportunity-form.tsx');
+  assert.match(form, /contacts: initial\?\.contacts \?\? \[\]/);
+  assert.match(form, /accountContextId \? `\/accounts\/\$\{accountContextId\}\?tab=opportunities`/);
+  assert.match(form, /Resume draft/);
+  assert.match(form, /Discard draft/);
+  assert.match(source('app/opportunities/new/page.tsx'), /key=\{accountContextId \? `new-account-\$\{accountContextId\}` : "new"\}/);
 });
