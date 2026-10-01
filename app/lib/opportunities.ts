@@ -3,7 +3,7 @@ import { ForecastCategory, OpportunityPartyRole, OpportunityProductPriceSource, 
 import { field, optional, pageNumber, positiveId, required, type Errors } from "./crm-validation";
 import { archivedWhere, recordVisibility } from "./record-visibility";
 import { moqEligibility, priceExceptionSnapshot } from "./opportunity-price-exceptions";
-import type { Actor } from "./authorization";
+import { assertPermission, opportunityScope, type Actor } from "./authorization";
 import { canViewPriceException } from "./price-exception-visibility";
 import { odmCustomerSnapshot } from './opportunity-odm-pricing';
 import { priceExceptionMatchesParticipants, unrelatedPriceExceptionMessage } from './price-exception-account-match';
@@ -235,7 +235,10 @@ export type OpportunityFilters = { q?: string; stageId?: string; ownerId?: strin
 export function opportunityWhere(filters: OpportunityFilters): Prisma.OpportunityWhereInput {
   const visibility = recordVisibility(filters.archived === "yes" ? "archived" : filters.archived === "all" ? "all" : "active");
   const where: Prisma.OpportunityWhereInput = { ...archivedWhere(visibility), ...(visibility === 'active' ? { AND: [operationalOpportunityWhere] } : {}) };
-  if (filters.q?.trim()) where.name = { contains: filters.q.trim().slice(0, 100), mode: "insensitive" };
+  if (filters.q?.trim()) {
+    const contains = { contains: filters.q.trim().slice(0, 100), mode: "insensitive" as const };
+    where.OR = [{ name: contains }, { competitor: { is: { name: contains } } }, { currentProductBeingUsed: contains }];
+  }
   const stageId = positiveId(filters.stageId ?? ""); if (stageId) where.stageId = stageId;
   const competitorId = positiveId(filters.competitorId ?? ""); if (competitorId) where.competitorId = competitorId;
   const ownerId = positiveId(filters.ownerId ?? ""); if (ownerId) where.ownerId = ownerId;
@@ -248,8 +251,10 @@ export function opportunityWhere(filters: OpportunityFilters): Prisma.Opportunit
   if (from && !Number.isNaN(from.getTime()) || to && !Number.isNaN(to.getTime())) where.expectedCloseDate = { ...(from && !Number.isNaN(from.getTime()) ? { gte: from } : {}), ...(to && !Number.isNaN(to.getTime()) ? { lte: to } : {}) };
   return where;
 }
-export async function listOpportunities(client: PrismaClient, filters: OpportunityFilters) {
-  const where = opportunityWhere(filters), count = await client.opportunity.count({ where }); const { page, pages } = pageNumber(filters.page, count);
-  const opportunities = await client.opportunity.findMany({ where, include: { stage: true, owner: true, participants: { include: { account: true, roles: true } }, products: { where: { archivedAt: null } } }, orderBy: [{ expectedCloseDate: "asc" }, { id: "desc" }], skip: (page - 1) * 20, take: 20 });
+export async function listOpportunities(client: PrismaClient, filters: OpportunityFilters, actor: Actor) {
+  assertPermission(actor, 'sales.read');
+  const where: Prisma.OpportunityWhereInput = { AND: [opportunityWhere(filters), opportunityScope(actor)] };
+  const count = await client.opportunity.count({ where }); const { page, pages } = pageNumber(filters.page, count);
+  const opportunities = await client.opportunity.findMany({ where, include: { stage: true, competitor: true, owner: true, participants: { include: { account: true, roles: true } }, products: { where: { archivedAt: null } } }, orderBy: [{ expectedCloseDate: "asc" }, { id: "desc" }], skip: (page - 1) * 20, take: 20 });
   return { opportunities, count, page, pages };
 }
