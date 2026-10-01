@@ -29,6 +29,14 @@ select.filter-control { padding-right: 2rem; overflow: visible; }
 @media (min-width: 40rem) { .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 64rem) { .filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (min-width: 80rem) { .filter-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } .filter-grid-five { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.filter-grid.opportunity-filter-grid { gap: .875rem 1rem; }
+.opportunity-filter-grid > div { min-width: 0; }
+@media (min-width: 40rem) {
+  .filter-grid.opportunity-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .opportunity-filter-search { grid-column: span 2; }
+  .opportunity-filter-actions { justify-self: end; }
+}
+@media (min-width: 80rem) { .filter-grid.opportunity-filter-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .accounts-filter-field { flex: 0 0 9.25rem; max-width: 100%; }
 .accounts-filter-control, .accounts-filter-action { height: 2.25rem; padding-block: .375rem; }
 .accounts-filter-action { padding-inline: .75rem; }
