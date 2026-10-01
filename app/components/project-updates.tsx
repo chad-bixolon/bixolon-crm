@@ -26,7 +26,7 @@ function UpdateForm({ context, update, options }: { context: UpdateContext; upda
 export function ProjectUpdates({ context, rows, options, editable, editableIds }: { context: UpdateContext; rows: Row[]; options: Option[]; editable: boolean; editableIds: number[] }) {
   return <section className="panel p-6" aria-label="Project Updates">
     <h2 className="text-lg font-semibold">Project Updates ({rows.length})</h2>
-    {editable && <details className="mt-4 text-sm"><summary className="btn-secondary inline-block cursor-pointer">Add update</summary><UpdateForm context={context} options={options}/></details>}
+    {editable && <details className="mt-4 text-sm"><summary className="btn-primary inline-block cursor-pointer">Add update</summary><UpdateForm context={context} options={options}/></details>}
     {rows.length ? <ul className="mt-4 divide-y">{rows.map(row => <li key={row.id} className="py-4"><p className="whitespace-pre-wrap text-sm">{row.body}</p><p className="mt-2 text-xs text-slate-500">{row.createdBy.firstName} {row.createdBy.lastName} · {row.createdAt.toISOString().slice(0, 10)}{row.updatedAt.getTime() !== row.createdAt.getTime() ? ' · edited' : ''}</p>{editableIds.includes(row.id) && <details className="mt-2 text-sm"><summary className="cursor-pointer text-orange-800">Edit update</summary><UpdateForm context={context} update={row} options={options}/></details>}</li>)}</ul> : <p className="mt-4 text-sm text-slate-500">No Project Updates yet.</p>}
   </section>;
 }
