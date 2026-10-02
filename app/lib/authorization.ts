@@ -1,18 +1,20 @@
 import type { UserRole } from '@prisma/client';
 
-export type Permission = 'accounts.read' | 'accounts.write' | 'contacts.read' | 'contacts.write' | 'sales.read' | 'sales.write' | 'pricing.read' | 'tasks.read' | 'tasks.write' | 'products.read' | 'products.write' | 'projects.read' | 'projects.write' | 'users.manage' | 'integrations.manage' | 'marketing.read' | 'marketing.write' | 'trade-shows.read' | 'trade-shows.manage' | 'trade-shows.leads.write' | 'trade-shows.assign' | 'trade-shows.resolve' | 'trade-shows.route';
+export type Permission = 'sales-plan.read' | 'sales-plan.allocate' | 'sales-plan.manage' | 'accounts.read' | 'accounts.write' | 'contacts.read' | 'contacts.write' | 'sales.read' | 'sales.write' | 'pricing.read' | 'tasks.read' | 'tasks.write' | 'products.read' | 'products.write' | 'projects.read' | 'projects.write' | 'users.manage' | 'integrations.manage' | 'marketing.read' | 'marketing.write' | 'trade-shows.read' | 'trade-shows.manage' | 'trade-shows.leads.write' | 'trade-shows.assign' | 'trade-shows.resolve' | 'trade-shows.route';
 export type Actor = { id: number; role: UserRole; active: boolean; archivedAt?: Date | null };
 
 const grants: Record<UserRole, readonly Permission[]> = {
-  ADMIN: ['accounts.read','accounts.write','contacts.read','contacts.write','sales.read','sales.write','pricing.read','tasks.read','tasks.write','products.read','products.write','projects.read','projects.write','users.manage','integrations.manage','marketing.read','marketing.write','trade-shows.read','trade-shows.manage','trade-shows.leads.write','trade-shows.assign','trade-shows.resolve','trade-shows.route'],
-  SALES_MANAGER: ['accounts.read','accounts.write','contacts.read','contacts.write','sales.read','sales.write','pricing.read','tasks.read','tasks.write','products.read','projects.read','projects.write','trade-shows.read','trade-shows.leads.write','trade-shows.assign','trade-shows.resolve','trade-shows.route'],
-  SALES: ['accounts.read','accounts.write','contacts.read','contacts.write','sales.read','sales.write','pricing.read','tasks.read','tasks.write','products.read','projects.read','projects.write','trade-shows.read','trade-shows.leads.write','trade-shows.resolve','trade-shows.route'],
+  ADMIN: ['sales-plan.read','sales-plan.allocate','sales-plan.manage','accounts.read','accounts.write','contacts.read','contacts.write','sales.read','sales.write','pricing.read','tasks.read','tasks.write','products.read','products.write','projects.read','projects.write','users.manage','integrations.manage','marketing.read','marketing.write','trade-shows.read','trade-shows.manage','trade-shows.leads.write','trade-shows.assign','trade-shows.resolve','trade-shows.route'],
+  SALES_MANAGER: ['sales-plan.read','sales-plan.allocate','sales-plan.manage','accounts.read','accounts.write','contacts.read','contacts.write','sales.read','sales.write','pricing.read','tasks.read','tasks.write','products.read','projects.read','projects.write','trade-shows.read','trade-shows.leads.write','trade-shows.assign','trade-shows.resolve','trade-shows.route'],
+  SALES: ['sales-plan.read','sales-plan.allocate','accounts.read','accounts.write','contacts.read','contacts.write','sales.read','sales.write','pricing.read','tasks.read','tasks.write','products.read','projects.read','projects.write','trade-shows.read','trade-shows.leads.write','trade-shows.resolve','trade-shows.route'],
   MARKETING_MANAGER: ['accounts.read','accounts.write','contacts.read','contacts.write','pricing.read','tasks.read','tasks.write','products.read','projects.read','marketing.read','marketing.write','trade-shows.read','trade-shows.manage','trade-shows.leads.write','trade-shows.assign','trade-shows.resolve','trade-shows.route'],
-  READ_ONLY: ['accounts.read','contacts.read','sales.read','pricing.read','tasks.read','products.read','projects.read','trade-shows.read'],
+  READ_ONLY: ['sales-plan.read','accounts.read','contacts.read','sales.read','pricing.read','tasks.read','products.read','projects.read','trade-shows.read'],
 };
 export function can(actor: Actor | null | undefined, permission: Permission) { return !!actor?.active && !actor.archivedAt && grants[actor.role]?.includes(permission) === true; }
 export function assertPermission(actor: Actor | null | undefined, permission: Permission) { if (!can(actor,permission)) throw new Error('Access denied'); }
 export function permissionForPath(path: string): Permission | null {
+  if (path.startsWith('/sales-plan/import')) return 'sales-plan.manage';
+  if (path.startsWith('/sales-plan')) return 'sales-plan.read';
   if (path.startsWith('/marketing')) return 'marketing.read';
   if (path.startsWith('/trade-shows')) return 'trade-shows.read';
   if (path.startsWith('/reports/engagement') || path.startsWith('/reports/new')) return 'sales.write';

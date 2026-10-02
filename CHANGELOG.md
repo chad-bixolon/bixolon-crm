@@ -6,6 +6,10 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+### Added
+
+- Sales Plan management with review-first workbook imports, official annual revisions, rep quarterly allocation, target comparison, and a management report.
+
 No commits are assigned here because the repository does not identify the Git
 commit currently deployed. The numbered groups below describe code history,
 not confirmed production releases.

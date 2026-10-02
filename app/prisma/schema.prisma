@@ -115,6 +115,12 @@ enum SalesQuarter {
   Q4
 }
 
+enum SalesPlanStatus {
+  DRAFT
+  ACTIVE
+  SUPERSEDED
+}
+
 enum PriceExceptionStatus {
   ACTIVE
   EXPIRED
@@ -199,6 +205,11 @@ enum TradeShowImportFormat {
 }
 
 model User {
+  createdSalesPlanImportMappings SalesPlanImportMapping[] @relation("SalesPlanMappingCreator")
+  ownedSalesPlans SalesPlan[] @relation("SalesPlanOwner")
+  createdSalesPlans SalesPlan[] @relation("SalesPlanCreator")
+  supersededSalesPlans SalesPlan[] @relation("SalesPlanSuperseder")
+  salesPlanAllocations SalesPlanQuarterAllocation[] @relation("SalesPlanAllocationEditor")
   requestedDemos DemoRequest[] @relation("DemoRequester")
   reviewedDemos DemoRequest[] @relation("DemoReviewer")
   shippedDemos DemoRequest[] @relation("DemoShipper")
@@ -359,6 +370,7 @@ model ExternalIdentity {
 }
 
 model Account {
+  salesPlanLines SalesPlanLine[]
   demoRequests DemoRequest[]
   id                         Int                   @id @default(autoincrement())
   name                       String
@@ -572,6 +584,7 @@ model CompetitorOption {
 }
 
 model Currency {
+  salesPlans SalesPlan[]
   code          String        @id @db.Char(3)
   name          String
   active        Boolean       @default(true)
@@ -657,6 +670,91 @@ model SalesTarget {
   @@index([year, quarter, currencyCode, archivedAt])
 }
 
+model SalesPlan {
+  id Int @id @default(autoincrement())
+  planYear Int
+  currencyCode String @db.Char(3)
+  currency Currency @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  ownerId Int
+  owner User @relation("SalesPlanOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  originalOwnerName String @db.VarChar(255)
+  name String @db.VarChar(255)
+  revision Int
+  status SalesPlanStatus @default(DRAFT)
+  sourceFileName String @db.VarChar(255)
+  sourceSha256 String @db.Char(64)
+  importFingerprint String @unique @db.Char(64)
+  createdById Int
+  createdBy User @relation("SalesPlanCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  activatedAt DateTime?
+  supersededAt DateTime?
+  supersededById Int?
+  supersededBy User? @relation("SalesPlanSuperseder", fields: [supersededById], references: [id], onDelete: Restrict)
+  lines SalesPlanLine[]
+
+  @@unique([ownerId, planYear, currencyCode, revision])
+  @@index([planYear, currencyCode, status])
+}
+
+model SalesPlanImportMapping {
+  id Int @id @default(autoincrement())
+  name String @db.VarChar(255)
+  mappings Json
+  createdById Int
+  createdBy User @relation("SalesPlanMappingCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  lastUsedAt DateTime?
+  archivedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([archivedAt, name])
+}
+
+model SalesPlanLine {
+  id Int @id @default(autoincrement())
+  planId Int
+  plan SalesPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  originalSalesRepName String? @db.VarChar(255)
+  accountId Int?
+  account Account? @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  originalAccountText String? @db.VarChar(500)
+  accountCarryForwardSuggested Boolean @default(false)
+  productSkuId Int?
+  productSku ProductSku? @relation(fields: [productSkuId], references: [id], onDelete: Restrict)
+  originalSkuText String? @db.VarChar(500)
+  planItem String? @db.VarChar(1000)
+  annualPlannedUnits Decimal? @db.Decimal(18, 3)
+  annualPlannedRevenue Decimal? @db.Decimal(18, 2)
+  priorYearRevenue Decimal? @db.Decimal(18, 2)
+  comments String? @db.Text
+  sourceWorksheet String @db.VarChar(255)
+  sourceRow Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  allocations SalesPlanQuarterAllocation[]
+
+  @@unique([planId, sourceWorksheet, sourceRow])
+  @@index([accountId])
+  @@index([productSkuId])
+}
+
+model SalesPlanQuarterAllocation {
+  id Int @id @default(autoincrement())
+  salesPlanLineId Int
+  line SalesPlanLine @relation(fields: [salesPlanLineId], references: [id], onDelete: Restrict)
+  quarter SalesQuarter
+  plannedUnits Decimal? @db.Decimal(18, 3)
+  plannedRevenue Decimal? @db.Decimal(18, 2)
+  updatedById Int
+  updatedBy User @relation("SalesPlanAllocationEditor", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([salesPlanLineId, quarter])
+}
+
 model OpportunityAccount {
   opportunityId Int
   accountId     Int
@@ -713,6 +811,7 @@ model Product {
 }
 
 model ProductSku {
+  salesPlanLines SalesPlanLine[]
   demoItems DemoItem[]
   id                   Int                   @id @default(autoincrement())
   productId            Int

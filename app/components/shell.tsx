@@ -10,12 +10,12 @@ import type { LabelMap } from "@/lib/configuration";
 
 const navSections = [
   { label: "CRM", items: ["Dashboard", "Accounts", "Contacts"] },
-  { label: "Sales", items: ["Opportunities", "Demos", "Pipeline", "Reports", "Tasks"] },
+  { label: "Sales", items: ["Opportunities", "Demos", "Pipeline", "Sales Plan", "Reports", "Tasks"] },
   { label: "Programs", items: ["Projects", "Trade Shows", "Marketing Audiences"] },
   { label: "Catalog", items: ["Products", "Price Exceptions"] },
   { label: "Admin", items: ["Administration", "Integrations"] },
 ] as const;
-const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Price Exceptions" ? "/price-exceptions" : item === "Trade Shows" ? "/trade-shows" : item === "Marketing Audiences" ? "/marketing/audiences" : `/${item.toLowerCase()}`;
+const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Sales Plan" ? "/sales-plan" : item === "Price Exceptions" ? "/price-exceptions" : item === "Trade Shows" ? "/trade-shows" : item === "Marketing Audiences" ? "/marketing/audiences" : `/${item.toLowerCase()}`;
 const navLabelKeys: Partial<Record<string, keyof LabelMap>> = { Accounts: "ACCOUNT", Contacts: "CONTACT", Projects: "PROJECT", Opportunities: "OPPORTUNITY", Tasks: "TASK" };
 type ShellUser = { name: string; role: UserRole; canManageUsers: boolean; canViewReports: boolean; canViewMarketing:boolean; canViewSales:boolean };
 export function Shell({ children, user, labels }: { children: ReactNode; user: ShellUser | null; labels?: LabelMap }) {
@@ -27,7 +27,7 @@ export function Shell({ children, user, labels }: { children: ReactNode; user: S
         <Image src="/brand/bixolon-logo.png" alt="BIXOLON" width={500} height={40} priority className="h-6 w-44 object-cover object-center" />
       </div>
       <nav aria-label="Primary navigation" className="flex gap-1 overflow-x-auto px-3 pb-3 lg:block lg:space-y-1 lg:py-5">
-        {navSections.map(section => { const visible = section.items.filter((item) => (item !== "Administration" || user?.canManageUsers) && (item !== "Reports" || user?.canViewReports) && (item !== "Marketing Audiences" || user?.canViewMarketing) && (item !== "Demos" || user?.role === "ADMIN") && (item !== "Trade Shows" || !!user)); return visible.length ? <div key={section.label} className="flex shrink-0 gap-1 lg:mb-4 lg:block"><p className="hidden px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400 lg:block">{section.label}</p>{visible.map((item) => { const href = hrefFor(item); const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+        {navSections.map(section => { const visible = section.items.filter((item) => (item !== "Administration" || user?.canManageUsers) && (item !== "Reports" || user?.canViewReports) && (item !== "Sales Plan" || user?.canViewSales) && (item !== "Marketing Audiences" || user?.canViewMarketing) && (item !== "Demos" || user?.role === "ADMIN") && (item !== "Trade Shows" || !!user)); return visible.length ? <div key={section.label} className="flex shrink-0 gap-1 lg:mb-4 lg:block"><p className="hidden px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400 lg:block">{section.label}</p>{visible.map((item) => { const href = hrefFor(item); const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           const key = navLabelKeys[item];
           const title = labels && key ? key === "OPPORTUNITY" && labels[key] === "Opportunity" ? "Opportunities" : `${labels[key]}s` : item;
           return <Link key={item} href={href} aria-current={active ? "page" : undefined} className={`block whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${active ? "bg-orange-50 text-orange-800 border-l-2 border-orange-600" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}>{title}</Link>; })}</div> : null; })}
