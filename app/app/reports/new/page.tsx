@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Content,PageHeader } from '@/components/shell';
 import { ReportCloseDateFields } from '@/components/report-close-date-fields';
+import { ReportSalesRepFilter } from '@/components/report-sales-rep-filter';
 import { ReportResults } from '@/components/report-results';
 import { currentUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
@@ -23,7 +24,7 @@ export default async function NewReportPage({searchParams}:{searchParams:Promise
   <input type="hidden" name="configured" value="1"/>{config.filters.some(filter => filter.field === 'activeSalesRep') && <input type="hidden" name="activeSalesRep" value="1"/>}{saved&&<input type="hidden" name="reportId" value={saved.id}/>}
   <fieldset className="report-section report-primary-filters"><legend className="report-section-title">Opportunity filters</legend><div className="report-filter-grid">
    <label className="label">Status<select className="field" name="status" defaultValue={selected(config,'status')}><option value="">Any</option><option value="OPEN">Open</option><option value="WON">Closed Won</option><option value="LOST">Closed Lost</option></select></label>
-   <label className="label">Sales Rep<select className="field" name="ownerId" defaultValue={selected(config,'ownerId')}><option value="">All permitted</option>{owners.map(x=><option value={x.id} key={x.id}>{x.firstName} {x.lastName}</option>)}</select></label>
+   <ReportSalesRepFilter actor={actor} reps={owners} selected={selected(config,'ownerId')}/>
    <label className="label">Stage<select className="field" name="stageId" defaultValue={selected(config,'stageId')}><option value="">All</option>{stages.map(x=><option value={x.id} key={x.id}>{x.name}</option>)}</select></label>
    <label className="label">Forecast Category<select className="field" name="forecastCategory" defaultValue={selected(config,'forecastCategory')}><option value="">All</option><option value="IN_FORECAST">In forecast</option>{['PIPELINE','BEST_CASE','COMMIT','OMITTED','CLOSED'].map(x=><option key={x} value={x}>{x.replace('_',' ')}</option>)}</select></label>
   </div></fieldset>

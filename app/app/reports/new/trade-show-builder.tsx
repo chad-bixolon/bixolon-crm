@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type {Actor} from '@/lib/authorization';
 import {Content,PageHeader} from '@/components/shell';
 import {ReportResults} from '@/components/report-results';
+import { ReportSalesRepFilter } from '@/components/report-sales-rep-filter';
 import {prisma} from '@/lib/prisma';
 import {filterValue,tradeShowConfigFromParams} from '@/lib/report-builder';
 import {canCreateReport,canShareReport,executeTradeShowReport,reportRegistry} from '@/lib/reporting';
@@ -29,7 +30,7 @@ export async function TradeShowBuilder({params,actor,saved}:{params:Params;actor
     <form method="get" className="panel report-builder p-3 md:p-4"><input type="hidden" name="configured" value="1"/><input type="hidden" name="reportType" value="TRADE_SHOW"/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>} 
       <fieldset className="report-section report-primary-filters"><legend className="report-section-title">Lead filters</legend><div className="report-filter-grid">
         {select('tradeShowId','Trade Show',shows.map(show=>({value:show.id,label:show.name})))}
-        {select('ownerId','Assigned Sales Rep',reps.map(rep=>({value:rep.id,label:`${rep.firstName} ${rep.lastName}`})),'All permitted')}
+        <ReportSalesRepFilter actor={actor} reps={reps} selected={selected('ownerId')} label="Assigned Sales Rep"/>
         {select('leadStatus','Lead Status',['NEW','CONTACTED','QUALIFIED','CONVERTED','DISQUALIFIED'].map(value=>({value,label:value.charAt(0)+value.slice(1).toLowerCase()})))}
         {select('routing','Routing',[{value:'UNREVIEWED',label:'Unreviewed'},{value:'BIXOLON_SALES',label:'BIXOLON Sales'},{value:'REFERRED_TO_PARTNER',label:'Referred to Partner'},{value:'MARKETING_FOLLOW_UP',label:'Marketing Follow-Up'}])}
         {select('referralPartnerId','Referral Partner',partners.map(item=>({value:item.id,label:item.name})))}

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import type {Actor} from '@/lib/authorization';
 import {Content,PageHeader} from '@/components/shell';
 import {ReportResults} from '@/components/report-results';
+import { ReportSalesRepFilter } from '@/components/report-sales-rep-filter';
 import {prisma} from '@/lib/prisma';
 import {projectInitiativeConfigFromParams,filterValue} from '@/lib/report-builder';
 import {canShareReport,executeProjectInitiativeReport,reportRegistry} from '@/lib/reporting';
@@ -40,7 +41,7 @@ export async function ProjectInitiativeBuilder({params,actor,saved}:{params:Para
         {select('participantAccountId','Participant Account',accounts.map(x=>({value:x.id,label:x.name})))}
         {select('hasAccount','Account relationship',[{value:'true',label:'Has Account'},{value:'false',label:'No Account'}])}
         {select('hasOpportunities','Opportunities',[{value:'true',label:'Has Opportunities'},{value:'false',label:'No Opportunities'}])}
-        {select('ownerId','Sales Rep',owners.filter(x=>actor.role!=='SALES'||x.id===actor.id).map(x=>({value:x.id,label:`${x.firstName} ${x.lastName}`})))}
+        <ReportSalesRepFilter actor={actor} reps={owners.filter(x=>actor.role!=='SALES'||x.id===actor.id)} selected={selected('ownerId')} label="Sales Rep"/>
         {select('stageId','Opportunity Stage',stages.map(x=>({value:x.id,label:x.name})))}
         {select('competitorId','Competitor',competitors.map(x=>({value:x.id,label:x.name+(x.active?'':' (Inactive)')})))}
         {select('forecastCategory','Forecast Category',['PIPELINE','BEST_CASE','COMMIT','OMITTED','CLOSED'].map(x=>({value:x,label:x.replaceAll('_',' ')})))}

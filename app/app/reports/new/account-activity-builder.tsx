@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { Actor } from '@/lib/authorization';
 import { Content,PageHeader } from '@/components/shell';
 import { ReportResults } from '@/components/report-results';
+import { ReportSalesRepFilter } from '@/components/report-sales-rep-filter';
 import { prisma } from '@/lib/prisma';
 import { accountActivityConfigFromParams,filterValue } from '@/lib/report-builder';
 import { canShareReport,executeAccountActivityReport,reportRegistry } from '@/lib/reporting';
@@ -23,7 +24,7 @@ export async function AccountActivityBuilder({params,actor,saved}:{params:Params
  return <Content><PageHeader eyebrow="Reports" title={saved?'Edit Account Activity Report':'Account Activity Report'} description="Review Account activity, follow-up, and Accounts that may need attention." action={<Link className="btn-secondary" href="/reports">Reports</Link>}/>
  <div className="mb-2 flex flex-wrap gap-2"><Link className="btn-secondary" href="/reports/new?reportType=PIPELINE">Pipeline</Link><Link className="btn-secondary" href="/reports/new?reportType=ACCOUNT_ACTIVITY">Account Activity</Link><Link className="btn-secondary" href="/reports/new?reportType=PRODUCT_PERFORMANCE">Product Performance</Link><Link className="btn-secondary" href="/reports/new?reportType=CHANNEL_PARTNER">Channel / Partner</Link><Link className="btn-secondary" href="/reports/new?reportType=PROJECT_INITIATIVE">Project Performance</Link></div><form method="get" className="panel report-builder p-3 md:p-4"><input type="hidden" name="configured" value="1"/><input type="hidden" name="reportType" value="ACCOUNT_ACTIVITY"/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}
  <fieldset className="report-section report-primary-filters"><legend className="report-section-title">Account filters</legend><div className="report-filter-grid">
- <label className="label">Sales Rep<select className="field" name="ownerId" defaultValue={selected('ownerId')}><option value="">All permitted</option>{owners.map(x=><option key={x.id} value={x.id}>{x.firstName} {x.lastName}</option>)}</select></label>
+ <ReportSalesRepFilter actor={actor} reps={owners} selected={selected('ownerId')}/>
  <label className="label">Account<select className="field" name="accountId" defaultValue={selected('accountId')}><option value="">All</option>{accounts.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
  <label className="label">Industry<select className="field" name="industry" defaultValue={selected('industry')}><option value="">All</option>{industries.map(x=><option key={x.code} value={x.code}>{x.name}</option>)}</select></label>
  <label className="label">Territory<select className="field" name="territory" defaultValue={selected('territory')}><option value="">All</option>{territories.map(x=><option key={x.code} value={x.code}>{x.name}</option>)}</select></label>

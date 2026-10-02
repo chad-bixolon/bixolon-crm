@@ -3,6 +3,7 @@ import Link from 'next/link';
 import type { Actor } from '@/lib/authorization';
 import { Content,PageHeader } from '@/components/shell';
 import { ReportResults } from '@/components/report-results';
+import { ReportSalesRepFilter } from '@/components/report-sales-rep-filter';
 import { ReportCloseDateFields } from '@/components/report-close-date-fields';
 import { prisma } from '@/lib/prisma';
 import { catalogSourceLabels } from '@/lib/products';
@@ -35,7 +36,7 @@ export async function ProductPerformanceBuilder({params,actor,saved}:{params:Par
     <div className="mb-2 flex flex-wrap gap-2"><Link className="btn-secondary" href="/reports/new?reportType=PIPELINE">Pipeline</Link><Link className="btn-secondary" href="/reports/new?reportType=ACCOUNT_ACTIVITY">Account Activity</Link><Link className="btn-secondary" href="/reports/new?reportType=PRODUCT_PERFORMANCE">Product Performance</Link><Link className="btn-secondary" href="/reports/new?reportType=CHANNEL_PARTNER">Channel / Partner</Link><Link className="btn-secondary" href="/reports/new?reportType=PROJECT_INITIATIVE">Project Performance</Link></div>
     <form method="get" className="panel report-builder p-3 md:p-4"><input type="hidden" name="configured" value="1"/><input type="hidden" name="reportType" value="PRODUCT_PERFORMANCE"/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}
       <fieldset className="report-section report-primary-filters"><legend className="report-section-title">Primary filters</legend><div className="report-filter-grid">
-        {select('ownerId','Sales Rep',owners.map(x=>({value:x.id,label:`${x.firstName} ${x.lastName}`})),'All permitted')}
+        <ReportSalesRepFilter actor={actor} reps={owners} selected={selected('ownerId')} label="Sales Rep"/>
         {select('productCategoryId','Product Category',categories.map(x=>({value:x.id,label:x.name})))}
         {select('productId','Product / Model',products.map(x=>({value:x.id,label:x.name})))}
         {select('skuId','SKU / Part Number',skus.map(x=>({value:x.id,label:x.partNumber})))}
