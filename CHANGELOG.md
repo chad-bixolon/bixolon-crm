@@ -22,6 +22,7 @@ boundaries. Dates are the dates of the last commits in each group.
 - Creating a Contact from an Account returns to that Account's Contacts tab; Contacts can use the Account address or keep a different address.
 - Project update actions are easier to find and use.
 - Sales Rep filters across reports hide redundant self/all choices for Sales users and offer clearer multi-rep choices for management.
+- Sales users can view Trade Show event details and resources without gaining Trade Show management access.
 
 ### Fixed
 

@@ -75,6 +75,26 @@ test('Trade Show Event Leads uses compact responsive filters and six combined ta
   assert.match(page, /phone: true/);
 });
 
+test('Sales can read every Trade Show event while lead data stays assigned-rep scoped', () => {
+  const list = fs.readFileSync(path.join(root, 'app/trade-shows/page.tsx'), 'utf8');
+  const detail = fs.readFileSync(path.join(root, 'app/trade-shows/[id]/page.tsx'), 'utf8');
+  const resolution = fs.readFileSync(path.join(root, 'app/trade-shows/[id]/contact-resolution/page.tsx'), 'utf8');
+  assert.equal(routeAccess('/trade-shows', actor('SALES')), 'allowed');
+  assert.equal(routeAccess('/trade-shows/42', actor('SALES')), 'allowed');
+  assert.deepEqual(shows.tradeShowReadWhere(actor('SALES')), {});
+  assert.deepEqual(shows.tradeShowLeadReadWhere(actor('SALES')), { assignedSalesRepUserId: 7 });
+  assert.match(list, /leads: \{ where: tradeShowLeadReadWhere\(actor\)/);
+  assert.match(detail, /leads: \{ where: leadFilter/);
+  assert.match(detail, /tradeShowLeadReadWhere\(actor\)/);
+  assert.match(resolution, /_count:\{select:\{leads:\{where:tradeShowLeadReadWhere\(actor\)\}\}\}/);
+  assert.match(detail, /title=\{show\.name\}/);
+  assert.match(detail, /tradeShowTimezoneLabel\(show\.timezone\)/);
+  assert.match(detail, /<TradeShowResources boothNumber=\{show\.boothNumber\} links=\{show\.resourceLinks\}/);
+  assert.match(detail, /can\(actor, 'trade-shows\.manage'\) && !show\.archivedAt/);
+  assert.match(detail, /can\(actor, 'trade-shows\.manage'\) && <TradeShowArchiveControl/);
+  assert.match(list, /action=\{can\(actor, 'trade-shows\.manage'\)/);
+});
+
 test('Trade Show roles and row scopes preserve Marketing and Sales boundaries', () => {
   for (const role of ['ADMIN','MARKETING_MANAGER']) {
     assert.equal(can(actor(role), 'trade-shows.manage'), true);
@@ -92,7 +112,7 @@ test('Trade Show roles and row scopes preserve Marketing and Sales boundaries', 
   assert.equal(can(actor('SALES_MANAGER'), 'trade-shows.assign'), true);
   assert.equal(can(actor('READ_ONLY'), 'trade-shows.leads.write'), false);
   assert.deepEqual(shows.tradeShowLeadReadWhere(actor('SALES')), { assignedSalesRepUserId: 7 });
-  assert.deepEqual(shows.tradeShowReadWhere(actor('SALES')), { leads: { some: { assignedSalesRepUserId: 7 } } });
+  assert.deepEqual(shows.tradeShowReadWhere(actor('SALES')), {});
   for (const role of ['ADMIN','SALES_MANAGER','MARKETING_MANAGER','READ_ONLY']) assert.deepEqual(shows.tradeShowReadWhere(actor(role)), {});
   assert.equal(shows.canEditTradeShowLead(actor('SALES'), { assignedSalesRepUserId: 8 }), false);
   assert.equal(shows.canEditTradeShowLead(actor('SALES'), { assignedSalesRepUserId: 7 }), true);
@@ -101,6 +121,10 @@ test('Trade Show roles and row scopes preserve Marketing and Sales boundaries', 
   assert.equal(routeAccess('/trade-shows/1/import', actor('MARKETING_MANAGER')), 'allowed');
   assert.equal(routeAccess('/trade-shows/1/import', actor('SALES_MANAGER')), 'denied');
   assert.equal(routeAccess('/trade-shows/1/import', actor('SALES')), 'denied');
+  assert.equal(routeAccess('/trade-shows/import-mappings', actor('SALES')), 'denied');
+  assert.equal(routeAccess('/trade-shows/1/edit', actor('SALES')), 'denied');
+  assert.equal(routeAccess('/trade-shows', actor('SALES')), 'allowed');
+  assert.equal(routeAccess('/trade-shows/1', actor('SALES')), 'allowed');
   assert.equal(routeAccess('/trade-shows/1', actor('SALES_MANAGER')), 'allowed');
   assert.equal(routeAccess('/trade-shows/1', actor('READ_ONLY')), 'allowed');
   assert.equal(routeAccess('/trade-shows/my-leads', actor('SALES')), 'allowed');
@@ -161,6 +185,8 @@ test('Trade Show create/edit validates eligible owner and archive stays reversib
   await assert.rejects(shows.saveTradeShow(client, { ...retained, resourceLinks: [{ id: null, label: 'Bad', url: 'javascript:alert(1)' }] }, actor('ADMIN'), 3), /valid show resource/);
   await assert.rejects(shows.saveTradeShow(client, { ...retained, resourceLinks: [{ id: 999, label: 'Other show', url: 'https://example.com' }] }, actor('ADMIN'), 3), /does not belong/);
   await assert.rejects(shows.saveTradeShow(client, withResources, actor('READ_ONLY'), 3), /Access denied/);
+  await assert.rejects(shows.saveTradeShow(client, withResources, actor('SALES'), 3), /Access denied/);
+  await assert.rejects(shows.saveTradeShow(client, withResources, actor('SALES')), /Access denied/);
   await assert.rejects(shows.saveTradeShow(client, { ...input, timezone: '' }, actor('ADMIN')), /approved event timezone/);
   await assert.rejects(shows.saveTradeShow(client, { ...input, timezone: '' }, actor('ADMIN'), 3), /approved event timezone/);
   await assert.rejects(shows.saveTradeShow(client, { ...input, timezone: 'Europe/London' }, actor('ADMIN'), 3), /approved event timezone/);
@@ -176,6 +202,7 @@ test('Trade Show create/edit validates eligible owner and archive stays reversib
   assert.equal(saved.archivedAt, null);
   assert.equal(saved.archivedById, null);
   await assert.rejects(shows.setTradeShowArchived(client, 3, true, actor('READ_ONLY')), /Access denied/);
+  await assert.rejects(shows.setTradeShowArchived(client, 3, true, actor('SALES')), /Access denied/);
 });
 
 test('KPI counts are zero for empty shows and cumulative through conversion', () => {

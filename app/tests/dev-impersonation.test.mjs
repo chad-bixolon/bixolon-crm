@@ -11,6 +11,7 @@ const require = Module.createRequire(fileURLToPath(import.meta.url));
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText, filename);
 const policy = require(path.join(root, 'lib/dev-impersonation.ts'));
 const { can, routeAccess, opportunityScope, taskScope } = require(path.join(root, 'lib/authorization.ts'));
+const { tradeShowReadWhere, tradeShowLeadReadWhere } = require(path.join(root, 'lib/trade-shows.ts'));
 const realAdmin = { id: 1, name: 'Chad Admin', email: 'admin@example.test', role: 'ADMIN', active: true };
 const target = (role = 'SALES') => ({ id: 7, firstName: 'Ryan', lastName: 'Example', email: 'ryan@example.test', role, active: true, archivedAt: null });
 const db = (user = target()) => ({ user: { findUnique: async ({ where }) => where.id === 7 ? user : null } });
@@ -46,6 +47,11 @@ test('active existing user becomes effective while real Google Admin remains sep
   assert.equal(can(result.effective, 'users.manage'), false);
   assert.equal(routeAccess('/administration', result.effective), 'denied');
   assert.equal(can(result.real, 'users.manage'), true);
+  assert.equal(routeAccess('/trade-shows/12', result.effective), 'allowed');
+  assert.deepEqual(tradeShowReadWhere(result.effective), {});
+  assert.deepEqual(tradeShowLeadReadWhere(result.effective), { assignedSalesRepUserId: 7 });
+  assert.equal(can(result.effective, 'trade-shows.manage'), false);
+  assert.equal(routeAccess('/trade-shows/12/edit', result.effective), 'denied');
 });
 
 test('selected roles receive existing permissions, including Marketing and Read Only restrictions', async () => {

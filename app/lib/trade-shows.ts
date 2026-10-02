@@ -61,7 +61,7 @@ export function tradeShowFailureState(form: FormData, errors: Errors, message = 
 
 export function tradeShowReadWhere(actor: Actor): Prisma.TradeShowWhereInput {
   if (!can(actor, 'trade-shows.read')) return { id: -1 };
-  return actor.role === 'SALES' ? { leads: { some: { assignedSalesRepUserId: actor.id } } } : {};
+  return {};
 }
 
 export function tradeShowLeadReadWhere(actor: Actor): Prisma.TradeShowLeadWhereInput {
