@@ -130,6 +130,9 @@ export async function applyImport(db:PrismaClient,csv:string,expectedDigest:stri
     for (const item of plan.items.filter(i=>i.type==='Contact' && i.status!=='UNCHANGED')) {
       const data:Record<string,unknown> = {...item.data,updatedById:actorId};
       if (typeof item.accountRef === 'string') data.accountId = created.get(item.accountRef);
+      const hasImportedAddress = ['addressLine1','addressLine2','city','stateProvince','postalCode','country'].some(key => typeof data[key] === 'string' && !!String(data[key]).trim());
+      if (hasImportedAddress) data.useAccountAddress = false;
+      else if (!item.id && data.accountId != null) data.useAccountAddress = true;
       if (item.primaryTransferId) await tx.contact.update({where:{id:item.primaryTransferId},data:{isPrimary:false,updatedById:actorId}});
       if (item.id) await tx.contact.update({where:{id:item.id},data:data as Prisma.ContactUncheckedUpdateInput});
       else await tx.contact.create({data:{...data,firstName:String(data.firstName),lastName:String(data.lastName),createdById:actorId} as Prisma.ContactUncheckedCreateInput});

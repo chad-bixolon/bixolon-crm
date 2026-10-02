@@ -510,6 +510,8 @@ model Contact {
   email         String?
   phone         String?
   mobile        String?
+  /// Null retains legacy behavior: saved Contact address wins; otherwise use Account address.
+  useAccountAddress Boolean?
   addressLine1  String?
   addressLine2  String?
   city          String?

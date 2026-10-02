@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { saveContactRecord, type ContactInput } from './contacts';
+import { sourceAddressDiffersFromAccount } from './address';
 
 export type ResolutionLead = {
   id:number; firstName:string; lastName:string; title:string|null; email:string|null; phone:string|null;
@@ -87,7 +88,10 @@ export async function bulkCreateTradeShowContacts(client:ResolutionClient,tradeS
     if(unsafe.length)throw new Error(`${unsafe.length} selected lead${unsafe.length===1?' is':'s are'} no longer eligible for bulk creation. Refresh and review the excluded rows.`);
     const created:number[]=[];
     for(const lead of leads){
-      const input:ContactInput={accountId:lead.accountId,firstName:reviewedValue(lead.firstName)!,lastName:reviewedValue(lead.lastName)!,title:reviewedValue(lead.title),email:normalizedEmail(lead.email),phone:reviewedValue(lead.phone),mobile:null,active:true,isPrimary:false,marketingPreference:'UNKNOWN',addressLine1:null,addressLine2:null,city:null,stateProvince:null,postalCode:null,country:null};
+      const sourceAddress={addressLine1:reviewedValue(lead.addressLine1),addressLine2:reviewedValue(lead.addressLine2),city:reviewedValue(lead.city),stateProvince:reviewedValue(lead.stateProvince),postalCode:reviewedValue(lead.postalCode),country:reviewedValue(lead.country)};
+      const account=lead.accountId === null ? null : await tx.account.findUnique({where:{id:lead.accountId},select:{addressLine1:true,addressLine2:true,city:true,stateProvince:true,postalCode:true,country:true}});
+      const useAccountAddress=lead.accountId !== null && !sourceAddressDiffersFromAccount(sourceAddress,account);
+      const input:ContactInput={accountId:lead.accountId,useAccountAddress,firstName:reviewedValue(lead.firstName)!,lastName:reviewedValue(lead.lastName)!,title:reviewedValue(lead.title),email:normalizedEmail(lead.email),phone:reviewedValue(lead.phone),mobile:null,active:true,isPrimary:false,marketingPreference:'UNKNOWN',...sourceAddress};
       const contactId=await saveContactRecord(tx,input,undefined,actor);
       await tx.tradeShowLead.update({where:{id:lead.id},data:{contactId}});created.push(contactId);
     }

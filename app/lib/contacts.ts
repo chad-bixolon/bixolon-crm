@@ -1,9 +1,9 @@
 import { MarketingPreference, Prisma, type PrismaClient } from "@prisma/client";
 import { can, type Actor } from "./authorization";
 import { field, optional, pageNumber, phone, positiveId, required, type Errors } from "./crm-validation";
-import { parseAddress, type Address } from "./address";
+import { parseAddress, addressFields, type Address } from "./address";
 export const marketingPreferenceLabels: Record<MarketingPreference,string> = { UNKNOWN: "Not specified", OPTED_IN: "Opted in", OPTED_OUT: "Opted out" };
-export type ContactInput = Address & { accountId: number | null; firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null; mobile: string | null; active: boolean; isPrimary: boolean; marketingPreference: MarketingPreference };
+export type ContactInput = Address & { useAccountAddress?: boolean | null; accountId: number | null; firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null; mobile: string | null; active: boolean; isPrimary: boolean; marketingPreference: MarketingPreference };
 type ContactWriteClient = Pick<Prisma.TransactionClient,"account"|"contact">;
 export function parseContact(form: FormData) {
   const errors: Errors = {};
@@ -20,15 +20,17 @@ export function parseContact(form: FormData) {
   const active = field(form, "active") !== "false";
   const isPrimary = form.has("isPrimary");
   const marketingPreference = Object.values(MarketingPreference).includes(field(form,"marketingPreference") as MarketingPreference) ? field(form,"marketingPreference") as MarketingPreference : MarketingPreference.UNKNOWN;
-  const address = parseAddress(form, errors);
+  const useAccountAddress = accountId !== null && (field(form, "addressMode") === "account" || !form.has("addressMode"));
+  if (form.has("addressMode") && !["account", "different"].includes(field(form, "addressMode"))) errors.addressMode = "Choose an address option.";
+  const address = useAccountAddress ? Object.fromEntries(addressFields.map(([key]) => [key, null])) as Address : parseAddress(form, errors);
   if (isPrimary && !active) errors.isPrimary = "A primary contact must be active.";
   if (isPrimary && !accountId) errors.isPrimary = "Choose an account for a primary contact.";
-  return { errors, value: Object.keys(errors).length ? undefined : { accountId, firstName, lastName, title, email, phone: office, mobile, active, isPrimary, marketingPreference, ...address } satisfies ContactInput };
+  return { errors, value: Object.keys(errors).length ? undefined : { accountId, firstName, lastName, title, email, phone: office, mobile, active, isPrimary, marketingPreference, useAccountAddress, ...address } satisfies ContactInput };
 }
 export async function saveContactRecord(tx: ContactWriteClient, input: ContactInput, id?: number, actor?: Actor) {
     if (input.accountId !== null) {
-      const account = await tx.account.findUnique({ where: { id: input.accountId }, select: { status: true } });
-      if (!account || account.status !== "ACTIVE") throw new Error("Choose an active account.");
+      const account = await tx.account.findUnique({ where: { id: input.accountId }, select: { status: true, archivedAt: true } });
+      if (!account || account.status !== "ACTIVE" || account.archivedAt) throw new Error("Choose an active account.");
     }
     const existing = id ? await tx.contact.findUnique({ where: { id } }) : null;
     if (id) { if (!existing) throw new Error("Contact not found."); if (existing.archivedAt) throw new Error("Reactivate this contact before editing it."); }
@@ -36,7 +38,8 @@ export async function saveContactRecord(tx: ContactWriteClient, input: ContactIn
     if (preferenceChanged && (!actor || !can(actor,"contacts.write"))) throw new Error("Access denied");
     if (input.isPrimary && input.accountId !== null) await tx.contact.updateMany({ where: { accountId: input.accountId, isPrimary: true, ...(id ? { id: { not: id } } : {}) }, data: { isPrimary: false } });
     const audit = preferenceChanged ? { marketingPreferenceUpdatedAt: new Date(), marketingPreferenceUpdatedByUserId: actor!.id } : {};
-    const record = id ? await tx.contact.update({ where: { id }, data: {...input,...audit} }) : await tx.contact.create({ data: {...input,...audit} });
+    const address = input.useAccountAddress && existing ? Object.fromEntries(addressFields.map(([key]) => [key, existing[key]])) as Address : input.useAccountAddress ? Object.fromEntries(addressFields.map(([key]) => [key, null])) as Address : input;
+    const record = id ? await tx.contact.update({ where: { id }, data: {...input,...address,...audit} }) : await tx.contact.create({ data: {...input,...address,...audit} });
     return record.id;
 }
 export async function saveContact(client: PrismaClient, input: ContactInput, id?: number, actor?: Actor) {
