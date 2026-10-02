@@ -23,3 +23,34 @@ test('oversized source text is rejected rather than silently truncated; dash mea
 test('saved mapping templates never persist rep assignments',()=>{const {salesPlanMappingTemplate}=req(path.join(root,'lib/sales-plan-import.ts'));const [mapping]=salesPlanMappingTemplate([{sheet:'Mark',headerRow:3,columns:{account:0,sku:1},repId:7,include:true}]);assert.equal('repId' in mapping,false);assert.equal(mapping.columns.sku,1);});
 test('a genuine Account beginning with Total is not discarded as a summary row',async()=>{const X=req('xlsx'),book=X.utils.book_new();X.utils.book_append_sheet(book,X.utils.aoa_to_sheet([['Account','SKU','Revenue'],['Total Wine','',250],['Total','-',250]]),'Rep');const p=await previewSalesPlanImport(db,actor('ADMIN'),X.write(book,{type:'buffer',bookType:'xlsx'}),{year:2027,currencyCode:'USD',name:'Plan',revision:1,mappings:[{sheet:'Rep',headerRow:1,repId:7,columns:{account:0,sku:1,revenue:2}}]});assert.deepEqual(p.rows.map(r=>r.account),['Total Wine']);});
 test('combined-sheet finalization preserves each row’s original Sales Rep text',async()=>{const {finalizeSalesPlanImport}=req(path.join(root,'lib/sales-plan-import.ts'));const config={year:2025,currencyCode:'USD',name:'Plan',revision:1,mappings:[{sheet:'2025 Label Printer Sales Plan ',headerRow:3,columns:{account:0,rep:1,sku:2,units:3,revenue:4,comments:5}}]};const client={...db,currency:{findUnique:async()=>({active:true})},user:{findMany:async()=>[{id:7,firstName:'Mark',lastName:'Smith',role:'SALES',active:true,archivedAt:null}]}};const preview=await previewSalesPlanImport(client,actor('ADMIN'),x25,config);assert.ok(preview.rows[0].rep);let sourceRep;const tx={account:{findMany:async()=>[]},productSku:{findMany:async()=>[]},user:{findMany:async()=>[{id:7}]},currency:{findUnique:async()=>({active:true})},salesPlan:{findUnique:async()=>null,findMany:async()=>[],create:async x=>{sourceRep=x.data.lines.create[0].originalSalesRepName;return {id:1};}}};client.$transaction=async fn=>fn(tx);const rows=preview.rows.map((r,i)=>({sheet:r.sheet,row:r.row,include:i===0,repId:7,accountId:null,skuId:null}));await finalizeSalesPlanImport(client,actor('ADMIN'),x25,'source.xlsx',{config,rows,sha256:preview.sha256,configSha256:preview.configSha256});assert.equal(sourceRep,preview.rows[0].rep);});
+
+test('four-quarter allocation validates before any write and saves in one transaction',async()=>{
+  const {saveLineAllocation}=req(path.join(root,'lib/sales-plan.ts'));
+  const writes=[];let transactions=0;
+  const client={salesPlanLine:{findUnique:async()=>({id:5,annualPlannedUnits:dec('8'),annualPlannedRevenue:dec('100.00'),plan:{status:'ACTIVE',ownerId:7,owner:{active:true,archivedAt:null,role:'SALES'}}})},salesPlanQuarterAllocation:{upsert:async value=>writes.push(value)},$transaction:async fn=>{transactions++;return fn(client)}};
+  const quarters=Object.fromEntries(['Q1','Q2','Q3','Q4'].map(q=>[q,{units:'2',revenue:'25.00'}]));
+  await saveLineAllocation(client,actor('SALES'),{lineId:5,quarters});
+  assert.equal(transactions,1);assert.equal(writes.length,4);assert.ok(writes.every(x=>x.create.updatedById===7));
+  writes.length=0;await assert.rejects(saveLineAllocation(client,actor('SALES'),{lineId:5,quarters:{...quarters,Q4:{units:'-1',revenue:'25.00'}}}),/nonnegative/);assert.equal(writes.length,0);
+  await assert.rejects(saveLineAllocation(client,actor('SALES',8),{lineId:5,quarters}),/not eligible/);
+  await assert.rejects(saveLineAllocation(client,actor('READ_ONLY'),{lineId:5,quarters}),/Access denied/);
+  await saveLineAllocation(client,actor('SALES'),{lineId:5,quarters:Object.fromEntries(['Q1','Q2','Q3','Q4'].map(q=>[q,{units:'',revenue:''}]))});
+  assert.ok(writes.every(x=>x.update.plannedUnits===null&&x.update.plannedRevenue===null));
+});
+test('even split reconciles cents and thousandths exactly',()=>{
+  const {splitEvenly}=req(path.join(root,'lib/sales-plan-allocation.ts'));
+  assert.deepEqual(splitEvenly('1312000.01',2),['328000.01','328000.00','328000.00','328000.00']);
+  assert.deepEqual(splitEvenly('8000.001',3),['2000.001','2000.000','2000.000','2000.000']);
+  assert.deepEqual(splitEvenly('0',2),['0.00','0.00','0.00','0.00']);
+});
+test('Sales Plan presentation keeps previous versions and allocation controls business friendly',()=>{
+  const page=fs.readFileSync(path.join(root,'app/sales-plan/page.tsx'),'utf8');
+  const editor=fs.readFileSync(path.join(root,'app/sales-plan/allocation-editor.tsx'),'utf8');
+  assert.match(page,/Show previous plan versions/);assert.match(page,/Current':'Previous version/);
+  assert.doesNotMatch(page,/Include superseded revisions|Plan vs Target|Save Q[1-4]/);
+  assert.match(page,/Sales Target','Plan Allocation','Open Pipeline'/);assert.match(page,/'Not allocated'/);
+  assert.match(page,/line\.planItem\?` — \$\{line\.planItem\}`:''/);
+  assert.match(page,/model&&model!==sku/);assert.match(page,/line\.priorYearRevenue!==null&&/);
+  assert.match(editor,/aria-expanded=\{open\}/);assert.match(editor,/Split evenly/);assert.match(editor,/Clear allocation/);
+  assert.equal(editor.match(/Save Allocation/g)?.length,1);
+});
