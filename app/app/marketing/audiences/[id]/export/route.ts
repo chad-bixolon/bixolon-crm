@@ -1,11 +1,11 @@
 import { operationalContactWhere } from '@/lib/operational-where';
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { userContext } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { audienceContactInclude, canExportAudience, contactsCsv, resolveAudienceContactIds, validEmail } from "@/lib/marketing-audiences";
 
 export async function GET(request:NextRequest,{params}:{params:Promise<{id:string}>}){
-  const session=await auth(),actor=session?.crmUser,id=Number((await params).id);
+  const context=await userContext(),actor=context.effective,id=Number((await params).id);
   if(!actor||!Number.isSafeInteger(id)||id<=0)return new NextResponse("Not found",{status:404});
   const audience=await prisma.marketingAudience.findUnique({where:{id}});
   if(!audience||audience.archivedAt||!canExportAudience(actor,audience))return new NextResponse("Access denied",{status:403});

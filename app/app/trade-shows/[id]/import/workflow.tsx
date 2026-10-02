@@ -8,6 +8,7 @@ import type { ImportChoice } from '@/lib/trade-show-import';
 import { MAPPING_DESTINATIONS, REVIEWABLE_LEAD_FIELDS, type MappingDefinition, type MappingDestination, type ReviewableLeadField } from '@/lib/trade-show-import-fields';
 import type { TradeShowImportFormat, TradeShowLeadRouting } from '@prisma/client';
 import { SaveSuccess } from '@/components/save-success';
+import { defaultEligibleUserId } from '@/lib/assignment-eligibility';
 
 type Plan = NonNullable<Awaited<ReturnType<typeof previewTradeShowAction>>['plan']>;
 type MappingRequest = NonNullable<Awaited<ReturnType<typeof previewTradeShowAction>>['mappingRequired']>;
@@ -60,7 +61,7 @@ function WorkflowSteps({ current, mapping }: { current: number; mapping: boolean
   </nav>;
 }
 
-export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; timezone: string | null }) {
+export function TradeShowImportWorkflow({ showId, timezone, effectiveUserId }: { showId: number; timezone: string | null; effectiveUserId: number }) {
   const [file, setFile] = useState<File | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [mappingRequired, setMappingRequired] = useState<MappingRequest | null>(null);
@@ -103,7 +104,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
         setPlan(response.plan);
         setMappingRequired(null);
         setChoices(response.plan.rows.map(initialChoice));
-        setDefaultRep(null);
+        setDefaultRep(defaultEligibleUserId(response.plan.reps, effectiveUserId));
         setDefaultRouting('UNREVIEWED');setDefaultPartner(null);
         setExpandedRow(null);
         setRepOverrideRow(null);
@@ -126,7 +127,7 @@ export function TradeShowImportWorkflow({ showId, timezone }: { showId: number; 
 
   async function mappedPreview(){
     if(!file||!mappingDefinition)return;setBusy(true);setPreviewing(true);setMessage('');setConfirmError('');
-    try{const response=await previewMappedTradeShowAction(showId,fileForm(),mappingDefinition,saveMapping?mappingName:null);if(response.error)setMessage(response.error);else if(response.plan){setPlan(response.plan);setMappingRequired(null);setChoices(response.plan.rows.map(initialChoice));setDefaultRep(null);setDefaultRouting('UNREVIEWED');setDefaultPartner(null);setExpandedRow(null);setRepOverrideRow(null);}}
+    try{const response=await previewMappedTradeShowAction(showId,fileForm(),mappingDefinition,saveMapping?mappingName:null);if(response.error)setMessage(response.error);else if(response.plan){setPlan(response.plan);setMappingRequired(null);setChoices(response.plan.rows.map(initialChoice));setDefaultRep(defaultEligibleUserId(response.plan.reps,effectiveUserId));setDefaultRouting('UNREVIEWED');setDefaultPartner(null);setExpandedRow(null);setRepOverrideRow(null);}}
     finally{setPreviewing(false);setBusy(false);}
   }
 

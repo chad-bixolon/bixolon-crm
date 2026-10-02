@@ -6,6 +6,7 @@ import type { UserRole } from "@prisma/client";
 import { roleLabels } from "@/lib/role-labels";
 import type { ReactNode } from "react";
 import { signOutAction } from "@/app/sign-out-action";
+import { endImpersonation } from "@/app/dev/impersonation/actions";
 import type { LabelMap } from "@/lib/configuration";
 
 const navSections = [
@@ -18,7 +19,7 @@ const navSections = [
 const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Sales Plan" ? "/sales-plan" : item === "Price Exceptions" ? "/price-exceptions" : item === "Trade Shows" ? "/trade-shows" : item === "Marketing Audiences" ? "/marketing/audiences" : `/${item.toLowerCase()}`;
 const navLabelKeys: Partial<Record<string, keyof LabelMap>> = { Accounts: "ACCOUNT", Contacts: "CONTACT", Projects: "PROJECT", Opportunities: "OPPORTUNITY", Tasks: "TASK" };
 type ShellUser = { name: string; role: UserRole; canManageUsers: boolean; canViewReports: boolean; canViewMarketing:boolean; canViewSales:boolean };
-export function Shell({ children, user, labels }: { children: ReactNode; user: ShellUser | null; labels?: LabelMap }) {
+export function Shell({ children, user, labels, developmentAdmin = false, impersonating = null }: { children: ReactNode; user: ShellUser | null; labels?: LabelMap; developmentAdmin?: boolean; impersonating?: { realName: string; effectiveName: string; role: UserRole } | null }) {
   const pathname = usePathname();
   if (pathname === "/sign-in") return <div className="min-h-screen">{children}</div>;
   return <div className="min-h-screen lg:flex">
@@ -27,13 +28,13 @@ export function Shell({ children, user, labels }: { children: ReactNode; user: S
         <Image src="/brand/bixolon-logo.png" alt="BIXOLON" width={500} height={40} priority className="h-6 w-44 object-cover object-center" />
       </div>
       <nav aria-label="Primary navigation" className="flex gap-1 overflow-x-auto px-3 pb-3 lg:block lg:space-y-1 lg:py-5">
-        {navSections.map(section => { const visible = section.items.filter((item) => (item !== "Administration" || user?.canManageUsers) && (item !== "Reports" || user?.canViewReports) && (item !== "Sales Plan" || user?.canViewSales) && (item !== "Marketing Audiences" || user?.canViewMarketing) && (item !== "Demos" || user?.role === "ADMIN") && (item !== "Trade Shows" || !!user)); return visible.length ? <div key={section.label} className="flex shrink-0 gap-1 lg:mb-4 lg:block"><p className="hidden px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400 lg:block">{section.label}</p>{visible.map((item) => { const href = hrefFor(item); const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+        {navSections.map(section => { const visible = section.items.filter((item) => (!['Administration', 'Integrations'].includes(item) || user?.canManageUsers) && (item !== "Reports" || user?.canViewReports) && (item !== "Sales Plan" || user?.canViewSales) && (item !== "Marketing Audiences" || user?.canViewMarketing) && (item !== "Demos" || user?.role === "ADMIN") && (item !== "Trade Shows" || !!user)); return visible.length ? <div key={section.label} className="flex shrink-0 gap-1 lg:mb-4 lg:block"><p className="hidden px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400 lg:block">{section.label}</p>{visible.map((item) => { const href = hrefFor(item); const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           const key = navLabelKeys[item];
           const title = labels && key ? key === "OPPORTUNITY" && labels[key] === "Opportunity" ? "Opportunities" : `${labels[key]}s` : item;
           return <Link key={item} href={href} aria-current={active ? "page" : undefined} className={`block whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${active ? "bg-orange-50 text-orange-800 border-l-2 border-orange-600" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}>{title}</Link>; })}</div> : null; })}
       </nav>
     </aside>
-    <div className="min-w-0 flex-1"><header className="flex min-h-16 items-center justify-end gap-4 border-b border-slate-200 bg-white px-5 py-3 lg:px-8">{user && <div className="flex items-center gap-4"><div className="text-right"><div className="text-sm font-semibold text-slate-900">{user.name}</div><div className="text-xs text-slate-500">{roleLabels[user.role]}</div></div><form action={signOutAction}><button type="submit" className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Sign out</button></form></div>}</header>{children}</div>
+    <div className="min-w-0 flex-1">{impersonating && <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-400 bg-amber-100 px-5 py-3 text-sm text-amber-950 lg:px-8"><div><strong>Development mode — Testing as {impersonating.effectiveName} · {roleLabels[impersonating.role]}</strong><span className="ml-3 text-xs">Signed in as {impersonating.realName}</span></div><form action={endImpersonation}><button type="submit" className="rounded-md bg-amber-900 px-3 py-1.5 font-semibold text-white">Return to Admin</button></form></div>}<header className="flex min-h-16 items-center justify-end gap-4 border-b border-slate-200 bg-white px-5 py-3 lg:px-8">{user && <div className="flex items-center gap-4">{developmentAdmin && <Link href="/dev/impersonation" className="btn-secondary">Test as user</Link>}<div className="text-right"><div className="text-sm font-semibold text-slate-900">{user.name}</div><div className="text-xs text-slate-500">{roleLabels[user.role]}</div></div><form action={signOutAction}><button type="submit" className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Sign out</button></form></div>}</header>{children}</div>
   </div>;
 }
 export function Content({ children }: { children: ReactNode }) { return <main className="mx-auto max-w-7xl px-5 py-8 lg:px-8">{children}</main>; }

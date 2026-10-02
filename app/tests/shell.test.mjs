@@ -16,6 +16,7 @@ Module._load = function(request, parent, isMain) {
   if (request === 'next/image') return function MockImage({ src, alt, width, height, className }) { return React.createElement('img', { src, alt, width, height, className }); };
   if (request === 'next/navigation') return { usePathname: () => pathname };
   if (request === '@/app/sign-out-action') return { signOutAction: async () => {} };
+  if (request === '@/app/dev/impersonation/actions') return { endImpersonation: async () => {} };
   if (request === '@/lib/role-labels') return require(path.join(root, 'lib/role-labels.ts'));
   return originalLoad.call(this, request, parent, isMain);
 };
@@ -26,10 +27,21 @@ const { Shell } = require(path.join(root, 'components/shell.tsx'));
 const { can } = require(path.join(root, 'lib/authorization.ts'));
 Module._load = originalLoad;
 
-function render(user, route = '/') {
+function render(user, route = '/', extras = {}) {
   pathname = route;
-  return renderToStaticMarkup(React.createElement(Shell, { user }, React.createElement('div', null, 'Page content')));
+  return renderToStaticMarkup(React.createElement(Shell, { user, ...extras }, React.createElement('div', null, 'Page content')));
 }
+
+test('development switcher is Admin-only and impersonation banner keeps return control for Sales', () => {
+  const admin = { name: 'Chad Admin', role: 'ADMIN', canManageUsers: true };
+  assert.match(render(admin, '/', { developmentAdmin: true }), /href="\/dev\/impersonation"[^>]*>Test as user/);
+  assert.doesNotMatch(render(admin), /Test as user/);
+  const sales = { name: 'Ryan Example', role: 'SALES', canManageUsers: false };
+  const html = render(sales, '/accounts', { impersonating: { realName: 'Chad Admin', effectiveName: 'Ryan Example', role: 'SALES' } });
+  assert.match(html, /Development mode.*Testing as Ryan Example/);
+  assert.match(html, /Return to Admin/);
+  assert.doesNotMatch(html, /href="\/administration"|href="\/integrations"|href="\/dev\/impersonation"/);
+});
 
 test('authenticated shell shows only the logo in its brand area and keeps user controls', () => {
   const roles = { ADMIN: 'Administrator', SALES_MANAGER: 'Sales Manager', SALES: 'Sales', MARKETING_MANAGER: 'Marketing Manager', READ_ONLY: 'Read Only' };
@@ -63,7 +75,8 @@ test('navigation groups preserve role visibility and Admin-only Demos', () => {
   for (const role of ['ADMIN', 'SALES_MANAGER', 'SALES', 'MARKETING_MANAGER', 'READ_ONLY']) {
     const actor = { id: 7, role, active: true, archivedAt: null };
     const html = render({ name: 'Test User', role, canManageUsers: role === 'ADMIN', canViewReports: can(actor, 'reports.view'), canViewMarketing: can(actor, 'marketing.read'), canViewSales: can(actor, 'sales.read') });
-    for (const section of ['CRM', 'Sales', 'Programs', 'Catalog', 'Admin']) assert.match(html, new RegExp(`>${section}</p>`));
+    for (const section of ['CRM', 'Sales', 'Programs', 'Catalog']) assert.match(html, new RegExp(`>${section}</p>`));
+    assert.equal(html.includes('>Admin</p>'), role === 'ADMIN');
     assert.equal(html.includes('href="/demos"'), role === 'ADMIN');
     assert.equal(html.includes('href="/administration"'), role === 'ADMIN');
     assert.equal(html.includes('href="/marketing/audiences"'), can(actor, 'marketing.read'));

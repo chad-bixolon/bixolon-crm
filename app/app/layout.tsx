@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { auth } from "@/auth";
+import { userContext } from "@/lib/current-user";
+import { impersonationAdminAllowed } from "@/lib/dev-impersonation";
 import { Shell } from "@/components/shell";
 import { can } from "@/lib/authorization";
 import { getLabels } from "@/lib/configuration";
@@ -8,8 +9,8 @@ import { canAccessReports } from "@/lib/reporting";
 import "./globals.css";
 export const metadata: Metadata = { title: "BIXOLON SalesHub", description: "BIXOLON America internal CRM" };
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const session = await auth();
-  const user = session?.crmUser;
+  const context = await userContext();
+  const user = context.effective;
   const labels = user ? await getLabels(prisma) : undefined;
-  return <html lang="en"><body><Shell user={user ? { name: user.name, role: user.role, canManageUsers: can(user, 'users.manage'), canViewReports: canAccessReports(user), canViewMarketing:can(user,'marketing.read'), canViewSales:can(user,'sales.read') } : null} labels={labels}>{children}</Shell></body></html>;
+  return <html lang="en"><body><Shell user={user ? { name: user.name, role: user.role, canManageUsers: can(user, 'users.manage'), canViewReports: canAccessReports(user), canViewMarketing:can(user,'marketing.read'), canViewSales:can(user,'sales.read') } : null} developmentAdmin={impersonationAdminAllowed(context.real) && !context.impersonating} impersonating={context.impersonating ? { realName: context.real!.name, effectiveName: user!.name, role: user!.role } : null} labels={labels}>{children}</Shell></body></html>;
 }

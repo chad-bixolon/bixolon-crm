@@ -8,6 +8,7 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ### Added
 
+- Local development user impersonation for Admin led role and ownership UAT; disabled in production.
 - Sales Plan management with review-first workbook imports, official annual revisions, rep quarterly allocation, target comparison, and a management report.
 - Explicit management preview and sync from an active annual Sales Plan to quarterly Sales Targets, with exact cent allocation, conflict checks, and audit history.
 

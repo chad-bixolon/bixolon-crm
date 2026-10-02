@@ -1,13 +1,22 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { routeAccess } from '@/lib/authorization';
+import { DEV_IMPERSONATION_COOKIE, impersonationAdminAllowed, resolveUserContext } from '@/lib/dev-impersonation';
+import { prisma } from '@/lib/prisma';
 
-export default auth((request) => {
+export default auth(async (request) => {
   const path = request.nextUrl.pathname;
-  const user = request.auth?.crmUser;
-  const decision = routeAccess(path, user ?? null);
-  if (decision === 'sign-in') return NextResponse.redirect(new URL(request.auth ? '/access-denied?reason=inactive' : '/sign-in', request.url));
-  if (decision === 'denied') return NextResponse.redirect(new URL(user ? '/access-denied' : '/access-denied?reason=inactive', request.url));
-  return NextResponse.next();
+  const rawId = request.cookies.get(DEV_IMPERSONATION_COOKIE)?.value;
+  const context = await resolveUserContext(request.auth?.crmUser, rawId, prisma);
+  const decision = path.startsWith('/dev/impersonation')
+    ? impersonationAdminAllowed(context.real) ? 'allowed' : 'denied'
+    : routeAccess(path, context.effective);
+  const response = decision === 'sign-in'
+    ? NextResponse.redirect(new URL(request.auth ? '/access-denied?reason=inactive' : '/sign-in', request.url))
+    : decision === 'denied'
+      ? NextResponse.redirect(new URL(context.real ? '/access-denied' : '/sign-in', request.url))
+      : NextResponse.next();
+  if (context.clearCookie) response.cookies.delete(DEV_IMPERSONATION_COOKIE);
+  return response;
 });
 export const config = { matcher: ['/((?!api/auth/|_next/static|_next/image|brand/|icon\\.png).*)'] };
