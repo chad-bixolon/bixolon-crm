@@ -53,8 +53,8 @@ export async function annualTarget(client:PrismaClient,userIds:number[],year:num
   const rows=await client.salesTarget.findMany({where:{userId:{in:userIds},year,currencyCode,archivedAt:null},select:{userId:true,quarter:true,targetAmount:true}});
   return annualTargetFromRows(userIds,rows);
 }
-export async function planForecast(client:PrismaClient,actor:Actor,input:{userId:number|null;year:number;currencyCode:string}){
-  const users=input.userId===null?await client.user.findMany({where:activeSalesRepWhere(),select:{id:true,role:true,active:true,archivedAt:true}}):[];
+export async function planForecast(client:PrismaClient,actor:Actor,input:{userId:number|null;year:number;currencyCode:string;ownerIds?:number[]}){
+  const users=input.userId===null?await client.user.findMany({where:{...activeSalesRepWhere(),...(input.ownerIds?{id:{in:input.ownerIds}}:{})},select:{id:true,role:true,active:true,archivedAt:true}}):[];
   const periods=await Promise.all(quarters.map(async quarter=>input.userId!==null?forecastForRep(client,actor,{userId:input.userId,year:input.year,quarter,currencyCode:input.currencyCode}):forecastForTeam(client,actor,{users,year:input.year,quarter,currencyCode:input.currencyCode})));
   return periods.map((metrics,index)=>({quarter:quarters[index],pipeline:metrics.pipeline,bestCase:metrics.bestCase,commit:metrics.commit}));
 }

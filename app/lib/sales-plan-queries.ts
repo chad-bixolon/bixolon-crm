@@ -4,6 +4,12 @@ import { pageNumber } from './crm-validation';
 
 export type PlanLineFilters = {year:number; currencyCode:string; userId:number|null; history:boolean; account?:string; sku?:string; status?:string; search?:string; page?:string};
 
+export function salesPlanPopulation(activeSalesRepIds:number[], activePlanOwnerIds:number[], userId:number|null) {
+  const planned=new Set(activePlanOwnerIds);
+  const ownerIds=userId===null?activeSalesRepIds.filter(id=>planned.has(id)):planned.has(userId)?[userId]:[];
+  return {ownerIds,activeSalesReps:activeSalesRepIds.length,repsWithPlan:activeSalesRepIds.filter(id=>planned.has(id)).length,missingPlanReps:activeSalesRepIds.filter(id=>!planned.has(id)).length};
+}
+
 // The allocation expression follows allocationSummary: absent annual measures do not
 // participate, zero annual measures are complete, and excess takes precedence.
 const lineBase = Prisma.sql`

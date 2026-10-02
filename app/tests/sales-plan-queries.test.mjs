@@ -10,7 +10,8 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 Module._extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,f);
 const req=Module.createRequire(import.meta.url);
 const {Prisma}=req('@prisma/client');
-const {salesPlanLinePage,salesPlanReportTotals,salesPlanReportLinePage}=req(path.join(root,'lib/sales-plan-queries.ts'));
+const {salesPlanLinePage,salesPlanReportTotals,salesPlanReportLinePage,salesPlanPopulation}=req(path.join(root,'lib/sales-plan-queries.ts'));
+const {annualTargetFromRows,planForecast}=req(path.join(root,'lib/sales-plan.ts'));
 const actor=(role,id=7)=>({role,id,active:true,archivedAt:null});
 const totals={count:80n,annual:new Prisma.Decimal(8000),units:new Prisma.Decimal(800),revenueCount:80n,unitsCount:80n,complete:60n,accounts:12n,q1:new Prisma.Decimal(100),q2:new Prisma.Decimal(200),q3:new Prisma.Decimal(300),q4:new Prisma.Decimal(400)};
 const sql=q=>q.sql.replace(/\s+/g,' ');
@@ -59,4 +60,30 @@ test('management rep totals aggregate all lines and detail uses database count a
   assert.equal(detailArgs.skip,50);assert.equal(detailArgs.take,50);
   assert.equal(detail.lines[0].account,null);assert.equal(detail.lines[0].productSku,null);
   assert.equal(detailArgs.include.allocations,true);
+});
+
+test('page and report calculations use the same planned reps while participation counts all active reps',()=>{
+  const active=[7,8,9,10],plans=[7,8];
+  const page=salesPlanPopulation(active,plans,null);
+  const report=salesPlanPopulation(active,plans,null);
+  assert.deepEqual(page,report);
+  assert.deepEqual(page,{ownerIds:[7,8],activeSalesReps:4,repsWithPlan:2,missingPlanReps:2});
+  const rows=[7,8].flatMap(userId=>['Q1','Q2','Q3','Q4'].map(quarter=>({userId,quarter,targetAmount:new Prisma.Decimal(25)})));
+  assert.equal(annualTargetFromRows(page.ownerIds,rows).amount.toString(),'200');
+  assert.equal(annualTargetFromRows(page.ownerIds,[...rows.slice(0,-1)]).status,'Incomplete');
+  assert.deepEqual(salesPlanPopulation(active,plans,9).ownerIds,[]);
+});
+
+test('team forecast selects only active plan owners',async()=>{
+  const population=salesPlanPopulation([7,8,9,10],[7,8],null);
+  const queried=[];
+  const client={
+    user:{findMany:async args=>{assert.deepEqual(args.where.id.in,population.ownerIds);return population.ownerIds.map(id=>({id,role:'SALES',active:true,archivedAt:null}));}},
+    salesTarget:{findMany:async args=>{queried.push(args.where.userId.in);return [];}},
+    opportunity:{findMany:async args=>{queried.push(args.where.AND.at(-1).ownerId.in);return [];}}
+  };
+  const forecast=await planForecast(client,actor('SALES_MANAGER'),{userId:null,year:2027,currencyCode:'USD',ownerIds:population.ownerIds});
+  assert.equal(forecast.length,4);
+  assert.ok(queried.every(ids=>JSON.stringify(ids)==='[7,8]'));
+  assert.ok(forecast.every(q=>q.pipeline==='0.00'));
 });
