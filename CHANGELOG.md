@@ -21,6 +21,7 @@ boundaries. Dates are the dates of the last commits in each group.
 - New CRM records default eligible owner and assignee fields to the current user or the relevant source record.
 - Creating a Contact from an Account returns to that Account's Contacts tab; Contacts can use the Account address or keep a different address.
 - Project update actions are easier to find and use.
+- Sales Rep filters across reports hide redundant self/all choices for Sales users and offer clearer multi-rep choices for management.
 
 ### Fixed
 
