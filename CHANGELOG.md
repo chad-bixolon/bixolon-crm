@@ -11,6 +11,20 @@ boundaries. Dates are the dates of the last commits in each group.
 - Local development user impersonation for Admin led role and ownership UAT; disabled in production.
 - Sales Plan management with review-first workbook imports, official annual revisions, rep quarterly allocation, target comparison, and a management report.
 - Explicit management preview and sync from an active annual Sales Plan to quarterly Sales Targets, with exact cent allocation, conflict checks, and audit history.
+- Forecast Attention on the Dashboard and Quarterly Forecast report, highlighting missing targets and Opportunities needing follow-up.
+- Opportunity creation from an Account, with the Account preselected.
+
+### Improved
+
+- Sales Plan pages and management reports paginate plan lines while keeping totals across the full selection.
+- Sales Plan allocation is easier to review and edit, with an even-split option, clearer status, and consistent currency, unit, and percentage formatting.
+- New CRM records default eligible owner and assignee fields to the current user or the relevant source record.
+- Creating a Contact from an Account returns to that Account's Contacts tab; Contacts can use the Account address or keep a different address.
+- Project update actions are easier to find and use.
+
+### Fixed
+
+- Sales Plan team targets and forecasts count reps with an active plan for the selected year and currency.
 
 No commits are assigned here because the repository does not identify the Git
 commit currently deployed. The numbered groups below describe code history,
