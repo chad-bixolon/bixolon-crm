@@ -267,6 +267,7 @@ model User {
   salesTargets            SalesTarget[]      @relation("SalesTargetRep")
   createdSalesTargets     SalesTarget[]      @relation("SalesTargetCreatedBy")
   updatedSalesTargets     SalesTarget[]      @relation("SalesTargetUpdatedBy")
+  salesTargetSyncs        SalesTargetSync[]  @relation("SalesTargetSyncActor")
   marketingTradeShows     TradeShow[]        @relation("TradeShowMarketingOwner")
   createdTradeShows       TradeShow[]        @relation("TradeShowCreatedBy")
   updatedTradeShows       TradeShow[]        @relation("TradeShowUpdatedBy")
@@ -670,6 +671,24 @@ model SalesTarget {
   @@index([year, quarter, currencyCode, archivedAt])
 }
 
+model SalesTargetSync {
+  id Int @id @default(autoincrement())
+  actorId Int
+  actor User @relation("SalesTargetSyncActor", fields: [actorId], references: [id], onDelete: Restrict)
+  planId Int
+  plan SalesPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  userId Int
+  year Int
+  currencyCode String @db.Char(3)
+  sourceAnnualAmount Decimal @db.Decimal(18, 2)
+  priorTargets Json
+  resultingTargets Json
+  createdAt DateTime @default(now())
+
+  @@index([userId, year, currencyCode, createdAt])
+  @@index([planId])
+}
+
 model SalesPlan {
   id Int @id @default(autoincrement())
   planYear Int
@@ -693,6 +712,7 @@ model SalesPlan {
   supersededById Int?
   supersededBy User? @relation("SalesPlanSuperseder", fields: [supersededById], references: [id], onDelete: Restrict)
   lines SalesPlanLine[]
+  targetSyncs SalesTargetSync[]
 
   @@unique([ownerId, planYear, currencyCode, revision])
   @@index([planYear, currencyCode, status])

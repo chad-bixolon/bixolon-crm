@@ -14,6 +14,7 @@ export function can(actor: Actor | null | undefined, permission: Permission) { r
 export function assertPermission(actor: Actor | null | undefined, permission: Permission) { if (!can(actor,permission)) throw new Error('Access denied'); }
 export function permissionForPath(path: string): Permission | null {
   if (path.startsWith('/sales-plan/import')) return 'sales-plan.manage';
+  if (path.startsWith('/sales-plan/sync')) return 'sales-plan.manage';
   if (path.startsWith('/sales-plan')) return 'sales-plan.read';
   if (path.startsWith('/marketing')) return 'marketing.read';
   if (path.startsWith('/trade-shows')) return 'trade-shows.read';
