@@ -8,6 +8,7 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ### Added
 
+- Sales Plan management Excel export with current targets, approved plan allocations, live Opportunity forecast, SKU detail, and conservative planned versus unplanned pipeline comparison.
 - Marketing attribution foundation with configurable Lead Sources, Campaigns, dated Campaign Influences, Trade Show import automation, Contact and Opportunity context, Marketing management, and correction history.
 - Opportunity change history, weekly forecast snapshots, a Forecast Movement report, and an Admin retention/archive workflow.
 - Local development user impersonation for Admin led role and ownership UAT; disabled in production.
