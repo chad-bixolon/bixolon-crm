@@ -29,6 +29,8 @@ const pageMocks = {
   '@/lib/opportunities': { lineTotal: () => 0, opportunityTotal: () => 0, weightedValue: () => 0 },
   '@/lib/prisma': { prisma: {
     opportunity: { findUnique: async () => opportunity },
+    opportunityHistoryEvent: { findFirst: async () => null },
+    opportunityHistoryArchive: { findFirst: async () => null },
     projectUpdate: { findMany: async () => [] },
     project: { findMany: async () => [] },
     demoRequest: { findMany: async query => query.where.opportunityId === null ? demoOptions : demos },
@@ -48,6 +50,7 @@ const pageMocks = {
   '@/lib/demo-operations': { demoSummary: () => ({ outstanding: 0 }) },
   '@/lib/demos': { demoLabel: row => row.demoNumber },
   '@/lib/authorization': { can: () => true },
+  '@/lib/opportunity-history': { opportunityHistory: async () => ({ rows: [], total: 0 }), stageStartedAt: () => null },
   '@/app/demos/actions': { linkDemoFromOpportunity: () => async () => {}, updateDemoContext: () => async () => {} },
 };
 Module._load = function(specifier, parent, isMain) { return specifier in pageMocks ? pageMocks[specifier] : originalLoad.call(this, specifier, parent, isMain); };

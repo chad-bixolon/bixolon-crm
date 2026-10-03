@@ -97,6 +97,7 @@ export default async function ReportsPage({searchParams}:{searchParams:Promise<{
         <span className="shrink-0 text-sm font-semibold text-orange-800">View forecast <span aria-hidden="true">→</span></span>
       </Link>
     </section>}
+    {visibleReportTypes.includes('PIPELINE')&&<section className="mb-6"><Link className="panel block p-4" href="/reports/forecast-movement"><h2 className="text-lg font-semibold">Forecast Movement</h2><p className="text-sm text-slate-600">Compare captured weekly Pipeline, Best Case, Commit, weighted Pipeline, and target changes.</p></Link></section>}
     {['ADMIN','SALES_MANAGER','READ_ONLY'].includes(actor.role)&&<section className="mb-6"><Link className="group flex flex-col gap-2 rounded-lg border border-orange-200 bg-orange-50/70 p-4 hover:border-orange-400" href="/reports/sales-plan"><h2 className="text-lg font-semibold">Sales Plan report</h2><p className="text-sm text-slate-600">Annual target and plan, quarterly allocation, and current forecast by rep with line drill-down.</p></Link></section>}
     {!!builtIns.size && <section className="panel mb-8 p-5 md:p-6">
       <h2 className="text-lg font-semibold">Built-in Reports</h2>

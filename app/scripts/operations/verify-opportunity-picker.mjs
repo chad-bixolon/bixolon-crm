@@ -25,7 +25,7 @@ try {
     prisma.account.findFirst({ where: { status: 'ACTIVE' }, select: { id: true } }),
     prisma.salesStage.findFirst({ where: { active: true }, select: { id: true } }),
     prisma.currency.findFirst({ where: { active: true }, select: { code: true } }),
-    prisma.user.findFirst({ where: { role: 'ADMIN', active: true, archivedAt: null, identities: { some: {} } }, select: { id: true, identities: { select: { id: true }, take: 1 } } }),
+    prisma.user.findFirst({ where: { role: 'ADMIN', active: true, archivedAt: null, identities: { some: {} } }, select: { id: true, role: true, active: true, archivedAt: true, identities: { select: { id: true }, take: 1 } } }),
   ]);
   assert.ok(account && stage && currency && admin, 'active account, stage, currency and linked admin are required');
   const product = await prisma.product.create({ data: {
@@ -64,7 +64,7 @@ try {
     participants: [{ accountId: account.id, roles: ['END_USER'] }],
     lines: [{ productId, skuId: sku.id, quantity: 2, price: chosen.prices[0].amount }],
   };
-  opportunityId = await saveOpportunity(prisma, input);
+  opportunityId = await saveOpportunity(prisma, input, undefined, admin);
   let saved = await prisma.opportunity.findUniqueOrThrow({ where: { id: opportunityId }, include: { products: { include: { sku: true } } } });
   assert.equal(saved.products[0].sku?.partNumber, sku.partNumber);
   assert.equal(saved.products[0].quantity, 2);
@@ -74,7 +74,7 @@ try {
   assert.match(editPage, new RegExp(`name="productId" value="${productId}"`));
   assert.ok(editPage.includes(`name="skuId" value="${sku.id}"`), `edit page SKU input: ${editPage.match(/name="skuId"[^>]*>/)?.[0] ?? 'absent'}`);
   input.lines = [{ id: saved.products[0].id, productId, skuId: sku.id, quantity: 3, price: '15.00' }];
-  await saveOpportunity(prisma, input, opportunityId);
+  await saveOpportunity(prisma, input, opportunityId, admin);
   saved = await prisma.opportunity.findUniqueOrThrow({ where: { id: opportunityId }, include: { products: { include: { sku: true } } } });
   assert.equal(saved.products[0].skuId, sku.id);
   assert.equal(saved.products[0].quantity, 3);
@@ -88,6 +88,8 @@ try {
   console.log('PASS: Opportunity create/edit, SKU persistence after reopen, quantity, estimated price and totals.');
 } finally {
   if (opportunityId) await prisma.$transaction(async tx => {
+    // This smoke check removes only its own temporary fixture and its generated events.
+    await tx.opportunityHistoryEvent.deleteMany({ where: { opportunityId } });
     await tx.opportunityProduct.deleteMany({ where: { opportunityId } });
     await tx.opportunityAccountRole.deleteMany({ where: { opportunityId } });
     await tx.opportunityAccount.deleteMany({ where: { opportunityId } });

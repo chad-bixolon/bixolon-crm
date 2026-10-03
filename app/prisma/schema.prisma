@@ -598,6 +598,7 @@ model Currency {
 }
 
 model Opportunity {
+  historyEvents           OpportunityHistoryEvent[]
   id                      Int                  @id @default(autoincrement())
   demoRequests            DemoRequest[]
   projects                OpportunityProject[]
@@ -649,6 +650,130 @@ model Opportunity {
   @@index([createdById])
   @@index([updatedById])
   @@index([archivedById])
+}
+
+model OpportunityHistoryEvent {
+  id Int @id @default(autoincrement())
+  opportunityId Int
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  occurredAt DateTime @default(now())
+  actorId Int?
+  eventType String @db.VarChar(32)
+  opportunityName String
+  actorName String?
+  accountName String?
+  oldStageId Int?
+  newStageId Int?
+  oldStageName String?
+  newStageName String?
+  oldCategory ForecastCategory?
+  newCategory ForecastCategory?
+  oldCloseDate DateTime?
+  newCloseDate DateTime?
+  oldOwnerId Int?
+  newOwnerId Int?
+  oldOwnerName String?
+  newOwnerName String?
+  oldProbability Int?
+  newProbability Int?
+  oldValue Decimal? @db.Decimal(18, 2)
+  newValue Decimal? @db.Decimal(18, 2)
+  oldCurrencyCode String? @db.Char(3)
+  newCurrencyCode String? @db.Char(3)
+  oldArchived Boolean?
+  newArchived Boolean?
+  createdAt DateTime @default(now())
+
+  @@index([opportunityId, occurredAt, id])
+  @@index([actorId, occurredAt])
+  @@index([eventType, occurredAt])
+  @@index([oldCloseDate, newCloseDate])
+  @@index([newCategory, occurredAt])
+}
+
+model OpportunityHistoryArchive {
+  id Int @id @default(autoincrement())
+  sourceId Int @unique
+  opportunityId Int
+  occurredAt DateTime
+  actorId Int?
+  eventType String @db.VarChar(32)
+  opportunityName String
+  actorName String?
+  accountName String?
+  oldStageId Int?
+  newStageId Int?
+  oldStageName String?
+  newStageName String?
+  oldCategory ForecastCategory?
+  newCategory ForecastCategory?
+  oldCloseDate DateTime?
+  newCloseDate DateTime?
+  oldOwnerId Int?
+  newOwnerId Int?
+  oldOwnerName String?
+  newOwnerName String?
+  oldProbability Int?
+  newProbability Int?
+  oldValue Decimal? @db.Decimal(18, 2)
+  newValue Decimal? @db.Decimal(18, 2)
+  oldCurrencyCode String? @db.Char(3)
+  newCurrencyCode String? @db.Char(3)
+  oldArchived Boolean?
+  newArchived Boolean?
+  createdAt DateTime
+  archivedAt DateTime @default(now())
+  archiveBatchId String @db.Uuid
+
+  @@index([opportunityId, occurredAt, sourceId])
+  @@index([archiveBatchId])
+}
+
+model ForecastSnapshot {
+  id Int @id @default(autoincrement())
+  snapshotWeek DateTime @db.Date
+  capturedAt DateTime @default(now())
+  year Int
+  quarter SalesQuarter
+  currencyCode String @db.Char(3)
+  repId Int
+  repName String
+  pipeline Decimal @db.Decimal(18, 2)
+  weightedPipeline Decimal @db.Decimal(18, 2)
+  bestCase Decimal @db.Decimal(18, 2)
+  commit Decimal @db.Decimal(18, 2)
+  target Decimal? @db.Decimal(18, 2)
+  targetStatus String @db.VarChar(32)
+  createdAt DateTime @default(now())
+
+  @@unique([snapshotWeek, year, quarter, currencyCode, repId])
+  @@index([year, quarter, currencyCode, repId, snapshotWeek])
+  @@index([capturedAt])
+}
+
+model ForecastSnapshotArchive {
+  id Int @id @default(autoincrement())
+  sourceId Int @unique
+  snapshotWeek DateTime @db.Date
+  capturedAt DateTime
+  year Int
+  quarter SalesQuarter
+  currencyCode String @db.Char(3)
+  repId Int
+  repName String
+  pipeline Decimal @db.Decimal(18, 2)
+  weightedPipeline Decimal @db.Decimal(18, 2)
+  bestCase Decimal @db.Decimal(18, 2)
+  commit Decimal @db.Decimal(18, 2)
+  target Decimal? @db.Decimal(18, 2)
+  targetStatus String @db.VarChar(32)
+  createdAt DateTime
+  archivedAt DateTime @default(now())
+  archiveBatchId String @db.Uuid
+
+  @@unique([snapshotWeek, year, quarter, currencyCode, repId])
+  @@index([year, quarter, currencyCode, repId, snapshotWeek])
+  @@index([archiveBatchId])
 }
 
 model SalesTarget {

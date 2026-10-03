@@ -104,12 +104,13 @@ test('Opportunity form parsing still validates source fields; the save path chec
 function saveDb({ existingLine = null, selectedLines = [], catalogPrices = [], odmPrices = [] } = {}) {
   const writes = [];
   const tx = {
-    opportunity: { findUnique: async () => existingLine ? { id: 5, archivedAt: null, stageId: 1, projects: [] } : null, create: async () => ({ id: 5 }), update: async () => ({}) },
+    opportunity: { findUnique: async () => existingLine ? { id: 5, archivedAt: null, stageId: 1, projects: [], participants: [], stage: { name: 'Open' }, owner: null, forecastCategory: 'PIPELINE', expectedCloseDate: null, ownerId: null, probability: null, currencyCode: 'USD' } : null, create: async () => ({ id: 5 }), update: async () => ({}) },
     opportunityProduct: { findMany: async () => existingLine ? [existingLine] : [], create: async ({ data }) => { writes.push(data); }, update: async ({ data }) => { writes.push(data); } },
-    salesStage: { findUnique: async () => ({ id: 1, active: true }) }, currency: { findUnique: async () => ({ code: 'USD', active: true }) },
+    salesStage: { findUnique: async () => ({ id: 1, name: 'Open', active: true }) }, currency: { findUnique: async () => ({ code: 'USD', active: true }) },
     user: { findUnique: async () => null }, account: { findMany: async args => args.where.id.in.map(id => ({ id })) }, product: { findMany: async () => [{ id: 3 }] }, project: { findMany: async () => [] },
     productSku: { findMany: async () => [{ id: 9, productId: 3, active: true }] }, productPrice: { findMany: async () => catalogPrices }, priceExceptionLine: { findMany: async () => selectedLines }, productSkuOdmCustomerPrice: { findMany: async () => odmPrices },
     opportunityProject: { delete: async () => ({}), create: async () => ({}) }, opportunityAccount: { findMany: async () => [], delete: async () => ({}), upsert: async () => ({}) }, opportunityAccountRole: { deleteMany: async () => ({}), create: async () => ({}) },
+    opportunityHistoryEvent: { createMany: async () => ({ count: 1 }) },
   };
   return { writes, client: { $transaction: async fn => fn(tx) } };
 }

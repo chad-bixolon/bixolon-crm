@@ -111,7 +111,7 @@ export async function opportunityOptions(client: PrismaClient) {
 export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number, actor?: Actor) {
   input = { ...input, contacts: input.contacts ?? [], lines: input.lines.map(line => ({ ...line, priceSource: line.priceSource ?? "MANUAL", catalogPriceTier: line.catalogPriceTier ?? null, priceExceptionLineId: line.priceExceptionLineId ?? null, odmCustomerPriceId: line.odmCustomerPriceId ?? null, odmCustomerAccountId: line.odmCustomerAccountId ?? null })) };
   const run = async (tx: Prisma.TransactionClient) => {
-    const existing = id ? await tx.opportunity.findUnique({ where: { id }, include: { projects: true } }) : null;
+    const existing = id ? await tx.opportunity.findUnique({ where: { id }, include: { projects: true, stage: true, owner: true, participants: { include: { account: true } } } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Opportunity not found or archived.');
     const existingContacts = id && tx.opportunityContact ? await tx.opportunityContact.findMany({ where: { opportunityId: id }, select: { contactId: true } }) : [];
     const existingContactIds = new Set(existingContacts.map(link => link.contactId));
@@ -119,7 +119,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
     const [stage, currency, owner, accounts, contacts, products, projects, skus, catalogPrices, peLines, odmPrices] = await Promise.all([
       tx.salesStage.findUnique({ where: { id: input.stageId } }), tx.currency.findUnique({ where: { code: input.currencyCode } }),
       input.ownerId ? tx.user.findUnique({ where: { id: input.ownerId } }) : null,
-      tx.account.findMany({ where: { id: { in: input.participants.map((p) => p.accountId) }, status: "ACTIVE", archivedAt: null }, select: { id: true } }),
+      tx.account.findMany({ where: { id: { in: input.participants.map((p) => p.accountId) }, status: "ACTIVE", archivedAt: null }, select: { id: true, name: true } }),
       input.contacts.length ? tx.contact.findMany({ where: { id: { in: input.contacts.map(contact => contact.contactId) } }, select: { id: true, accountId: true, active: true, archivedAt: true } }) : Promise.resolve([]),
       tx.product.findMany({ where: { id: { in: input.lines.map((l) => l.productId) }, active: true, archivedAt: null }, select: { id: true } }),
       tx.project.findMany({ where: { AND: [operationalProjectWhere], id: { in: input.projectIds } }, select: { id: true, archivedAt: true } }),
@@ -219,6 +219,29 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       if (line.id) { if (!old) throw new Error("Line item not found."); await tx.opportunityProduct.update({ where: { id: line.id }, data: lineData }); }
       else await tx.opportunityProduct.create({ data: { opportunityId, ...lineData } });
     }
+    if (actor) {
+      const [actorRow, newOwner, currentLines] = await Promise.all([
+        tx.user.findUnique({ where: { id: actor.id }, select: { firstName: true, lastName: true } }),
+        input.ownerId ? tx.user.findUnique({ where: { id: input.ownerId }, select: { firstName: true, lastName: true } }) : Promise.resolve(null),
+        tx.opportunityProduct.findMany({ where: { opportunityId, archivedAt: null }, select: { quantity: true, estimatedUnitPrice: true } }),
+      ]);
+      const name = (user: { firstName: string; lastName: string } | null) => user ? `${user.firstName} ${user.lastName}` : null;
+      const context = { opportunityId, opportunityName: input.name, actorId: actor.id, actorName: name(actorRow), accountName: accounts.find(account => account.id === input.participants[0]?.accountId)?.name ?? existing?.participants[0]?.account.name ?? null };
+      const events: Prisma.OpportunityHistoryEventCreateManyInput[] = [];
+      const add = (eventType: string, values: Partial<Prisma.OpportunityHistoryEventCreateManyInput>) => events.push({ ...context, eventType, ...values });
+      if (!existing) add('BASELINE', { newStageId: input.stageId, newStageName: stage.name, newCategory: data.forecastCategory, newCloseDate: input.expectedCloseDate, newOwnerId: input.ownerId, newOwnerName: name(newOwner), newProbability: input.probability, newValue: opportunityTotal(currentLines), newCurrencyCode: input.currencyCode, newArchived: false });
+      else {
+        if (existing.stageId !== input.stageId) add('STAGE', { oldStageId: existing.stageId, oldStageName: existing.stage.name, newStageId: input.stageId, newStageName: stage.name });
+        if (existing.forecastCategory !== data.forecastCategory) add('FORECAST_CATEGORY', { oldCategory: existing.forecastCategory, newCategory: data.forecastCategory });
+        if (existing.expectedCloseDate?.getTime() !== input.expectedCloseDate?.getTime()) add('EXPECTED_CLOSE_DATE', { oldCloseDate: existing.expectedCloseDate, newCloseDate: input.expectedCloseDate });
+        if (existing.ownerId !== input.ownerId) add('OWNER', { oldOwnerId: existing.ownerId, oldOwnerName: name(existing.owner), newOwnerId: input.ownerId, newOwnerName: name(newOwner) });
+        if (existing.probability !== input.probability) add('PROBABILITY', { oldProbability: existing.probability, newProbability: input.probability });
+        const before = opportunityTotal(existingLines), after = opportunityTotal(currentLines);
+        if (!before.equals(after)) add('VALUE', { oldValue: before, newValue: after, oldCurrencyCode: existing.currencyCode, newCurrencyCode: input.currencyCode });
+        if (existing.currencyCode !== input.currencyCode) add('CURRENCY', { oldCurrencyCode: existing.currencyCode, newCurrencyCode: input.currencyCode });
+      }
+      if (events.length) await tx.opportunityHistoryEvent.createMany({ data: events });
+    }
     return opportunityId;
   };
   // Transaction clients intentionally omit $transaction. This permits conversion to
@@ -227,10 +250,16 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
   return run(client as unknown as Prisma.TransactionClient);
 }
 export async function setOpportunityArchived(client: PrismaClient, id: number, archived: boolean, actor?: Actor) {
-  const row = await client.opportunity.findUnique({ where: { id } }); if (!row) throw new Error("Opportunity not found.");
-  if (actor?.role === 'SALES' && row.ownerId !== actor.id) throw new Error('Sales users may edit only their own Opportunities.');
-  if (!!row.archivedAt === archived) throw new Error(archived ? "Opportunity is already archived." : "Opportunity is already active.");
-  await client.opportunity.update({ where: { id }, data: { archivedAt: archived ? new Date() : null } });
+  await client.$transaction(async tx => {
+    const row = await tx.opportunity.findUnique({ where: { id }, include: { participants: { include: { account: true } } } }); if (!row) throw new Error("Opportunity not found.");
+    if (actor?.role === 'SALES' && row.ownerId !== actor.id) throw new Error('Sales users may edit only their own Opportunities.');
+    if (!!row.archivedAt === archived) throw new Error(archived ? "Opportunity is already archived." : "Opportunity is already active.");
+    await tx.opportunity.update({ where: { id }, data: { archivedAt: archived ? new Date() : null } });
+    if (actor) {
+      const user = await tx.user.findUnique({ where: { id: actor.id }, select: { firstName: true, lastName: true } });
+      await tx.opportunityHistoryEvent.create({ data: { opportunityId: id, opportunityName: row.name, accountName: row.participants[0]?.account.name ?? null, actorId: actor.id, actorName: user ? `${user.firstName} ${user.lastName}` : null, eventType: archived ? 'ARCHIVED' : 'REOPENED', oldArchived: !archived, newArchived: archived } });
+    }
+  });
 }
 export type OpportunityFilters = { q?: string; stageId?: string; ownerId?: string; competitorId?: string; projectId?: string; forecastCategory?: string; closeFrom?: string; closeTo?: string; accountId?: string; page?: string; archived?: string };
 export function opportunityWhere(filters: OpportunityFilters): Prisma.OpportunityWhereInput {

@@ -43,7 +43,7 @@ function fixture({convertedOpportunityId=null,contactAccountId=10,contactActive=
     opportunity:{create:async()=>{if(failCreate)throw new Error('write failed');created++;return{id:55};}},
     opportunityAccount:{findMany:async()=>[],upsert:async()=>({})},opportunityAccountRole:{create:async()=>({})},
     opportunityContact:{findMany:async()=>[],delete:async()=>({}),updateMany:async()=>({count:0}),upsert:async({create})=>{links.push(create);return create;}},
-    opportunityProduct:{create:async()=>({}),update:async()=>({})},opportunityProject:{create:async()=>({}),delete:async()=>({})},
+    opportunityProduct:{findMany:async()=>[],create:async()=>({}),update:async()=>({})},opportunityProject:{create:async()=>({}),delete:async()=>({})},opportunityHistoryEvent:{createMany:async()=>({count:1})},
   };
   return {client:{$transaction:async callback=>callback(tx)},lead,get converted(){return converted},get created(){return created},get links(){return links}};
 }
