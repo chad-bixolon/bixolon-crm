@@ -5,10 +5,10 @@ type Summary = { rep:string; target:number|null; plan:number|null; difference:nu
 type Approved = {rep:string;account:string;planItem:string;product:string;sku:string;units:number|null;revenue:number|null;priorRevenue:number|null;quarters:(number|null)[][];allocationStatus:string;comments:string;revision:number;status:string};
 type Pipeline = {rep:string;account:string;opportunity:string;stage:string;category:string;date:Date;quarter:string;product:string;sku:string;quantity:number;unitPrice:number;value:number;opportunityTotal:number;currency:string;probability:number;planned:string;matchStatus:string};
 type Comparison = {rep:string;account:string;product:string;sku:string;planned:number|null;units:number|null;pipeline:number;bestCase:number;commit:number;pipelineDifference:number|null;commitDifference:number|null;classification:string};
-const moneyFormat = (code:string) => code === 'USD' ? '$#,##0.00;[Red]($#,##0.00)' : `"${code}" #,##0.00;[Red]("${code}" #,##0.00)`;
+export const moneyFormat = (code:string) => code === 'USD' ? '$#,##0.00;[Red]($#,##0.00)' : `"${code}" #,##0.00;[Red]("${code}" #,##0.00)`;
 const units = '#,##0.###';
 const percent = '0.0%';
-function sheet(headers:string[], rows:Cell[][], widths:number[], formats:Record<number,string>, headerRow=1) {
+export function sheet(headers:string[], rows:Cell[][], widths:number[], formats:Record<number,string>, headerRow=1) {
   const worksheet=XLSX.utils.aoa_to_sheet([headers,...rows]);
   worksheet['!cols']=widths.map(wch=>({wch}));
   worksheet['!autofilter']={ref:`A${headerRow}:${XLSX.utils.encode_col(headers.length-1)}${rows.length+headerRow}`};
