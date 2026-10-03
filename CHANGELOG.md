@@ -27,6 +27,7 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ### Fixed
 
+- Fixed Pipeline navigation so users without Pipeline access no longer see a dead-end link.
 - Fixed Product action visibility so Product readers no longer see management actions they cannot perform.
 - Sales Plan team targets and forecasts count reps with an active plan for the selected year and currency.
 

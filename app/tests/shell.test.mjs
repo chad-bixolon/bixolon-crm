@@ -24,7 +24,8 @@ Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(f
 Module._extensions['.tsx'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText, filename);
 const require = Module.createRequire(fileURLToPath(import.meta.url));
 const { Shell } = require(path.join(root, 'components/shell.tsx'));
-const { can } = require(path.join(root, 'lib/authorization.ts'));
+const { can, routeAccess } = require(path.join(root, 'lib/authorization.ts'));
+const { resolveUserContext } = require(path.join(root, 'lib/dev-impersonation.ts'));
 Module._load = originalLoad;
 
 function render(user, route = '/', extras = {}) {
@@ -82,4 +83,26 @@ test('navigation groups preserve role visibility and Admin-only Demos', () => {
     assert.equal(html.includes('href="/marketing/audiences"'), can(actor, 'marketing.read'));
     assert.equal(html.includes('href="/reports"'), can(actor, 'reports.view'));
   }
+});
+
+test('Pipeline navigation matches existing route permission for every role', () => {
+  for (const role of ['ADMIN', 'SALES_MANAGER', 'SALES', 'MARKETING_MANAGER', 'READ_ONLY']) {
+    const actor = { id: 7, role, active: true, archivedAt: null };
+    const allowed = can(actor, 'sales.read');
+    const html = render({ name: 'Test User', role, canViewSales: allowed });
+    assert.equal(html.includes('href="/pipeline"'), allowed, role);
+    assert.equal(routeAccess('/pipeline', actor), allowed ? 'allowed' : 'denied', role);
+  }
+  assert.equal(routeAccess('/pipeline', { id: 7, role: 'MARKETING_MANAGER', active: true, archivedAt: null }), 'denied');
+});
+
+test('Pipeline navigation uses the effective Marketing Manager during impersonation', async () => {
+  const real = { id: 1, role: 'ADMIN', active: true, name: 'Admin', email: 'admin@example.test' };
+  const db = { user: { findUnique: async () => ({ id: 7, role: 'MARKETING_MANAGER', active: true, archivedAt: null, firstName: 'Marketing', lastName: 'Manager', email: 'marketing@example.test' }) } };
+  const context = await resolveUserContext(real, '7', db, { NODE_ENV: 'development', ENABLE_DEV_IMPERSONATION: 'true' });
+  assert.equal(context.impersonating, true);
+  assert.equal(can(context.real, 'sales.read'), true);
+  const html = render({ name: context.effective.name, role: context.effective.role, canViewSales: can(context.effective, 'sales.read') }, '/', { impersonating: { realName: real.name, effectiveName: context.effective.name, role: context.effective.role } });
+  assert.doesNotMatch(html, /href="\/pipeline"/);
+  assert.match(html, /Testing as Marketing Manager/);
 });
