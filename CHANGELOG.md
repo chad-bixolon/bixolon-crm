@@ -17,7 +17,7 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ### Improved
 
-- Improved Opportunity and Forecast History administration with clearer snapshot dates, archive status, and empty states.
+- Refined Opportunity and Forecast History administration into compact snapshot, archive, and restore status sections with clearer dates, counts, actions, and empty states.
 - Opportunity History starts collapsed and calls out close-date changes that move an Opportunity into another quarter.
 - Opportunity History now uses clearer labels and dates and appears after the Opportunity's working sections.
 - Improved Contact address selection with clearer Account-address and custom-address choices.
