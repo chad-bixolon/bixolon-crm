@@ -17,6 +17,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ### Improved
 
+- Opportunity History starts collapsed and calls out close-date changes that move an Opportunity into another quarter.
+- Opportunity History now uses clearer labels and dates and appears after the Opportunity's working sections.
 - Improved Contact address selection with clearer Account-address and custom-address choices.
 - Sales Plan pages and management reports paginate plan lines while keeping totals across the full selection.
 - Sales Plan allocation is easier to review and edit, with an even-split option, clearer status, and consistent currency, unit, and percentage formatting.

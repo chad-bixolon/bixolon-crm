@@ -19,12 +19,13 @@ const actor = { id: 1, role: 'ADMIN' };
 let opportunity;
 let demos = [];
 let demoOptions = [];
+let history = { rows: [], total: 0 };
 const pageMocks = {
   'next/link': Link,
   'next/navigation': { notFound: () => { throw new Error('Not found'); } },
   '@/components/shell': { Content: ({ children }) => React.createElement('main', null, children), PageHeader: ({ title }) => React.createElement('header', null, title) },
   '@/components/crm-state-control': { CrmStateControl: () => null },
-  '@/lib/crm-validation': { forecastLabels: {}, opportunityPartyLabels: () => ({}) },
+  '@/lib/crm-validation': { forecastLabels: { PIPELINE: 'Pipeline', BEST_CASE: 'Best Case', COMMIT: 'Commit' }, opportunityPartyLabels: () => ({}) },
   '@/lib/configuration': { getLabels: async () => ({}) },
   '@/lib/opportunities': { lineTotal: () => 0, opportunityTotal: () => 0, weightedValue: () => 0 },
   '@/lib/prisma': { prisma: {
@@ -40,7 +41,7 @@ const pageMocks = {
   '@/components/project-updates': { ProjectUpdates: () => React.createElement('section', null, 'Project Updates') },
   '@/lib/projects': { projectReadWhere: () => ({}), canEditProject: () => true },
   '@/lib/engagement': { daysSince: () => null },
-  '@/lib/display-format': { formatCurrency: () => '$0' },
+  '@/lib/display-format': { formatCurrency: value => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value) },
   '@/lib/current-user': { currentUser: async () => actor },
   '@/lib/price-exception-visibility': { canViewPriceException: () => false },
   '@/components/save-success': { SaveSuccess: () => null },
@@ -50,7 +51,7 @@ const pageMocks = {
   '@/lib/demo-operations': { demoSummary: () => ({ outstanding: 0 }) },
   '@/lib/demos': { demoLabel: row => row.demoNumber },
   '@/lib/authorization': { can: () => true },
-  '@/lib/opportunity-history': { opportunityHistory: async () => ({ rows: [], total: 0 }), stageStartedAt: () => null },
+  '@/lib/opportunity-history': { opportunityHistory: async () => history, stageStartedAt: () => null },
   '@/app/demos/actions': { linkDemoFromOpportunity: () => async () => {}, updateDemoContext: () => async () => {} },
 };
 Module._load = function(specifier, parent, isMain) { return specifier in pageMocks ? pageMocks[specifier] : originalLoad.call(this, specifier, parent, isMain); };
@@ -100,6 +101,43 @@ test('supporting cards keep compact states, grid breakpoints, and Demo link acti
   assert.match(linked, /Choose an existing Demo/);
   assert.match(linked, /Link Demo/);
   demos = []; demoOptions = [];
+});
+
+test('Opportunity History uses business labels and local time after working sections', async () => {
+  opportunity = fixture();
+  history = { rows: [
+    { id: 2, eventType: 'FORECAST_CATEGORY', oldCategory: 'PIPELINE', newCategory: 'BEST_CASE', occurredAt: new Date('2026-10-03T13:39:00Z'), actorName: 'Blaise Collura' },
+    { id: 1, eventType: 'BASELINE', newStageName: 'Demo / POC', newCategory: 'PIPELINE', newValue: 126000, newCurrencyCode: 'USD', occurredAt: new Date('2026-10-03T13:38:00Z'), actorName: 'Blaise Collura' },
+  ], total: 21 };
+  const html = await render();
+  assert.match(html, /<details(?![^>]*\bopen\b)[^>]*><summary[^>]*><h2[^>]*>Opportunity History<\/h2> <span[^>]*>\(21\)<\/span><\/summary>/);
+  assert.match(html, /<summary[^>]*>.*?<\/summary><ul[^>]*>.*?Starting point.*?<\/ul>.*?<\/details>/);
+  assert.match(html, /Starting point<\/div><div>Demo \/ POC · Pipeline · \$126,000\.00/);
+  assert.match(html, /Forecast changed<\/div><div>Pipeline → Best Case/);
+  assert.match(html, /Oct 3, 2026 at 9:38 AM · Blaise Collura/);
+  assert.ok(html.indexOf('Products</h2>') < html.indexOf('Opportunity History</h2>'));
+  assert.ok(html.indexOf('Project Updates') < html.indexOf('Opportunity History</h2>'));
+  assert.match(html, /href="\/opportunities\/7\?historyPage=2"[^>]*>Older<\/a>/);
+  assert.doesNotMatch(html, /History \/ Forecast History|Initial captured state|PIPELINE/);
+  history = { rows: [], total: 0 };
+});
+
+test('close-date history highlights quarter and year movement only when the period changes', async () => {
+  opportunity = fixture();
+  const closeEvent = (id, oldDate, newDate) => ({ id, eventType: 'EXPECTED_CLOSE_DATE', oldCloseDate: oldDate && new Date(oldDate), newCloseDate: newDate && new Date(newDate), occurredAt: new Date('2026-10-03T13:38:00Z'), actorName: 'Blaise Collura' });
+  history = { rows: [
+    closeEvent(4, '2026-12-31T00:00:00Z', '2027-01-01T00:00:00Z'),
+    closeEvent(3, '2026-03-31T00:00:00Z', '2026-04-01T00:00:00Z'),
+    closeEvent(2, '2026-10-03T00:00:00Z', '2026-11-15T00:00:00Z'),
+    closeEvent(1, null, '2026-10-03T00:00:00Z'),
+  ], total: 4 };
+  const html = await render();
+  assert.match(html, /Dec 31, 2026 → Jan 1, 2027<\/div><div>Quarter moved: Q4 2026 → Q1 2027<\/div>/);
+  assert.match(html, /Mar 31, 2026 → Apr 1, 2026<\/div><div>Quarter moved: Q1 2026 → Q2 2026<\/div>/);
+  assert.match(html, /Oct 3, 2026 → Nov 15, 2026<\/div><div class="text-slate-500">/);
+  assert.match(html, /— → Oct 3, 2026<\/div><div class="text-slate-500">/);
+  assert.equal((html.match(/Quarter moved:/g) ?? []).length, 2);
+  history = { rows: [], total: 0 };
 });
 
 const documentMocks = {
