@@ -31,9 +31,10 @@ boundaries. Dates are the dates of the last commits in each group.
 - Fixed Product action visibility so Product readers no longer see management actions they cannot perform.
 - Sales Plan team targets and forecasts count reps with an active plan for the selected year and currency.
 
-No commits are assigned here because the repository does not identify the Git
-commit currently deployed. The numbered groups below describe code history,
-not confirmed production releases.
+Items under Unreleased are committed to the current development branch but have
+not yet been confirmed as deployed to production. The numbered groups below
+describe earlier code history and do not necessarily represent verified
+production deployment boundaries.
 
 ## v0.9.0 — 2026-10-01
 
