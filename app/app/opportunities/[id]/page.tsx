@@ -22,12 +22,15 @@ import { opportunityHistory, stageStartedAt } from '@/lib/opportunity-history';
 import { linkDemoFromOpportunity, updateDemoContext } from "@/app/demos/actions";
 import { ProjectUpdates } from "@/components/project-updates";
 import { canEditProject, projectReadWhere } from "@/lib/projects";
+import { opportunityAttribution } from "@/lib/marketing-attribution";
+import { MarketingAttributionCard } from "@/components/marketing-attribution-card";
 export const dynamic = "force-dynamic";
 export default async function OpportunityPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tasksView?: string; activitiesView?: string; notesView?: string; documentsView?: string; saved?: string; historyPage?: string }> }) {
   const id = Number((await params).id); if (!Number.isSafeInteger(id) || id <= 0) notFound();
   const actor = await currentUser();
   const workViews = await searchParams;
   const o = await prisma.opportunity.findUnique({ where: { id }, include: { stage: true, competitor: true, owner: true, originatingTradeShowLead: { include: { tradeShow: { select: { name: true } } } }, contacts: { include: { contact: { include: { account: { select: { name: true } } } } }, orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }] }, projects: { include: { project: { select: { id: true, name: true } } } }, participants: { include: { account: true, roles: true } }, products: { include: { product: true, sku: true, priceExceptionLine: { select: { priceExceptionId: true, priceException: { select: { assignedSalesRepUserId: true, sourceType: true } } } } }, orderBy: { id: "asc" } } } }); if (!o || (actor.role === 'SALES' && o.ownerId !== actor.id)) notFound();
+  const attribution = await opportunityAttribution(prisma, id, o.contacts.map(link => link.contactId), o.originatingTradeShowLead?.id ?? null);
   const demos = await prisma.demoRequest.findMany({ where: { opportunityId: id }, include: demoListInclude, orderBy: [{ requestedAt: 'desc' }, { id: 'desc' }] });
   const outstandingDemoUnits = demos.reduce((total, demo) => total + demoSummary(demo).outstanding, 0);
   const demoEditable = can(actor, 'sales.write') && !o.archivedAt && (actor.role !== 'SALES' || o.ownerId === actor.id);
@@ -66,6 +69,7 @@ export default async function OpportunityPage({ params, searchParams }: { params
   const saveMessage = saveFeedbackMessage(workViews.saved, 'Opportunity');
   return <Content><PageHeader eyebrow="Opportunities" title={o.name} description={`Opportunity #${id}`} action={<div className="flex gap-2"><Link className="btn-secondary" href="/opportunities">All opportunities</Link>{!o.archivedAt && (actor.role !== "SALES" || o.ownerId === actor.id) && <Link className="btn-primary" href={`/opportunities/${id}/edit`}>Edit opportunity</Link>}</div>}/>
     {saveMessage && <SaveSuccess message={saveMessage}/>}
+    <div className="mb-5"><MarketingAttributionCard actor={actor} leadSource={attribution.leadSource} influences={attribution.influences}/></div>
     <div className="panel mb-5 flex flex-wrap items-center gap-3 p-5"><span className="rounded bg-slate-100 px-3 py-1 text-sm">{o.archivedAt ? "Archived" : "Current"}</span><CrmStateControl kind="opportunity" id={id} state={o.archivedAt ? "archived" : "active"}/></div>
     <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><div className="panel p-5"><div className="label">Total estimated value</div><div className="text-xl font-semibold">{formatCurrency(total, o.currencyCode)}</div></div><div className="panel p-5"><div className="label">Weighted value</div><div className="text-xl font-semibold">{formatCurrency(weightedValue(total, probability), o.currencyCode)}</div></div><div className="panel p-5"><div className="label">Sales stage</div><div className="text-lg font-semibold">{o.stage.name}</div></div><div className="panel p-5"><div className="label">Probability</div><div className="text-lg font-semibold">{probability}%{o.probability !== null ? " override" : " stage"}</div></div></div>
     <div className="panel mb-5 p-4 text-sm">Last Opportunity Activity: {lastActivity?.activityDate.toISOString().slice(0,16).replace('T',' ') ?? "Never"} · Days since Activity: {daysSince(lastActivity?.activityDate ?? null) ?? "—"} · Days in current stage: {stageDays ?? 'Unknown before history capture'}</div>

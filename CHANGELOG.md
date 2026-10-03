@@ -8,6 +8,7 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ### Added
 
+- Marketing attribution foundation with configurable Lead Sources, Campaigns, dated Campaign Influences, Trade Show import automation, Contact and Opportunity context, Marketing management, and correction history.
 - Opportunity change history, weekly forecast snapshots, a Forecast Movement report, and an Admin retention/archive workflow.
 - Local development user impersonation for Admin led role and ownership UAT; disabled in production.
 - Sales Plan management with review-first workbook imports, official annual revisions, rep quarterly allocation, target comparison, and a management report.

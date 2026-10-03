@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { saveContactRecord, type ContactInput } from './contacts';
 import { sourceAddressDiffersFromAccount } from './address';
+import { linkLeadAttributionToContact } from './marketing-attribution';
 
 export type ResolutionLead = {
   id:number; firstName:string; lastName:string; title:string|null; email:string|null; phone:string|null;
@@ -53,6 +54,7 @@ export async function linkTradeShowLeadContact(client:ResolutionClient,tradeShow
     if(!contact)throw new Error('Choose an active Contact.');
     if(lead.accountId&&contact.accountId&&lead.accountId!==contact.accountId)throw new Error('The selected Contact belongs to a different Account. Neither record was changed.');
     await tx.tradeShowLead.update({where:{id:lead.id},data:{contactId:contact.id}});
+    await linkLeadAttributionToContact(tx, lead.id, contact.id, actor.id);
     return contact.id;
   });
 }
@@ -66,6 +68,7 @@ export async function createContactFromTradeShowLead(client:ResolutionClient,tra
     if(matches.length)throw new Error(matches.length>1?'Multiple Contacts use this email. Review and link the correct Contact.':'A Contact with this email already exists. Review and link the existing Contact.');
     const contactId=await saveContactRecord(tx,{...input,email,marketingPreference:'UNKNOWN'},undefined,actor);
     await tx.tradeShowLead.update({where:{id:lead.id},data:{contactId}});
+    await linkLeadAttributionToContact(tx, lead.id, contactId, actor.id);
     return contactId;
   });
 }
@@ -94,6 +97,7 @@ export async function bulkCreateTradeShowContacts(client:ResolutionClient,tradeS
       const input:ContactInput={accountId:lead.accountId,useAccountAddress,firstName:reviewedValue(lead.firstName)!,lastName:reviewedValue(lead.lastName)!,title:reviewedValue(lead.title),email:normalizedEmail(lead.email),phone:reviewedValue(lead.phone),mobile:null,active:true,isPrimary:false,marketingPreference:'UNKNOWN',...sourceAddress};
       const contactId=await saveContactRecord(tx,input,undefined,actor);
       await tx.tradeShowLead.update({where:{id:lead.id},data:{contactId}});created.push(contactId);
+      await linkLeadAttributionToContact(tx, lead.id, contactId, actor.id);
     }
     return {created:created.length,contactIds:created,unresolvedAccounts:leads.filter(lead=>lead.accountId===null).length};
   });

@@ -5,6 +5,7 @@ import type { ReviewedOverrides } from './trade-show-import-fields';
 import { PARTNER_ACCOUNT_ROLES } from './trade-show-routing';
 import { syncTradeShowFollowUp } from './trade-show-follow-up';
 import { tradeShowFollowUpBusinessDays } from './configuration';
+import { attachTradeShowInfluence, ensureTradeShowCampaign, eventsLeadSource } from './marketing-attribution';
 
 export type ReviewedRow = { originalSourceKey:string; reviewedOverrides:ReviewedOverrides };
 export type ImportChoice = ReviewedRow & { sourceKey: string; routing:TradeShowLeadRouting|null; repId: number | null; partnerAccountId:number|null; accountId: number | null; contactId: number | null; refresh: boolean };
@@ -130,6 +131,8 @@ export async function confirmTradeShowImport(client:PrismaClient,showId:number,b
     for(const choice of choices){const contact=choice.contactId?validContacts.get(choice.contactId):null;if(contact?.accountId&&choice.accountId&&contact.accountId!==choice.accountId)throw new Error('Selected Contact belongs to a different Account.');}
     const record=await tx.tradeShowImport.create({data:{tradeShowId:showId,format:parsed.format,sourceFileName:filename,sourceSheet:parsed.sheet,fileSha256:parsed.sha256,uploadedById:actor.id,rowCount:rows.length,mappingId:mapping?.id??null,mappingName:mapping?.name??null}});
     let created=0,existing=0,skipped=0;const seen=new Set<string>();
+    let campaign: Awaited<ReturnType<typeof ensureTradeShowCampaign>> | null = null;
+    let eventSource: Awaited<ReturnType<typeof eventsLeadSource>> | null = null;
     for(let i=0;i<rows.length;i++){
       const row=rows[i],rawRow=parsed.rows[i],choice=choices[i],reviewedOverrides=validateReviewedOverrides(choice.reviewedOverrides??{});if(row.invalid){skipped++;continue;}
       if(seen.has(row.sourceKey)){existing++;continue;}seen.add(row.sourceKey);
@@ -140,8 +143,10 @@ export async function confirmTradeShowImport(client:PrismaClient,showId:number,b
       const source={rawSourceData:rawRow.rawSourceData,capturedAt:row.capturedAt?new Date(row.capturedAt):null,firstName:row.firstName,lastName:row.lastName,title:row.title,email:row.email,phone:row.phone,sourceCompany:row.sourceCompany,sourceCompanyWebsite:row.sourceCompanyWebsite,addressLine1:row.addressLine1,addressLine2:row.addressLine2,city:row.city,stateProvince:row.stateProvince,postalCode:row.postalCode,country:row.country,sourceNotes:row.sourceNotes,sourceLeadId:row.sourceLeadId,productInterest:row.productInterest,competitorSourceText:row.competitorSourceText,currentProductBeingUsed:row.currentProductBeingUsed,customerPainPoints:row.customerPainPoints,...correctionData};
       const correctionsChanged=old&&stableJson(storedOverrides(old.reviewedOverrides))!==stableJson(reviewedOverrides);
       if(old){existing++;if(correctionsChanged||choice.refresh&&stableJson(old.rawSourceData)!==stableJson(rawRow.rawSourceData))await tx.tradeShowLead.update({where:{id:old.id},data:source});continue;}
+      if (!campaign) { campaign = await ensureTradeShowCampaign(tx, showId, actor.id); eventSource = await eventsLeadSource(tx); }
       const route=effective[i];
       const createdLead=await tx.tradeShowLead.create({data:{tradeShowId:showId,firstImportId:record.id,sourceFileName:filename,sourceSheet:parsed.sheet,sourceRow:row.sourceRow,...source,routing:route.routing,assignedSalesRepUserId:route.repId,routedPartnerAccountId:route.partnerAccountId,referralNotes:null,...(route.routing==='REFERRED_TO_PARTNER'?{referredAt:new Date(),referredByUserId:actor.id}:{}),accountId:choice.accountId,contactId:choice.contactId,status:'NEW'}});created++;
+      await attachTradeShowInfluence(tx, createdLead, campaign!.id, eventSource!.id, actor.id);
       if(route.routing==='BIXOLON_SALES')await syncTradeShowFollowUp(tx,null,createdLead,actor.id,new Date(),businessDays);
     }
     await tx.tradeShowImport.update({where:{id:record.id},data:{createdCount:created,existingCount:existing,skippedCount:skipped}});

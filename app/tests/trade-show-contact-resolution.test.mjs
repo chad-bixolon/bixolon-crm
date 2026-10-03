@@ -13,7 +13,7 @@ const resolution=require(path.join(root,'lib/trade-show-contact-resolution.ts'))
 const audiences=require(path.join(root,'lib/marketing-audiences.ts'));
 const actor=(role,id=7)=>({id,role,active:true,archivedAt:null});
 const input=(overrides={})=>({accountId:null,firstName:'Ada',lastName:'Lovelace',title:'Director',email:'ADA@EXAMPLE.COM',phone:'555-0100',mobile:null,active:true,isPrimary:false,marketingPreference:'OPTED_IN',addressLine1:null,addressLine2:null,city:null,stateProvince:null,postalCode:null,country:null,...overrides});
-const lead=(overrides={})=>({id:2,tradeShowId:1,contactId:null,accountId:null,firstName:'Ada',lastName:'Lovelace',title:'Director',email:'ada@example.com',phone:'555-0100',tradeShow:{archivedAt:null},...overrides});
+const lead=(overrides={})=>({id:2,tradeShowId:1,contactId:null,accountId:null,leadSourceId:null,firstName:'Ada',lastName:'Lovelace',title:'Director',email:'ada@example.com',phone:'555-0100',tradeShow:{archivedAt:null},...overrides});
 
 test('Contact Resolution administration is limited to Admin and Marketing Manager',()=>{
   assert.equal(resolution.canManageContactResolution(actor('ADMIN')),true);
@@ -23,7 +23,7 @@ test('Contact Resolution administration is limited to Admin and Marketing Manage
 
 test('individual creation preserves the lead, links the new Contact, and always defaults preference to UNKNOWN',async()=>{
   let created,leadPatch;
-  const tx={tradeShowLead:{findFirst:async()=>lead(),update:async({data})=>{leadPatch=data;}},contact:{findMany:async()=>[],create:async({data})=>{created={id:31,...data};return created;}},account:{findUnique:async()=>null}};
+  const tx={tradeShowLead:{findFirst:async()=>lead(),findUniqueOrThrow:async()=>lead(),update:async({data})=>{leadPatch=data;}},contact:{findMany:async()=>[],create:async({data})=>{created={id:31,...data};return created;}},account:{findUnique:async()=>null}};
   const client={$transaction:async fn=>fn(tx)};
   const id=await resolution.createContactFromTradeShowLead(client,1,2,input(),actor('MARKETING_MANAGER'));
   assert.equal(id,31);assert.equal(created.marketingPreference,'UNKNOWN');assert.equal(created.email,'ada@example.com');assert.deepEqual(leadPatch,{contactId:31});
@@ -39,7 +39,7 @@ test('exact and ambiguous email matches block creation and require explicit link
 
 test('linking changes only TradeShowLead.contactId and never overwrites Contact or Account data',async()=>{
   let leadPatch,contactWrites=0;
-  const tx={tradeShowLead:{findFirst:async()=>lead({accountId:8}),update:async({data})=>{leadPatch=data;}},contact:{findFirst:async()=>({id:20,accountId:8}),update:async()=>contactWrites++}};
+  const tx={tradeShowLead:{findFirst:async()=>lead({accountId:8}),findUniqueOrThrow:async()=>lead({accountId:8}),update:async({data})=>{leadPatch=data;}},contact:{findFirst:async()=>({id:20,accountId:8}),update:async()=>contactWrites++}};
   assert.equal(await resolution.linkTradeShowLeadContact({$transaction:async fn=>fn(tx)},1,2,20,actor('ADMIN')),20);
   assert.deepEqual(leadPatch,{contactId:20});assert.equal(contactWrites,0);
 });
@@ -53,7 +53,7 @@ test('bulk eligibility excludes placeholders, missing email, existing matches, a
 
 test('bulk creation accepts clean leads with unresolved Accounts and links each UNKNOWN Contact',async()=>{
   let next=40;const created=[],linked=[];const rows=[lead({id:2,email:'one@example.com'}),lead({id:3,email:'two@example.com',accountId:null})];
-  const tx={tradeShow:{findUnique:async()=>({archivedAt:null})},tradeShowLead:{findMany:async()=>rows,update:async({where,data})=>linked.push([where.id,data.contactId])},contact:{findMany:async()=>[],create:async({data})=>{const row={id:next++,...data};created.push(row);return row;}},account:{findUnique:async()=>null}};
+  const tx={tradeShow:{findUnique:async()=>({archivedAt:null})},tradeShowLead:{findMany:async()=>rows,findUniqueOrThrow:async({where})=>rows.find(row=>row.id===where.id),update:async({where,data})=>linked.push([where.id,data.contactId])},contact:{findMany:async()=>[],create:async({data})=>{const row={id:next++,...data};created.push(row);return row;}},account:{findUnique:async()=>null}};
   const result=await resolution.bulkCreateTradeShowContacts({$transaction:async fn=>fn(tx)},1,[2,3],actor('MARKETING_MANAGER'));
   assert.equal(result.created,2);assert.equal(result.unresolvedAccounts,2);assert.ok(created.every(row=>row.marketingPreference==='UNKNOWN'));assert.deepEqual(linked,[[2,40],[3,41]]);
 });

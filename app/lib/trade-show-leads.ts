@@ -6,6 +6,7 @@ import { canEditTradeShowLead } from './trade-shows';
 import { canRouteTradeShowLead, referralData, TRADE_SHOW_ROUTINGS, validateTradeShowRouting } from './trade-show-routing';
 import { syncTradeShowFollowUp } from './trade-show-follow-up';
 import { tradeShowFollowUpBusinessDays } from './configuration';
+import { linkLeadAttributionToContact } from './marketing-attribution';
 
 const statuses = Object.values(TradeShowLeadStatus);
 export const actionableTradeShowLeadStatuses: TradeShowLeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED'];
@@ -112,6 +113,7 @@ export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId:
       assignedSalesRepUserId: repId, routing, routedPartnerAccountId:partnerAccountId,
       ...referralData(routing,lead.routing,actor.id,notes,lead.referredAt), accountId, contactId,
     } });
+    if (contactId && contactId !== lead.contactId) await linkLeadAttributionToContact(tx, leadId, contactId, actor.id);
     await syncTradeShowFollowUp(tx, lead, updated, actor.id, new Date(), businessDays);
     return { errors: {} };
   });

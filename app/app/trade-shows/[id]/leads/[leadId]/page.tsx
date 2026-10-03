@@ -9,6 +9,8 @@ import { canConvertTradeShowLead } from '@/lib/trade-show-conversion';
 import type { TradeShowImportFormat, TradeShowLeadRouting, TradeShowLeadStatus } from '@prisma/client';
 import { SaveSuccess } from '@/components/save-success';
 import { saveFeedbackMessage } from '@/lib/save-feedback';
+import { canManageAttribution } from '@/lib/marketing-attribution';
+import { MarketingAttributionCard } from '@/components/marketing-attribution-card';
 
 export const dynamic = 'force-dynamic';
 const statusLabels: Record<TradeShowLeadStatus, string> = { NEW: 'New', CONTACTED: 'Contacted', QUALIFIED: 'Qualified', CONVERTED: 'Converted', DISQUALIFIED: 'Disqualified' };
@@ -31,6 +33,12 @@ export default async function TradeShowLeadPage({ params, searchParams }: { para
     },
   });
   if (!lead) notFound();
+  const [influences, sources, campaigns] = await Promise.all([
+    prisma.campaignInfluence.findMany({ where: { tradeShowLeadId: id, voidedAt: null }, include: { campaign: { select: { name: true, archivedAt: true } } }, orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }] }),
+    canManageAttribution(actor) ? prisma.leadSourceOption.findMany({ where: { active: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }) : Promise.resolve([]),
+    canManageAttribution(actor) ? prisma.marketingCampaign.findMany({ where: { archivedAt: null }, select: { id: true, name: true }, orderBy: { name: 'asc' } }) : Promise.resolve([]),
+  ]);
+  const leadSource = await prisma.leadSourceOption.findUnique({ where: { id: lead.leadSourceId ?? -1 }, select: { name: true } });
   const followUpTask = await prisma.task.findFirst({ where: { tradeShowLeadId: lead.id, source: 'TRADE_SHOW_LEAD_FOLLOW_UP' }, orderBy: { id: 'desc' }, select: { id: true, status: true, dueDate: true } });
   const when = (value: Date | null) => value ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }).format(value) : '—';
   const canLinkOpportunity = can(actor, 'sales.read') && (actor.role !== 'SALES' || lead.convertedOpportunity?.ownerId === actor.id);
@@ -40,6 +48,7 @@ export default async function TradeShowLeadPage({ params, searchParams }: { para
   const saveMessage = saveFeedbackMessage((await searchParams).saved, 'Trade Show Lead');
   return <Content><PageHeader eyebrow={lead.tradeShow.name} title={`${lead.firstName} ${lead.lastName}`} description={`Trade Show Lead #${lead.id}`} action={<div className="flex flex-wrap justify-end gap-2"><Link className="btn-secondary" href={`/trade-shows/${tradeShowId}`}>Back to Trade Show</Link>{!lead.tradeShow.archivedAt && canEditTradeShowLead(actor, lead) && <Link className="btn-primary" href={`/trade-shows/${tradeShowId}/leads/${lead.id}/edit`}>Edit Lead</Link>}</div>}/>
     {saveMessage && <SaveSuccess message={saveMessage}/>}
+    <div className="mb-5"><MarketingAttributionCard actor={actor} tradeShowLeadId={id} tradeShowId={tradeShowId} leadSource={leadSource?.name ?? null} influences={influences} sources={sources} campaigns={campaigns}/></div>
     <div className="grid gap-5 lg:grid-cols-2">
       <section className="panel p-5"><h2 className="mb-4 text-lg font-semibold">Lead</h2><dl className="grid gap-4 sm:grid-cols-2">{row('Name', `${lead.firstName} ${lead.lastName}`)}{row('Title', lead.title)}{row('Email', lead.email)}{row('Phone', lead.phone)}</dl></section>
       <section className="panel p-5"><h2 className="mb-4 text-lg font-semibold">Company</h2><dl className="grid gap-4 sm:grid-cols-2">{row('Source Company', lead.sourceCompany)}{row('Website', lead.sourceCompanyWebsite)}{row('Address', [lead.addressLine1, lead.addressLine2].filter(Boolean).join(', '))}{row('Location', [lead.city, lead.stateProvince, lead.postalCode, lead.country].filter(Boolean).join(', '))}</dl></section>
