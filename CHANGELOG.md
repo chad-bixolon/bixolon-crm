@@ -19,6 +19,7 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ### Improved
 
+- Reorganized the main navigation into functional CRM, Sales, Programs, Marketing, Catalog & Pricing, Reports, and Administration groups.
 - Expanded Opportunity History to capture participating Account, Contact, and Project relationship changes.
 - Reorganized Administration into compact functional groups for faster navigation.
 - Aligned Forecast Snapshot capture controls with their inputs on the history administration page.

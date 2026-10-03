@@ -33,6 +33,27 @@ function render(user, route = '/', extras = {}) {
   return renderToStaticMarkup(React.createElement(Shell, { user, ...extras }, React.createElement('div', null, 'Page content')));
 }
 
+const expectedSections = {
+  CRM: ['/', '/accounts', '/contacts'],
+  Sales: ['/opportunities', '/pipeline', '/sales-plan', '/tasks', '/demos'],
+  Programs: ['/projects'],
+  Marketing: ['/trade-shows', '/marketing/campaigns', '/marketing/audiences'],
+  'Catalog & Pricing': ['/products', '/price-exceptions'],
+  Reports: ['/reports'],
+  Administration: ['/administration', '/integrations'],
+};
+
+function shellUser(role) {
+  const actor = { id: 7, role, active: true, archivedAt: null };
+  return { name: 'Test User', role, canManageUsers: can(actor, 'users.manage'), canViewReports: can(actor, 'sales.read') || can(actor, 'trade-shows.read'), canViewMarketing: can(actor, 'marketing.read'), canViewSales: can(actor, 'sales.read') };
+}
+
+function navigation(html) {
+  const nav = html.match(/<nav aria-label="Primary navigation"[^>]*>(.*?)<\/nav>/)?.[1] ?? '';
+  const headings = [...nav.matchAll(/<p[^>]*>([^<]+)<\/p>/g)];
+  return Object.fromEntries(headings.map((heading, index) => [heading[1].replaceAll('&amp;', '&'), [...nav.slice(heading.index, headings[index + 1]?.index).matchAll(/<a href="([^"]+)"/g)].map(link => link[1])]));
+}
+
 test('development switcher is Admin-only and impersonation banner keeps return control for Sales', () => {
   const admin = { name: 'Chad Admin', role: 'ADMIN', canManageUsers: true };
   assert.match(render(admin, '/', { developmentAdmin: true }), /href="\/dev\/impersonation"[^>]*>Test as user/);
@@ -72,17 +93,24 @@ test('Marketing Audience navigation follows the Admin and Marketing role grants'
   }
 });
 
-test('navigation groups preserve role visibility and Admin-only Demos', () => {
+test('navigation groups preserve every route once and match effective role access', () => {
+  const allRoutes = Object.values(expectedSections).flat();
+  assert.equal(new Set(allRoutes).size, allRoutes.length);
   for (const role of ['ADMIN', 'SALES_MANAGER', 'SALES', 'MARKETING_MANAGER', 'READ_ONLY']) {
     const actor = { id: 7, role, active: true, archivedAt: null };
-    const html = render({ name: 'Test User', role, canManageUsers: role === 'ADMIN', canViewReports: can(actor, 'reports.view'), canViewMarketing: can(actor, 'marketing.read'), canViewSales: can(actor, 'sales.read') });
-    for (const section of ['CRM', 'Sales', 'Programs', 'Catalog']) assert.match(html, new RegExp(`>${section}</p>`));
-    assert.equal(html.includes('>Admin</p>'), role === 'ADMIN');
-    assert.equal(html.includes('href="/demos"'), role === 'ADMIN');
-    assert.equal(html.includes('href="/administration"'), role === 'ADMIN');
-    assert.equal(html.includes('href="/marketing/audiences"'), can(actor, 'marketing.read'));
-    assert.equal(html.includes('href="/reports"'), can(actor, 'reports.view'));
+    const html = render(shellUser(role));
+    const actual = navigation(html);
+    const expected = Object.fromEntries(Object.entries(expectedSections).map(([section, routes]) => [section, routes.filter(route =>
+      (route !== '/demos' || role === 'ADMIN') &&
+      (!['/opportunities', '/pipeline', '/sales-plan'].includes(route) || can(actor, route === '/sales-plan' ? 'sales-plan.read' : 'sales.read')) &&
+      (!['/marketing/campaigns', '/marketing/audiences'].includes(route) || can(actor, 'marketing.read')) &&
+      (!['/administration', '/integrations'].includes(route) || can(actor, route === '/administration' ? 'users.manage' : 'integrations.manage'))
+    )]).filter(([, routes]) => routes.length));
+    assert.deepEqual(actual, expected, role);
+    for (const route of Object.values(actual).flat()) assert.equal(routeAccess(route, actor), 'allowed', `${role}: ${route}`);
   }
+  assert.deepEqual(navigation(render(null)), {});
+  assert.deepEqual(navigation(render({ name: 'No grants', role: 'MARKETING_MANAGER', canManageUsers: false, canViewReports: false, canViewMarketing: false, canViewSales: false })).Administration, undefined);
 });
 
 test('Pipeline navigation matches existing route permission for every role', () => {
@@ -105,4 +133,15 @@ test('Pipeline navigation uses the effective Marketing Manager during impersonat
   const html = render({ name: context.effective.name, role: context.effective.role, canViewSales: can(context.effective, 'sales.read') }, '/', { impersonating: { realName: real.name, effectiveName: context.effective.name, role: context.effective.role } });
   assert.doesNotMatch(html, /href="\/pipeline"/);
   assert.match(html, /Testing as Marketing Manager/);
+});
+
+test('impersonation uses effective Marketing Manager navigation and keeps return control', async () => {
+  const real = { id: 1, role: 'ADMIN', active: true, name: 'Admin', email: 'admin@example.test' };
+  const db = { user: { findUnique: async () => ({ id: 7, role: 'MARKETING_MANAGER', active: true, archivedAt: null, firstName: 'Marketing', lastName: 'Manager', email: 'marketing@example.test' }) } };
+  const context = await resolveUserContext(real, '7', db, { NODE_ENV: 'development', ENABLE_DEV_IMPERSONATION: 'true' });
+  const html = render(shellUser(context.effective.role), '/trade-shows', { impersonating: { realName: real.name, effectiveName: context.effective.name, role: context.effective.role } });
+  assert.deepEqual(navigation(html), navigation(render(shellUser('MARKETING_MANAGER'), '/trade-shows')));
+  assert.doesNotMatch(html, /href="\/administration"|href="\/integrations"|href="\/opportunities"|href="\/pipeline"/);
+  assert.match(html, /Return to Admin/);
+  assert.match(html, /href="\/trade-shows" aria-current="page"/);
 });
