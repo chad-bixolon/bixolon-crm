@@ -6,7 +6,7 @@ import { submitContact, type FormState } from "@/app/contacts/actions";
 import { createContactForTradeShowLead } from "@/app/trade-shows/[id]/leads/[leadId]/resolve/actions";
 import { createResolutionContactAction } from "@/app/trade-shows/[id]/contact-resolution/actions";
 import { AddressFields } from "@/components/address-fields";
-import { addressFields, hasAddress, type Address } from "@/lib/address";
+import { hasAddress, type Address } from "@/lib/address";
 import type { MarketingPreference } from "@prisma/client";
 type Initial = Address & { accountId: number | null; useAccountAddress?: boolean | null; firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null; mobile: string | null; active: boolean; isPrimary: boolean; marketingPreference?: MarketingPreference };
 type AccountOption = Address & { id: number; name: string };
@@ -20,6 +20,12 @@ export function ContactForm({ id, initial, accounts, accountId, leadContext, res
   const [addressMode, setAddressMode] = useState<"account" | "different">(() => state.values?.addressMode === "account" ? "account" : state.values?.addressMode === "different" || (initial && (initial.useAccountAddress === false || initial.useAccountAddress === null && hasAddress(initial))) ? "different" : "account");
   const selectedAccount = accounts.find(account => String(account.id) === selectedAccountId);
   const effectiveMode = selectedAccountId ? addressMode : "different";
+  const accountAddressLines = selectedAccount && hasAddress(selectedAccount) ? [
+    selectedAccount.addressLine1,
+    selectedAccount.addressLine2,
+    [selectedAccount.city, [selectedAccount.stateProvince, selectedAccount.postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+    selectedAccount.country,
+  ].filter(Boolean) : [];
   const error = (key: string) => state.errors[key] && <p className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
   return <form key={state.reviewToken ?? 'contact'} action={action} onSubmit={guard} className="panel max-w-4xl p-6" aria-label={id ? "Edit contact" : "Create contact"}>
     {state.message && <p role="alert" className="mb-5 rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
@@ -31,8 +37,22 @@ export function ContactForm({ id, initial, accounts, accountId, leadContext, res
       {!sourceContext && <div><label className="label" htmlFor="marketingPreference">Marketing communications</label><select className="field" id="marketingPreference" name="marketingPreference" defaultValue={retained("marketingPreference",initial?.marketingPreference ?? "UNKNOWN")}><option value="UNKNOWN">Not specified</option><option value="OPTED_IN">Opted in</option><option value="OPTED_OUT">Opted out</option></select><p className="mt-1 text-xs text-slate-600">Record the Contact&apos;s preference for receiving marketing communications.</p><p className="mt-1 text-xs text-slate-600">Opted out: Do not include this Contact in marketing audience exports.</p></div>}
       {sourceContext && <><input type="hidden" name="marketingPreference" value="UNKNOWN"/><div className="rounded bg-slate-50 p-3 text-sm"><span className="font-semibold">Marketing communications</span><span className="block text-slate-600">Not specified</span></div></>}
       <label className="flex items-center gap-2 text-sm font-medium text-slate-700"><input type="checkbox" name="isPrimary" defaultChecked={state.values?state.values.isPrimary==="true":initial?.isPrimary} className="accent-orange-700"/>Primary contact for selected account</label>{error("isPrimary")}
-      <div className="sm:col-span-2 border-t border-slate-200 pt-5"><h2 className="text-base font-semibold">Location / Address</h2>{selectedAccountId && <div className="mt-3 space-y-2 text-sm"><label className="flex gap-2"><input type="radio" name="addressMode" value="account" checked={effectiveMode === "account"} onChange={() => setAddressMode("account")}/>Use Account address</label>{effectiveMode === "account" && <p className="ml-6 text-slate-600">{selectedAccount ? addressFields.map(([key]) => selectedAccount[key]).filter(Boolean).join(", ") || "No Account address saved" : "Account address unavailable"}</p>}<label className="flex gap-2"><input type="radio" name="addressMode" value="different" checked={effectiveMode === "different"} onChange={() => setAddressMode("different")}/>Use different address</label></div>}{!selectedAccountId && <input type="hidden" name="addressMode" value="different"/>}{effectiveMode === "account" && initial && hasAddress(initial) && <p className="mt-2 text-xs text-slate-600">Saved Contact address is kept. Choose “Use different address” later to use it again.</p>}</div>
-      {effectiveMode === "different" && <AddressFields initial={{...initial,...Object.fromEntries(["addressLine1","addressLine2","city","stateProvince","postalCode","country"].map(key=>[key,retained(key,initial?.[key as keyof Initial] as string|null)]))} as Address} errors={state.errors}/>}
+      <fieldset className="sm:col-span-2 border-t border-slate-200 pt-5">
+        <legend className="text-base font-semibold text-slate-900">Address</legend>
+        {selectedAccountId && <div className="mt-3 grid max-w-xl gap-2 text-sm">
+          <label className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors hover:border-orange-300 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-orange-600 ${effectiveMode === "account" ? "border-orange-300 bg-orange-50/60" : "border-slate-200 bg-white"}`}>
+            <input className="mt-0.5 shrink-0 accent-orange-700" type="radio" name="addressMode" value="account" checked={effectiveMode === "account"} onChange={() => setAddressMode("account")}/>
+            <span className="min-w-0"><span className="block font-semibold text-slate-900">Use Account address</span><span className="mt-1 block whitespace-pre-line text-slate-600">{accountAddressLines.length ? accountAddressLines.join("\n") : "No Account address available"}</span></span>
+          </label>
+          <label className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors hover:border-orange-300 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-orange-600 ${effectiveMode === "different" ? "border-orange-300 bg-orange-50/60" : "border-slate-200 bg-white"}`}>
+            <input className="mt-0.5 shrink-0 accent-orange-700" type="radio" name="addressMode" value="different" checked={effectiveMode === "different"} onChange={() => setAddressMode("different")}/>
+            <span className="min-w-0"><span className="block font-semibold text-slate-900">Use different address</span><span className="mt-1 block text-slate-600">Enter a separate address for this contact.</span></span>
+          </label>
+        </div>}
+        {!selectedAccountId && <input type="hidden" name="addressMode" value="different"/>}
+        {effectiveMode === "account" && initial && hasAddress(initial) && <p className="mt-2 text-xs text-slate-600">Saved Contact address is kept. Choose “Use different address” later to use it again.</p>}
+      </fieldset>
+      {effectiveMode === "different" && <AddressFields embedded initial={{...initial,...Object.fromEntries(["addressLine1","addressLine2","city","stateProvince","postalCode","country"].map(key=>[key,retained(key,initial?.[key as keyof Initial] as string|null)]))} as Address} errors={state.errors}/>}
       {leadContext && <label className="sm:col-span-2 flex items-start gap-2 rounded bg-amber-50 p-3 text-sm"><input className="mt-1" type="checkbox" name="confirmDuplicate"/>I reviewed the exact-email matches shown above and explicitly want to create a new Contact.</label>}
     </div><div className="mt-7 flex justify-end gap-2"><Link href={resolutionContext ? `/trade-shows/${resolutionContext.tradeShowId}/contact-resolution${resolutionContext.returnTo?`?returnTo=${encodeURIComponent(resolutionContext.returnTo)}`:""}` : leadContext ? `/trade-shows/${leadContext.tradeShowId}/leads/${leadContext.leadId}/edit` : id ? `/contacts/${id}` : accountId ? `/accounts/${accountId}?tab=contacts` : "/contacts"} className="btn-secondary">Cancel</Link><button type="submit" className="btn-primary disabled:opacity-60" name={state.matches?.length ? 'reviewedContact' : undefined} value={state.reviewToken} disabled={pending}>{pending ? "Saving…" : state.matches?.length ? id ? "Save changes anyway" : "Create new Contact anyway" : id ? "Save contact" : "Create contact"}</button></div>
   </form>;

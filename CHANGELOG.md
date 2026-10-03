@@ -16,6 +16,7 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ### Improved
 
+- Improved Contact address selection with clearer Account-address and custom-address choices.
 - Sales Plan pages and management reports paginate plan lines while keeping totals across the full selection.
 - Sales Plan allocation is easier to review and edit, with an even-split option, clearer status, and consistent currency, unit, and percentage formatting.
 - New CRM records default eligible owner and assignee fields to the current user or the relevant source record.
