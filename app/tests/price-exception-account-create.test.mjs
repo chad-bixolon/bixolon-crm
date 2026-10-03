@@ -63,6 +63,6 @@ test('Account creation from import requires Account write permission',async()=>{
 });
 test('Administration landing restores PE Cleanup as ongoing maintenance',()=>{
   const page=fs.readFileSync(path.join(root,'app/administration/page.tsx'),'utf8');
-  assert.match(page,/\["Imports"/);assert.match(page,/\["PE Cleanup", "\/administration\/price-exceptions", "Review and correct imported Price Exceptions, account mappings, owners, statuses, and other data issues\."\]/);
+  assert.match(page,/\["Imports"/);assert.match(page,/\["PE Cleanup", "\/administration\/price-exceptions", "Review imported Price Exceptions and correct data issues\."\]/);
   assert.doesNotMatch(page,/legacy cleanup/i);
 });
