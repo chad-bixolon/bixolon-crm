@@ -25,7 +25,7 @@ const pageMocks = {
   'next/navigation': { notFound: () => { throw new Error('Not found'); } },
   '@/components/shell': { Content: ({ children }) => React.createElement('main', null, children), PageHeader: ({ title }) => React.createElement('header', null, title) },
   '@/components/crm-state-control': { CrmStateControl: () => null },
-  '@/lib/crm-validation': { forecastLabels: { PIPELINE: 'Pipeline', BEST_CASE: 'Best Case', COMMIT: 'Commit' }, opportunityPartyLabels: () => ({}) },
+  '@/lib/crm-validation': { forecastLabels: { PIPELINE: 'Pipeline', BEST_CASE: 'Best Case', COMMIT: 'Commit' }, opportunityPartyLabels: () => ({ VAR_RESELLER: 'VAR', DISTRIBUTOR: 'Distributor', END_USER: 'End User' }) },
   '@/lib/configuration': { getLabels: async () => ({}) },
   '@/lib/opportunities': { lineTotal: () => 0, opportunityTotal: () => 0, weightedValue: () => 0 },
   '@/lib/prisma': { prisma: {
@@ -121,6 +121,34 @@ test('Opportunity History uses business labels and local time after working sect
   assert.ok(html.indexOf('Project Updates') < html.indexOf('Opportunity History</h2>'));
   assert.match(html, /href="\/opportunities\/7\?historyPage=2"[^>]*>Older<\/a>/);
   assert.doesNotMatch(html, /History \/ Forecast History|Initial captured state|PIPELINE/);
+  history = { rows: [], total: 0 };
+});
+
+test('Opportunity History shows relationship names, role labels, actor, and count without raw metadata', async () => {
+  opportunity = fixture();
+  const occurredAt = new Date('2026-10-03T18:15:00Z');
+  const details = (id, eventType, relatedRecordName, extra = {}) => ({ id, eventType, relatedRecordId: 99999, relatedRecordName, occurredAt, actorName: 'Ryan Persaud', oldRoles: [], newRoles: [], ...extra });
+  history = { rows: [
+    details(7, 'ACCOUNT_ADDED', 'BlueStar', { newRoles: ['DISTRIBUTOR'] }),
+    details(6, 'ACCOUNT_REMOVED', 'Operandi', { oldRoles: ['END_USER'] }),
+    details(5, 'ACCOUNT_ROLE_CHANGED', 'BlueStar', { oldRoles: ['VAR_RESELLER'], newRoles: ['DISTRIBUTOR'] }),
+    details(4, 'CONTACT_ADDED', 'Jane Smith'),
+    details(3, 'CONTACT_REMOVED', 'John Doe'),
+    details(2, 'PROJECT_LINKED', 'SRP-S300II Deployment'),
+    details(1, 'PROJECT_UNLINKED', 'Retail Rollout'),
+  ], total: 7 };
+  const html = await render();
+  const timeline = html.slice(html.indexOf('<details class="panel mb-5 p-5"'));
+  assert.match(timeline, /Opportunity History<\/h2> <span[^>]*>\(7\)<\/span>/);
+  for (const label of ['Account added', 'Account removed', 'Account role changed', 'Contact added', 'Contact removed', 'Project linked', 'Project unlinked']) assert.ok(timeline.includes(label));
+  assert.match(timeline, /BlueStar added as Distributor/);
+  assert.match(timeline, /Operandi removed from opportunity/);
+  assert.match(timeline, /BlueStar · VAR → Distributor/);
+  assert.match(timeline, /Jane Smith added/);
+  assert.match(timeline, /John Doe removed/);
+  assert.match(timeline, /SRP-S300II Deployment/);
+  assert.match(timeline, /Oct 3, 2026 at 2:15 PM · Ryan Persaud/);
+  assert.doesNotMatch(timeline, /VAR_RESELLER|DISTRIBUTOR|99999/);
   history = { rows: [], total: 0 };
 });
 

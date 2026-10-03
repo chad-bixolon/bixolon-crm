@@ -47,13 +47,14 @@ export default async function OpportunityPage({ params, searchParams }: { params
   const latestStage = await prisma.opportunityHistoryEvent.findFirst({ where: { opportunityId: id, eventType: { in: ['STAGE', 'BASELINE'] } }, orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }], select: { eventType: true, occurredAt: true } }) ?? await prisma.opportunityHistoryArchive.findFirst({ where: { opportunityId: id, eventType: { in: ['STAGE', 'BASELINE'] } }, orderBy: [{ occurredAt: 'desc' }, { sourceId: 'desc' }], select: { eventType: true, occurredAt: true } });
   const stageStart = stageStartedAt(latestStage ? [latestStage] : []);
   const stageDays = stageStart ? Math.max(0, Math.floor((new Date().getTime()-stageStart.getTime())/86400000)) : null;
-  const eventLabel = (kind: string) => ({ BASELINE: 'Starting point', STAGE: 'Stage changed', FORECAST_CATEGORY: 'Forecast changed', EXPECTED_CLOSE_DATE: 'Expected close date changed', OWNER: 'Owner changed', PROBABILITY: 'Probability override changed', VALUE: 'Opportunity value changed', CURRENCY: 'Currency changed', ARCHIVED: 'Opportunity archived', REOPENED: 'Opportunity reactivated' } as Record<string,string>)[kind] ?? kind;
+  const eventLabel = (kind: string) => ({ BASELINE: 'Starting point', STAGE: 'Stage changed', FORECAST_CATEGORY: 'Forecast changed', EXPECTED_CLOSE_DATE: 'Expected close date changed', OWNER: 'Owner changed', PROBABILITY: 'Probability override changed', VALUE: 'Opportunity value changed', CURRENCY: 'Currency changed', ARCHIVED: 'Opportunity archived', REOPENED: 'Opportunity reactivated', ACCOUNT_ADDED: 'Account added', ACCOUNT_REMOVED: 'Account removed', ACCOUNT_ROLE_CHANGED: 'Account role changed', CONTACT_ADDED: 'Contact added', CONTACT_REMOVED: 'Contact removed', PROJECT_LINKED: 'Project linked', PROJECT_UNLINKED: 'Project unlinked' } as Record<string,string>)[kind] ?? kind;
   const categoryLabel = (category: keyof typeof forecastLabels | null) => category ? forecastLabels[category] : '—';
   const historyDateTime = (value: Date) => `${new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' }).format(value)} at ${new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).format(value)}`;
   const closeDate = (value: Date | null) => value ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(value) : '—';
   const closeQuarter = (value: Date) => `Q${Math.floor(value.getUTCMonth() / 3) + 1} ${value.getUTCFullYear()}`;
   const quarterMovement = (oldDate: Date | null, newDate: Date | null) => oldDate && newDate && closeQuarter(oldDate) !== closeQuarter(newDate) ? `Quarter moved: ${closeQuarter(oldDate)} → ${closeQuarter(newDate)}` : null;
   const eventValues = (event: typeof history.rows[number]) => {
+    const roleNames = (roles: typeof event.oldRoles) => roles.map(role => partyLabels[role]).join(', ');
     switch (event.eventType) {
       case 'STAGE': return `${event.oldStageName ?? '—'} → ${event.newStageName ?? '—'}`;
       case 'FORECAST_CATEGORY': return `${categoryLabel(event.oldCategory)} → ${categoryLabel(event.newCategory)}`;
@@ -63,6 +64,13 @@ export default async function OpportunityPage({ params, searchParams }: { params
       case 'VALUE': return `${formatCurrency(event.oldValue ?? 0, event.oldCurrencyCode ?? o.currencyCode)} → ${formatCurrency(event.newValue ?? 0, event.newCurrencyCode ?? o.currencyCode)}`;
       case 'CURRENCY': return `${event.oldCurrencyCode ?? '—'} → ${event.newCurrencyCode ?? '—'}`;
       case 'BASELINE': return `${event.newStageName ?? '—'} · ${categoryLabel(event.newCategory)} · ${formatCurrency(event.newValue ?? 0, event.newCurrencyCode ?? o.currencyCode)}`;
+      case 'ACCOUNT_ADDED': return `${event.relatedRecordName ?? 'Account unavailable'} added as ${roleNames(event.newRoles)}`;
+      case 'ACCOUNT_REMOVED': return `${event.relatedRecordName ?? 'Account unavailable'} removed from opportunity`;
+      case 'ACCOUNT_ROLE_CHANGED': return `${event.relatedRecordName ?? 'Account unavailable'} · ${roleNames(event.oldRoles)} → ${roleNames(event.newRoles)}`;
+      case 'CONTACT_ADDED': return `${event.relatedRecordName ?? 'Contact unavailable'} added`;
+      case 'CONTACT_REMOVED': return `${event.relatedRecordName ?? 'Contact unavailable'} removed`;
+      case 'PROJECT_LINKED':
+      case 'PROJECT_UNLINKED': return event.relatedRecordName ?? 'Project unavailable';
       default: return '';
     }
   };

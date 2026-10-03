@@ -24,6 +24,13 @@ export async function changeProjectOpportunity(projectId: number, _state: LinkSt
       } else {
         await tx.opportunityProject.delete({ where: { opportunityId_projectId: { opportunityId, projectId } } });
       }
+      const user = await tx.user.findUnique({ where: { id: actor.id }, select: { firstName: true, lastName: true } });
+      await tx.opportunityHistoryEvent.create({ data: {
+        opportunityId, opportunityName: opportunity.name, actorId: actor.id,
+        actorName: user ? `${user.firstName} ${user.lastName}` : null,
+        eventType: operation === "link" ? "PROJECT_LINKED" : "PROJECT_UNLINKED",
+        relatedRecordId: projectId, relatedRecordName: project.name,
+      } });
     });
   } catch (error) { return { message: friendlyError(error, "This link could not be changed. Check whether it already exists.") }; }
   revalidatePath(`/projects/${projectId}`);

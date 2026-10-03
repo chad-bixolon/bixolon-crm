@@ -111,18 +111,18 @@ export async function opportunityOptions(client: PrismaClient) {
 export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number, actor?: Actor) {
   input = { ...input, contacts: input.contacts ?? [], lines: input.lines.map(line => ({ ...line, priceSource: line.priceSource ?? "MANUAL", catalogPriceTier: line.catalogPriceTier ?? null, priceExceptionLineId: line.priceExceptionLineId ?? null, odmCustomerPriceId: line.odmCustomerPriceId ?? null, odmCustomerAccountId: line.odmCustomerAccountId ?? null })) };
   const run = async (tx: Prisma.TransactionClient) => {
-    const existing = id ? await tx.opportunity.findUnique({ where: { id }, include: { projects: true, stage: true, owner: true, participants: { include: { account: true } } } }) : null;
+    const existing = id ? await tx.opportunity.findUnique({ where: { id }, include: { projects: { include: { project: { select: { name: true } } } }, stage: true, owner: true, participants: { include: { account: true } } } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Opportunity not found or archived.');
-    const existingContacts = id && tx.opportunityContact ? await tx.opportunityContact.findMany({ where: { opportunityId: id }, select: { contactId: true } }) : [];
+    const existingContacts = id && tx.opportunityContact ? await tx.opportunityContact.findMany({ where: { opportunityId: id }, include: { contact: { select: { firstName: true, lastName: true } } } }) : [];
     const existingContactIds = new Set(existingContacts.map(link => link.contactId));
     const existingLines = id ? await tx.opportunityProduct.findMany({ where: { opportunityId: id, archivedAt: null } }) : [];
     const [stage, currency, owner, accounts, contacts, products, projects, skus, catalogPrices, peLines, odmPrices] = await Promise.all([
       tx.salesStage.findUnique({ where: { id: input.stageId } }), tx.currency.findUnique({ where: { code: input.currencyCode } }),
       input.ownerId ? tx.user.findUnique({ where: { id: input.ownerId } }) : null,
       tx.account.findMany({ where: { id: { in: input.participants.map((p) => p.accountId) }, status: "ACTIVE", archivedAt: null }, select: { id: true, name: true } }),
-      input.contacts.length ? tx.contact.findMany({ where: { id: { in: input.contacts.map(contact => contact.contactId) } }, select: { id: true, accountId: true, active: true, archivedAt: true } }) : Promise.resolve([]),
+      input.contacts.length ? tx.contact.findMany({ where: { id: { in: input.contacts.map(contact => contact.contactId) } }, select: { id: true, accountId: true, active: true, archivedAt: true, firstName: true, lastName: true } }) : Promise.resolve([]),
       tx.product.findMany({ where: { id: { in: input.lines.map((l) => l.productId) }, active: true, archivedAt: null }, select: { id: true } }),
-      tx.project.findMany({ where: { AND: [operationalProjectWhere], id: { in: input.projectIds } }, select: { id: true, archivedAt: true } }),
+      tx.project.findMany({ where: { AND: [operationalProjectWhere], id: { in: input.projectIds } }, select: { id: true, name: true, archivedAt: true } }),
       input.lines.some(line => line.skuId) ? tx.productSku.findMany({ where: { id: { in: input.lines.flatMap(line => line.skuId ? [line.skuId] : []) } }, select: { id: true, productId: true, active: true, catalogSource: true, odmSubtype: true } }) : Promise.resolve([]),
       input.lines.some(line => line.priceSource === "CATALOG") ? tx.productPrice.findMany({ where: { OR: input.lines.filter(line => line.priceSource === "CATALOG" && line.skuId && line.catalogPriceTier).map(line => ({ skuId: line.skuId!, currencyCode: input.currencyCode, tier: line.catalogPriceTier! })) }, select: { skuId: true, currencyCode: true, tier: true, amount: true } }) : Promise.resolve([]),
       input.lines.some(line => line.priceSource === "PRICE_EXCEPTION") ? tx.priceExceptionLine.findMany({ where: { id: { in: input.lines.flatMap(line => line.priceExceptionLineId ? [line.priceExceptionLineId] : []) } }, include: { priceException: true } }) : Promise.resolve([]),
@@ -240,6 +240,24 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
         if (!before.equals(after)) add('VALUE', { oldValue: before, newValue: after, oldCurrencyCode: existing.currencyCode, newCurrencyCode: input.currencyCode });
         if (existing.currencyCode !== input.currencyCode) add('CURRENCY', { oldCurrencyCode: existing.currencyCode, newCurrencyCode: input.currencyCode });
       }
+      const roles = (values: OpportunityPartyRole[]) => [...new Set(values)].sort();
+      const previousAccounts = new Map(existingMemberships.map(membership => [membership.accountId, roles(membership.roles.map(item => item.role))]));
+      const currentAccounts = new Map(input.participants.map(participant => [participant.accountId, roles(participant.roles)]));
+      for (const [accountId, oldRoles] of previousAccounts) {
+        const relatedRecordName = existing?.participants.find(participant => participant.accountId === accountId)?.account.name ?? 'Account unavailable';
+        const newRoles = currentAccounts.get(accountId);
+        if (!newRoles) add('ACCOUNT_REMOVED', { relatedRecordId: accountId, relatedRecordName, oldRoles });
+        else if (oldRoles.join('|') !== newRoles.join('|')) add('ACCOUNT_ROLE_CHANGED', { relatedRecordId: accountId, relatedRecordName, oldRoles, newRoles });
+      }
+      for (const [accountId, newRoles] of currentAccounts) if (!previousAccounts.has(accountId)) add('ACCOUNT_ADDED', { relatedRecordId: accountId, relatedRecordName: accounts.find(account => account.id === accountId)?.name ?? 'Account unavailable', newRoles });
+      const previousContacts = new Set(existingContacts.map(link => link.contactId));
+      const currentContacts = new Set(input.contacts.map(contact => contact.contactId));
+      for (const link of existingContacts) if (!currentContacts.has(link.contactId)) add('CONTACT_REMOVED', { relatedRecordId: link.contactId, relatedRecordName: link.contact ? `${link.contact.firstName} ${link.contact.lastName}` : 'Contact unavailable' });
+      for (const contact of contacts) if (!previousContacts.has(contact.id)) add('CONTACT_ADDED', { relatedRecordId: contact.id, relatedRecordName: `${contact.firstName} ${contact.lastName}` });
+      const previousProjects = new Set(existing?.projects.map(link => link.projectId) ?? []);
+      const currentProjects = new Set(input.projectIds);
+      for (const link of existing?.projects ?? []) if (!currentProjects.has(link.projectId)) add('PROJECT_UNLINKED', { relatedRecordId: link.projectId, relatedRecordName: link.project?.name ?? 'Project unavailable' });
+      for (const project of projects) if (!previousProjects.has(project.id)) add('PROJECT_LINKED', { relatedRecordId: project.id, relatedRecordName: project.name ?? 'Project unavailable' });
       if (events.length) await tx.opportunityHistoryEvent.createMany({ data: events });
     }
     return opportunityId;

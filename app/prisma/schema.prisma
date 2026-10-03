@@ -672,6 +672,10 @@ model OpportunityHistoryEvent {
   opportunityName String
   actorName String?
   accountName String?
+  relatedRecordId Int?
+  relatedRecordName String?
+  oldRoles OpportunityPartyRole[] @default([])
+  newRoles OpportunityPartyRole[] @default([])
   oldStageId Int?
   newStageId Int?
   oldStageName String?
@@ -711,6 +715,10 @@ model OpportunityHistoryArchive {
   opportunityName String
   actorName String?
   accountName String?
+  relatedRecordId Int?
+  relatedRecordName String?
+  oldRoles OpportunityPartyRole[] @default([])
+  newRoles OpportunityPartyRole[] @default([])
   oldStageId Int?
   newStageId Int?
   oldStageName String?

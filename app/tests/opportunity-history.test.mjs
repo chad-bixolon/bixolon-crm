@@ -91,7 +91,7 @@ test('two-week movement sums rep snapshots and reports precise change', () => {
 test('one save records changed forecast fields and one total value event; an unchanged save records none', async () => {
   const oldDate = new Date('2027-06-30T12:00:00Z'), newDate = new Date('2027-09-30T12:00:00Z');
   const oldLine = { id: 20, opportunityId: 5, productId: 3, skuId: null, quantity: 1, estimatedUnitPrice: new Prisma.Decimal('300'), priceSource: 'MANUAL', archivedAt: null };
-  let row = { id: 5, name: 'Deal', projects: [], participants: [], stageId: 1, stage: { name: 'Qualification' }, forecastCategory: 'PIPELINE', expectedCloseDate: oldDate, ownerId: 7, owner: { firstName: 'Ryan', lastName: 'Persaud' }, probability: null, currencyCode: 'USD', archivedAt: null };
+  let row = { id: 5, name: 'Deal', projects: [], participants: [{ accountId: 11, account: { name: 'Customer' } }], stageId: 1, stage: { name: 'Qualification' }, forecastCategory: 'PIPELINE', expectedCloseDate: oldDate, ownerId: 7, owner: { firstName: 'Ryan', lastName: 'Persaud' }, probability: null, currencyCode: 'USD', archivedAt: null };
   let line = { ...oldLine }, events = [];
   const tx = {
     opportunity: { findUnique: async () => row, update: async ({ data }) => { row = { ...row, ...data, stage: { name: data.stageId === 2 ? 'Evaluation' : 'Qualification' } }; } },
@@ -101,7 +101,7 @@ test('one save records changed forecast fields and one total value event; an unc
     currency: { findUnique: async () => ({ active: true }) },
     user: { findUnique: async ({ where }) => where.id === 8 ? { id: 8, firstName: 'Alex', lastName: 'Lee', active: true, role: 'SALES' } : { id: 7, firstName: 'Ryan', lastName: 'Persaud', active: true, role: 'ADMIN' } },
     account: { findMany: async () => [{ id: 11, name: 'Customer' }] }, product: { findMany: async () => [{ id: 3 }] }, project: { findMany: async () => [] },
-    opportunityAccount: { findMany: async () => [], upsert: async () => ({}) }, opportunityAccountRole: { create: async () => ({}) },
+    opportunityAccount: { findMany: async () => [{ accountId: 11, roles: [{ role: 'END_USER' }] }], upsert: async () => ({}) }, opportunityAccountRole: { create: async () => ({}) },
   };
   const client = { $transaction: fn => fn(tx) };
   const input = { name: 'Deal', description: null, ownerId: 8, projectIds: [], stageId: 2, expectedCloseDate: newDate, probability: 80, forecastCategory: 'BEST_CASE', currencyCode: 'USD', participants: [{ accountId: 11, roles: ['END_USER'] }], contacts: [], lines: [{ id: 20, productId: 3, quantity: 2, price: '300.00', priceSource: 'MANUAL' }] };
@@ -202,20 +202,20 @@ test('history lookup enforces Opportunity ownership and read permission', async 
 });
 
 test('archived Opportunity events remain readable under the same Opportunity scope', async () => {
-  const archived = { id: 40, sourceId: 4, opportunityId: 2, opportunityName: 'Old deal', actorName: 'Former rep', eventType: 'VALUE', occurredAt: new Date('2020-01-01'), oldValue: new Prisma.Decimal('100'), newValue: new Prisma.Decimal('200') };
+  const archived = { id: 40, sourceId: 4, opportunityId: 2, opportunityName: 'Old deal', actorName: 'Former rep', eventType: 'ACCOUNT_ROLE_CHANGED', relatedRecordId: 8, relatedRecordName: 'BlueStar', oldRoles: ['VAR_RESELLER'], newRoles: ['DISTRIBUTOR'], occurredAt: new Date('2020-01-01') };
   const client = { opportunity: { findFirst: async ({ where }) => where.ownerId === 7 ? { id: 2 } : null }, opportunityHistoryEvent: { findMany: async () => [], count: async () => 0 }, opportunityHistoryArchive: { findMany: async () => [archived], count: async () => 1 } };
   const result = await opportunityHistory(client, actor('SALES'), 2);
-  assert.equal(result.total, 1); assert.equal(result.rows[0].actorName, 'Former rep'); assert.equal(result.rows[0].newValue.toFixed(2), '200.00');
+  assert.equal(result.total, 1); assert.equal(result.rows[0].actorName, 'Former rep'); assert.equal(result.rows[0].relatedRecordName, 'BlueStar'); assert.deepEqual(result.rows[0].newRoles, ['DISTRIBUTOR']);
 });
 
 test('archive copies before removal, preserves context, and rolls back on a failed copy', async () => {
-  const old = new Date('2020-01-01'), event = { id: 3, opportunityId: 4, opportunityName: 'Archived deal', actorName: 'Former rep', eventType: 'VALUE', occurredAt: old, createdAt: old, oldValue: '100.00', newValue: '200.00' };
+  const old = new Date('2020-01-01'), event = { id: 3, opportunityId: 4, opportunityName: 'Archived deal', actorName: 'Former rep', eventType: 'ACCOUNT_ROLE_CHANGED', relatedRecordId: 8, relatedRecordName: 'BlueStar', oldRoles: ['VAR_RESELLER'], newRoles: ['DISTRIBUTOR'], occurredAt: old, createdAt: old };
   const writes = [];
   const tx = { opportunityHistoryEvent: { findMany: async () => [event], deleteMany: async () => { writes.push('delete'); return { count: 1 }; } }, forecastSnapshot: { findMany: async () => [] }, opportunityHistoryArchive: { createMany: async ({ data }) => { writes.push(data[0]); return { count: 1 }; } } };
   const client = { systemSetting: { findMany: async () => [] }, $transaction: async fn => fn(tx) };
   const result = await archiveHistoryBatch(client, actor('ADMIN'), new Date('2020-02-01'));
   assert.equal(result.events, 1);
-  assert.equal(writes[0].sourceId, 3); assert.equal(writes[0].actorName, 'Former rep'); assert.equal(writes[0].newValue, '200.00'); assert.equal(writes[1], 'delete');
+  assert.equal(writes[0].sourceId, 3); assert.equal(writes[0].actorName, 'Former rep'); assert.equal(writes[0].relatedRecordName, 'BlueStar'); assert.deepEqual(writes[0].oldRoles, ['VAR_RESELLER']); assert.deepEqual(writes[0].newRoles, ['DISTRIBUTOR']); assert.equal(writes[1], 'delete');
   const failed = { ...tx, opportunityHistoryArchive: { createMany: async () => { throw new Error('copy failed'); } } };
   writes.length = 0;
   await assert.rejects(archiveHistoryBatch({ ...client, $transaction: fn => fn(failed) }, actor('ADMIN'), new Date('2020-02-01')), /copy failed/);
@@ -239,7 +239,7 @@ test('retention preview counts only older active rows and never deletes data', a
 
 test('Admin restore moves original events and snapshots atomically, preserving values and IDs', async () => {
   const batchId = '123e4567-e89b-42d3-a456-426614174000', date = new Date('2020-01-01');
-  const event = { id: 60, sourceId: 3, archiveBatchId: batchId, archivedAt: new Date(), opportunityId: 4, opportunityName: 'Old deal', actorName: 'Former rep', eventType: 'VALUE', occurredAt: date, createdAt: date, oldValue: new Prisma.Decimal('100'), newValue: new Prisma.Decimal('200') };
+  const event = { id: 60, sourceId: 3, archiveBatchId: batchId, archivedAt: new Date(), opportunityId: 4, opportunityName: 'Old deal', actorName: 'Former rep', eventType: 'ACCOUNT_ROLE_CHANGED', relatedRecordId: 8, relatedRecordName: 'BlueStar', oldRoles: ['VAR_RESELLER'], newRoles: ['DISTRIBUTOR'], occurredAt: date, createdAt: date };
   const snapshot = { id: 70, sourceId: 5, archiveBatchId: batchId, archivedAt: new Date(), snapshotWeek: date, capturedAt: date, year: 2020, quarter: 'Q1', currencyCode: 'USD', repId: 7, repName: 'Former rep', pipeline: new Prisma.Decimal('200'), weightedPipeline: new Prisma.Decimal('100'), bestCase: new Prisma.Decimal('0'), commit: new Prisma.Decimal('0'), target: null, targetStatus: 'NO_TARGET', createdAt: date };
   const operations = [];
   const tx = {
@@ -251,7 +251,7 @@ test('Admin restore moves original events and snapshots atomically, preserving v
   const client = { $transaction: fn => fn(tx) };
   const result = await restoreHistoryBatch(client, actor('ADMIN'), batchId);
   assert.deepEqual([result.events, result.snapshots], [1,1]);
-  assert.equal(operations[0].id, 3); assert.equal(operations[0].opportunityName, 'Old deal'); assert.equal(operations[0].newValue.toFixed(2), '200.00');
+  assert.equal(operations[0].id, 3); assert.equal(operations[0].opportunityName, 'Old deal'); assert.equal(operations[0].relatedRecordName, 'BlueStar'); assert.deepEqual(operations[0].oldRoles, ['VAR_RESELLER']); assert.deepEqual(operations[0].newRoles, ['DISTRIBUTOR']);
   assert.equal(operations[2].id, 5); assert.equal(operations[2].pipeline.toFixed(2), '200.00');
   assert.deepEqual([operations[1], operations[3]], ['remove event archive', 'remove snapshot archive']);
   operations.length = 0;

@@ -33,7 +33,7 @@ export default async function ForecastMovement({ searchParams }: { searchParams:
   const fromDate = canCompare ? new Date(`${previousWeek}T00:00:00Z`) : null, toDate = canCompare ? new Date(new Date(`${currentWeek}T00:00:00Z`).getTime()+7*86400000) : null;
   const stageId = Number(f.stageId), category = ['PIPELINE','BEST_CASE','COMMIT','OMITTED','CLOSED'].includes(f.category ?? '') ? f.category as ForecastCategory : null;
   const eventFilter = { ...opportunityScope(actor), ...(repId ? { ownerId: repId } : {}), ...(Number.isSafeInteger(stageId) && stageId > 0 ? { stageId } : {}) };
-  const periodFilter = { occurredAt: { gte: fromDate!, lt: toDate! }, ...(category ? { OR: [{ oldCategory: category }, { newCategory: category }] } : {}) };
+  const periodFilter = { occurredAt: { gte: fromDate!, lt: toDate! }, eventType: { in: ['BASELINE', 'STAGE', 'FORECAST_CATEGORY', 'EXPECTED_CLOSE_DATE', 'OWNER', 'PROBABILITY', 'VALUE', 'CURRENCY', 'ARCHIVED', 'REOPENED'] }, ...(category ? { OR: [{ oldCategory: category }, { newCategory: category }] } : {}) };
   const [activeEvents, archiveCandidates] = fromDate && toDate ? await Promise.all([
     prisma.opportunityHistoryEvent.findMany({ where: { opportunity: { is: eventFilter }, ...periodFilter }, orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }], take: 100 }),
     includeArchived ? prisma.opportunityHistoryArchive.findMany({ where: periodFilter, orderBy: [{ occurredAt: 'desc' }, { sourceId: 'desc' }], take: 100 }) : Promise.resolve([]),
