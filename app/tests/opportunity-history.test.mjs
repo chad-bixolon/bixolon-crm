@@ -11,6 +11,8 @@ const require = Module.createRequire(fileURLToPath(import.meta.url));
 const { Prisma } = require('@prisma/client');
 const { saveOpportunity } = require(path.join(root, 'lib/opportunities.ts'));
 const { newYorkWeek, stageStartedAt, archiveCutoff, captureForecastWeek, previewHistoryArchive, archiveHistoryBatch, restoreHistoryBatch, opportunityHistory, closeDateMovement, snapshotComparisonState, snapshotChange } = require(path.join(root, 'lib/opportunity-history.ts'));
+const { formatCalendarDate, formatEasternDateTime } = require(path.join(root, 'lib/display-format.ts'));
+const { captureFeedback, existingCaptureFeedback, formatSnapshotWeekQuery } = require(path.join(root, 'lib/history-admin-display.ts'));
 const actor = role => ({ id: 7, role, active: true, archivedAt: null });
 
 test('New York Monday period and stage age have no invented prehistory', () => {
@@ -39,7 +41,32 @@ test('movement comparison needs two distinct captured weeks', () => {
   assert.match(report, /currentWeek !== previousWeek/);
   assert.match(report, /includeArchived === '1'/);
   const admin = fs.readFileSync(path.join(root, 'app/administration/history/page.tsx'), 'utf8');
-  for (const label of ['Week of','Rep','Forecast period','Currency','Captured (UTC)','Storage']) assert.ok(admin.includes(label));
+  for (const label of ['Week of','Rep','Forecast period','Currency','Captured','Status']) assert.ok(admin.includes(label));
+});
+
+test('History administration presents dates, statuses, and empty states clearly', () => {
+  const admin = fs.readFileSync(path.join(root, 'app/administration/history/page.tsx'), 'utf8');
+  assert.match(admin, /title="Opportunity & Forecast History"/);
+  assert.match(admin, /Current snapshot week: \{currentWeek\}/);
+  assert.match(admin, /formatCalendarDate\(newYorkWeek\(now\)\)/);
+  assert.match(admin, /formatCalendarDate\(row\.snapshotWeek\)/);
+  assert.match(admin, /formatEasternDateTime\(row\.capturedAt\)/);
+  assert.match(admin, /'sourceId' in row \? 'Archived' : 'Active'/);
+  assert.match(admin, /formatCalendarDate\(preview\.cutoff\)/);
+  assert.match(admin, /Active history retention:/);
+  assert.match(admin, /No weekly forecast snapshots have been captured yet\./);
+  assert.match(admin, /No history is currently eligible for archive\./);
+  assert.match(admin, /No archived history batches are available to restore\./);
+  assert.match(admin, /_count: \{ _all: true \}/);
+  assert.match(admin, /formatEasternDateTime\(batch\.archivedAt\)/);
+  assert.doesNotMatch(admin, /Captured \(UTC\)|Storage|snapshot\(s\)| UTC · Batch/);
+  assert.equal(formatCalendarDate(new Date('2026-09-28T00:00:00Z')), 'Sep 28, 2026');
+  assert.equal(formatEasternDateTime(new Date('2026-10-03T14:06:00Z')), 'Oct 3, 2026 at 10:06 AM');
+  assert.equal(formatSnapshotWeekQuery('2026-09-28'), 'Sep 28, 2026');
+  assert.equal(formatSnapshotWeekQuery('2026-02-30'), null);
+  assert.equal(captureFeedback(1, 'Sep 28, 2026'), 'Captured 1 rep snapshot for the week of Sep 28, 2026.');
+  assert.equal(captureFeedback(2, 'Sep 28, 2026'), 'Captured 2 rep snapshots for the week of Sep 28, 2026.');
+  assert.equal(existingCaptureFeedback('Sep 28, 2026'), 'Snapshots for the week of Sep 28, 2026 were already captured.');
 });
 
 test('two-week movement sums rep snapshots and reports precise change', () => {

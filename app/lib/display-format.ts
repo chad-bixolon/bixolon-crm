@@ -1,5 +1,13 @@
 type Money = number | { toNumber(): number };
 
+const calendarDateFormatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+const easternDateFormatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" });
+const easternTimeFormatter = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+
+export function formatCalendarDate(value: Date): string { return calendarDateFormatter.format(value); }
+export function formatEasternDate(value: Date): string { return easternDateFormatter.format(value); }
+export function formatEasternDateTime(value: Date): string { return `${formatEasternDate(value)} at ${easternTimeFormatter.format(value)}`; }
+
 export function formatCurrency(value: Money, currency: string, showCode = false): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
