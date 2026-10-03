@@ -31,7 +31,7 @@ function canSeeNavItem(item: NavItem, user: ShellUser | null) {
     case "Opportunities":
     case "Pipeline":
     case "Sales Plan": return user.canViewSales;
-    case "Campaigns":
+    case "Campaigns": return true;
     case "Marketing Audiences": return user.canViewMarketing;
     case "Demos": return user.role === "ADMIN";
     default: return true;

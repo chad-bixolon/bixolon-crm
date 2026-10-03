@@ -19,6 +19,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ### Improved
 
+- Improved Campaigns with a read-only detail view, clearer influence metrics, and dedicated editing.
+
 - Reorganized the main navigation into functional CRM, Sales, Programs, Marketing, Catalog & Pricing, Reports, and Administration groups.
 - Expanded Opportunity History to capture participating Account, Contact, and Project relationship changes.
 - Reorganized Administration into compact functional groups for faster navigation.

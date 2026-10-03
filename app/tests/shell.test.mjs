@@ -103,7 +103,7 @@ test('navigation groups preserve every route once and match effective role acces
     const expected = Object.fromEntries(Object.entries(expectedSections).map(([section, routes]) => [section, routes.filter(route =>
       (route !== '/demos' || role === 'ADMIN') &&
       (!['/opportunities', '/pipeline', '/sales-plan'].includes(route) || can(actor, route === '/sales-plan' ? 'sales-plan.read' : 'sales.read')) &&
-      (!['/marketing/campaigns', '/marketing/audiences'].includes(route) || can(actor, 'marketing.read')) &&
+      (route !== '/marketing/audiences' || can(actor, 'marketing.read')) &&
       (!['/administration', '/integrations'].includes(route) || can(actor, route === '/administration' ? 'users.manage' : 'integrations.manage'))
     )]).filter(([, routes]) => routes.length));
     assert.deepEqual(actual, expected, role);

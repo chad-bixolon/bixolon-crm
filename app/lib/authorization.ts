@@ -16,6 +16,7 @@ export function permissionForPath(path: string): Permission | null {
   if (path.startsWith('/sales-plan/import')) return 'sales-plan.manage';
   if (path.startsWith('/sales-plan/sync')) return 'sales-plan.manage';
   if (path.startsWith('/sales-plan')) return 'sales-plan.read';
+  if (path === '/marketing/campaigns' || /^\/marketing\/campaigns\/\d+$/.test(path)) return 'trade-shows.read';
   if (path.startsWith('/marketing')) return 'marketing.read';
   if (path.startsWith('/trade-shows')) return 'trade-shows.read';
   if (path.startsWith('/reports/engagement') || path.startsWith('/reports/new')) return 'sales.write';

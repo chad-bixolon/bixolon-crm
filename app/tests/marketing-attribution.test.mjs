@@ -101,9 +101,12 @@ test('Marketing actions create and archive Campaigns while Sales cannot mutate',
   const create = form([['name', 'FSTEC 2026'], ['status', 'ACTIVE'], ['year', '2026']]);
   await assert.rejects(actions.saveCampaign(create), /REDIRECT:\/marketing\/campaigns\/5/);
   assert.equal(changes[0][0], 'create'); assert.equal(changes[0][1].createdById, 7);
+  const edit = form([['id', '5'], ['name', 'FSTEC 2026 updated'], ['status', 'COMPLETED']]);
+  await assert.rejects(actions.saveCampaign(edit), /REDIRECT:\/marketing\/campaigns\/5/);
+  assert.equal(changes[1][0], 'update'); assert.equal(changes[1][2].status, 'COMPLETED');
   const archive = form([['id', '5'], ['archive', 'true']]);
   await assert.rejects(actions.setCampaignArchive(archive), /REDIRECT:\/marketing\/campaigns\/5/);
-  assert.ok(changes[1][2].archivedAt instanceof Date);
+  assert.ok(changes[2][2].archivedAt instanceof Date);
   role = 'SALES';
   await assert.rejects(actions.saveCampaign(create), /Access denied/);
   await assert.rejects(actions.setCampaignArchive(archive), /Access denied/);

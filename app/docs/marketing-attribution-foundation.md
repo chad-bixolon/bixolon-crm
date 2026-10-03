@@ -20,10 +20,10 @@ The migration adds only the configurable Events default. It does not backfill hi
 
 ## Ownership and access
 
-Marketing Manager and Admin manage Lead Source options and Campaigns and may correct first touch, add manual touches, or void mistaken touches. Sales, Sales Manager, and Read Only see attribution only on CRM records their existing permissions let them open. They have no attribution mutation controls or Campaign management route. Server actions use the current effective user, including local impersonation.
+Marketing Manager and Admin manage Lead Source options and Campaigns and may correct first touch, add manual touches, or void mistaken touches. Sales, Sales Manager, and Read Only can open the read-only Campaign list and detail pages. Linked influence activity and related records follow their existing CRM record visibility. They have no attribution mutation controls or Campaign edit route. Server actions use the current effective user, including local impersonation.
 
 ## Future work and decisions awaiting Liz
 
 WordPress ingestion is deferred. The `sourceContext`, unique `sourceKey`, and optional JSON `metadata` allow a later form handler to record form name, page URL, UTM values, and referrer without rewriting this model. That handler must set a blank first touch only, then append a Campaign Influence with a stable submission identity.
 
-Final Lead Source categories, Campaign categories/status vocabulary, naming convention, and the priority of future attribution reports await Liz. Current Campaign detail counts cover linked leads, Contacts, and Opportunities, with no pipeline, won revenue, ROI, or first/last/linear/weighted credit model. Historical Trade Show backfill requires separately reviewed rules before implementation.
+Final Lead Source categories, Campaign categories/status vocabulary, Campaign naming, and the priority of future attribution reports await Liz. Campaign category remains free text and category/naming may be refined after Marketing feedback. Current Campaign detail counts cover linked leads, Contacts, and Opportunities, with no pipeline, won revenue, ROI, or first/last/linear/weighted credit model. Historical Trade Show backfill requires separately reviewed rules before implementation.
