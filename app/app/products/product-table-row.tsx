@@ -6,9 +6,9 @@ import styles from "./products-page.module.css";
 
 const interactiveSelector = 'a, button, input, select, textarea, summary, [role="button"], [role="link"], [contenteditable]:not([contenteditable="false"])';
 
-export function ProductTableRow({ id, name, children }: { id: number; name: string; children: ReactNode }) {
+export function ProductTableRow({ id, name, canManage, children }: { id: number; name: string; canManage: boolean; children: ReactNode }) {
   const router = useRouter();
-  const href = `/products/${id}/edit`;
+  const href = canManage ? `/products/${id}/edit` : `/products/${id}`;
 
   function handleClick(event: MouseEvent<HTMLTableRowElement>) {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -25,5 +25,5 @@ export function ProductTableRow({ id, name, children }: { id: number; name: stri
     }
   }
 
-  return <tr role="link" aria-label={`Edit product ${name}`} tabIndex={0} onClick={handleClick} onKeyDown={handleKeyDown} className={styles.row}>{children}</tr>;
+  return <tr role="link" aria-label={`${canManage ? 'Edit' : 'View'} product ${name}`} tabIndex={0} onClick={handleClick} onKeyDown={handleKeyDown} className={styles.row}>{children}</tr>;
 }
