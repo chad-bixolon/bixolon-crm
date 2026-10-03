@@ -4,8 +4,10 @@ import { AccountForm } from "@/components/account-form";
 import { accountEditTerritories, accountOptions } from "@/lib/accounts";
 import { prisma } from "@/lib/prisma";
 import { getLabels } from "@/lib/configuration";
+import { requirePermission } from "@/lib/current-user";
 export const dynamic = "force-dynamic";
 export default async function EditAccountPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission('accounts.write');
   const id = Number((await params).id); if (!Number.isSafeInteger(id) || id <= 0) notFound();
   const [account, options, labels] = await Promise.all([prisma.account.findUnique({ where: { id }, include: { owner: { select: { firstName: true, lastName: true } }, businessRoles: true, industryCategory: true, territoryCategory: true } }), accountOptions(prisma), getLabels(prisma)]);
   if (!account) notFound();

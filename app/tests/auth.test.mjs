@@ -150,6 +150,27 @@ test('protected routes allow only authenticated authorized users', () => {
   assert.equal(routeAccess('/pipeline', actor('MARKETING_MANAGER')), 'denied');
   assert.equal(routeAccess('/accounts', actor('MARKETING_MANAGER')), 'allowed');
 });
+test('Marketing Manager has CRM context without Sales management or CRM writes', () => {
+  const marketing = actor('MARKETING_MANAGER');
+  for (const [resource, permission] of [['accounts','accounts'], ['contacts','contacts'], ['opportunities','opportunities'], ['projects','projects']]) {
+    assert.equal(can(marketing, `${permission}.read`), true);
+    assert.equal(routeAccess(`/${resource}`, marketing), 'allowed');
+    assert.equal(routeAccess(`/${resource}/12`, marketing), 'allowed');
+    assert.equal(routeAccess(`/${resource}/new`, marketing), 'denied');
+    assert.equal(routeAccess(`/${resource}/12/edit`, marketing), 'denied');
+  }
+  for (const permission of ['accounts.write','contacts.write','sales.write','projects.write','sales.read','sales-plan.read','sales-plan.manage','users.manage']) assert.equal(can(marketing, permission), false);
+  for (const path of ['/pipeline','/sales-plan','/reports/forecast','/reports/sales-plan','/reports/forecast-movement','/administration/sales-targets']) assert.equal(routeAccess(path, marketing), 'denied');
+  for (const path of ['/marketing/campaigns','/marketing/audiences','/trade-shows']) assert.equal(routeAccess(path, marketing), 'allowed');
+  assert.equal(can(marketing, 'marketing.write'), true);
+  for (const role of ['ADMIN','SALES_MANAGER','SALES','READ_ONLY']) {
+    const user = actor(role);
+    assert.equal(can(user, 'opportunities.read'), true);
+    assert.equal(routeAccess('/opportunities/12', user), 'allowed');
+    assert.equal(can(user, 'sales.read'), true);
+  }
+  assert.equal(can(actor('READ_ONLY'), 'accounts.write'), false);
+});
 test('Sales dashboard scope selects own opportunities and tasks', () => {
   assert.deepEqual(opportunityScope(actor('SALES')), { ownerId: 7 });
   assert.deepEqual(taskScope(actor('SALES')), { assignedToId: 7 });

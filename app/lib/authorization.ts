@@ -1,16 +1,20 @@
 import type { UserRole } from '@prisma/client';
 
-export type Permission = 'sales-plan.read' | 'sales-plan.allocate' | 'sales-plan.manage' | 'accounts.read' | 'accounts.write' | 'contacts.read' | 'contacts.write' | 'sales.read' | 'sales.write' | 'pricing.read' | 'tasks.read' | 'tasks.write' | 'products.read' | 'products.write' | 'projects.read' | 'projects.write' | 'users.manage' | 'integrations.manage' | 'marketing.read' | 'marketing.write' | 'trade-shows.read' | 'trade-shows.manage' | 'trade-shows.leads.write' | 'trade-shows.assign' | 'trade-shows.resolve' | 'trade-shows.route';
+export type Permission = 'sales-plan.read' | 'sales-plan.allocate' | 'sales-plan.manage' | 'accounts.read' | 'accounts.write' | 'contacts.read' | 'contacts.write' | 'opportunities.read' | 'sales.read' | 'sales.write' | 'pricing.read' | 'tasks.read' | 'tasks.write' | 'products.read' | 'products.write' | 'projects.read' | 'projects.write' | 'users.manage' | 'integrations.manage' | 'marketing.read' | 'marketing.write' | 'trade-shows.read' | 'trade-shows.manage' | 'trade-shows.leads.write' | 'trade-shows.assign' | 'trade-shows.resolve' | 'trade-shows.route';
 export type Actor = { id: number; role: UserRole; active: boolean; archivedAt?: Date | null };
 
 const grants: Record<UserRole, readonly Permission[]> = {
   ADMIN: ['sales-plan.read','sales-plan.allocate','sales-plan.manage','accounts.read','accounts.write','contacts.read','contacts.write','sales.read','sales.write','pricing.read','tasks.read','tasks.write','products.read','products.write','projects.read','projects.write','users.manage','integrations.manage','marketing.read','marketing.write','trade-shows.read','trade-shows.manage','trade-shows.leads.write','trade-shows.assign','trade-shows.resolve','trade-shows.route'],
   SALES_MANAGER: ['sales-plan.read','sales-plan.allocate','sales-plan.manage','accounts.read','accounts.write','contacts.read','contacts.write','sales.read','sales.write','pricing.read','tasks.read','tasks.write','products.read','projects.read','projects.write','trade-shows.read','trade-shows.leads.write','trade-shows.assign','trade-shows.resolve','trade-shows.route'],
   SALES: ['sales-plan.read','sales-plan.allocate','accounts.read','accounts.write','contacts.read','contacts.write','sales.read','sales.write','pricing.read','tasks.read','tasks.write','products.read','projects.read','projects.write','trade-shows.read','trade-shows.leads.write','trade-shows.resolve','trade-shows.route'],
-  MARKETING_MANAGER: ['accounts.read','accounts.write','contacts.read','contacts.write','pricing.read','tasks.read','tasks.write','products.read','projects.read','marketing.read','marketing.write','trade-shows.read','trade-shows.manage','trade-shows.leads.write','trade-shows.assign','trade-shows.resolve','trade-shows.route'],
+  MARKETING_MANAGER: ['accounts.read','contacts.read','opportunities.read','pricing.read','tasks.read','tasks.write','products.read','projects.read','marketing.read','marketing.write','trade-shows.read','trade-shows.manage','trade-shows.leads.write','trade-shows.assign','trade-shows.resolve','trade-shows.route'],
   READ_ONLY: ['sales-plan.read','accounts.read','contacts.read','sales.read','pricing.read','tasks.read','products.read','projects.read','trade-shows.read'],
 };
-export function can(actor: Actor | null | undefined, permission: Permission) { return !!actor?.active && !actor.archivedAt && grants[actor.role]?.includes(permission) === true; }
+export function can(actor: Actor | null | undefined, permission: Permission) {
+  if (!actor?.active || actor.archivedAt) return false;
+  return grants[actor.role]?.includes(permission) === true ||
+    (permission === 'opportunities.read' && grants[actor.role]?.includes('sales.read') === true);
+}
 export function assertPermission(actor: Actor | null | undefined, permission: Permission) { if (!can(actor,permission)) throw new Error('Access denied'); }
 export function permissionForPath(path: string): Permission | null {
   if (path.startsWith('/sales-plan/import')) return 'sales-plan.manage';
@@ -23,7 +27,8 @@ export function permissionForPath(path: string): Permission | null {
   if (path.startsWith('/reports')) return 'sales.read';
   if (path.startsWith('/administration')) return 'users.manage';
   if (path.startsWith('/integrations')) return 'integrations.manage';
-  if (path.startsWith('/pipeline') || path.startsWith('/opportunities')) return 'sales.read';
+  if (path.startsWith('/pipeline')) return 'sales.read';
+  if (path.startsWith('/opportunities')) return 'opportunities.read';
   if (path.startsWith('/demos')) return 'sales.read';
   if (path.startsWith('/projects')) return 'projects.read';
   if (path.startsWith('/accounts')) return 'accounts.read';

@@ -19,6 +19,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ### Improved
 
+- Expanded Marketing Manager visibility with read-only access to Accounts, Contacts, Opportunities, and Projects for campaign and attribution context.
+
 - Improved Campaigns with a read-only detail view, clearer influence metrics, and dedicated editing.
 
 - Reorganized the main navigation into functional CRM, Sales, Programs, Marketing, Catalog & Pricing, Reports, and Administration groups.

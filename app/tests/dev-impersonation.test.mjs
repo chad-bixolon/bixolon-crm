@@ -57,6 +57,11 @@ test('active existing user becomes effective while real Google Admin remains sep
 test('selected roles receive existing permissions, including Marketing and Read Only restrictions', async () => {
   const marketing = (await policy.resolveUserContext(realAdmin, '7', db(target('MARKETING_MANAGER')), dev)).effective;
   assert.equal(can(marketing, 'marketing.write'), true);
+  assert.equal(can(marketing, 'opportunities.read'), true);
+  assert.equal(routeAccess('/opportunities/12', marketing), 'allowed');
+  assert.equal(routeAccess('/opportunities/12/edit', marketing), 'denied');
+  assert.equal(routeAccess('/pipeline', marketing), 'denied');
+  assert.equal(can(marketing, 'accounts.write'), false);
   assert.equal(can(marketing, 'sales-plan.manage'), false);
   const readonly = (await policy.resolveUserContext(realAdmin, '7', db(target('READ_ONLY')), dev)).effective;
   assert.equal(can(readonly, 'accounts.read'), true);

@@ -197,7 +197,7 @@ test('weekly snapshot copies authoritative forecast result and prevents duplicat
 test('history lookup enforces Opportunity ownership and read permission', async () => {
   const client = { opportunity: { findFirst: async ({ where }) => where.ownerId === 7 ? { id: 2 } : null }, opportunityHistoryEvent: { findMany: async () => [], count: async () => 0 }, opportunityHistoryArchive: { findMany: async () => [], count: async () => 0 } };
   assert.equal((await opportunityHistory(client, actor('SALES'), 2)).total, 0);
-  await assert.rejects(opportunityHistory(client, actor('MARKETING_MANAGER'), 2), /Access denied/);
+  assert.equal((await opportunityHistory({ ...client, opportunity: { findFirst: async () => ({ id: 2 }) } }, actor('MARKETING_MANAGER'), 2)).total, 0);
   await assert.rejects(opportunityHistory({ ...client, opportunity: { findFirst: async () => null } }, actor('SALES'), 2), /not found/);
 });
 

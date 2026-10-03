@@ -38,7 +38,7 @@ test('Account and Opportunity owner pickers include only active users with recor
     product: { count: async () => 0 }, project: { findMany: async () => [] },
     productCategory: { findMany: async () => [] }, competitorOption: { findMany: async () => [] },
   };
-  assert.deepEqual((await accountOptions(client)).owners.map(user => user.id), [1, 5]);
+  assert.deepEqual((await accountOptions(client)).owners.map(user => user.id), [1]);
   assert.deepEqual((await opportunityOptions(client)).owners.map(user => user.id), [1]);
 });
 

@@ -24,7 +24,7 @@ async function editableLead(tradeShowId:number,leadId:number) {
 }
 export async function createAccountForTradeShowLead(tradeShowId:number,leadId:number,_state:AccountFormState,form:FormData):Promise<AccountFormState> {
   const {actor}=await editableLead(tradeShowId,leadId);
-  if(!can(actor,'accounts.write')) throw new Error('Access denied');
+
   const parsed=parseAccountForm(form); if(!parsed.value)return {errors:parsed.errors,message:'Please correct the highlighted fields.'};
   const refs=await checkAccountReferences(prisma,parsed.value); if(Object.keys(refs).length)return {errors:refs,message:'Please correct the highlighted fields.'};
   const review=await accountSaveReview(prisma,parsed.value,form);
@@ -39,7 +39,7 @@ export async function createAccountForTradeShowLead(tradeShowId:number,leadId:nu
 }
 export async function createContactForTradeShowLead(tradeShowId:number,leadId:number,_state:State,form:FormData):Promise<State> {
   const {actor,lead}=await editableLead(tradeShowId,leadId);
-  if(!can(actor,'contacts.write')) throw new Error('Access denied');
+
   const values=retainedValues(form),parsed=parseContact(form); if(!parsed.value)return {errors:parsed.errors,message:'Please correct the highlighted fields.',values};
   if(lead.accountId&&parsed.value.accountId&&lead.accountId!==parsed.value.accountId)return {errors:{accountId:'Choose the resolved Lead Account, or return and resolve the Account first.'},message:'Account and Contact must be consistent.',values};
   const matches=parsed.value.email?await prisma.contact.findMany({where:{email:{equals:parsed.value.email,mode:'insensitive'},archivedAt:null},select:{id:true}}):[];

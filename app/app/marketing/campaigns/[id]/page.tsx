@@ -21,7 +21,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
   const campaign = await prisma.marketingCampaign.findUnique({ where: { id }, include: { tradeShow: { select: { id: true, name: true } } } });
   if (!campaign) notFound();
   const manage = canManageAttribution(actor);
-  const canOpenOpportunity = can(actor, 'sales.read');
+  const canOpenOpportunity = can(actor, 'opportunities.read');
   const influenceWhere = campaignInfluenceReadWhere(actor, id);
   const leadWhere = { AND: [tradeShowLeadReadWhere(actor), { campaignInfluences: { some: { campaignId: id, voidedAt: null } } }] };
   const contactWhere = campaignContactWhere(actor, id);

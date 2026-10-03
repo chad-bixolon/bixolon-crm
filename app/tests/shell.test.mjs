@@ -45,7 +45,7 @@ const expectedSections = {
 
 function shellUser(role) {
   const actor = { id: 7, role, active: true, archivedAt: null };
-  return { name: 'Test User', role, canManageUsers: can(actor, 'users.manage'), canViewReports: can(actor, 'sales.read') || can(actor, 'trade-shows.read'), canViewMarketing: can(actor, 'marketing.read'), canViewSales: can(actor, 'sales.read') };
+  return { name: 'Test User', role, canManageUsers: can(actor, 'users.manage'), canViewReports: can(actor, 'sales.read') || can(actor, 'trade-shows.read'), canViewMarketing: can(actor, 'marketing.read'), canViewSales: can(actor, 'sales.read'), canViewOpportunities: can(actor, 'opportunities.read') };
 }
 
 function navigation(html) {
@@ -102,7 +102,8 @@ test('navigation groups preserve every route once and match effective role acces
     const actual = navigation(html);
     const expected = Object.fromEntries(Object.entries(expectedSections).map(([section, routes]) => [section, routes.filter(route =>
       (route !== '/demos' || role === 'ADMIN') &&
-      (!['/opportunities', '/pipeline', '/sales-plan'].includes(route) || can(actor, route === '/sales-plan' ? 'sales-plan.read' : 'sales.read')) &&
+      (route !== '/opportunities' || can(actor, 'opportunities.read')) &&
+      (!['/pipeline', '/sales-plan'].includes(route) || can(actor, route === '/sales-plan' ? 'sales-plan.read' : 'sales.read')) &&
       (route !== '/marketing/audiences' || can(actor, 'marketing.read')) &&
       (!['/administration', '/integrations'].includes(route) || can(actor, route === '/administration' ? 'users.manage' : 'integrations.manage'))
     )]).filter(([, routes]) => routes.length));
@@ -110,6 +111,8 @@ test('navigation groups preserve every route once and match effective role acces
     for (const route of Object.values(actual).flat()) assert.equal(routeAccess(route, actor), 'allowed', `${role}: ${route}`);
   }
   assert.deepEqual(navigation(render(null)), {});
+  assert.deepEqual(navigation(render(shellUser('MARKETING_MANAGER'))).Sales, ['/opportunities', '/tasks']);
+  assert.deepEqual(navigation(render(shellUser('MARKETING_MANAGER'))).Programs, ['/projects']);
   assert.deepEqual(navigation(render({ name: 'No grants', role: 'MARKETING_MANAGER', canManageUsers: false, canViewReports: false, canViewMarketing: false, canViewSales: false })).Administration, undefined);
 });
 
@@ -141,7 +144,8 @@ test('impersonation uses effective Marketing Manager navigation and keeps return
   const context = await resolveUserContext(real, '7', db, { NODE_ENV: 'development', ENABLE_DEV_IMPERSONATION: 'true' });
   const html = render(shellUser(context.effective.role), '/trade-shows', { impersonating: { realName: real.name, effectiveName: context.effective.name, role: context.effective.role } });
   assert.deepEqual(navigation(html), navigation(render(shellUser('MARKETING_MANAGER'), '/trade-shows')));
-  assert.doesNotMatch(html, /href="\/administration"|href="\/integrations"|href="\/opportunities"|href="\/pipeline"/);
+  assert.doesNotMatch(html, /href="\/administration"|href="\/integrations"|href="\/pipeline"|href="\/sales-plan"/);
+  assert.match(html, /href="\/opportunities"/);
   assert.match(html, /Return to Admin/);
   assert.match(html, /href="\/trade-shows" aria-current="page"/);
 });

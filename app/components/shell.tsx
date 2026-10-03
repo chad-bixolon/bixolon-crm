@@ -20,7 +20,7 @@ const navSections = [
 ] as const;
 const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Sales Plan" ? "/sales-plan" : item === "Price Exceptions" ? "/price-exceptions" : item === "Trade Shows" ? "/trade-shows" : item === "Campaigns" ? "/marketing/campaigns" : item === "Marketing Audiences" ? "/marketing/audiences" : `/${item.toLowerCase()}`;
 const navLabelKeys: Partial<Record<string, keyof LabelMap>> = { Accounts: "ACCOUNT", Contacts: "CONTACT", Projects: "PROJECT", Opportunities: "OPPORTUNITY", Tasks: "TASK" };
-type ShellUser = { name: string; role: UserRole; canManageUsers: boolean; canViewReports: boolean; canViewMarketing:boolean; canViewSales:boolean };
+type ShellUser = { name: string; role: UserRole; canManageUsers: boolean; canViewReports: boolean; canViewMarketing:boolean; canViewSales:boolean; canViewOpportunities:boolean };
 type NavItem = (typeof navSections)[number]["items"][number];
 function canSeeNavItem(item: NavItem, user: ShellUser | null) {
   if (!user) return false;
@@ -28,7 +28,7 @@ function canSeeNavItem(item: NavItem, user: ShellUser | null) {
     case "Administration":
     case "Integrations": return user.canManageUsers;
     case "Reports": return user.canViewReports;
-    case "Opportunities":
+    case "Opportunities": return user.canViewOpportunities;
     case "Pipeline":
     case "Sales Plan": return user.canViewSales;
     case "Campaigns": return true;

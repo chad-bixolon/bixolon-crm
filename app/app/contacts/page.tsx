@@ -4,9 +4,12 @@ import { ContactAccountFilter } from "@/components/contact-account-filter";
 import { contactListState, contactListUrl, listContacts, marketingPreferenceLabels, type ContactFilters, type ContactSort } from "@/lib/contacts";
 import { prisma } from "@/lib/prisma";
 import { positiveId } from "@/lib/crm-validation";
+import { currentUser } from "@/lib/current-user";
+import { can } from "@/lib/authorization";
 export const dynamic = "force-dynamic";
 const keys = ["q","active","accountId","marketingPreference","title","primary","assignment","sort","dir","pageSize"] as const;
 export default async function ContactsPage({searchParams}:{searchParams:Promise<ContactFilters>}) {
+  const actor = await currentUser();
   const filters=await searchParams, accountId=positiveId(filters.accountId??"");
   const [{contacts,count,page,pages,pageSize},initialAccount]=await Promise.all([listContacts(prisma,filters),accountId?prisma.account.findUnique({where:{id:accountId},select:{id:true,name:true}}):Promise.resolve(null)]);
   const {sort,dir}=contactListState(filters);
@@ -17,7 +20,7 @@ export default async function ContactsPage({searchParams}:{searchParams:Promise<
     return <Link href={contactListUrl(filters,next)} className="inline-flex items-center gap-1 hover:text-orange-800" aria-label={`Sort by ${label}${direction?`, currently ${direction}ending`:""}`}><span>{label}</span><span className="text-[10px] text-slate-400" aria-hidden="true">{direction==="asc"?"▲":direction==="desc"?"▼":"↕"}</span></Link>;
   };
   return <Content>
-    <PageHeader eyebrow="CRM records" title="Contacts" description="Manage customer, partner, and prospect contacts." action={<Link className="btn-primary" href="/contacts/new">New contact</Link>}/>
+    <PageHeader eyebrow="CRM records" title="Contacts" description="Manage customer, partner, and prospect contacts." action={can(actor, 'contacts.write') && <Link className="btn-primary" href="/contacts/new">New contact</Link>}/>
     <form method="get" className="panel filter-panel filter-grid mb-5" aria-label="Filter contacts">
       <input type="hidden" name="sort" value={filters.sort??""}/><input type="hidden" name="dir" value={filters.dir??""}/><input type="hidden" name="pageSize" value={pageSize}/>
       <div><label className="label" htmlFor="q">Search</label><input className="field filter-control" id="q" name="q" defaultValue={filters.q??""} placeholder="Name, email, or title"/></div>

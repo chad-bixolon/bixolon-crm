@@ -39,7 +39,7 @@ export function closeDateMovement(oldDate: Date | null, newDate: Date | null) {
 }
 
 export async function opportunityHistory(client: PrismaClient, actor: Actor, opportunityId: number, page = 1) {
-  if (!can(actor, 'sales.read')) throw new Error('Access denied');
+  if (!can(actor, 'opportunities.read')) throw new Error('Access denied');
   const opportunity = await client.opportunity.findFirst({ where: { id: opportunityId, ...opportunityScope(actor) }, select: { id: true } });
   if (!opportunity) throw new Error('Opportunity not found');
   const skip = (Math.max(1, Math.min(page, 10000)) - 1) * 20;

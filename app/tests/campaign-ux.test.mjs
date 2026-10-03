@@ -97,6 +97,18 @@ test('influence and related record queries are bounded and respect Sales scope',
   assert.doesNotMatch(JSON.stringify(queryLog.find(([name]) => name === 'influences')[1]), /assignedSalesRepUserId/);
 });
 
+test('Marketing Manager can follow Campaign Contact and Opportunity influences', async () => {
+  rows = [
+    { ...touch, id: 21, tradeShowLead: null, contact: { id: 21, firstName: 'Ada', lastName: 'Lovelace' } },
+    { ...touch, id: 22, tradeShowLead: null, opportunity: { id: 12, name: 'New rollout', ownerId: 8 } },
+  ];
+  count = { lead: 0, contact: 1, opportunity: 1, active: 2 };
+  const html = await detail('MARKETING_MANAGER');
+  assert.match(html, /href="\/contacts\/21"/);
+  assert.match(html, /href="\/opportunities\/12"/);
+  assert.ok(queryLog.some(([name]) => name === 'opportunities'));
+});
+
 test('create and edit forms stay editable with friendly labels and edit Cancel returns to detail', async () => {
   effectiveRole = 'MARKETING_MANAGER';
   const editHtml = renderToStaticMarkup(await Edit({ params: Promise.resolve({ id: '5' }) }));

@@ -12,7 +12,7 @@ export type ResolutionLead = {
 export type ResolutionContact = {id:number;firstName:string;lastName:string;email:string|null;accountId:number|null;active?:boolean};
 
 export function canManageContactResolution(actor:Actor|null|undefined) {
-  return !!actor && (actor.role==='ADMIN'||actor.role==='MARKETING_MANAGER') && can(actor,'trade-shows.resolve') && can(actor,'contacts.write');
+  return !!actor && (actor.role==='ADMIN'||actor.role==='MARKETING_MANAGER') && can(actor,'trade-shows.resolve');
 }
 
 export function normalizedEmail(value:string|null|undefined) {

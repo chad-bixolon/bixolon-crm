@@ -104,6 +104,7 @@ test('parent authorization preserves Account, Project, Opportunity and role scop
   await assert.rejects(documents.assertDocumentParentAccess(client({ project: { findFirst: async () => ({ ownerId: 8, primaryAccount: { ownerId: 9 }, archivedAt: null }) } }), actor('SALES'), { type: 'project', id: 10 }, 'write'), /Access denied/);
   await documents.assertDocumentParentAccess(client(), actor('SALES_MANAGER'), { type: 'opportunity', id: 10 }, 'write');
   await assert.rejects(documents.assertDocumentParentAccess(client(), actor('MARKETING_MANAGER'), { type: 'opportunity', id: 10 }, 'read'), /Access denied/);
+  await assert.rejects(documents.assertDocumentParentAccess(client(), actor('MARKETING_MANAGER'), { type: 'opportunity', id: 10 }, 'write'), /Access denied/);
   await assert.rejects(documents.assertDocumentParentAccess(client({ opportunity: { findFirst: async () => null } }), actor('SALES'), { type: 'opportunity', id: 10 }, 'read'), /not found/);
 });
 

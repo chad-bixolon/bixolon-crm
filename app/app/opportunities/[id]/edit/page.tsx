@@ -4,12 +4,12 @@ import { OpportunityForm } from "@/components/opportunity-form";
 import { opportunityOptions } from "@/lib/opportunities";
 import { prisma } from "@/lib/prisma";
 import { getLabels } from "@/lib/configuration";
-import { currentUser } from "@/lib/current-user";
+import { requirePermission } from "@/lib/current-user";
 import { serializeOpportunityForForm } from "@/lib/opportunity-serialization";
 export const dynamic = "force-dynamic";
 export default async function EditOpportunityPage({ params }: { params: Promise<{ id: string }> }) {
   const id = Number((await params).id); if (!Number.isSafeInteger(id) || id <= 0) notFound();
-  const actor = await currentUser();
+  const actor = await requirePermission('sales.write');
   const [opportunity, options, labels] = await Promise.all([prisma.opportunity.findUnique({ where: { id }, include: { owner: { select: { firstName: true, lastName: true } }, projects: true, contacts: true, participants: { include: { roles: true } }, products: { where: { archivedAt: null }, include: { priceExceptionLine: { select: { priceException: { select: { distributorAccountId: true, varAccountId: true, endUserAccountId: true, assignedSalesRepUserId:true, sourceType:true } } } } } } } }), opportunityOptions(prisma), getLabels(prisma)]);
   if (!opportunity || (actor.role === 'SALES' && opportunity.ownerId !== actor.id)) notFound();
   if (!options.stages.some(stage => stage.id === opportunity.stageId)) {

@@ -300,7 +300,7 @@ export function opportunityWhere(filters: OpportunityFilters): Prisma.Opportunit
   return where;
 }
 export async function listOpportunities(client: PrismaClient, filters: OpportunityFilters, actor: Actor) {
-  assertPermission(actor, 'sales.read');
+  assertPermission(actor, 'opportunities.read');
   const where: Prisma.OpportunityWhereInput = { AND: [opportunityWhere(filters), opportunityScope(actor)] };
   const count = await client.opportunity.count({ where }); const { page, pages } = pageNumber(filters.page, count);
   const opportunities = await client.opportunity.findMany({ where, include: { stage: true, competitor: true, owner: true, participants: { include: { account: true, roles: true } }, products: { where: { archivedAt: null } } }, orderBy: [{ expectedCloseDate: "asc" }, { id: "desc" }], skip: (page - 1) * 20, take: 20 });
