@@ -21,6 +21,7 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ### Improved
 
+- Improved the Campaigns list with compact filters and richer campaign summaries.
 - Expanded Marketing Manager visibility with read-only access to Accounts, Contacts, Opportunities, and Projects for campaign and attribution context.
 
 - Improved Campaigns with a read-only detail view, clearer influence metrics, and dedicated editing.

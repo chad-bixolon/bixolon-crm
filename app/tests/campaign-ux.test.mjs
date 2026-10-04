@@ -25,9 +25,11 @@ const campaign = { id: 5, name: 'FSTEC 2026', status: 'ACTIVE', year: 2026, cate
 const touch = { id: 10, occurredAt: new Date('2026-10-03T14:00:00Z'), sourceContext: 'TRADE_SHOW_IMPORT', tradeShowLead: { id: 11, tradeShowId: 3, firstName: 'Ada', lastName: 'Lovelace' }, contact: null, opportunity: null, capturedBy: { firstName: 'Mia', lastName: 'Chen' }, voidedAt: null };
 let queryLog = [];
 let rows = [touch];
+let listRows = [];
+let campaignTotal = 0;
 let count = { lead: 1, contact: 0, opportunity: 0, active: 1 };
 const prisma = {
-  marketingCampaign: { findUnique: async () => campaign, findMany: async () => [] },
+  marketingCampaign: { findUnique: async () => campaign, findMany: async q => { queryLog.push(['campaignList', q]); return listRows; }, count: async () => campaignTotal },
   tradeShowLead: { count: async q => { queryLog.push(['leadCount', q]); return count.lead; }, findMany: async q => { queryLog.push(['leads', q]); return count.lead ? [touch.tradeShowLead] : []; } },
   contact: { count: async q => { queryLog.push(['contactCount', q]); return count.contact; }, findMany: async q => { queryLog.push(['contacts', q]); return []; } },
   opportunity: { count: async q => { queryLog.push(['opportunityCount', q]); return count.opportunity; }, findMany: async q => { queryLog.push(['opportunities', q]); return []; } },
@@ -48,15 +50,64 @@ const mocks = {
 Module._load = function(request, parent, isMain) { return request in mocks ? mocks[request] : originalLoad.call(this, request, parent, isMain); };
 const campaignView = require(path.join(root, 'lib/campaign-view.ts'));
 mocks['@/lib/campaign-view'] = campaignView;
+mocks['@/lib/display-format'] = require(path.join(root, 'lib/display-format.ts'));
 const CampaignForm = require(path.join(root, 'components/campaign-form.tsx')).CampaignForm;
 mocks['@/components/campaign-form'] = { CampaignForm };
 const Detail = require(path.join(root, 'app/marketing/campaigns/[id]/page.tsx')).default;
 const Edit = require(path.join(root, 'app/marketing/campaigns/[id]/edit/page.tsx')).default;
 const New = require(path.join(root, 'app/marketing/campaigns/new/page.tsx')).default;
+const List = require(path.join(root, 'app/marketing/campaigns/page.tsx')).default;
 Module._load = originalLoad;
 Module._extensions['.ts'] = originalTs;
 Module._extensions['.tsx'] = originalTsx;
 const detail = async role => { effectiveRole = role; queryLog = []; return renderToStaticMarkup(await Detail({ params: Promise.resolve({ id: '5' }), searchParams: Promise.resolve({}) })); };
+const list = async (role, filters = {}) => { effectiveRole = role; queryLog = []; return renderToStaticMarkup(await List({ searchParams: Promise.resolve(filters) })); };
+
+test('Campaign list has compact responsive filters and preserves filter inputs', async () => {
+  listRows = [{ ...campaign, _count: { influences: 2 } }];
+  const html = await list('ADMIN', { q: 'FSTEC', status: 'ACTIVE', year: '2026', archived: 'true' });
+  assert.match(html, /filter-grid campaign-filter-grid/);
+  assert.match(html, /name="q"[^>]*value="FSTEC"/);
+  assert.match(html, /name="status"[^>]*>.*?<option value="ACTIVE" selected="">Active<\/option>/);
+  assert.match(html, /name="year"[^>]*value="2026"/);
+  assert.match(html, /name="archived"[^>]*checked=""/);
+  assert.match(html, /btn-filter-secondary campaign-filter-submit/);
+  const where = queryLog.find(([name]) => name === 'campaignList')[1].where;
+  assert.deepEqual(where, { archivedAt: { not: null }, name: { contains: 'FSTEC', mode: 'insensitive' }, status: 'ACTIVE', year: 2026 });
+});
+
+test('Campaign rows show friendly status, optional context, dates, and manager influence count', async () => {
+  listRows = [
+    { ...campaign, startDate: new Date('2026-10-05T00:00:00Z'), endDate: new Date('2026-10-30T00:00:00Z'), _count: { influences: 2 } },
+    { ...campaign, id: 6, name: 'Archived campaign', status: 'COMPLETED', year: null, category: null, startDate: null, endDate: null, tradeShow: null, archivedAt: new Date('2026-11-01T00:00:00Z'), _count: { influences: 0 } },
+  ];
+  const html = await list('MARKETING_MANAGER');
+  assert.match(html, /href="\/marketing\/campaigns\/5"[^>]*>FSTEC 2026<\/a>/);
+  assert.match(html, /2026/); assert.match(html, />Active<\/span>/); assert.match(html, />Trade Show<\/span>/);
+  assert.match(html, /Oct 5, 2026 – Oct 30, 2026/);
+  assert.match(html, /2 active influences/);
+  assert.match(html, /Archived<\/span>/);
+  assert.doesNotMatch(html.slice(html.indexOf('<ul class="panel')), /\bACTIVE\b|\bCOMPLETED\b/);
+  const archivedRow = [...html.matchAll(/<li[^>]*>[\s\S]*?<\/li>/g)].map(match => match[0]).find(row => row.includes('Archived campaign'));
+  assert.ok(archivedRow);
+  assert.doesNotMatch(archivedRow, /Trade Show:|Oct|2026 –|undefined|null/);
+  const viewerHtml = await list('READ_ONLY');
+  assert.doesNotMatch(viewerHtml, /active influences|New Campaign|Lead Sources/);
+});
+
+test('Campaign list empty states and management actions respect the effective user', async () => {
+  listRows = []; campaignTotal = 1;
+  assert.match(await list('ADMIN', { q: 'missing' }), /No Campaigns match the current filters/);
+  campaignTotal = 0;
+  const manager = await list('MARKETING_MANAGER');
+  assert.match(manager, /Create the first Campaign to begin tracking Marketing influence/);
+  assert.match(manager, /New Campaign/); assert.match(manager, /Lead Sources/);
+  for (const role of ['SALES', 'SALES_MANAGER', 'READ_ONLY']) {
+    const html = await list(role);
+    assert.match(html, /No Campaigns yet/);
+    assert.doesNotMatch(html, /Create the first Campaign|New Campaign|Lead Sources/);
+  }
+});
 
 test('saved Campaign detail is read-only; only Marketing and Admin can edit', async () => {
   for (const role of ['ADMIN', 'MARKETING_MANAGER', 'SALES', 'SALES_MANAGER', 'READ_ONLY']) {
