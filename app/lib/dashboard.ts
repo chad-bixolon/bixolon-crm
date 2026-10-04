@@ -9,7 +9,7 @@ import { canViewSalesLeadQueue } from './trade-show-leads';
 export type DashboardSection = 'forecast' | 'reps' | 'closing' | 'stage' | 'category' | 'stale' | 'tasks' | 'activities' | 'tradeShowLeads' | 'admin' | 'marketing';
 export type DashboardView = { title: string; sections: readonly DashboardSection[] };
 
-export const dashboardWidgetKeys = ['FORECAST_SUMMARY','FORECAST_ATTENTION','PIPELINE_BY_REP','PIPELINE_BY_STAGE','PIPELINE_BY_PRODUCT_CATEGORY','CLOSING_OPPORTUNITIES','STALE_ACCOUNTS','OVERDUE_TASKS','RECENT_ACTIVITY','MY_TRADE_SHOW_LEADS','MARKETING_SUMMARY','ADMIN_SHORTCUTS'] as const;
+export const dashboardWidgetKeys = ['FORECAST_SUMMARY','FORECAST_ATTENTION','FORECAST_MOVEMENT','SALES_PLAN_STATUS','PIPELINE_BY_REP','PIPELINE_BY_STAGE','PIPELINE_BY_PRODUCT_CATEGORY','CLOSING_OPPORTUNITIES','STALE_ACCOUNTS','OVERDUE_TASKS','RECENT_ACTIVITY','MY_TRADE_SHOW_LEADS','MARKETING_SUMMARY','MARKETING_ACTIVITY','ADMIN_SHORTCUTS'] as const;
 export type DashboardWidgetKey = typeof dashboardWidgetKeys[number];
 export type DashboardWidgetSize = 'HALF'|'FULL';
 export type SavedReportWidgetStyle = 'KPI'|'COMPACT_TABLE'|'GROUPED_SUMMARY';
@@ -32,6 +32,8 @@ type WidgetDefinition = { title:string; description:string; sizes:readonly Dashb
 export const dashboardWidgetRegistry: Record<DashboardWidgetKey,WidgetDefinition> = {
   FORECAST_SUMMARY:{title:'Forecast Summary',description:'Pipeline, commit, targets, and coverage for the current quarter.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'forecast',presentationSection:'FORECAST',roles:['ADMIN','SALES_MANAGER','SALES','READ_ONLY'],drillDown:'/reports/forecast'},
   FORECAST_ATTENTION:{title:'Forecast Attention',description:'Open Opportunities needing forecast follow-up.',sizes:['HALF','FULL'],defaultSize:'FULL',hideable:true,section:'forecast',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES','READ_ONLY'],drillDown:'/reports/forecast?attention=1'},
+  FORECAST_MOVEMENT:{title:'Forecast Movement',description:'Change since the previous comparable weekly snapshot.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'forecast',presentationSection:'FORECAST',roles:['ADMIN','SALES_MANAGER','SALES'],drillDown:'/reports/forecast-movement'},
+  SALES_PLAN_STATUS:{title:'Sales Plan Status',description:'Official annual plan, allocation, and target alignment.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'forecast',presentationSection:'FORECAST',roles:['ADMIN','SALES_MANAGER','SALES'],drillDown:'/sales-plan'},
   PIPELINE_BY_REP:{title:'Sales Rep Forecast',description:'Team pipeline and forecast grouped by Sales Rep.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'reps',presentationSection:'PIPELINE',roles:['ADMIN','SALES_MANAGER','READ_ONLY']},
   PIPELINE_BY_STAGE:{title:'Pipeline by Stage',description:'Current-quarter pipeline grouped by stage.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'stage',presentationSection:'PIPELINE',roles:['ADMIN','SALES_MANAGER','SALES','READ_ONLY']},
   PIPELINE_BY_PRODUCT_CATEGORY:{title:'Pipeline by Product Category',description:'Current-quarter pipeline grouped by Product Category.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'category',presentationSection:'PIPELINE',roles:['ADMIN','SALES_MANAGER','READ_ONLY']},
@@ -41,6 +43,7 @@ export const dashboardWidgetRegistry: Record<DashboardWidgetKey,WidgetDefinition
   RECENT_ACTIVITY:{title:'Recent Activity',description:'Latest CRM activity in your permitted scope.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'activities',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES']},
   MY_TRADE_SHOW_LEADS:{title:'My Trade Show Leads',description:'Actionable internal Sales leads assigned to you.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'tradeShowLeads',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES'],drillDown:'/trade-shows/my-leads'},
   MARKETING_SUMMARY:{title:'Marketing Summary',description:'Marketing-safe Account and Trade Show lead overview.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'marketing',presentationSection:'MARKETING',roles:['MARKETING_MANAGER']},
+  MARKETING_ACTIVITY:{title:'Marketing Activity',description:'Campaign activity and Trade Show leads needing action.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'marketing',presentationSection:'MARKETING',roles:['ADMIN','MARKETING_MANAGER'],drillDown:'/marketing/campaigns'},
   ADMIN_SHORTCUTS:{title:'Administration Shortcuts',description:'Quick access to common Administration areas.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'admin',presentationSection:'ADMINISTRATION',roles:['ADMIN']},
 };
 
@@ -53,23 +56,24 @@ export function dashboardItemPresentationSection(item:DashboardLayoutItem):Dashb
 const views: Record<UserRole, DashboardView> = {
   SALES: { title: 'My sales dashboard', sections: ['forecast','closing','stale','tasks','activities','tradeShowLeads','stage'] },
   SALES_MANAGER: { title: 'Team sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','stage','category'] },
-  ADMIN: { title: 'Sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','stage','category','admin'] },
+  ADMIN: { title: 'Sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','stage','category','admin','marketing'] },
   READ_ONLY: { title: 'Sales overview', sections: ['forecast','reps','closing','stage','category'] },
   MARKETING_MANAGER: { title: 'Marketing overview', sections: ['marketing'] },
 };
 
 const item=(key:DashboardWidgetKey,size?:DashboardWidgetSize):DashboardBuiltinItem=>({kind:'BUILTIN',key,size:size??dashboardWidgetRegistry[key].defaultSize});
 export const systemDashboardDefaults: Record<UserRole,DashboardLayoutConfiguration> = {
-  SALES:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('PIPELINE_BY_STAGE'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('MY_TRADE_SHOW_LEADS')]},
-  SALES_MANAGER:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY')]},
-  ADMIN:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('ADMIN_SHORTCUTS')]},
+  SALES:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('FORECAST_MOVEMENT'),item('SALES_PLAN_STATUS'),item('PIPELINE_BY_STAGE'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('MY_TRADE_SHOW_LEADS')]},
+  SALES_MANAGER:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('FORECAST_MOVEMENT'),item('SALES_PLAN_STATUS'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY')]},
+  ADMIN:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('FORECAST_MOVEMENT'),item('SALES_PLAN_STATUS'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('ADMIN_SHORTCUTS')]},
   READ_ONLY:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES')]},
-  MARKETING_MANAGER:{version:1,items:[item('MARKETING_SUMMARY'),item('OVERDUE_TASKS')]},
+  MARKETING_MANAGER:{version:1,items:[item('MARKETING_SUMMARY'),item('MARKETING_ACTIVITY'),item('OVERDUE_TASKS')]},
 };
 
 export function canUseDashboardWidget(actor:Actor,key:DashboardWidgetKey) {
   const definition=dashboardWidgetRegistry[key];
-  return definition.roles.includes(actor.role)&&canShowDashboardSection(actor,definition.section);
+  return definition.roles.includes(actor.role)&&canShowDashboardSection(actor,definition.section)
+    &&(key!=='SALES_PLAN_STATUS'||can(actor,'sales-plan.read'));
 }
 
 function object(value:unknown):value is Record<string,unknown>{return !!value&&typeof value==='object'&&!Array.isArray(value);}

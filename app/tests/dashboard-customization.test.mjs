@@ -24,7 +24,13 @@ test('system defaults are role-specific and Marketing remains sales-pipeline saf
   assert.ok(dashboard.systemDashboardDefaults.SALES.items.some(item=>item.key==='FORECAST_SUMMARY'));
   assert.ok(dashboard.systemDashboardDefaults.SALES.items.some(item=>item.key==='MY_TRADE_SHOW_LEADS'));
   assert.ok(dashboard.systemDashboardDefaults.SALES_MANAGER.items.some(item=>item.key==='PIPELINE_BY_REP'));
-  assert.deepEqual(dashboard.systemDashboardDefaults.MARKETING_MANAGER.items.map(item=>item.key),['MARKETING_SUMMARY','OVERDUE_TASKS']);
+  assert.deepEqual(dashboard.systemDashboardDefaults.MARKETING_MANAGER.items.map(item=>item.key),['MARKETING_SUMMARY','MARKETING_ACTIVITY','OVERDUE_TASKS']);
+  for(const role of ['SALES','SALES_MANAGER'])for(const key of ['FORECAST_MOVEMENT','SALES_PLAN_STATUS'])assert.ok(dashboard.systemDashboardDefaults[role].items.some(item=>item.key===key));
+  assert.ok(dashboard.systemDashboardDefaults.ADMIN.items.some(item=>item.key==='FORECAST_MOVEMENT'));
+  assert.ok(!dashboard.systemDashboardDefaults.ADMIN.items.some(item=>item.key==='MARKETING_ACTIVITY'));
+  assert.equal(dashboard.canUseDashboardWidget(actor('ADMIN'),'MARKETING_ACTIVITY'),true);
+  assert.equal(dashboard.canUseDashboardWidget(actor('SALES'),'MARKETING_ACTIVITY'),false);
+  assert.equal(dashboard.canUseDashboardWidget(actor('READ_ONLY'),'SALES_PLAN_STATUS'),false);
   assert.equal(dashboard.canUseDashboardWidget(actor('MARKETING_MANAGER'),'FORECAST_SUMMARY'),false);
   assert.equal(dashboard.canUseDashboardWidget(actor('SALES'),'PIPELINE_BY_REP'),false);
 });
@@ -42,8 +48,11 @@ test('layout validation preserves order and rejects unknown, unauthorized, dupli
 });
 
 test('canonical widget names and presentation sections are shared across Dashboard surfaces',()=>{
+  assert.equal(new Set(dashboard.dashboardWidgetKeys).size,dashboard.dashboardWidgetKeys.length);
   const expected={
     FORECAST_SUMMARY:['Forecast Summary','FORECAST'],
+    FORECAST_MOVEMENT:['Forecast Movement','FORECAST'],
+    SALES_PLAN_STATUS:['Sales Plan Status','FORECAST'],
     PIPELINE_BY_REP:['Sales Rep Forecast','PIPELINE'],
     PIPELINE_BY_STAGE:['Pipeline by Stage','PIPELINE'],
     PIPELINE_BY_PRODUCT_CATEGORY:['Pipeline by Product Category','PIPELINE'],
@@ -53,6 +62,7 @@ test('canonical widget names and presentation sections are shared across Dashboa
     RECENT_ACTIVITY:['Recent Activity','ATTENTION'],
     MY_TRADE_SHOW_LEADS:['My Trade Show Leads','ATTENTION'],
     MARKETING_SUMMARY:['Marketing Summary','MARKETING'],
+    MARKETING_ACTIVITY:['Marketing Activity','MARKETING'],
     ADMIN_SHORTCUTS:['Administration Shortcuts','ADMINISTRATION'],
   };
   for(const [key,[title,section]] of Object.entries(expected)){
@@ -67,7 +77,7 @@ test('canonical widget names and presentation sections are shared across Dashboa
 
 test('presentation sections expose only permitted widgets and omit empty unauthorized groups',()=>{
   const marketing=dashboard.availableDashboardWidgets(actor('MARKETING_MANAGER'));
-  assert.deepEqual(marketing.map(widget=>widget.key),['MARKETING_SUMMARY']);
+  assert.deepEqual(marketing.map(widget=>widget.key),['MARKETING_SUMMARY','MARKETING_ACTIVITY']);
   assert.deepEqual(new Set(marketing.map(widget=>widget.presentationSection)),new Set(['MARKETING']));
   assert.equal(marketing.some(widget=>widget.presentationSection==='PIPELINE'||widget.presentationSection==='ADMINISTRATION'),false);
   const sales=dashboard.availableDashboardWidgets(actor('SALES'));
@@ -95,7 +105,7 @@ test('personal override wins, reset inheritance remains implicit, and a role cha
   result=await dashboard.getEffectiveDashboardLayout(client({personal:null,roleLayout}),actor('SALES'));
   assert.equal(result.personalized,false);assert.equal(result.configuration.items[0].key,'PIPELINE_BY_STAGE');
   result=await dashboard.getEffectiveDashboardLayout(client({personal,roleLayout:null}),actor('MARKETING_MANAGER'));
-  assert.equal(result.personalized,false);assert.deepEqual(result.configuration.items.map(item=>item.key),['MARKETING_SUMMARY','OVERDUE_TASKS']);
+  assert.equal(result.personalized,false);assert.deepEqual(result.configuration.items.map(item=>item.key),['MARKETING_SUMMARY','MARKETING_ACTIVITY','OVERDUE_TASKS']);
 });
 
 test('Dashboard UI exposes responsive spans and keyboard reorder controls',()=>{

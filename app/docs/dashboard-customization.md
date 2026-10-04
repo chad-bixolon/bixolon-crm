@@ -4,11 +4,17 @@ Dashboard layouts contain presentation state only. `RoleDashboardLayout` stores 
 
 Built-in widget metadata is centralized in `lib/dashboard.ts`. Layout input accepts only registered keys, HALF/FULL sizes supported by each widget, and the curated Saved Report styles KPI, Compact Table, and Grouped Summary. Grouped Summary is available only for a report with a configured grouping. The limit is 24 total widgets and 8 Saved Report widgets.
 
+Forecast Movement compares the latest two active weekly snapshots for the current Dashboard quarter and currency, scoped to the effective Sales user or current Sales team. It shows Pipeline, Best Case, and Commit changes plus distinct Opportunities whose expected close date slipped beyond the quarter during the captured interval. With fewer than two weeks, it prompts another capture. It links to `/reports/forecast-movement`. Sales and Sales Manager default layouts include it; Admin can customize it and has it by default.
+
+Sales Plan Status uses active official plan revisions and the Sales Plan report's aggregate totals, allocation completion, annual target, and target sync rules. The Dashboard uses the Sales Plan page's current-year-or-latest-year default and the selected Dashboard currency. Missing-plan reps are counted as exceptions and excluded from financial totals. With no active plan it shows a clear empty state. It links to `/sales-plan` and is default for Sales, Sales Manager, and Admin.
+
+Marketing Activity counts active Campaigns, nonvoided influences recorded in the last seven rolling days, actionable unreviewed or Marketing Follow-Up Trade Show leads, and visible active Marketing Audiences. With no Campaigns, recent influences, or leads needing action, it shows a quiet-state message. It links to `/marketing/campaigns`. Marketing Manager has it by default; Admin may add it through customization. Sales, Sales Manager, and Read Only cannot add it.
+
 ## Manual acceptance
 
 1. Sign in as SALES. Confirm the Sales default, open **Customize Dashboard**, hide and reorder widgets with the arrow controls, add a permitted personal Saved Report, save, refresh, and confirm persistence. Use **Reset to Role Default** and confirm the current role default returns.
 2. Sign in as SALES_MANAGER. Save a Pipeline report, open it, choose **Add to Dashboard**, then select KPI, Compact Table, or Grouped Summary (for a grouped report) in customization. Confirm the widget opens the original report and shows only manager-authorized data.
-3. Sign in as MARKETING_MANAGER. Confirm only Marketing Summary and own overdue Tasks are default built-ins. Pin a Trade Show report. Confirm Pipeline reports and pipeline widgets are unavailable.
+3. Sign in as MARKETING_MANAGER. Confirm Marketing Summary, Marketing Activity, and own overdue Tasks are default built-ins. Pin a Trade Show report. Confirm Pipeline reports and pipeline widgets are unavailable.
 4. Sign in as ADMIN. Open **Administration → Dashboard Views**, change the Sales default, and save. Confirm a Sales user without a personal override inherits it, while a personalized user is unchanged. Reset that user and confirm the new Admin default appears. Use **Restore System Default** to remove the database override.
 5. Tamper with a save request by supplying an unknown key, unsupported size, duplicate widget, inaccessible Saved Report ID, or ungrouped report with Grouped Summary. Confirm the server rejects it without persisting. Change a user role and confirm the prior-role personal layout is ignored. Archive or remove access to a pinned report and confirm no report data is exposed.
 
