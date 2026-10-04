@@ -6,6 +6,9 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added a Lead Sources report that counts unique prospects without double-counting resolved leads and Contacts.
+- Improved the Marketing dashboard and added Marketing Attribution reporting for Campaign Influence activity.
+
 ### Added
 
 - Added compact Dashboard widgets for Forecast Movement, Sales Plan status, and Marketing activity.

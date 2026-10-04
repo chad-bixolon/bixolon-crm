@@ -22,6 +22,24 @@ The migration adds only the configurable Events default. It does not backfill hi
 
 Marketing Manager and Admin manage Lead Source options and Campaigns and may correct first touch, add manual touches, or void mistaken touches. Sales, Sales Manager, and Read Only can open the read-only Campaign list and detail pages. Linked influence activity and related records follow their existing CRM record visibility. They have no attribution mutation controls or Campaign edit route. Server actions use the current effective user, including local impersonation.
 
+## Lead Sources report
+
+`/reports/lead-sources` derives a canonical prospect set: each unarchived Contact appears once, and each Trade Show Lead without a Contact link appears once. A linked lead is represented only by its Contact, even when several leads link to that Contact. Campaign Influences and Opportunities are never prospect rows. Reimporting an existing Trade Show lead reuses its source key and does not create a second prospect. The report cannot identify two independently created, unresolved leads as the same person without an explicit Contact link.
+
+**Resolved Contacts** have at least one linked Trade Show lead. **Contact-only Prospects** have no linked Trade Show lead. Both are part of Unique Prospects, along with Unresolved Leads. **Contact Share** is the percentage of report prospects currently represented by a Contact; it is not a historical conversion rate.
+
+The Contact's current explicit Lead Source is authoritative for its row. An unresolved lead uses its own current Lead Source. The report never copies or corrects a source. A Contact is flagged for review when any linked lead's current source differs from the Contact's current source, including one side being blank. Corrections to either current source are reflected on the next read; `LeadSourceChange` remains the audit history. An unspecified Contact source stays unspecified even if linked leads have sources.
+
+The date range filters a **report date**, which is the earliest captured or imported date among linked leads whose source matches the Contact's current source, when available. Otherwise it is the Contact creation date. An unresolved lead uses its capture date, or its import date when capture is missing. Detail rows show the date basis. Contact creation is only a fallback, not a verified first-touch date; historical Contacts without provenance may therefore fall in a different period than their actual first touch. Corrections may change which matching linked lead supplies a Contact's report date. No date is fabricated.
+
+Campaign filtering checks for at least one active influence attached directly to a Contact, to one of its linked leads, or to an unresolved lead. Multiple matching influences still select the prospect only once. Voided influences do not qualify. An Opportunity-only influence does not establish a person's Campaign association. Related Campaign names in the detail follow the same rule.
+
+Opportunity association counts distinct, unarchived Opportunities linked through `OpportunityContact` or a Trade Show lead's converted Opportunity. An unresolved lead can retain a converted Opportunity and still be an unresolved Contact lead. Each prospect contributes at most one to **Prospects with Opportunities**, while detail shows its distinct Opportunity count. This indicates CRM association, not Campaign attribution or conversion revenue.
+
+Marketing Manager and Admin can access the report under effective-user authorization. Sales, Sales Manager, and Read Only retain their existing permissions and cannot open it. The report uses server-side grouped SQL and a 26-row fetch for each 25-row detail page. It is read-only and does not change attribution or CRM records. The assigned rep filter and display use Trade Show lead assignment; a Contact with leads assigned to multiple reps has no single report rep. Contacts without linked Trade Show leads have no assigned rep in this report.
+
+Archived Contacts are outside the report population; leads linked to them are not reclassified as unresolved. Historical Trade Show leads with blank Lead Source remain in **Unspecified** until explicitly corrected. No historical backfill or person matching is performed.
+
 ## Future work and decisions awaiting Liz
 
 WordPress ingestion is deferred. The `sourceContext`, unique `sourceKey`, and optional JSON `metadata` allow a later form handler to record form name, page URL, UTM values, and referrer without rewriting this model. That handler must set a blank first touch only, then append a Campaign Influence with a stable submission identity.

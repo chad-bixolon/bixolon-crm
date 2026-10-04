@@ -45,6 +45,7 @@ export function routeAccess(path: string, actor: Actor | null): 'sign-in' | 'den
   if (path === '/demos' && actor.role !== 'ADMIN') return 'denied';
   if (path.startsWith('/demos/') && !/^\/demos\/\d+$/.test(path)) return 'denied';
   if (path === '/trade-shows/my-leads' && !['ADMIN','SALES_MANAGER','SALES'].includes(actor.role)) return 'denied';
+  if (path === '/reports/marketing-attribution' || path === '/reports/lead-sources') return can(actor, 'marketing.read') && can(actor, 'contacts.read') && can(actor, 'opportunities.read') ? 'allowed' : 'denied';
   // The Reports landing page, saved reports, and builder perform report-type
   // authorization server-side. This lets Marketing use Trade Show reporting
   // without granting access to Pipeline or other sales reports.

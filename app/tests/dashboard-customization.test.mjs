@@ -24,7 +24,7 @@ test('system defaults are role-specific and Marketing remains sales-pipeline saf
   assert.ok(dashboard.systemDashboardDefaults.SALES.items.some(item=>item.key==='FORECAST_SUMMARY'));
   assert.ok(dashboard.systemDashboardDefaults.SALES.items.some(item=>item.key==='MY_TRADE_SHOW_LEADS'));
   assert.ok(dashboard.systemDashboardDefaults.SALES_MANAGER.items.some(item=>item.key==='PIPELINE_BY_REP'));
-  assert.deepEqual(dashboard.systemDashboardDefaults.MARKETING_MANAGER.items.map(item=>item.key),['MARKETING_SUMMARY','MARKETING_ACTIVITY','OVERDUE_TASKS']);
+  assert.deepEqual(dashboard.systemDashboardDefaults.MARKETING_MANAGER.items.map(item=>item.key),['OVERDUE_TASKS','MARKETING_ACTIVITY','MARKETING_SUMMARY']);
   for(const role of ['SALES','SALES_MANAGER'])for(const key of ['FORECAST_MOVEMENT','SALES_PLAN_STATUS'])assert.ok(dashboard.systemDashboardDefaults[role].items.some(item=>item.key===key));
   assert.ok(dashboard.systemDashboardDefaults.ADMIN.items.some(item=>item.key==='FORECAST_MOVEMENT'));
   assert.ok(!dashboard.systemDashboardDefaults.ADMIN.items.some(item=>item.key==='MARKETING_ACTIVITY'));
@@ -62,7 +62,7 @@ test('canonical widget names and presentation sections are shared across Dashboa
     RECENT_ACTIVITY:['Recent Activity','ATTENTION'],
     MY_TRADE_SHOW_LEADS:['My Trade Show Leads','ATTENTION'],
     MARKETING_SUMMARY:['Marketing Summary','MARKETING'],
-    MARKETING_ACTIVITY:['Marketing Activity','MARKETING'],
+    MARKETING_ACTIVITY:['Marketing Activity','ATTENTION'],
     ADMIN_SHORTCUTS:['Administration Shortcuts','ADMINISTRATION'],
   };
   for(const [key,[title,section]] of Object.entries(expected)){
@@ -77,8 +77,8 @@ test('canonical widget names and presentation sections are shared across Dashboa
 
 test('presentation sections expose only permitted widgets and omit empty unauthorized groups',()=>{
   const marketing=dashboard.availableDashboardWidgets(actor('MARKETING_MANAGER'));
-  assert.deepEqual(marketing.map(widget=>widget.key),['MARKETING_SUMMARY','MARKETING_ACTIVITY']);
-  assert.deepEqual(new Set(marketing.map(widget=>widget.presentationSection)),new Set(['MARKETING']));
+  assert.deepEqual(marketing.map(widget=>widget.key),['OVERDUE_TASKS','MARKETING_SUMMARY','MARKETING_ACTIVITY']);
+  assert.deepEqual(new Set(marketing.map(widget=>widget.presentationSection)),new Set(['MARKETING','ATTENTION']));
   assert.equal(marketing.some(widget=>widget.presentationSection==='PIPELINE'||widget.presentationSection==='ADMINISTRATION'),false);
   const sales=dashboard.availableDashboardWidgets(actor('SALES'));
   assert.equal(sales.some(widget=>widget.presentationSection==='MARKETING'||widget.presentationSection==='ADMINISTRATION'),false);
@@ -105,7 +105,19 @@ test('personal override wins, reset inheritance remains implicit, and a role cha
   result=await dashboard.getEffectiveDashboardLayout(client({personal:null,roleLayout}),actor('SALES'));
   assert.equal(result.personalized,false);assert.equal(result.configuration.items[0].key,'PIPELINE_BY_STAGE');
   result=await dashboard.getEffectiveDashboardLayout(client({personal,roleLayout:null}),actor('MARKETING_MANAGER'));
-  assert.equal(result.personalized,false);assert.deepEqual(result.configuration.items.map(item=>item.key),['MARKETING_SUMMARY','MARKETING_ACTIVITY','OVERDUE_TASKS']);
+  assert.equal(result.personalized,false);assert.deepEqual(result.configuration.items.map(item=>item.key),['OVERDUE_TASKS','MARKETING_ACTIVITY','MARKETING_SUMMARY']);
+});
+
+test('Marketing default is balanced and unavailable personal report pins are removed',async()=>{
+  const defaults=dashboard.systemDashboardDefaults.MARKETING_MANAGER.items;
+  assert.deepEqual(defaults.map(item=>[item.key,item.size]),[['OVERDUE_TASKS','HALF'],['MARKETING_ACTIVITY','HALF'],['MARKETING_SUMMARY','FULL']]);
+  assert.equal(dashboard.dashboardItemPresentationSection(defaults[0]),'ATTENTION');
+  assert.equal(dashboard.dashboardItemPresentationSection(defaults[1]),'ATTENTION');
+  assert.equal(dashboard.dashboardItemPresentationSection(defaults[2]),'MARKETING');
+  const personal={role:'MARKETING_MANAGER',configuration:{version:1,items:[...defaults,{kind:'SAVED_REPORT',reportId:999,size:'HALF',style:'KPI'}]}};
+  const result=await dashboard.getEffectiveDashboardLayout(client({personal}),actor('MARKETING_MANAGER'));
+  assert.equal(result.personalized,true);
+  assert.deepEqual(result.configuration.items,defaults);
 });
 
 test('Dashboard UI exposes responsive spans and keyboard reorder controls',()=>{
@@ -119,6 +131,7 @@ test('Dashboard UI exposes responsive spans and keyboard reorder controls',()=>{
   assert.match(editor,/Half/);assert.match(editor,/Full/);
   assert.match(editor,/Dashboard Sections/);
   assert.match(editor,/Choose which items appear, set their order, and select their size\./);
+  assert.match(editor,/No additional widgets are available for this role\./);
   assert.match(editor,/dashboardPresentationSectionTitles\[group\.section\]/);
   assert.match(editor,/filter\(group=>group\.items\.length\)/);
   assert.match(admin,/widgets=\{availableDashboardWidgets\(target\)\}/);

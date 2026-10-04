@@ -22,7 +22,7 @@ test('role dashboard presentation is filtered by authorization', () => {
   assert.deepEqual(sections('SALES_MANAGER'), ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','stage','category']);
   assert.ok(sections('ADMIN').includes('admin'));
   assert.deepEqual(sections('READ_ONLY'), ['forecast','reps','closing','stage','category']);
-  assert.deepEqual(sections('MARKETING_MANAGER'), ['marketing']);
+  assert.deepEqual(sections('MARKETING_MANAGER'), ['tasks','marketing']);
   assert.equal(dashboard.canShowDashboardSection(actor('MARKETING_MANAGER'), 'forecast'), false);
   assert.equal(dashboard.canShowDashboardSection(actor('READ_ONLY'), 'admin'), false);
 });

@@ -43,7 +43,7 @@ export const dashboardWidgetRegistry: Record<DashboardWidgetKey,WidgetDefinition
   RECENT_ACTIVITY:{title:'Recent Activity',description:'Latest CRM activity in your permitted scope.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'activities',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES']},
   MY_TRADE_SHOW_LEADS:{title:'My Trade Show Leads',description:'Actionable internal Sales leads assigned to you.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'tradeShowLeads',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES'],drillDown:'/trade-shows/my-leads'},
   MARKETING_SUMMARY:{title:'Marketing Summary',description:'Marketing-safe Account and Trade Show lead overview.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'marketing',presentationSection:'MARKETING',roles:['MARKETING_MANAGER']},
-  MARKETING_ACTIVITY:{title:'Marketing Activity',description:'Campaign activity and Trade Show leads needing action.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'marketing',presentationSection:'MARKETING',roles:['ADMIN','MARKETING_MANAGER'],drillDown:'/marketing/campaigns'},
+  MARKETING_ACTIVITY:{title:'Marketing Activity',description:'Campaign activity and Trade Show leads needing action.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'marketing',presentationSection:'ATTENTION',roles:['ADMIN','MARKETING_MANAGER'],drillDown:'/marketing/campaigns'},
   ADMIN_SHORTCUTS:{title:'Administration Shortcuts',description:'Quick access to common Administration areas.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'admin',presentationSection:'ADMINISTRATION',roles:['ADMIN']},
 };
 
@@ -58,7 +58,7 @@ const views: Record<UserRole, DashboardView> = {
   SALES_MANAGER: { title: 'Team sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','stage','category'] },
   ADMIN: { title: 'Sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','stage','category','admin','marketing'] },
   READ_ONLY: { title: 'Sales overview', sections: ['forecast','reps','closing','stage','category'] },
-  MARKETING_MANAGER: { title: 'Marketing overview', sections: ['marketing'] },
+  MARKETING_MANAGER: { title: 'Marketing overview', sections: ['tasks','marketing'] },
 };
 
 const item=(key:DashboardWidgetKey,size?:DashboardWidgetSize):DashboardBuiltinItem=>({kind:'BUILTIN',key,size:size??dashboardWidgetRegistry[key].defaultSize});
@@ -67,7 +67,7 @@ export const systemDashboardDefaults: Record<UserRole,DashboardLayoutConfigurati
   SALES_MANAGER:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('FORECAST_MOVEMENT'),item('SALES_PLAN_STATUS'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY')]},
   ADMIN:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('FORECAST_MOVEMENT'),item('SALES_PLAN_STATUS'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('ADMIN_SHORTCUTS')]},
   READ_ONLY:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES')]},
-  MARKETING_MANAGER:{version:1,items:[item('MARKETING_SUMMARY'),item('MARKETING_ACTIVITY'),item('OVERDUE_TASKS')]},
+  MARKETING_MANAGER:{version:1,items:[item('OVERDUE_TASKS'),item('MARKETING_ACTIVITY'),item('MARKETING_SUMMARY')]},
 };
 
 export function canUseDashboardWidget(actor:Actor,key:DashboardWidgetKey) {

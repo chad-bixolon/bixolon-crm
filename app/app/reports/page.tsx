@@ -5,6 +5,7 @@ import { Content, PageHeader } from '@/components/shell';
 import { currentUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { canAccessReports, canEditReportDefinition, getCreatableReportTypes, getVisibleBuiltInReports, getVisibleReportTypes, reportRegistry, savedReportWhere, type BuiltInReportType } from '@/lib/reporting';
+import { canViewMarketingReports } from '@/lib/marketing-attribution-report';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,12 +86,14 @@ export default async function ReportsPage({searchParams}:{searchParams:Promise<{
   const builtIns = new Set(getVisibleBuiltInReports(actor));
   const visibleReportTypes = getVisibleReportTypes(actor);
   const creatableReportTypes = getCreatableReportTypes(actor);
+  const marketingReports = canViewMarketingReports(actor);
   const reports = await prisma.reportDefinition.findMany({ where: {...savedReportWhere(actor),archivedAt:archivedView?{not:null}:null}, include: { owner: true }, orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }] });
   const mine = reports.filter(report => report.ownerId === actor.id);
   const shared = reports.filter(report => report.visibility === 'SHARED' && report.ownerId !== actor.id);
 
   return <Content>
-    <PageHeader eyebrow="Management reporting" title="Reports" description="Create, save, and review reports using current SalesHub data." action={creatableReportTypes.length ? <Link className="btn-primary" href={creatableReportTypes.includes('PIPELINE')?'/reports/new':'/reports/new?reportType=TRADE_SHOW'}>Create Report</Link> : undefined} />
+    <PageHeader eyebrow="Reporting" title="Reports" description="Create, save, and review reports using current SalesHub data." action={creatableReportTypes.length ? <Link className="btn-primary" href={creatableReportTypes.includes('PIPELINE')?'/reports/new':'/reports/new?reportType=TRADE_SHOW'}>Create Report</Link> : undefined} />
+    {marketingReports&&<section className="panel mb-6 p-5"><h2 className="text-lg font-semibold">Marketing</h2><div className="mt-3 grid gap-3 sm:grid-cols-2"><Link className="rounded-md border p-4 hover:border-orange-400" href="/reports/trade-shows"><strong>Trade Show Report</strong><p className="mt-1 text-sm text-slate-600">Review event leads and follow-up.</p></Link><Link className="rounded-md border p-4 hover:border-orange-400" href="/reports/marketing-attribution"><strong>Marketing Attribution</strong><p className="mt-1 text-sm text-slate-600">Review recorded Campaign Influence activity.</p></Link><Link className="rounded-md border p-4 hover:border-orange-400" href="/reports/lead-sources"><strong>Lead Sources</strong><p className="mt-1 text-sm text-slate-600">Count unique prospects by first-touch source.</p></Link></div></section>}
     {visibleReportTypes.includes('PIPELINE')&&<section className="-mt-1 mb-6">
       <Link className="group flex flex-col gap-3 rounded-lg border border-orange-200 bg-orange-50/70 p-4 transition-colors hover:border-orange-400 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600 sm:flex-row sm:items-center sm:justify-between" href="/reports/forecast">
         <div className="min-w-0"><h2 className="text-lg font-semibold text-slate-950">Quarterly Forecast</h2><p className="mt-1 text-sm leading-6 text-slate-600">View targets, open pipeline, commit, and coverage by sales rep and currency.</p></div>
@@ -103,7 +106,7 @@ export default async function ReportsPage({searchParams}:{searchParams:Promise<{
       <h2 className="text-lg font-semibold">Built-in Reports</h2>
       <p className="mt-1 text-sm text-slate-600">Open common report views instantly.</p>
       <div className="mt-5 space-y-6">
-        {builtInGroups.map(group => {
+        {builtInGroups.filter(group=>!(actor.role==='MARKETING_MANAGER'&&group.title==='Trade Shows')).map(group => {
           const cards = group.cards.filter(card => builtIns.has(card.id));
           if (!cards.length) return null;
           return <section key={group.title} aria-label={group.title} className="border-t border-slate-100 pt-5 first:border-0 first:pt-0">
