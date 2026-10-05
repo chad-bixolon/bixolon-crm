@@ -6,6 +6,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added Price Exception expiration reporting, dashboard follow-up alerts, and Excel export for expired and upcoming PEs.
+
 - Improved Sales Plan exports with direct access from Sales Plan, compact report filters, consistent primary report actions, and more presentation-ready management and SKU workbooks.
 - Improved Price Exception import review by treating N/A party roles as intentionally blank, clarifying revision choices, and formatting source timestamps.
 - Added a Lead Sources report that counts unique prospects without double-counting resolved leads and Contacts.

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { listPriceExceptions, priceExceptionHref, type PriceExceptionFilters } from '@/lib/price-exceptions';
 import { priceExceptionStatusLabel } from '@/lib/price-exception-labels';
 import { priceExceptionListSummary } from '@/lib/price-exception-list-summary';
+import { expirationOptions } from '@/lib/price-exception-expiration';
 
 export const dynamic='force-dynamic';
 const Party=({account,raw}:{account:{id:number;name:string}|null;raw:string|null})=>account?<Link className="block max-w-44 truncate text-orange-800 underline" title={account.name} href={`/accounts/${account.id}`}>{account.name}</Link>:raw?<span className="block max-w-44 truncate" title={`Unresolved: ${raw}`}>{raw} <span className="text-amber-700">?</span></span>:<>—</>;
@@ -21,7 +22,7 @@ export default async function PriceExceptionsPage({searchParams}:{searchParams:P
       <label className="label">Distributor / OEM<input className={control} name="distributor" defaultValue={filters.distributor??''}/></label>
       <label className="label">VAR / ISV<input className={control} name="varName" defaultValue={filters.varName??''}/></label>
       <label className="label">End User<input className={control} name="endUser" defaultValue={filters.endUser??''}/></label>
-      <label className="label">Expiration<select className={control} name="expiration" defaultValue={filters.expiration??''}><option value="">All</option><option value="expired">Past date</option><option value="future">Current/future</option><option value="none">No date</option></select></label>
+      <label className="label">Expiration<select className={control} name="expiration" defaultValue={filters.expiration??'all'}>{expirationOptions.map(([value,label])=><option key={value} value={value}>{label}</option>)}<option value="future">Current/future</option></select></label>
       <label className="label">Resolution Status<select className={control} name="unresolved" defaultValue={filters.unresolved??''}><option value="">All</option><option value="yes">Only unresolved</option></select></label>
       {actor.role!=='SALES'&&<label className="label">BIXOLON Sales Rep<select className={control} name="salesRep" defaultValue={filters.salesRep??''}><option value="">All Sales Reps</option><option value="unassigned">Unassigned / Legacy</option>{salesReps.map(rep=><option key={rep.id} value={rep.id}>{rep.firstName} {rep.lastName}{!rep.active||rep.archivedAt?' (inactive)':''}</option>)}</select></label>}
       <div className="filter-actions"><button className="btn-filter-primary">Apply</button><Link className="btn-filter-secondary" href="/price-exceptions">Clear</Link></div>

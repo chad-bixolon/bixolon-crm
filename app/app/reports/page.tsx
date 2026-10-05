@@ -52,6 +52,7 @@ const builtInGroups: { title: string; cards: BuiltInCard[] }[] = [
   {
     title: 'Price Exceptions',
     cards: [
+      { id: 'EXPIRING_PRICE_EXCEPTIONS', title: 'Expiring Price Exceptions', description: 'Follow up on active PEs that are expired or expiring within 90 days.', href: '/reports/price-exceptions-expiring' },
       { id: 'PE_USAGE_THIS_QUARTER', title: 'PE Usage This Quarter', description: 'Review opportunity product lines using Price Exception pricing with an expected close this quarter.', href: '/reports/new?reportType=PRICE_EXCEPTION_USAGE&configured=1&closeDatePreset=THIS_QUARTER&groupBy=priceException' },
       { id: 'PE_USAGE_BY_SALES_REP', title: 'PE Usage by Sales Rep', description: 'Compare Price Exception usage across the sales team.', href: '/reports/new?reportType=PRICE_EXCEPTION_USAGE&configured=1&groupBy=owner&metrics=lineValue&metrics=quantity&metrics=opportunityCount&metrics=priceExceptionCount' },
       { id: 'PE_USAGE_BY_PRODUCT', title: 'PE Usage by Product', description: 'Analyze quantity, line value, and approved PE pricing by product.', href: '/reports/new?reportType=PRICE_EXCEPTION_USAGE&configured=1&groupBy=product&metrics=quantity&metrics=lineValue&metrics=opportunityCount&metrics=averageApprovedUnitPrice&metrics=averageActualUnitPrice' },

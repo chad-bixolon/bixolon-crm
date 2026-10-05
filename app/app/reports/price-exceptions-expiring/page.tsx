@@ -1,0 +1,32 @@
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import { Content, PageHeader } from '@/components/shell';
+import { currentUser } from '@/lib/current-user';
+import { prisma } from '@/lib/prisma';
+import { canViewExpirationReport, expiringReport, normalizeExpiration, type ExpiringFilters } from '@/lib/price-exception-expiration';
+
+export const dynamic='force-dynamic';
+const windows=[['follow-up','Expired + next 90 days'],['expired','Expired'],['next30','Next 30 days'],['next60','Next 60 days'],['next90','Next 90 days'],['activeExpired','Active but Expired'],['none','No expiration date'],['all','All expiration dates']] as const;
+const stateClass=(state:string)=>state==='Expired'?'text-red-700':state==='0–30 Days'?'text-amber-800':state==='31–60 Days'?'text-yellow-800':'text-slate-600';
+export default async function Page({searchParams}:{searchParams:Promise<ExpiringFilters>}) {
+  const actor=await currentUser();if(!canViewExpirationReport(actor))notFound();
+  const filters=await searchParams,window=normalizeExpiration(filters.expiration);
+  const report=await expiringReport(prisma,actor,filters);
+  const reps=actor.role==='SALES'?[]:await prisma.user.findMany({where:{OR:[{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},{assignedPriceExceptions:{some:{}}}]},select:{id:true,firstName:true,lastName:true},orderBy:[{lastName:'asc'},{firstName:'asc'}]});
+  const query=new URLSearchParams(Object.entries(filters).filter(([key,value])=>key!=='page'&&!!value) as [string,string][]);
+  const href=(page:number)=>{const next=new URLSearchParams(query);next.set('page',String(page));return `/reports/price-exceptions-expiring?${next}`};
+  return <Content><PageHeader eyebrow="Reports / Price Exceptions" title="Expiring Price Exceptions" description="Follow up on expired and upcoming Price Exceptions. Stored status and expiration state are shown separately." action={<Link className="btn-primary" href={`/reports/price-exceptions-expiring/export?${query}`}>Export Excel</Link>}/>
+    <form method="get" className="panel filter-panel filter-grid mb-5" aria-label="Filter Expiring Price Exceptions">
+      <label className="label">Expiration window<select className="field filter-control" name="expiration" defaultValue={window}>{windows.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+      <label className="label">Status<select className="field filter-control" name="status" defaultValue={filters.status??(window==='follow-up'||window==='activeExpired'?'ACTIVE':'ALL')}><option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="EXPIRED">Expired status</option><option value="ARCHIVED">Archived</option></select></label>
+      {actor.role!=='SALES'&&<label className="label">Sales Rep<select className="field filter-control" name="salesRep" defaultValue={filters.salesRep??''}><option value="">All Sales Reps</option>{reps.map(rep=><option value={rep.id} key={rep.id}>{rep.firstName} {rep.lastName}</option>)}</select></label>}
+      <label className="label">Account<input className="field filter-control" name="account" defaultValue={filters.account??''}/></label>
+      <label className="label">SKU / Product<input className="field filter-control" name="sku" defaultValue={filters.sku??''}/></label>
+      <label className="label">Search<input className="field filter-control" name="q" defaultValue={filters.q??''} placeholder="PE number or SKU"/></label>
+      <div className="filter-actions"><button className="btn-filter-primary">View report</button></div>
+    </form>
+    <div className="mb-3 flex flex-wrap gap-2 text-sm">{windows.slice(0,6).map(([value,label])=><Link key={value} className="btn-secondary" href={`/reports/price-exceptions-expiring?expiration=${value}${value==='follow-up'?'':'&status=ALL'}`}>{label}</Link>)}</div>
+    <section className="panel overflow-x-auto"><table className="w-full min-w-[1050px] text-left text-sm"><thead className="border-b bg-slate-50 text-xs uppercase text-slate-500"><tr>{['PE Number','Sales Rep','Account / Customer','Product / SKU','Status','Expiration Date','Days Until Expiration','Expiration State','MOQ / Tiers'].map(label=><th className="px-3 py-2" key={label}>{label}</th>)}</tr></thead><tbody className="divide-y">{report.rows.map(row=><tr key={row.id} className="even:bg-slate-50/50"><td className="px-3 py-2"><Link className="font-semibold text-orange-800 underline" href={`/price-exceptions/${row.id}`}>{row.code}</Link></td><td className="px-3 py-2">{row.rep}</td><td className="px-3 py-2">{row.account}</td><td className="px-3 py-2">{row.product?`${row.product.product??''} ${row.product.sku}`:'—'}</td><td className="px-3 py-2">{row.status}</td><td className="px-3 py-2 whitespace-nowrap">{row.expirationDate?.toISOString().slice(0,10)??'—'}</td><td className="px-3 py-2 tabular-nums">{row.days===null?'—':row.days<0?`${-row.days} days expired`:row.days}</td><td className={`px-3 py-2 font-medium ${stateClass(row.state)}`}>{row.state}</td><td className="px-3 py-2">{row.tiers}</td></tr>)}</tbody></table>{!report.rows.length&&<p className="p-6 text-sm text-slate-600">No Price Exceptions match these filters.</p>}</section>
+    <nav className="mt-4 flex items-center justify-between text-sm"><span>{report.count} Price Exceptions · Page {report.page} of {report.pages}</span><span className="flex gap-2">{report.page>1&&<Link className="btn-secondary" href={href(report.page-1)}>Previous</Link>}{report.page<report.pages&&<Link className="btn-secondary" href={href(report.page+1)}>Next</Link>}</span></nav>
+  </Content>;
+}
