@@ -98,27 +98,49 @@ export function writeSalesPlanWorkbook(workbook: XLSX.WorkBook) {
   let styles = strFromU8(files['xl/styles.xml']);
   const xfCount = Number(/<cellXfs count="(\d+)"/.exec(styles)?.[1]);
   styles = styles.replace(/<fonts count="(\d+)">([\s\S]*?)<\/fonts>/, (_match, count: string, body: string) => `<fonts count="${Number(count) + 1}">${body}<font><b/><sz val="12"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts>`);
-  styles = styles.replace(/<fills count="(\d+)">([\s\S]*?)<\/fills>/, (_match, count: string, body: string) => `<fills count="${Number(count) + 2}">${body}<fill><patternFill patternType="solid"><fgColor rgb="FF243B53"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE8EFF5"/><bgColor indexed="64"/></patternFill></fill></fills>`);
+  const groupColors=['FF243B53','FF36566B','FF416476','FF526F7D'];
+  const statusColors=['FFE8F4EC','FFEAF3F8','FFFFF1DA','FFFFE9E5','FFFFF4DD'];
+  const fill=(color:string)=>`<fill><patternFill patternType="solid"><fgColor rgb="${color}"/><bgColor indexed="64"/></patternFill></fill>`;
+  styles = styles.replace(/<fills count="(\d+)">([\s\S]*?)<\/fills>/, (_match, count: string, body: string) => `<fills count="${Number(count) + 2 + groupColors.length + statusColors.length}">${body}${fill('FF243B53')}${fill('FFE8EFF5')}${groupColors.map(fill).join('')}${statusColors.map(fill).join('')}</fills>`);
   styles = styles.replace(/<cellXfs count="(\d+)">([\s\S]*?)<\/cellXfs>/, (_match, count: string, body: string) => {
     const originals = body.match(/<xf\b[^>]*\/>/g) ?? [];
     const totals = originals.map(xf => xf.replace(/ fillId="\d+"/, ' fillId="3"').replace('/>', ' applyFill="1"/>')).join('');
-    return `<cellXfs count="${Number(count) * 2 + 2}">${body}<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>${totals}<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf></cellXfs>`;
+    const groups=groupColors.map((_,i)=>`<xf numFmtId="0" fontId="1" fillId="${4+i}" borderId="0" xfId="0" applyFont="1" applyFill="1"/>`).join('');
+    const statuses=statusColors.map((_,i)=>`<xf numFmtId="0" fontId="0" fillId="${8+i}" borderId="0" xfId="0" applyFill="1"/>`).join('');
+    return `<cellXfs count="${Number(count) * 2 + 2 + groupColors.length + statusColors.length}">${body}<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>${totals}<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>${groups}${statuses}</cellXfs>`;
   });
   files['xl/styles.xml'] = strToU8(styles);
   for (let index = 1; index <= 4; index++) {
     const path = `xl/worksheets/sheet${index}.xml`;
     let xml = strFromU8(files[path]);
-    const header = index === 1 ? 10 : 1;
+    const header = index === 1 ? Number(workbook.Sheets['Executive Summary']['!autofilter']?.ref.match(/\d+/)?.[0]) : 1;
     const lastRow = index === 1 ? XLSX.utils.decode_range(workbook.Sheets['Executive Summary']['!ref']!).e.r + 1 : null;
     const total = lastRow && workbook.Sheets['Executive Summary'][`A${lastRow}`]?.v === 'Team Total' ? lastRow : null;
     const rowStyle = (cells: string, style: number, retainNumberFormat = false) => cells.replace(/<c\b([^>]*)>/g, (_cell, attrs: string) => {
       const original = Number(/ s="(\d+)"/.exec(attrs)?.[1] ?? 0);
       return `<c${attrs.replace(/ s="\d+"/, '')} s="${retainNumberFormat ? style + original : style}">`;
     });
-    xml = xml.replace('<sheetView workbookViewId="0"/>', `<sheetView workbookViewId="0"><pane ySplit="${header}" topLeftCell="A${header + 1}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A${header + 1}" sqref="A${header + 1}"/></sheetView>`);
-    xml = xml.replace(new RegExp(`(<row r="${header}"[^>]*>)([\\s\\S]*?)(<\\/row>)`), (_match, open: string, cells: string, close: string) => open + rowStyle(cells, xfCount) + close);
+    const freezeRow=index===1?1:header;
+    xml = xml.replace('<sheetView workbookViewId="0"/>', `<sheetView workbookViewId="0"><pane ySplit="${freezeRow}" topLeftCell="A${freezeRow + 1}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A${freezeRow + 1}" sqref="A${freezeRow + 1}"/></sheetView>`);
+    xml = xml.replace(new RegExp(`(<row r="${header}"[^>]*>)([\\s\\S]*?)(<\\/row>)`), (_match, open: string, cells: string, close: string) => {
+      const grouped = index===1 ? [[0,4],[5,8],[9,12],[13,15]] : index===2 ? [[0,4],[5,7],[8,9],[10,11],[12,13],[14,15],[16,19]] : [];
+      const styled=grouped.length?cells.replace(/<c r="([A-Z]+)\d+"([^>]*)>/g,(cell:string,col:string,attrs:string)=>{
+        const column=XLSX.utils.decode_col(col),group=grouped.findIndex(([start,end])=>column>=start&&column<=end);
+        return group<0?cell:`<c r="${col}${header}"${attrs.replace(/ s="\d+"/,'')} s="${xfCount*2+2+group%4}">`;
+      }):rowStyle(cells,xfCount);
+      return open+styled+close;
+    });
     if (total && index === 1) xml = xml.replace(new RegExp(`(<row r="${total}"[^>]*>)([\\s\\S]*?)(<\\/row>)`), (_match, open: string, cells: string, close: string) => open + rowStyle(cells, xfCount + 1, true) + close);
     if (index === 2) xml = xml.replace(/<c r="R(\d+)"([^>]*)>/g, (_cell, row: string, attrs: string) => Number(row) > 1 ? `<c r="R${row}"${attrs.replace(/ s="\d+"/, '')} s="${xfCount * 2 + 1}">` : _cell);
+    if(index===4){
+      const statusStyle=new Map([['Pipeline Supports Plan',0],['Unplanned Upside',1],['Plan Gap',2],['No Current Pipeline',3],['Unresolved Plan Match',4],['Planned — Revenue Unavailable',4],['Ambiguous: multiple Accounts',4],['Unresolved Account',4],['Unresolved SKU',4]]);
+      xml=xml.replace(/<c r="L(\d+)"[^>]*>[\s\S]*?<\/c>/g,(cell:string,row:string)=>{
+        if(Number(row)<=1)return cell;
+        const value=workbook.Sheets['Plan vs Pipeline Detail'][`L${row}`]?.v;
+        const style=statusStyle.get(String(value));
+        return style===undefined?cell:cell.replace(/<c\b([^>]*)>/,(_tag:string,attrs:string)=>`<c${attrs.replace(/ s="\d+"/,'')} s="${xfCount*2+6+style}">`);
+      });
+    }
     files[path] = strToU8(xml);
   }
   return Buffer.from(zipSync(files, { level: 6 }));

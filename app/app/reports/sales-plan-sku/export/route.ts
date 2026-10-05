@@ -19,7 +19,7 @@ export async function GET(request:NextRequest) {
   const report=await salesPlanSkuRollup(prisma,actor,{...selection,productId,skuId,accountId,search:request.nextUrl.searchParams.get('search')?.slice(0,100)});
   const rep=selection.userId===null?null:await prisma.user.findUnique({where:{id:selection.userId},select:{firstName:true,lastName:true}});
   const filename=skuRollupFilename(selection.year,selection.currencyCode,rep?`${rep.firstName} ${rep.lastName}`:undefined);
-  const workbook=salesPlanSkuWorkbook(report.rows,report.lines.filter(l=>l.skuId!==null),report.unresolved,selection.currencyCode);
+  const workbook=salesPlanSkuWorkbook(report.rows,report.lines.filter(l=>l.skuId!==null),report.unresolved,selection.currencyCode,{year:selection.year,rep:rep?`${rep.firstName} ${rep.lastName}`:'All planned reps',generatedAt:new Date(),summary:report.summary});
   const buffer=XLSX.write(workbook,{type:'buffer',bookType:'xlsx',compression:true}) as Buffer;
   return new NextResponse(new Uint8Array(buffer),{headers:{'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','Content-Disposition':`attachment; filename="${filename}"`,'Cache-Control':'private, no-store'}});
 }

@@ -32,11 +32,15 @@ test('SKU identity, independent measures, null quarters, partial allocation, and
 });
 test('workbook has three numeric sheets and predictable filenames',async()=>{
   const report=await salesPlanSkuRollup(db(),actor('ADMIN'),selection);
-  const workbook=salesPlanSkuWorkbook(report.rows,report.lines.filter(x=>x.skuId!==null),report.unresolved,'USD');
+  const workbook=salesPlanSkuWorkbook(report.rows,report.lines.filter(x=>x.skuId!==null),report.unresolved,'USD',{year:2027,rep:'All planned reps',generatedAt:new Date('2026-10-03T12:00:00Z'),summary:report.summary});
   const read=XLSX.read(XLSX.write(workbook,{type:'buffer',bookType:'xlsx'}),{type:'buffer'});
   assert.deepEqual(read.SheetNames,['SKU Rollup','Account Rep Detail','Unresolved SKU Lines']);
-  assert.equal(read.Sheets['SKU Rollup'].C2.t,'n');assert.equal(read.Sheets['SKU Rollup'].C2.v,150);assert.equal(read.Sheets['SKU Rollup'].F2.v,350);
-  assert.equal(read.Sheets['Account Rep Detail'].F2.t,'n');assert.equal(read.Sheets['Unresolved SKU Lines'].E2.v,10);
+  assert.equal(read.Sheets['SKU Rollup'].B1.v,2027);assert.equal(read.Sheets['SKU Rollup'].B3.v,'All planned reps');
+  assert.equal(read.Sheets['SKU Rollup'].B4.v,1);assert.equal(read.Sheets['SKU Rollup'].B5.v,150);assert.equal(read.Sheets['SKU Rollup'].B6.v,1500);assert.equal(read.Sheets['SKU Rollup'].B7.v,1);
+  assert.equal(read.Sheets['SKU Rollup'].B8.v,'Oct 3, 2026 at 8:00 AM ET');
+  assert.equal(read.Sheets['SKU Rollup'].C12.t,'n');assert.equal(read.Sheets['SKU Rollup'].C12.v,150);assert.equal(read.Sheets['SKU Rollup'].F12.v,350);
+  assert.equal(read.Sheets['Account Rep Detail'].F2.t,'n');assert.equal(read.Sheets['Unresolved SKU Lines'].E4.v,10);
+  assert.match(read.Sheets['Unresolved SKU Lines'].A1.v,/excluded from exact SKU rollup totals/);
   assert.equal(skuRollupFilename(2027,'USD'),'SalesHub_Sales_Plan_SKU_Rollup_2027_USD.xlsx');assert.equal(skuRollupFilename(2027,'USD','Ryan Persaud'),'SalesHub_Sales_Plan_SKU_Rollup_2027_Ryan_Persaud_USD.xlsx');
   assert.ok(!JSON.stringify(XLSX.utils.sheet_to_json(read.Sheets['SKU Rollup'])).includes('skuId'));
 });

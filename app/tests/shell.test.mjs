@@ -54,6 +54,31 @@ function navigation(html) {
   return Object.fromEntries(headings.map((heading, index) => [heading[1].replaceAll('&amp;', '&'), [...nav.slice(heading.index, headings[index + 1]?.index).matchAll(/<a href="([^"]+)"/g)].map(link => link[1])]));
 }
 
+function classesFor(html, tag, attribute = '') {
+  const escaped = attribute.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const opening = html.match(new RegExp(`<${tag}(?:\\s[^>]*?)?${escaped}[^>]*>`))?.[0] ?? '';
+  return new Set(opening.match(/class="([^"]+)"/)?.[1].split(/\s+/) ?? []);
+}
+
+test('desktop shell bounds both panes and gives the navigation independent vertical scrolling', () => {
+  for (const role of ['ADMIN', 'SALES', 'MARKETING_MANAGER']) {
+    const html = render(shellUser(role), '/', { impersonating: { realName: 'Admin', effectiveName: 'Test User', role } });
+    const shell = classesFor(html, 'div');
+    const aside = classesFor(html, 'aside');
+    const nav = classesFor(html, 'nav', 'aria-label="Primary navigation"');
+    assert.ok(shell.has('lg:h-dvh') && shell.has('lg:overflow-hidden'), role);
+    assert.ok(!shell.has('lg:h-screen'), `${role}: dynamic viewport height must take precedence`);
+    for (const cls of ['lg:flex', 'lg:h-full', 'lg:min-h-0', 'lg:flex-col']) assert.ok(aside.has(cls), `${role}: aside ${cls}`);
+    for (const cls of ['lg:min-h-0', 'lg:flex-1', 'lg:overflow-y-auto']) assert.ok(nav.has(cls), `${role}: nav ${cls}`);
+    assert.ok(nav.has('overflow-x-auto'), `${role}: mobile horizontal navigation`);
+    assert.ok(nav.has('lg:overflow-x-hidden'), `${role}: desktop vertical navigation`);
+    assert.match(html, /<div class="min-w-0 flex-1 lg:h-full lg:min-h-0 lg:overflow-y-auto">/);
+    assert.match(html, /role="status"/);
+  }
+  const adminLinks = navigation(render(shellUser('ADMIN'))).Administration;
+  assert.deepEqual(adminLinks, ['/administration', '/integrations']);
+});
+
 test('development switcher is Admin-only and impersonation banner keeps return control for Sales', () => {
   const admin = { name: 'Chad Admin', role: 'ADMIN', canManageUsers: true };
   assert.match(render(admin, '/', { developmentAdmin: true }), /href="\/dev\/impersonation"[^>]*>Test as user/);

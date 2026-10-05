@@ -12,6 +12,17 @@ Module._extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
 const req=Module.createRequire(import.meta.url);
 const {Prisma}=req('@prisma/client');
 const {buildSalesPlanManagementExport,exportAccess,exportSelection,exportFilename,writeSalesPlanWorkbook}=req(path.join(root,'lib/sales-plan-export.ts'));
+test('main Sales Plan shortcut reuses the protected report export and selected management scope',()=>{
+  const main=fs.readFileSync(path.join(root,'app/sales-plan/page.tsx'),'utf8');
+  const report=fs.readFileSync(path.join(root,'app/reports/sales-plan/page.tsx'),'utf8');
+  const sku=fs.readFileSync(path.join(root,'app/reports/sales-plan-sku/page.tsx'),'utf8');
+  const route=fs.readFileSync(path.join(root,'app/reports/sales-plan/export/route.ts'),'utf8');
+  assert.match(main,/exportAccess\(actor\).*?\/reports\/sales-plan\/export\?year=\$\{year\}&currencyCode=\$\{currencyCode\}/);
+  assert.match(main,/userId\?`&userId=\$\{userId\}`/);
+  assert.ok(!/f\.(account|sku|status|search|history).*?\/reports\/sales-plan\/export/.test(main));
+  assert.match(route,/buildSalesPlanManagementExport\(prisma, actor, selection\)/);
+  for(const page of [main,report,sku])assert.match(page,/action=\{.*?flex flex-wrap items-center gap-2/);
+});
 const D=n=>new Prisma.Decimal(n);
 const actor=role=>({id:90,role,active:true,archivedAt:null,name:'Export Manager'});
 const users=[{id:1,firstName:'Ryan',lastName:'Persaud',role:'SALES',active:true,archivedAt:null},{id:2,firstName:'Sam',lastName:'Manager',role:'SALES_MANAGER',active:true,archivedAt:null},{id:3,firstName:'No',lastName:'Plan',role:'SALES',active:true,archivedAt:null}];
@@ -50,11 +61,24 @@ test('management workbook uses active plans, live quarterly forecast, exact matc
   assert.equal(result.data.pipeline.reduce((n,x)=>n+x.value,0),result.data.summary.reduce((n,x)=>n+x.pipeline,0));
   const output=writeSalesPlanWorkbook(result.workbook);const book=XLSX.read(output,{type:'buffer',cellDates:true,cellStyles:true});
   assert.deepEqual(book.SheetNames,['Executive Summary','Approved Sales Plan','Current Opportunity Pipeline','Plan vs Pipeline Detail']);
-  assert.equal(book.Sheets['Executive Summary'].A13.v,'Team Total');assert.equal(book.Sheets['Executive Summary'].N13.v,765);
-  assert.equal(book.Sheets['Executive Summary'].B11.t,'n');assert.equal(book.Sheets['Approved Sales Plan'].G2.t,'n');
+  assert.equal(book.Sheets['Executive Summary'].A24.v,'Team Total');assert.equal(book.Sheets['Executive Summary'].N24.v,765);
+  assert.equal(book.Sheets['Executive Summary'].B22.t,'n');assert.equal(book.Sheets['Approved Sales Plan'].G2.t,'n');
+  assert.equal(book.Sheets['Executive Summary'].B5.v,'Oct 3, 2026 at 8:00 AM ET');
+  assert.match(book.Sheets['Executive Summary'].B7.v,/approved annual commitment/);
+  assert.match(book.Sheets['Executive Summary'].B8.v,/current SalesHub Opportunity data/);
+  assert.equal(book.Sheets['Executive Summary'].B12.v,160);assert.equal(book.Sheets['Executive Summary'].B13.v,210);assert.equal(book.Sheets['Executive Summary'].B14.v,50);assert.equal(book.Sheets['Executive Summary'].B15.v,765);
+  assert.equal(book.Sheets['Executive Summary'].B16.v,40);assert.equal(book.Sheets['Executive Summary'].B17.v,30);assert.equal(book.Sheets['Executive Summary'].B18.v,2);assert.equal(book.Sheets['Executive Summary'].B19.v,1);
+  assert.equal(book.Sheets['Executive Summary'].B12.t,'n');assert.equal(book.Sheets['Executive Summary'].B15.t,'n');
   assert.match(book.Sheets['Approved Sales Plan'].G2.z,/#,##0/);assert.match(book.Sheets['Current Opportunity Pipeline'].F2.z,/mmm d, yyyy/);
   assert.equal(book.Sheets['Current Opportunity Pipeline']['!autofilter'].ref,'A1:Q6');
-  const zipped=unzipSync(output);assert.match(strFromU8(zipped['xl/worksheets/sheet1.xml']),/state="frozen"/);assert.match(strFromU8(zipped['xl/styles.xml']),/<b\/>/);
+  assert.deepEqual(XLSX.utils.sheet_to_json(book.Sheets['Plan vs Pipeline Detail']).map(r=>r['Status / Classification']),result.data.comparison.map(r=>r.classification));
+  assert.equal(book.Sheets['Plan vs Pipeline Detail'].E2.t,'n');assert.equal(book.Sheets['Current Opportunity Pipeline'].J2.t,'n');
+  const zipped=unzipSync(output);const executiveXml=strFromU8(zipped['xl/worksheets/sheet1.xml']),comparisonXml=strFromU8(zipped['xl/worksheets/sheet4.xml']);
+  assert.match(executiveXml,/state="frozen"/);assert.match(strFromU8(zipped['xl/styles.xml']),/<b\/>/);
+  const headerStyle=column=>new RegExp(`<c r="${column}21"[^>]* s="(\\d+)"`).exec(executiveXml)?.[1];
+  assert.notEqual(headerStyle('A'),headerStyle('F'));assert.notEqual(headerStyle('F'),headerStyle('J'));assert.notEqual(headerStyle('J'),headerStyle('N'));
+  const classificationStyles=[...comparisonXml.matchAll(/<c r="L\d+"[^>]* s="(\d+)"/g)].map(match=>match[1]);
+  assert.ok(new Set(classificationStyles).size>=4);
   assert.ok(!output.includes(Buffer.from('ownerId')));assert.equal(calls.writes,0);
 });
 
@@ -67,6 +91,9 @@ test('selected rep, forecast filtering, and plan gap preserve scope',async()=>{
   const noPipeline=client();noPipeline.db.opportunity.findMany=async()=>[];
   const empty=await buildSalesPlanManagementExport(noPipeline.db,actor('ADMIN'),{year:2027,currencyCode:'USD',userId:1});
   assert.ok(empty.data.comparison.some(x=>x.classification==='No Current Pipeline'));
+  const emptyBook=XLSX.read(writeSalesPlanWorkbook(empty.workbook),{type:'buffer'});
+  assert.equal(emptyBook.Sheets['Current Opportunity Pipeline'].A2.v,'No current 2027 Opportunities match this export scope.');
+  assert.equal(emptyBook.Sheets['Current Opportunity Pipeline']['!autofilter'].ref,'A1:Q2');
   const gap=client();gap.db.opportunity.findMany=async args=>{const filter=args.where.AND.find(x=>x.expectedCloseDate);return filter.ownerId.in.includes(1)&&filter.expectedCloseDate.gte.getUTCMonth()===0?[{...opportunities[0],products:[opportunities[0].products[0]]}]:[];};
   const below=await buildSalesPlanManagementExport(gap.db,actor('ADMIN'),{year:2027,currencyCode:'USD',userId:1});
   assert.equal(below.data.comparison.find(x=>x.sku==='XD5-40').classification,'Plan Gap');
