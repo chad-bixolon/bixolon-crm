@@ -6,6 +6,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added Sales Rep filtering to Account and Contact lists for faster CRM follow-up.
+
 - Added Price Exception expiration reporting, dashboard follow-up alerts, and Excel export for expired and upcoming PEs.
 
 - Improved Sales Plan exports with direct access from Sales Plan, compact report filters, consistent primary report actions, and more presentation-ready management and SKU workbooks.

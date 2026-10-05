@@ -10,6 +10,7 @@ Module._extensions['.ts']=(mod,filename)=>mod._compile(ts.transpileModule(fs.rea
 const require=Module.createRequire(import.meta.url);
 const {contactWhere,contactOrderBy,contactListState,contactListUrl,listContacts}=require(path.join(root,'lib/contacts.ts'));
 const {routeAccess}=require(path.join(root,'lib/authorization.ts'));
+const {activeSalesRepWhere}=require(path.join(root,'lib/assignment-eligibility.ts'));
 const page=fs.readFileSync(path.join(root,'app/contacts/page.tsx'),'utf8');
 const detail=fs.readFileSync(path.join(root,'app/contacts/[id]/page.tsx'),'utf8');
 const route=fs.readFileSync(path.join(root,'app/contacts/account-search/route.ts'),'utf8');
@@ -114,4 +115,25 @@ test('list controls retain query state, reset pages on filter and sort changes, 
   assert.match(page,/Clear filters/);
   assert.match(route,/requirePermission\("contacts\.read"\)/);
   assert.match(route,/take: 20/);
+});
+test('Sales Rep filters Contacts through Account ownership without matching unassigned Contacts',async()=>{
+  const filters={salesRepId:'7',q:'Ada',active:'active',page:'2',pageSize:'25'};
+  const where=contactWhere(filters);
+  assert.deepEqual(where.AND[1],{account:{is:{owner:{is:{...activeSalesRepWhere(),id:7}}}}});
+  assert.deepEqual(where.OR,[{accountId:null},{account:{is:{archivedAt:null,status:'ACTIVE'}}}]);
+  assert.equal(where.active,true);
+  assert.deepEqual(contactWhere({salesRepId:'7',active:'archived'}).archivedAt,{not:null});
+  assert.equal(contactWhere({salesRepId:'invalid'}).AND[0].account.is.owner.is.id,0);
+  let countWhere, rowsArgs;
+  const client={contact:{count:async({where})=>{countWhere=where;return 26;},findMany:async args=>{rowsArgs=args;return [];}}};
+  await listContacts(client,filters);
+  assert.deepEqual(rowsArgs.where,countWhere);
+  assert.equal(rowsArgs.skip,25);
+  assert.equal(rowsArgs.where.AND[1].account.is.owner.is.id,7);
+  const next=new URL(contactListUrl(filters,{page:'3'}),'https://example.test');
+  assert.equal(next.searchParams.get('salesRepId'),'7');
+  const sorted=new URL(contactListUrl(filters,{sort:'name'}),'https://example.test');
+  assert.equal(sorted.searchParams.get('salesRepId'),'7');
+  assert.match(page,/name="salesRepId"/);
+  assert.match(page,/All Sales Reps/);
 });

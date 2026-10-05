@@ -2,6 +2,7 @@ import { MarketingPreference, Prisma, type PrismaClient } from "@prisma/client";
 import { can, type Actor } from "./authorization";
 import { field, optional, pageNumber, phone, positiveId, required, type Errors } from "./crm-validation";
 import { parseAddress, addressFields, type Address } from "./address";
+import { selectedSalesRepWhere } from './assignment-eligibility';
 export const marketingPreferenceLabels: Record<MarketingPreference,string> = { UNKNOWN: "Not specified", OPTED_IN: "Opted in", OPTED_OUT: "Opted out" };
 export type ContactInput = Address & { useAccountAddress?: boolean | null; accountId: number | null; firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null; mobile: string | null; active: boolean; isPrimary: boolean; marketingPreference: MarketingPreference };
 type ContactWriteClient = Pick<Prisma.TransactionClient,"account"|"contact">;
@@ -57,8 +58,8 @@ export async function setContactState(client: PrismaClient, id: number, state: "
   await client.contact.update({ where: { id }, data: { active: state === "active", archivedAt: state === "archived" ? new Date() : null, isPrimary: state === "active" ? existing.isPrimary && !existing.archivedAt : false } });
 }
 export type ContactSort = "name" | "account" | "title" | "email" | "status";
-export type ContactFilters = { q?: string; active?: string; accountId?: string; marketingPreference?: string; title?: string; primary?: string; assignment?: string; sort?: string; dir?: string; page?: string; pageSize?: string };
-const listQueryKeys = ["q", "active", "accountId", "marketingPreference", "title", "primary", "assignment", "sort", "dir", "pageSize"] as const;
+export type ContactFilters = { q?: string; active?: string; accountId?: string; salesRepId?: string; marketingPreference?: string; title?: string; primary?: string; assignment?: string; sort?: string; dir?: string; page?: string; pageSize?: string };
+const listQueryKeys = ["q", "active", "accountId", "salesRepId", "marketingPreference", "title", "primary", "assignment", "sort", "dir", "pageSize"] as const;
 export function contactListUrl(filters: ContactFilters, changes: Record<string, string | undefined> = {}) {
   const params = new URLSearchParams();
   for (const key of listQueryKeys) if (filters[key]) params.set(key, filters[key]);
@@ -104,6 +105,8 @@ export function contactWhere(filters: ContactFilters): Prisma.ContactWhereInput 
   if (filters.assignment === "unassigned" && where.accountId === undefined) where.accountId = null;
   if (filters.assignment === "assigned" && where.accountId === null) where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), { accountId: { not: null } }];
   if (filters.assignment === "unassigned" && where.accountId !== undefined && where.accountId !== null) where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), { accountId: null }];
+  const salesRep = selectedSalesRepWhere(filters.salesRepId);
+  if (salesRep) where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), { account: { is: { owner: { is: salesRep } } } }];
   return where;
 }
 export async function listContacts(client: PrismaClient, filters: ContactFilters) {

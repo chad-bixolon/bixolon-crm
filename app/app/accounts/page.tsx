@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getLabels } from "@/lib/configuration";
 import { currentUser } from "@/lib/current-user";
 import { assertPermission, can } from "@/lib/authorization";
+import { listSalesReps } from "@/lib/assignment-eligibility";
 export const dynamic = "force-dynamic";
 export default async function AccountsPage({ searchParams }: { searchParams: Promise<AccountFilters> }) {
   const filters = await searchParams;
@@ -14,14 +15,15 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   assertPermission(actor, "accounts.read");
   const view = accountView(filters, actor.role);
   const resolvedFilters = { ...filters, view };
-  const [{ accounts, count, page, pages }, options, labels] = await Promise.all([listAccounts(prisma, resolvedFilters, actor.id), accountOptions(prisma), getLabels(prisma)]);
+  const [{ accounts, count, page, pages }, options, labels, salesReps] = await Promise.all([listAccounts(prisma, resolvedFilters, actor.id), accountOptions(prisma), getLabels(prisma), listSalesReps(prisma)]);
   const linkFor = (target: number) => accountHref(resolvedFilters, { page: String(target) });
   return <Content><PageHeader eyebrow="CRM records" title="Accounts" description="Organizations and relationships in the CRM." action={can(actor, 'accounts.write') && <Link href="/accounts/new" className="btn-primary">New account</Link>}/>
-    <nav aria-label="Account views" className="mb-4 flex gap-1 border-b border-slate-200">{([ ["all", "All Accounts"], ["my", "My Accounts"] ] as const).map(([value, label]) => <Link key={value} href={accountHref(filters, { view: value })} aria-current={view === value ? "page" : undefined} className={`border-b-2 px-4 py-2.5 text-sm font-semibold ${view === value ? "border-orange-600 text-orange-800" : "border-transparent text-slate-600 hover:text-slate-900"}`}>{label}</Link>)}</nav>
-    <form className="panel mb-3 flex w-fit max-w-full flex-wrap items-end gap-x-1.5 gap-y-1.5 p-1.5" method="get" aria-label="Filter accounts">
+    <nav aria-label="Account views" className="mb-4 flex gap-1 border-b border-slate-200">{([ ["all", "All Accounts"], ["my", "My Accounts"] ] as const).map(([value, label]) => <Link key={value} href={accountHref(filters, { view: value, ...(value === "my" ? { salesRepId: "" } : {}) })} aria-current={view === value ? "page" : undefined} className={`border-b-2 px-4 py-2.5 text-sm font-semibold ${view === value ? "border-orange-600 text-orange-800" : "border-transparent text-slate-600 hover:text-slate-900"}`}>{label}</Link>)}</nav>
+    <form className="panel mb-3 flex w-full flex-wrap items-end gap-x-1.5 gap-y-1.5 p-1.5" method="get" aria-label="Filter accounts">
       <input type="hidden" name="view" value={view}/>
       <div className="accounts-filter-field"><label className="mb-0.5 block text-xs font-semibold text-slate-700" htmlFor="q">Search accounts</label><input className="field accounts-filter-control min-w-0 text-sm" id="q" name="q" defaultValue={filters.q ?? ""} placeholder="Account name"/></div>
       <div className="accounts-filter-field"><label className="mb-0.5 block text-xs font-semibold text-slate-700" htmlFor="status">Status</label><select className="field accounts-filter-control min-w-0 text-sm" id="status" name="status" defaultValue={filters.status ?? ""}><option value="">All statuses</option>{statuses.map((s) => <option value={s} key={s}>{s}</option>)}</select></div>
+      {view !== "my" && <div className="accounts-filter-field"><label className="mb-0.5 block text-xs font-semibold text-slate-700" htmlFor="salesRepId">Sales Rep</label><select className="field accounts-filter-control min-w-0 text-sm" id="salesRepId" name="salesRepId" defaultValue={filters.salesRepId ?? ""}><option value="">All Sales Reps</option>{salesReps.map(rep => <option key={rep.id} value={rep.id}>{rep.firstName} {rep.lastName}</option>)}</select></div>}
       <div className="accounts-filter-field"><label className="mb-0.5 block text-xs font-semibold text-slate-700" htmlFor="role">Business role</label><select className="field accounts-filter-control min-w-0 text-sm" id="role" name="role" defaultValue={filters.role ?? ""}><option value="">All roles</option>{Object.entries(roleLabels).map(([code, label]) => <option key={code} value={code}>{labels[code as keyof typeof labels] ?? label}</option>)}</select></div>
       <div className="accounts-filter-field"><label className="mb-0.5 block text-xs font-semibold text-slate-700" htmlFor="territory">Territory</label><select className="field accounts-filter-control min-w-0 text-sm" id="territory" name="territory" defaultValue={filters.territory ?? ""}><option value="">All territories</option>{options.territories.map((o) => <option key={o.code} value={o.code}>{o.name}</option>)}</select></div>
       <div className="accounts-filter-field"><label className="mb-0.5 block text-xs font-semibold text-slate-700" htmlFor="industry">Industry</label><select className="field accounts-filter-control min-w-0 text-sm" id="industry" name="industry" defaultValue={filters.industry ?? ""}><option value="">All industries</option>{options.industries.map((o) => <option key={o.code} value={o.code}>{o.name}</option>)}</select></div>

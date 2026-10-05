@@ -23,6 +23,7 @@ function loadTs(relative) {
 const { parseAccountForm, roleLabels } = loadTs('lib/account-validation.ts');
 const { accountWhere, accountView, accountHref, listAccounts, accountOptions, accountEditTerritories, PAGE_SIZE, checkAccountReferences, setAccountArchived, findAccountNameMatches, normalizeAccountName, saveAccount, createAccountFromImport, isRetiredSpecialAccountTerritory } = loadTs('lib/accounts.ts');
 const { routeAccess } = loadTs('lib/authorization.ts');
+const { listSalesReps, selectedSalesRepWhere, activeSalesRepWhere } = loadTs('lib/assignment-eligibility.ts');
 const { parseLookup } = loadTs('lib/lookups.ts');
 function form(entries) { const f = new FormData(); for (const [key, value] of entries) f.append(key, value); return f; }
 test('account validation requires a name and rejects unsafe fields', () => {
@@ -174,6 +175,39 @@ test('view links retain filters and pagination links retain the view', () => {
   const next = new URL(accountHref(filters, { page: '4' }), 'http://localhost');
   assert.equal(next.searchParams.get('view'), 'my');
   assert.equal(next.searchParams.get('page'), '4');
+});
+test('Sales Rep options use active Sales roles for every existing read scope', async () => {
+  let where;
+  const client = { user: { findMany: async args => { where = args.where; return [{ id: 7, firstName: 'Ada', lastName: 'Rep' }]; } } };
+  for (const role of ['ADMIN', 'SALES_MANAGER', 'SALES', 'MARKETING_MANAGER', 'READ_ONLY']) {
+    assert.equal(routeAccess('/accounts', { id: 7, role, active: true, archivedAt: null }), 'allowed');
+    assert.equal((await listSalesReps(client)).length, 1);
+    assert.deepEqual(where, activeSalesRepWhere());
+  }
+  assert.deepEqual(selectedSalesRepWhere('7'), { ...activeSalesRepWhere(), id: 7 });
+  assert.equal(selectedSalesRepWhere(''), null);
+  assert.equal(selectedSalesRepWhere('7x').id, 0);
+});
+test('Sales Rep narrows Accounts in the database and cannot replace My Accounts scope', async () => {
+  const filters = { view: 'my', salesRepId: '8', q: 'Acme', status: 'ACTIVE', page: '2' };
+  const where = accountWhere(filters, 7);
+  assert.equal(where.ownerId, 7);
+  assert.deepEqual(where.AND, [{ owner: { is: { ...activeSalesRepWhere(), id: 8 } } }]);
+  assert.deepEqual(where.name, { contains: 'Acme', mode: 'insensitive' });
+  assert.equal(where.status, 'ACTIVE');
+  assert.equal(accountWhere({ salesRepId: 'not-an-id' }).AND[0].owner.is.id, 0);
+  let countWhere, rowsArgs;
+  const client = { account: { count: async ({ where }) => { countWhere = where; return 41; }, findMany: async args => { rowsArgs = args; return []; } } };
+  await listAccounts(client, { ...filters, view: 'all' }, 7);
+  assert.deepEqual(rowsArgs.where, countWhere);
+  assert.equal(rowsArgs.skip, PAGE_SIZE);
+  assert.equal(rowsArgs.where.AND[0].owner.is.id, 8);
+  const next = new URL(accountHref(filters, { page: '3' }), 'http://localhost');
+  assert.equal(next.searchParams.get('salesRepId'), '8');
+  assert.equal(new URL(accountHref(filters, { salesRepId: '' }), 'http://localhost').searchParams.has('salesRepId'), false);
+  const page = fs.readFileSync(path.resolve(__dirname, '..', 'app/accounts/page.tsx'), 'utf8');
+  assert.match(page, /view !== "my"/);
+  assert.match(page, /Sales Rep/);
 });
 test('unauthorized Accounts access remains denied for inactive and missing users', () => {
   assert.equal(routeAccess('/accounts?view=my', null), 'sign-in');

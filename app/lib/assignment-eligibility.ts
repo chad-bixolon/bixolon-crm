@@ -1,4 +1,4 @@
-import { UserRole, type Prisma } from '@prisma/client';
+import { UserRole, type Prisma, type PrismaClient } from '@prisma/client';
 import { can, type Permission } from './authorization';
 
 // Keep assignment rules tied to the same capabilities used to edit the record.
@@ -22,4 +22,14 @@ export function defaultEligibleUserId<T extends { id: number }>(users: readonly 
 // Forecast and named sales-rep assignments are scoped to the sales organization.
 export function activeSalesRepWhere(): Prisma.UserWhereInput {
   return { active: true, archivedAt: null, role: { in: [UserRole.SALES, UserRole.SALES_MANAGER] } };
+}
+
+export function selectedSalesRepWhere(value?: string): Prisma.UserWhereInput | null {
+  if (!value) return null;
+  const id = /^\d+$/.test(value) ? Number(value) : 0;
+  return { ...activeSalesRepWhere(), id: Number.isSafeInteger(id) && id > 0 ? id : 0 };
+}
+
+export function listSalesReps(client: Pick<PrismaClient, 'user'>) {
+  return client.user.findMany({ where: activeSalesRepWhere(), orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }], select: { id: true, firstName: true, lastName: true } });
 }

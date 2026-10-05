@@ -6,14 +6,15 @@ import { prisma } from "@/lib/prisma";
 import { positiveId } from "@/lib/crm-validation";
 import { currentUser } from "@/lib/current-user";
 import { can } from "@/lib/authorization";
+import { listSalesReps } from "@/lib/assignment-eligibility";
 export const dynamic = "force-dynamic";
-const keys = ["q","active","accountId","marketingPreference","title","primary","assignment","sort","dir","pageSize"] as const;
+const keys = ["q","active","accountId","salesRepId","marketingPreference","title","primary","assignment","sort","dir","pageSize"] as const;
 export default async function ContactsPage({searchParams}:{searchParams:Promise<ContactFilters>}) {
   const actor = await currentUser();
   const filters=await searchParams, accountId=positiveId(filters.accountId??"");
-  const [{contacts,count,page,pages,pageSize},initialAccount]=await Promise.all([listContacts(prisma,filters),accountId?prisma.account.findUnique({where:{id:accountId},select:{id:true,name:true}}):Promise.resolve(null)]);
+  const [{contacts,count,page,pages,pageSize},initialAccount,salesReps]=await Promise.all([listContacts(prisma,filters),accountId?prisma.account.findUnique({where:{id:accountId},select:{id:true,name:true}}):Promise.resolve(null),listSalesReps(prisma)]);
   const {sort,dir}=contactListState(filters);
-  const hasFilters=["q","active","accountId","marketingPreference","title","primary","assignment"].some(key=>Boolean(filters[key as keyof ContactFilters]));
+  const hasFilters=["q","active","accountId","salesRepId","marketingPreference","title","primary","assignment"].some(key=>Boolean(filters[key as keyof ContactFilters]));
   const header=(key:ContactSort,label:string)=>{
     const next=sort!==key?{sort:key,dir:"asc"}:dir==="asc"?{sort:key,dir:"desc"}:{sort:undefined,dir:undefined};
     const direction=sort===key?dir:key==="name"&&!sort?"asc":null;
@@ -21,10 +22,11 @@ export default async function ContactsPage({searchParams}:{searchParams:Promise<
   };
   return <Content>
     <PageHeader eyebrow="CRM records" title="Contacts" description="Manage customer, partner, and prospect contacts." action={can(actor, 'contacts.write') && <Link className="btn-primary" href="/contacts/new">New contact</Link>}/>
-    <form method="get" className="panel filter-panel filter-grid mb-5" aria-label="Filter contacts">
+    <form method="get" className="panel filter-panel filter-grid filter-grid-five mb-5" aria-label="Filter contacts">
       <input type="hidden" name="sort" value={filters.sort??""}/><input type="hidden" name="dir" value={filters.dir??""}/><input type="hidden" name="pageSize" value={pageSize}/>
       <div><label className="label" htmlFor="q">Search</label><input className="field filter-control" id="q" name="q" defaultValue={filters.q??""} placeholder="Name, email, or title"/></div>
       <div><label className="label" htmlFor="active">Status</label><select className="field filter-control" id="active" name="active" defaultValue={filters.active??""}><option value="">Not Archived</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="archived">Archived</option><option value="all">All</option></select></div>
+      <div><label className="label" htmlFor="salesRepId">Sales Rep</label><select className="field filter-control" id="salesRepId" name="salesRepId" defaultValue={filters.salesRepId??""}><option value="">All Sales Reps</option>{salesReps.map(rep=><option key={rep.id} value={rep.id}>{rep.firstName} {rep.lastName}</option>)}</select></div>
       <ContactAccountFilter key={filters.accountId??""} initial={initialAccount} unassigned={filters.accountId==="unassigned"}/>
       <div><label className="label" htmlFor="marketingPreference">Marketing communications</label><select className="field filter-control" id="marketingPreference" name="marketingPreference" defaultValue={filters.marketingPreference??""}><option value="">All preferences</option><option value="UNKNOWN">Not specified</option><option value="OPTED_IN">Opted in</option><option value="OPTED_OUT">Opted out</option></select></div>
       <details className="col-span-full" open={Boolean(filters.title||filters.primary||filters.assignment)}><summary className="cursor-pointer text-sm font-medium text-orange-800">More filters</summary><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

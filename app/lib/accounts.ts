@@ -2,7 +2,7 @@ import { AccountBusinessRoleCode, AccountStatus, Prisma, type PrismaClient, type
 import type { AccountFields } from "./account-validation";
 import { parseAccountForm } from "./account-validation";
 import { assertPermission, type Actor } from "./authorization";
-import { eligibleUserWhere } from './assignment-eligibility';
+import { eligibleUserWhere, selectedSalesRepWhere } from './assignment-eligibility';
 
 export const PAGE_SIZE = 20;
 const retiredSpecialAccountTerritories = new Set(['strategic_sales', 'strategic', 'strategic / national accounts', 'strategic / national account', 'strategic/national account', 'national account']);
@@ -34,7 +34,7 @@ export async function createAccountFromImport(client: PrismaClient, actor: Actor
   const id = await saveAccount(client,parsed.value,undefined,actor.id);
   return {kind:'created' as const,account:{id,name:parsed.value.name}};
 }
-export type AccountFilters = { q?: string; status?: string; role?: string; territory?: string; industry?: string; strategic?: string; page?: string; view?: string };
+export type AccountFilters = { q?: string; status?: string; role?: string; territory?: string; industry?: string; strategic?: string; salesRepId?: string; page?: string; view?: string };
 
 export function accountView(filters: AccountFilters, role?: UserRole): "all" | "my" {
   if (filters.view === "my" || filters.view === "all") return filters.view;
@@ -57,6 +57,8 @@ export function accountWhere(filters: AccountFilters, currentUserId?: number): P
     if (!currentUserId) throw new Error("A CRM user is required for My Accounts.");
     where.ownerId = currentUserId;
   }
+  const salesRep = selectedSalesRepWhere(filters.salesRepId);
+  if (salesRep) where.AND = [{ owner: { is: salesRep } }];
   if (filters.q?.trim()) where.name = { contains: filters.q.trim().slice(0, 100), mode: "insensitive" };
   if (filters.status && Object.values(AccountStatus).includes(filters.status as AccountStatus)) where.status = filters.status as AccountStatus;
   if (filters.role && Object.values(AccountBusinessRoleCode).includes(filters.role as AccountBusinessRoleCode)) where.businessRoles = { some: { role: filters.role as AccountBusinessRoleCode } };
