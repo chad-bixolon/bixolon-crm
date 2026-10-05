@@ -29,6 +29,10 @@ select.filter-control { padding-right: 2rem; overflow: visible; }
 @media (min-width: 40rem) { .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 64rem) { .filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (min-width: 80rem) { .filter-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } .filter-grid-five { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.sales-plan-report-filters > .filter-actions { min-width: 0; }
+@media (min-width: 64rem) {
+  .filter-grid.sales-plan-report-filters { grid-template-columns: minmax(6.5rem, .65fr) minmax(8rem, .8fr) minmax(12rem, 1.5fr) auto; }
+}
 .filter-grid.opportunity-filter-grid { gap: .875rem 1rem; }
 .opportunity-filter-grid > div { min-width: 0; }
 @media (min-width: 40rem) {
