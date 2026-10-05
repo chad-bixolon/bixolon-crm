@@ -2,6 +2,7 @@ import { Prisma, PriceExceptionStatus, type PrismaClient } from '@prisma/client'
 import { can, type Actor } from './authorization';
 import { scopedPriceExceptionWhere } from './price-exception-visibility';
 import { priceExceptionListSummary } from './price-exception-list-summary';
+import { closedFollowUpStatuses, followUpOverdue } from './price-exception-follow-up';
 
 export type ExpirationWindow = 'all'|'follow-up'|'expired'|'next30'|'next60'|'next90'|'none'|'future'|'activeExpired';
 export const expirationOptions = [
@@ -40,7 +41,7 @@ export function expirationBucketWhere(bucket:'expired'|'0-30'|'31-60'|'61-90',to
   return {expirationDate:{gte:addDays(today,start),lt:addDays(today,end+1)}};
 }
 export function canViewExpirationReport(actor:Actor) {return ['ADMIN','SALES_MANAGER','SALES','READ_ONLY'].includes(actor.role)&&can(actor,'pricing.read')&&can(actor,'sales.read');}
-export type ExpiringFilters={expiration?:string;status?:string;salesRep?:string;account?:string;sku?:string;q?:string;page?:string};
+export type ExpiringFilters={expiration?:string;status?:string;salesRep?:string;account?:string;sku?:string;q?:string;page?:string;followUpStatus?:string;followUpOwner?:string;needsFollowUp?:string;overdueFollowUp?:string};
 export function normalizeExpiration(value:string|undefined,defaultWindow:ExpirationWindow='follow-up'):ExpirationWindow {
   return value&&['all','follow-up','expired','next30','next60','next90','none','future','activeExpired'].includes(value)?value as ExpirationWindow:defaultWindow;
 }
@@ -52,24 +53,34 @@ export function expiringWhere(actor:Actor,filters:ExpiringFilters,today:Date):Pr
   else {clauses.push({archivedAt:null});if(status&&status!=='ALL'&&Object.values(PriceExceptionStatus).includes(status as PriceExceptionStatus))clauses.push({status:status as PriceExceptionStatus});}
   if(window==='activeExpired')clauses.push({status:'ACTIVE'});
   if(filters.salesRep&&/^\d+$/.test(filters.salesRep))clauses.push({assignedSalesRepUserId:Number(filters.salesRep)});
+  if(filters.followUpStatus==='NOT_STARTED')clauses.push({OR:[{followUp:null},{followUp:{is:{status:'NOT_STARTED'}}}]});
+  else if(filters.followUpStatus&&['IN_PROGRESS','RENEWAL_REQUESTED','REPLACEMENT_SUBMITTED','NO_RENEWAL_NEEDED','COMPLETED'].includes(filters.followUpStatus))clauses.push({followUp:{is:{status:filters.followUpStatus as 'IN_PROGRESS'}}});
+  if(filters.followUpOwner==='unassigned')clauses.push({OR:[{followUp:{is:{ownerId:null}}},{AND:[{followUp:null},{assignedSalesRepUserId:null}]}]});
+  else if(filters.followUpOwner&&/^\d+$/.test(filters.followUpOwner)){const ownerId=Number(filters.followUpOwner);clauses.push({OR:[{followUp:{is:{ownerId}}},{AND:[{followUp:null},{assignedSalesRepUserId:ownerId}]}]});}
+  if(filters.needsFollowUp==='1')clauses.push(expirationWhere('follow-up',today),{OR:[{followUp:null},{followUp:{is:{status:{notIn:closedFollowUpStatuses}}}}]});
+  if(filters.overdueFollowUp==='1')clauses.push({followUp:{is:{nextFollowUpAt:{lt:today},status:{notIn:closedFollowUpStatuses}}}});
   if(filters.account?.trim()){const q=filters.account.trim().slice(0,100);clauses.push({OR:[{distributorAccount:{name:{contains:q,mode:'insensitive'}}},{varAccount:{name:{contains:q,mode:'insensitive'}}},{endUserAccount:{name:{contains:q,mode:'insensitive'}}},{distributorSourceName:{contains:q,mode:'insensitive'}},{varSourceName:{contains:q,mode:'insensitive'}},{endUserSourceName:{contains:q,mode:'insensitive'}}]});}
   if(filters.sku?.trim())clauses.push({lines:{some:{retiredAt:null,OR:[{sourceSku:{contains:filters.sku.trim().slice(0,100),mode:'insensitive'}},{productSku:{partNumber:{contains:filters.sku.trim().slice(0,100),mode:'insensitive'}}},{productSku:{product:{name:{contains:filters.sku.trim().slice(0,100),mode:'insensitive'}}}}]}}});
   if(filters.q?.trim()){const q=filters.q.trim().slice(0,100);clauses.push({OR:[{peCode:{contains:q,mode:'insensitive'}},{distributorSourceName:{contains:q,mode:'insensitive'}},{varSourceName:{contains:q,mode:'insensitive'}},{endUserSourceName:{contains:q,mode:'insensitive'}},{lines:{some:{retiredAt:null,sourceSku:{contains:q,mode:'insensitive'}}}}]});}
   return scopedPriceExceptionWhere(actor,{AND:clauses});
 }
-const include={assignedSalesRepUser:{select:{firstName:true,lastName:true}},distributorAccount:{select:{name:true}},varAccount:{select:{name:true}},endUserAccount:{select:{name:true}},lines:{where:{retiredAt:null},orderBy:{sortOrder:'asc'},select:{sourceSku:true,sourceQuantity:true,sourceQuantityRaw:true,productSku:{select:{partNumber:true,product:{select:{name:true}}}}}}} as const;
+const include={assignedSalesRepUser:{select:{firstName:true,lastName:true}},followUp:{include:{owner:{select:{firstName:true,lastName:true}},replacementPriceException:{select:{id:true,peCode:true}}}},distributorAccount:{select:{name:true}},varAccount:{select:{name:true}},endUserAccount:{select:{name:true}},lines:{where:{retiredAt:null},orderBy:{sortOrder:'asc'},select:{sourceSku:true,sourceQuantity:true,sourceQuantityRaw:true,productSku:{select:{partNumber:true,product:{select:{name:true}}}}}}} as const;
 export async function expiringReport(db:PrismaClient,actor:Actor,filters:ExpiringFilters,options:{all?:boolean;now?:Date}={}) {
   if(!canViewExpirationReport(actor))throw new Error('Access denied');
   const today=businessToday(options.now),where=expiringWhere(actor,filters,today);
   const count=await db.priceException.count({where});
   const page=Math.min(Math.max(Number(filters.page)||1,1),Math.max(1,Math.ceil(count/25)));
   const records=await db.priceException.findMany({where,include,orderBy:[{expirationDate:'asc'},{id:'asc'}],...(options.all?{}:{skip:(page-1)*25,take:25})});
-  return {today,count,page,pages:Math.max(1,Math.ceil(count/25)),rows:records.map(row=>({id:row.id,code:row.peCode??`PE #${row.id}`,rep:row.assignedSalesRepUser?`${row.assignedSalesRepUser.firstName} ${row.assignedSalesRepUser.lastName}`:row.sourceType==='LEGACY_WORKBOOK'?'Legacy / Unassigned':'Unassigned',account:row.distributorAccount?.name??row.varAccount?.name??row.endUserAccount?.name??row.distributorSourceName??row.varSourceName??row.endUserSourceName??'—',product:priceExceptionListSummary(row.lines).product,tiers:priceExceptionListSummary(row.lines).tierText,status:row.status,expirationDate:row.expirationDate,days:daysUntilExpiration(row.expirationDate,today),state:expirationState(row.expirationDate,today)}))};
+  return {today,count,page,pages:Math.max(1,Math.ceil(count/25)),rows:records.map(row=>({id:row.id,code:row.peCode??`PE #${row.id}`,rep:row.assignedSalesRepUser?`${row.assignedSalesRepUser.firstName} ${row.assignedSalesRepUser.lastName}`:row.sourceType==='LEGACY_WORKBOOK'?'Legacy / Unassigned':'Unassigned',account:row.distributorAccount?.name??row.varAccount?.name??row.endUserAccount?.name??row.distributorSourceName??row.varSourceName??row.endUserSourceName??'—',product:priceExceptionListSummary(row.lines).product,tiers:priceExceptionListSummary(row.lines).tierText,status:row.status,expirationDate:row.expirationDate,days:daysUntilExpiration(row.expirationDate,today),state:expirationState(row.expirationDate,today),followUpStatus:row.followUp?.status??'NOT_STARTED',followUpOwner:row.followUp?row.followUp.owner?`${row.followUp.owner.firstName} ${row.followUp.owner.lastName}`:'Unassigned':row.assignedSalesRepUser?`${row.assignedSalesRepUser.firstName} ${row.assignedSalesRepUser.lastName}`:'Unassigned',lastFollowUpAt:row.followUp?.lastFollowUpAt??null,nextFollowUpAt:row.followUp?.nextFollowUpAt??null,followUpOverdue:followUpOverdue(row.followUp?.nextFollowUpAt,row.followUp?.status??'NOT_STARTED',today),replacementPe:row.followUp?.replacementPriceException?{id:row.followUp.replacementPriceException.id,code:row.followUp.replacementPriceException.peCode??`PE #${row.followUp.replacementPriceException.id}`}:null,replacementPeNumber:row.followUp?.replacementPeNumber??null,followUpSummary:row.followUp?.summary??null}))};
 }
 export async function expiringDashboardCounts(db:PrismaClient,actor:Actor,now=new Date()) {
   if(!canViewExpirationReport(actor))throw new Error('Access denied');
   const today=businessToday(now),base=expiringWhere(actor,{expiration:'all',status:'ACTIVE'},today);
   const buckets=['expired','0-30','31-60','61-90'] as const;
   const counts=await Promise.all(buckets.map(bucket=>db.priceException.count({where:{AND:[base,expirationBucketWhere(bucket,today)]}})));
-  return Object.fromEntries(buckets.map((bucket,index)=>[bucket,counts[index]])) as Record<typeof buckets[number],number>;
+  const [notStarted,overdue]=await Promise.all([
+    db.priceException.count({where:expiringWhere(actor,{expiration:'follow-up',status:'ACTIVE',followUpStatus:'NOT_STARTED'},today)}),
+    db.priceException.count({where:expiringWhere(actor,{expiration:'follow-up',status:'ACTIVE',overdueFollowUp:'1'},today)}),
+  ]);
+  return {...Object.fromEntries(buckets.map((bucket,index)=>[bucket,counts[index]])),notStarted,overdue} as Record<typeof buckets[number],number>&{notStarted:number;overdue:number};
 }

@@ -6,6 +6,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added a Sales expiration follow-up workflow for Price Exceptions with ownership, dated actions, audit history, report filters, dashboard counts, and Excel fields; stored PE status remains independent.
+
 - Added Sales Rep filtering to Account and Contact lists for faster CRM follow-up.
 
 - Added Price Exception expiration reporting, dashboard follow-up alerts, and Excel export for expired and upcoming PEs.

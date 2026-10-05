@@ -3,9 +3,20 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireMutation } from '@/lib/current-user';
 import { parseAssignedSalesRepUserId, parsePriceExceptionAccountPatch, PriceExceptionAccountValidationError, updatePriceExceptionAccountLinks, updatePriceExceptionSalesRep, type PriceExceptionAccountValues } from '@/lib/price-exception-resolution';
+import { parseFollowUpForm, updatePriceExceptionFollowUp } from '@/lib/price-exception-follow-up';
+import { currentUser } from '@/lib/current-user';
 
 export type ResolvePriceExceptionState = { errors: Record<string, string>; values?: PriceExceptionAccountValues; saved?: boolean };
 export type AssignPriceExceptionSalesRepState = { error?: string; value?: string; saved?: boolean };
+export async function savePriceExceptionFollowUp(id:number,_state:{error?:string;saved?:boolean},form:FormData):Promise<{error?:string;saved?:boolean}> {
+  const actor=await currentUser();
+  try {
+    const patch=parseFollowUpForm(form);
+    const result=await updatePriceExceptionFollowUp(prisma,id,actor,patch);
+    if(result.changed){revalidatePath(`/price-exceptions/${id}`);revalidatePath('/reports/price-exceptions-expiring');revalidatePath('/');}
+    return {saved:true};
+  } catch(error) {return {error:error instanceof Error?error.message:'Follow-up could not be saved.'};}
+}
 
 export async function assignPriceExceptionSalesRep(id:number,_state:AssignPriceExceptionSalesRepState,form:FormData):Promise<AssignPriceExceptionSalesRepState>{
   const actor=await requireMutation('users.manage');
