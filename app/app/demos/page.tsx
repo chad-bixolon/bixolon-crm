@@ -2,17 +2,17 @@ import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
 import { requirePermission } from '@/lib/current-user';
 import { demoSummary } from '@/lib/demo-operations';
+import { demoStatusLabel } from '@/lib/demo-display';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 const displayDate = (value: Date) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(value);
-const statusLabel = (status: string) => status === 'PENDING' ? 'Requested' : status.charAt(0) + status.slice(1).toLowerCase();
 
 export default async function DemosPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string }> }) {
   await requirePermission('users.manage');
   const params = await searchParams;
   const q = (params.q ?? '').trim().slice(0, 100);
-  const status = ['PENDING', 'APPROVED', 'SHIPPED'].includes(params.status ?? '') ? params.status as 'PENDING' | 'APPROVED' | 'SHIPPED' : undefined;
+  const status = ['PENDING', 'APPROVED', 'SHIPPED', 'CANCELLED'].includes(params.status ?? '') ? params.status as 'PENDING' | 'APPROVED' | 'SHIPPED' | 'CANCELLED' : undefined;
   const [rows, metricRequests] = await Promise.all([
     prisma.demoRequest.findMany({
       where: { ...(status ? { status } : {}), ...(q ? { OR: [{ demoNumber: { contains: q, mode: 'insensitive' } }, { shippingCarrier: { contains: q, mode: 'insensitive' } }, { carrierAccountNumber: { contains: q, mode: 'insensitive' } }, { account: { name: { contains: q, mode: 'insensitive' } } }, { requestedBy: { OR: [{ firstName: { contains: q, mode: 'insensitive' } }, { lastName: { contains: q, mode: 'insensitive' } }] } }, { items: { some: { OR: [{ sourceSku: { contains: q, mode: 'insensitive' } }, { trackingNumbers: { array_contains: [q] } }, { productSku: { partNumber: { contains: q, mode: 'insensitive' } } }] } } }, ...(/^[0-9a-f-]{36}$/i.test(q) ? [{ sourceRequestId: q }] : [])] } : {}) },
@@ -33,7 +33,7 @@ export default async function DemosPage({ searchParams }: { searchParams: Promis
     <PageHeader eyebrow="Sales" title="Demo Requests" description="Track imported demo requests, shipment status, and deployed units." action={<Link className="btn-secondary" href="/administration/imports/demos">Import demos</Link>}/>
     <form className="panel mb-4 flex flex-wrap items-end gap-3 p-3" method="get">
       <label className="min-w-64 flex-1"><span className="sr-only">Search demos</span><input className="field h-11 w-full" name="q" placeholder="Search demo #, customer, requester, or SKU" defaultValue={q}/></label>
-      <label className="w-44 max-w-full"><span className="label">Status</span><select className="field h-11 w-full" name="status" defaultValue={status ?? ''}><option value="">All statuses</option><option value="PENDING">Requested</option><option value="APPROVED">Approved</option><option value="SHIPPED">Shipped</option></select></label>
+      <label className="w-44 max-w-full"><span className="label">Status</span><select className="field h-11 w-full" name="status" defaultValue={status ?? ''}><option value="">All statuses</option><option value="PENDING">Requested</option><option value="APPROVED">Approved</option><option value="SHIPPED">Shipped</option><option value="CANCELLED">Cancelled</option></select></label>
       <button className="btn-secondary h-11">Search</button>
     </form>
     <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4" aria-label="Demo summary">{metrics.map(([label, value]) => <div className="panel px-4 py-2" key={label}><p className="text-xs text-slate-600">{label}</p><p className="text-lg font-semibold tabular-nums">{value}</p></div>)}</div>
@@ -43,7 +43,7 @@ export default async function DemosPage({ searchParams }: { searchParams: Promis
       const requester = row.requestedBy ? `${row.requestedBy.firstName} ${row.requestedBy.lastName}` : 'Requester unassigned';
       return <Link href={`/demos/${row.id}`} className="flex items-start justify-between gap-3 px-4 py-2.5 hover:bg-orange-50" key={row.id}>
         <div className="min-w-0 flex-1"><p className="truncate font-semibold text-slate-900">{row.demoNumber || customer}</p><p className="truncate text-xs text-slate-600">{hasNumber ? customer : 'No demo number yet'} · Requested by {requester} · {displayDate(row.requestedAt)}</p><p className="truncate text-sm text-slate-700">{row.items.length ? row.items.map(item => `${item.sourceSku} × ${item.quantity}`).join(' · ') : 'No items'}</p></div>
-        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{statusLabel(row.status)}</span>
+        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{demoStatusLabel(row.status)}</span>
       </Link>;
     })}{!rows.length && <p className="p-5 text-sm text-slate-600">No Demo Requests found.</p>}</div>
   </Content>;

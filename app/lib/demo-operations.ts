@@ -1,7 +1,7 @@
 import type { DemoUnitStatus, Prisma } from '@prisma/client';
 
 export type UnitState = { id: number; ordinal: number; serialNumber: string | null; status: DemoUnitStatus; deployedAt: Date | null; returnedAt: Date | null; inventoryLocation: string | null };
-export type DemoState = { shippedAt: Date | null; durationValue: number | null; durationUnit: string | null; expectedReturnOverrideAt: Date | null; opportunity?: { stage: { isClosed: boolean; isWon: boolean } } | null; project?: { status: string; archivedAt?: Date | null } | null; items: { quantity: number; retiredAt?: Date | null; units: UnitState[] }[] };
+export type DemoState = { status?: string; shippedAt: Date | null; durationValue: number | null; durationUnit: string | null; expectedReturnOverrideAt: Date | null; opportunity?: { stage: { isClosed: boolean; isWon: boolean } } | null; project?: { status: string; archivedAt?: Date | null } | null; items: { quantity: number; retiredAt?: Date | null; units: UnitState[] }[] };
 const day = 86_400_000;
 export const dateOnly = (value: Date) => value.toISOString().slice(0, 10);
 export function addDemoDuration(shippedAt: Date | null, value: number | null, unit: string | null): Date | null {
@@ -27,7 +27,7 @@ export function demoSummary(request: DemoState, today = new Date()) {
   const calculated = addDemoDuration(request.shippedAt ?? firstDeployment, request.durationValue, request.durationUnit);
   const expected = request.expectedReturnOverrideAt ?? calculated;
   const overdue = outstanding.length > 0 && !!expected && dateOnly(expected) < dateOnly(today);
-  const contextRecovery = !!request.opportunity?.stage.isClosed && !request.opportunity.stage.isWon || ['CANCELLED', 'COMPLETED'].includes(request.project?.status ?? '') || !!request.project?.archivedAt;
+  const contextRecovery = request.status === 'CANCELLED' || !!request.opportunity?.stage.isClosed && !request.opportunity.stage.isWon || ['CANCELLED', 'COMPLETED'].includes(request.project?.status ?? '') || !!request.project?.archivedAt;
   return { total: units.length, deployed: deployed.length, returned: returned.length, outstanding: outstanding.length, open: outstanding.length > 0, calculated, expected, overdue, recoveryAttention: outstanding.length > 0 && (overdue || contextRecovery) };
 }
 export function opportunityResult(opportunity: DemoState['opportunity']) {
@@ -40,7 +40,7 @@ export function daysDeployed(unit: Pick<UnitState, 'deployedAt' | 'returnedAt'>,
 
 type Db = Prisma.TransactionClient;
 /** Assign source serials to existing anonymous slots before creating any new slots. CRM returns win over source shipment state. */
-export async function reconcileDemoUnits(tx: Db, itemId: number, quantity: number, serials: string[], locations: string[], status: 'PENDING' | 'APPROVED' | 'SHIPPED', shippedAt: Date | null) {
+export async function reconcileDemoUnits(tx: Db, itemId: number, quantity: number, serials: string[], locations: string[], status: 'PENDING' | 'APPROVED' | 'SHIPPED' | 'CANCELLED', shippedAt: Date | null) {
   if (serials.length > quantity || new Set(serials.map(value => value.toUpperCase())).size !== serials.length) throw new Error('Source serial count must be unique and no greater than quantity.');
   const prior = await tx.demoUnit.findMany({ where: { demoItemId: itemId }, orderBy: { ordinal: 'asc' } });
   if (prior.length > quantity && prior.slice(quantity).some(unit => unit.deployedAt || unit.returnedAt || unit.serialNumber)) throw new Error('Cannot reduce quantity below a tracked Demo unit.');
@@ -57,12 +57,13 @@ export async function reconcileDemoUnits(tx: Db, itemId: number, quantity: numbe
     }
   }
   for (const unit of slots) {
-    const sourceStatus = status === 'SHIPPED' ? 'DEPLOYED' : status === 'APPROVED' ? 'APPROVED' : 'REQUESTED';
+    const sourceShipped = status === 'SHIPPED' || status === 'CANCELLED' && shippedAt !== null;
+    const sourceStatus = sourceShipped ? 'DEPLOYED' : status === 'APPROVED' ? 'APPROVED' : status === 'CANCELLED' ? unit.status : 'REQUESTED';
     await tx.demoUnit.update({ where: { id: unit.id }, data: {
       serialNumber: assignments.get(unit.id) ?? unit.serialNumber,
       inventoryLocation: (locations.length === 1 ? locations[0] : locations[unit.ordinal - 1]) ?? unit.inventoryLocation,
       status: unit.returnedAt ? 'RETURNED' : unit.deployedAt ? 'DEPLOYED' : sourceStatus,
-      deployedAt: unit.deployedAt ?? (status === 'SHIPPED' ? shippedAt : null),
+      deployedAt: unit.deployedAt ?? (sourceShipped ? shippedAt : null),
     } });
   }
   if (prior.length > quantity) await tx.demoUnit.deleteMany({ where: { id: { in: prior.slice(quantity).map(unit => unit.id) } } });

@@ -37,21 +37,21 @@ export async function backfillExistingRosaDemo(db: PrismaClient, actor: Actor, f
     if (duplicate) throw new Error(`Demo Number is already used by Demo ${duplicate.id}. Review that record before backfilling.`);
   }
   const status = field(form, 'status', 20);
-  if (status !== 'PENDING' && status !== 'APPROVED' && status !== 'SHIPPED') throw new Error('Choose a valid source status.');
+  if (status !== 'PENDING' && status !== 'APPROVED' && status !== 'SHIPPED' && status !== 'CANCELLED') throw new Error('Choose a valid source status.');
   const requestedAt = optionalDate(form, 'requestedAt');
   const reviewedAt = optionalDate(form, 'reviewedAt');
   const shippedAt = optionalDate(form, 'shippedAt');
   if (!requestedAt) throw new Error('Source requested date is required.');
-  if (status !== 'PENDING' && !reviewedAt) throw new Error('Approved and shipped Demos require a reviewed date.');
+  if ((status === 'APPROVED' || status === 'SHIPPED') && !reviewedAt) throw new Error('Approved and shipped Demos require a reviewed date.');
   if (status === 'SHIPPED' && !shippedAt) throw new Error('Shipped Demos require a shipment date.');
-  if (status !== 'SHIPPED' && shippedAt) throw new Error('A shipment date requires SHIPPED status.');
+  if (status !== 'SHIPPED' && status !== 'CANCELLED' && shippedAt) throw new Error('A shipment date requires SHIPPED or CANCELLED status.');
   if (reviewedAt && reviewedAt < requestedAt || shippedAt && (shippedAt < (reviewedAt ?? requestedAt))) throw new Error('Lifecycle dates are out of order.');
   const requestedBy = field(form, 'requestedBy', 200);
   const reviewedBy = field(form, 'reviewedBy', 200);
   const shippedBy = field(form, 'shippedBy', 200);
   if (!requestedBy) throw new Error('Source requester is required.');
-  if (status !== 'PENDING' && !reviewedBy) throw new Error('Reviewed by is required.');
-  if (status === 'SHIPPED' && !shippedBy) throw new Error('Shipped by is required.');
+  if ((status === 'APPROVED' || status === 'SHIPPED') && !reviewedBy) throw new Error('Reviewed by is required.');
+  if (shippedAt && !shippedBy) throw new Error('Shipped by is required.');
   const accountId = Number(field(form, 'accountId', 20));
   const sourceAccount = field(form, 'sourceAccount', 200);
   if (!Number.isSafeInteger(accountId) || accountId <= 0 || !sourceAccount) throw new Error('Choose an Account and enter the source customer name.');

@@ -131,6 +131,7 @@ enum DemoStatus {
   PENDING
   APPROVED
   SHIPPED
+  CANCELLED
 }
 
 enum DemoUnitStatus {

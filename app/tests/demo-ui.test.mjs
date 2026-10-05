@@ -15,12 +15,14 @@ const queries = [];
 let listRows = [];
 let metricRows = [];
 Module._extensions['.tsx'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText, filename);
+Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
 Module._load = function(request, parent, isMain) {
   if (request === 'next/link') return function Link({ href, children, ...props }) { return React.createElement('a', { href, ...props }, children); };
   if (request === '@/components/shell') return { Content: ({ children }) => React.createElement('main', null, children), PageHeader: ({ title, description, action }) => React.createElement('header', null, React.createElement('h1', null, title), React.createElement('p', null, description), action) };
   if (request === '@/lib/current-user') return { requirePermission: async permission => { assert.equal(permission, 'users.manage'); return { role: 'ADMIN' }; } };
   if (request === '@/lib/prisma') return { prisma: { demoRequest: { findMany: async query => { queries.push(query); return query.take ? listRows : metricRows; } } } };
   if (request === '@/lib/demo-operations') return { demoSummary: request => ({ open: request.open, overdue: request.overdue }) };
+  if (request === '@/lib/demo-display') return require(path.join(root, 'lib/demo-display.ts'));
   return originalLoad.call(this, request, parent, isMain);
 };
 const DemosPage = require(path.join(root, 'app/demos/page.tsx')).default;
@@ -30,16 +32,18 @@ const row = (changes = {}) => ({ id: 1, demoNumber: 'DEMO092326-3', status: 'SHI
 async function render(params = {}) { queries.length = 0; return renderToStaticMarkup(await DemosPage({ searchParams: Promise.resolve(params) })); }
 
 test('Demo directory uses compact rows, source-neutral import copy, and friendly statuses', async () => {
-  listRows = [row(), row({ id: 2, demoNumber: null, status: 'APPROVED', account: { name: 'DuraFast Label Company' }, requestedBy: { firstName: 'Amber', lastName: 'Zumbiel' }, requestedAt: new Date('2026-09-25T00:00:00Z'), items: [{ sourceSku: 'XD5-40dEK', quantity: 2 }, { sourceSku: 'XL5-40CtEG', quantity: 2 }] })];
-  metricRows = [{ status: 'SHIPPED', open: true, overdue: true }, { status: 'APPROVED', open: false, overdue: false }];
+  listRows = [row(), row({ id: 2, demoNumber: null, status: 'APPROVED', account: { name: 'DuraFast Label Company' }, requestedBy: { firstName: 'Amber', lastName: 'Zumbiel' }, requestedAt: new Date('2026-09-25T00:00:00Z'), items: [{ sourceSku: 'XD5-40dEK', quantity: 2 }, { sourceSku: 'XL5-40CtEG', quantity: 2 }] }), row({id:3,status:'CANCELLED',demoNumber:'DEMO-CANCELLED'})];
+  metricRows = [{ status: 'SHIPPED', open: true, overdue: true }, { status: 'APPROVED', open: false, overdue: false }, {status:'CANCELLED',open:false,overdue:false}];
   const html = await render({ q: '  BK3  ', status: 'APPROVED' });
   assert.match(html, /Track imported demo requests, shipment status, and deployed units/);
   assert.match(html, /href="\/administration\/imports\/demos"[^>]*>Import demos</);
   assert.match(html, /Search demo #, customer, requester, or SKU/);
   assert.match(html, /<span class="label">Status<\/span>/);
-  assert.match(html, /Total demos.*?2.*?Open demos.*?1.*?Shipped.*?1.*?Overdue.*?1/);
+  assert.match(html, /Total demos.*?3.*?Open demos.*?1.*?Shipped.*?1.*?Overdue.*?1/);
   assert.match(html, /DEMO092326-3.*?CoreGroup Displays · Requested by Blaise Collura · Sep 23, 2026.*?BK3-31BA × 2.*?Shipped/);
   assert.match(html, /DuraFast Label Company.*?No demo number yet · Requested by Amber Zumbiel · Sep 25, 2026.*?XD5-40dEK × 2 · XL5-40CtEG × 2.*?Approved/);
+  assert.match(html, /DEMO-CANCELLED.*?Cancelled/);
+  assert.match(html, /value="CANCELLED">Cancelled/);
   assert.match(html, /px-4 py-2\.5/);
   assert.doesNotMatch(html, /Pending Demo|Rosa|>SHIPPED<|>APPROVED</);
   assert.equal(queries[0].where.status, 'APPROVED');

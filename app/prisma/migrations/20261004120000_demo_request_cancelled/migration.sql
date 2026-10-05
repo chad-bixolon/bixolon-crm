@@ -1,0 +1,1 @@
+ALTER TYPE "DemoStatus" ADD VALUE 'CANCELLED';

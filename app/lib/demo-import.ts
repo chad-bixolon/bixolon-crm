@@ -20,8 +20,8 @@ const normSku=(value:string)=>value.normalize('NFKC').trim().toUpperCase().repla
 const multi=(value:string)=>value.split(/[;\n]+/).map(part=>part.trim()).filter(Boolean);
 const headerFields=demoHeaders.filter(field=>!['SKU / Model','Quantity','Serial Numbers','Tracking Numbers','Inventory Locations'].includes(field));
 const userFields=['Requested By','Reviewed By','Shipped By'] as const;
-const statuses=['PENDING','APPROVED','SHIPPED'] as const;
-const statusRank:Record<string,number>={PENDING:0,APPROVED:1,SHIPPED:2};
+const statuses=['PENDING','APPROVED','SHIPPED','CANCELLED'] as const;
+const statusRank:Record<string,number>={PENDING:0,APPROVED:1,SHIPPED:2,CANCELLED:3};
 const dispositions:DemoDisposition[]=['Ready to import','Needs review','Error','Already imported / No changes','Source update available','Older source submission detected'];
 const counts=()=>Object.fromEntries(dispositions.map(value=>[value,0])) as Record<DemoDisposition,number>;
 const date=(value:string)=>{const raw=value.trim();if(!raw)return null;const match=/^(\d{4})-(\d\d)-(\d\d)T\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.exec(raw);if(!match)return null;const year=Number(match[1]),month=Number(match[2]),day=Number(match[3]);if(year<1900||year>2100||month<1||month>12||day<1||day>new Date(Date.UTC(year,month,0)).getUTCDate())return null;const result=new Date(raw);return Number.isNaN(result.valueOf())?null:result.toISOString();};
@@ -177,9 +177,11 @@ export async function planDemoImport(db:Db,parsed:DemoParsed,fileName:string,man
     let disposition:DemoDisposition=invalid?'Error':issues.length?'Needs review':current?'Source update available':'Ready to import';
     if(current){
       const latest=current.revisions[0];const oldTimestamp=latest?.sourceTimestamp.toISOString()??current.shippedAt?.toISOString()??current.reviewedAt?.toISOString()??current.requestedAt.toISOString();
-      if(latest?.contentHash===contentHash||!changes.length)disposition='Already imported / No changes';
-      else if(sourceTimestamp<oldTimestamp||statusRank[status]<statusRank[current.status])disposition='Older source submission detected';
-      else if(!invalid&&issues.length)disposition='Needs review';
+      if(!invalid){
+        if(latest?.contentHash===contentHash||!changes.length)disposition='Already imported / No changes';
+        else if((sourceTimestamp<oldTimestamp&&!(status==='CANCELLED'&&current.status!=='CANCELLED'))||statusRank[status]<statusRank[current.status])disposition='Older source submission detected';
+        else if(issues.length)disposition='Needs review';
+      }
     }
     result.groups.push({requestId,demoNumber:header['Demo Number'].trim(),status,requestedAt:requestedAt??'',reviewedAt,shippedAt,header,rows,account,users:resolvedUsers,items,disposition,issues,changes,conflicts,existingId:current?.id??null,contentHash,sourceTimestamp});
     result.counts[disposition]++;
@@ -200,13 +202,13 @@ export async function applyDemoImport(client:PrismaClient,parsed:DemoParsed,file
       const accountId=group.account.id;
       if(accountId===null)throw new Error(`Account unresolved for Request ID ${group.requestId}.`);
       const h=group.header;
-      const data={demoNumber:group.demoNumber||null,status:group.status as 'PENDING'|'APPROVED'|'SHIPPED',requestedAt:new Date(group.requestedAt),requestedById:group.users['Requested By'].id,reviewedAt:group.reviewedAt?new Date(group.reviewedAt):null,reviewedById:group.users['Reviewed By'].id,accountId,shippingAddress:h['Shipping Address']||null,shippingCarrier:h['Shipping Carrier']||null,carrierAccountNumber:h['Carrier Account Number']||null,shippedAt:group.shippedAt?new Date(group.shippedAt):null,shippedById:group.users['Shipped By'].id,durationValue:positiveInt(h['Duration Value']),durationUnit:norm(h['Duration Unit']).replace(/s$/,''),notes:h.Notes||null,approvalComments:h['Approval Comments']||null,sourceHeader:h};
+      const data={demoNumber:group.demoNumber||null,status:group.status as typeof statuses[number],requestedAt:new Date(group.requestedAt),requestedById:group.users['Requested By'].id,reviewedAt:group.reviewedAt?new Date(group.reviewedAt):null,reviewedById:group.users['Reviewed By'].id,accountId,shippingAddress:h['Shipping Address']||null,shippingCarrier:h['Shipping Carrier']||null,carrierAccountNumber:h['Carrier Account Number']||null,shippedAt:group.shippedAt?new Date(group.shippedAt):null,shippedById:group.users['Shipped By'].id,durationValue:positiveInt(h['Duration Value']),durationUnit:norm(h['Duration Unit']).replace(/s$/,''),notes:h.Notes||null,approvalComments:h['Approval Comments']||null,sourceHeader:h};
       const request=group.existingId?await tx.demoRequest.update({where:{id:group.existingId},data}):await tx.demoRequest.create({data:{...data,sourceRequestId:group.requestId}});
       if(group.existingId)updated++;else created++;
       const mappings={accountId:group.account.id,userIds:Object.fromEntries(userFields.map(field=>[field,group.users[field].id])),skuIds:Object.fromEntries(group.items.map(item=>[item.line,item.sku.id]))};
       await tx.demoSourceRevision.create({data:{demoRequestId:request.id,contentHash:group.contentHash,sourceFileName:fileName,sourceRowNumbers:group.rows.map(row=>row.line),sourceRows:group.rows as unknown as Prisma.InputJsonValue,reviewedMappings:mappings,resolvedHeader:data as unknown as Prisma.InputJsonValue,resolvedItems:group.items as unknown as Prisma.InputJsonValue,sourceTimestamp:new Date(group.sourceTimestamp),recordedById:actorId}});
       const keys=new Set(group.items.map(item=>item.sourceLineKey));
-      for(const item of group.items){const lineData={sourceRowNumber:item.line,sourceSku:item.sourceSku,productSkuId:item.sku.id,quantity:item.quantity,serialNumbers:item.serialNumbers,trackingNumbers:item.trackingNumbers,inventoryLocations:item.inventoryLocations,sourceValues:item.raw};const saved=await tx.demoItem.upsert({where:{demoRequestId_sourceLineKey:{demoRequestId:request.id,sourceLineKey:item.sourceLineKey}},create:{demoRequestId:request.id,sourceLineKey:item.sourceLineKey,...lineData},update:{...lineData,retiredAt:null}});await reconcileDemoUnits(tx,saved.id,item.quantity,item.serialNumbers,item.inventoryLocations,group.status as 'PENDING'|'APPROVED'|'SHIPPED',group.shippedAt?new Date(group.shippedAt):null);}
+      for(const item of group.items){const lineData={sourceRowNumber:item.line,sourceSku:item.sourceSku,productSkuId:item.sku.id,quantity:item.quantity,serialNumbers:item.serialNumbers,trackingNumbers:item.trackingNumbers,inventoryLocations:item.inventoryLocations,sourceValues:item.raw};const saved=await tx.demoItem.upsert({where:{demoRequestId_sourceLineKey:{demoRequestId:request.id,sourceLineKey:item.sourceLineKey}},create:{demoRequestId:request.id,sourceLineKey:item.sourceLineKey,...lineData},update:{...lineData,retiredAt:null}});await reconcileDemoUnits(tx,saved.id,item.quantity,item.serialNumbers,item.inventoryLocations,group.status as typeof statuses[number],group.shippedAt?new Date(group.shippedAt):null);}
       if(group.existingId){const prior=await tx.demoItem.findMany({where:{demoRequestId:request.id,retiredAt:null},select:{id:true,sourceLineKey:true}});for(const item of prior)if(!keys.has(item.sourceLineKey))await tx.demoItem.update({where:{id:item.id},data:{retiredAt:new Date()}});}
     }
     return {created,updated,skipped:plan.groups.length-created-updated};

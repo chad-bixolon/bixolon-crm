@@ -19,7 +19,7 @@ export default async function RosaBackfillPage({ searchParams }: { searchParams:
       <div className="grid gap-4 sm:grid-cols-2">
         <label>Source Request ID *<input className="field mt-1 w-full" name="requestId" required placeholder="UUID from source record"/></label>
         <label>Demo Number (if assigned)<input className="field mt-1 w-full" name="demoNumber"/></label>
-        <label>Source status *<select className="field mt-1 w-full" name="status" required><option value="">Choose status</option><option value="PENDING">Requested</option><option value="APPROVED">Approved</option><option value="SHIPPED">Shipped</option></select></label>
+        <label>Source status *<select className="field mt-1 w-full" name="status" required><option value="">Choose status</option><option value="PENDING">Requested</option><option value="APPROVED">Approved</option><option value="SHIPPED">Shipped</option><option value="CANCELLED">Cancelled</option></select></label>
         <label>CRM Account *<select className="field mt-1 w-full" name="accountId" required><option value="">Choose Account</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
         <label>Source customer name (VAR column) *<input className="field mt-1 w-full" name="sourceAccount" required/></label>
         <label>Requested date *<input className="field mt-1 w-full" name="requestedAt" type="date" required/></label>

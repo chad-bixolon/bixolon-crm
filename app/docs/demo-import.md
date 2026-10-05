@@ -6,7 +6,7 @@ The authoritative development fixture is `reference-data/demo-requests-2026-09-2
 | --- | --- |
 | Request ID | `DemoRequest.sourceRequestId`, unique UUID source key |
 | Demo Number | `DemoRequest.demoNumber`; CRM pages show `Pending Demo` when blank |
-| Status | `DemoRequest.status`: pending, approved, shipped |
+| Status | `DemoRequest.status`: pending, approved, shipped, cancelled |
 | Requested At / Requested By | `requestedAt` / `requestedById` → eligible `User` |
 | Reviewed At / Reviewed By | `reviewedAt` / optional `reviewedById` → eligible `User` when deterministically matched; original Reviewed By remains in source provenance |
 | VAR | Customer / Account receiving the Demo equipment → `accountId` on an active `Account`, regardless of business role |
@@ -43,7 +43,7 @@ The read-only local Compose preview can be run with `docker compose exec -T app 
 
 A `DemoRequest` is the business request, owned by a required Account. `DemoItem` is a requested SKU and source quantity. `DemoUnit` is one logical physical unit: one row is created for each requested quantity even before a serial is known. Source serials later fill existing blank unit slots. Unit count stays equal to the requested quantity. Source shipment sets unit deployment; source serial, location, tracking, and original rows remain in item fields and immutable revisions. A source import never changes a CRM-recorded returned unit back to deployed.
 
-An **Open Demo** has at least one deployed unit without a return date. Approved or requested units are not deployed inventory. A partial return closes only the selected units; the request stays open until all deployed units return. Authorized users record a date, optional tracking, and note for each returned unit. `DemoReturnEvent` keeps that CRM operational evidence and actor apart from Rosa source revisions. This version treats each logical unit as a single deployment and return cycle; later redeployment requires a dedicated history model and is not offered by the current UI.
+An **Open Demo** has at least one deployed unit without a return date. Approved or requested units are not deployed inventory. A cancelled request with no deployed units is closed and needs no return attention. Cancelling after shipment does not return equipment: its deployed units stay outstanding and require recovery attention until actual return events close them. A partial return closes only the selected units; the request stays open until all deployed units return. Authorized users record a date, optional tracking, and note for each returned unit. `DemoReturnEvent` keeps that CRM operational evidence and actor apart from Rosa source revisions. This version treats each logical unit as a single deployment and return cycle; later redeployment requires a dedicated history model and is not offered by the current UI.
 
 The calculated expected return is the source shipped date plus source duration in days, weeks, or calendar months (clamped to the last day of a shorter month). Authorized users may set an effective date override; the calculated date and source duration remain available, and the override stores actor, time, and reason. An outstanding Demo is overdue when its effective expected return calendar date is before today. Days deployed is derived from deployment to today, or deployment to return for a returned unit.
 

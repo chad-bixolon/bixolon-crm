@@ -43,6 +43,26 @@ test('opportunity and Project outcomes create attention without returning invent
   assert.equal(demoSummary(request(current,{project:{status:'COMPLETED'}}),today).recoveryAttention,true);
   assert.equal(demoSummary(request(current),d('2026-10-02')).recoveryAttention,true);
 });
+test('cancelled request remains historical while physical deployment drives open and recovery metrics',()=>{
+  const today=d('2026-09-10');
+  const unshipped=demoSummary(request([unit(1,null,null)],{status:'CANCELLED',shippedAt:null}),today);
+  assert.deepEqual([unshipped.deployed,unshipped.outstanding,unshipped.open,unshipped.overdue,unshipped.recoveryAttention],[0,0,false,false,false]);
+  const outstanding=demoSummary(request([unit(1)],{status:'CANCELLED'}),today);
+  assert.deepEqual([outstanding.deployed,outstanding.outstanding,outstanding.open,outstanding.overdue,outstanding.recoveryAttention],[1,1,true,false,true]);
+  const overdue=demoSummary(request([unit(1)],{status:'CANCELLED'}),d('2026-10-02'));
+  assert.deepEqual([overdue.open,overdue.overdue,overdue.recoveryAttention],[true,true,true]);
+  const returned=demoSummary(request([unit(1,null,d('2026-09-01'),d('2026-09-05'))],{status:'CANCELLED'}),d('2026-10-02'));
+  assert.deepEqual([returned.deployed,returned.returned,returned.outstanding,returned.open,returned.overdue,returned.recoveryAttention],[1,1,0,false,false,false]);
+  const {matchesDemoReportRequest,matchesDemoReportUnit}=require(path.join(root,'lib/demo-operations.ts'));
+  const units=[unit(1),unit(2,null,null)];
+  const item={quantity:2,retiredAt:null,productSkuId:null,productSku:null,units};
+  const cancelled={...request(units,{status:'CANCELLED'}),items:[item],accountId:1,requestedById:7,projectId:null,opportunityId:null};
+  const summary=demoSummary(cancelled,today);
+  assert.equal(matchesDemoReportRequest(cancelled,summary,{demoStatus:'CANCELLED',recovery:'yes'}),true);
+  assert.equal(matchesDemoReportRequest(cancelled,summary,{demoStatus:'SHIPPED'}),false);
+  assert.equal(matchesDemoReportUnit(item,units[0],{state:'open'}),true);
+  assert.equal(matchesDemoReportUnit(item,units[1],{state:'open'}),false);
+});
 test('report filters include account-only open units and distinguish partial returns',()=>{
   const {matchesDemoReportRequest,matchesDemoReportUnit}=require(path.join(root,'lib/demo-operations.ts'));
   const units=[unit(1,'A',d('2026-09-01'),d('2026-09-20')),unit(2,null)];

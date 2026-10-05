@@ -171,6 +171,74 @@ test('conflicting grouped header requires review and explicit source-row selecti
 test('malformed row stays an error even if another grouped header value is selected',async()=>{const bad=row(par[1],{Status:'unknown'}),id=par[0].values['Request ID'];const plan=await planDemoImport(db(),input(par[0],bad),'demo.csv',{[id]:{headerLines:{Status:par[0].line}}});assert.equal(plan.groups[0].disposition,'Error');});
 test('apply creates one header and two items atomically, then identical re-import writes nothing',async()=>{const client=db(),source=input(...par),plan=await planDemoImport(client,source,'demo.csv');await applyDemoImport(client,source,'demo.csv',plan.digest,true,100);assert.equal(stateCount(client),1);assert.equal(client.state.items.length,2);assert.equal(client.state.revisions.length,1);assert.deepEqual(client.state.revisions[0].sourceRowNumbers,par.map(item=>item.line));assert.equal((await planDemoImport(client,source,'demo.csv')).groups[0].disposition,'Already imported / No changes');const again=await planDemoImport(client,source,'demo.csv');const result=await applyDemoImport(client,source,'demo.csv',again.digest,true,100);assert.equal(result.created+result.updated,0);assert.equal(client.state.items.length,2);});
 test('later Demo Number and approved to shipped progression updates same request and retains revision',async()=>{const client=db(),source=input(first),prior=await planDemoImport(client,source,'demo.csv');await applyDemoImport(client,source,'demo.csv',prior.digest,true,100);const next=row(first,{'Demo Number':'DEMO093026-1',Status:'shipped','Shipped At':'2026-09-30T14:00:00+00:00','Shipped By':'Jorge','Serial Numbers':'ABC123','Tracking Numbers':'1Z123','Inventory Locations':'HQ A1'},first.line);const update=input(next),preview=await planDemoImport(client,update,'later.csv');assert.equal(preview.groups[0].disposition,'Source update available');assert.ok(preview.groups[0].changes.some(item=>item.field==='Demo Number'&&item.before==='—'));assert.ok(preview.groups[0].changes.some(item=>item.field==='Status'&&item.after==='shipped'));assert.ok(preview.groups[0].changes.some(item=>item.field.startsWith('Serial Numbers')));assert.ok(preview.groups[0].changes.some(item=>item.field.startsWith('Tracking Numbers')));await applyDemoImport(client,update,'later.csv',preview.digest,true,100,{},[first.values['Request ID']]);assert.equal(stateCount(client),1);assert.equal(client.state.revisions.length,2);assert.equal(client.state.requests[0].demoNumber,'DEMO093026-1');assert.deepEqual(client.state.items[0].serialNumbers,['ABC123']);assert.deepEqual(client.state.items[0].trackingNumbers,['1Z123']);assert.deepEqual(client.state.items[0].inventoryLocations,['HQ A1']);});
+test('new cancelled source row normalizes case and retains exact source status',async()=>{
+  for(const sourceStatus of ['cancelled','CANCELLED','CaNcElLeD']){
+    const client=db(),source=input(row(first,{Status:sourceStatus})),plan=await planDemoImport(client,source,'cancelled.csv');
+    assert.equal(plan.groups[0].disposition,'Ready to import');
+    assert.equal(plan.groups[0].status,'CANCELLED');
+    assert.deepEqual(await applyDemoImport(client,source,'cancelled.csv',plan.digest,true,100),{created:1,updated:0,skipped:0});
+    assert.equal(client.state.requests[0].status,'CANCELLED');
+    assert.equal(client.state.requests[0].sourceHeader.Status,sourceStatus);
+    assert.equal(client.state.revisions[0].sourceRows[0].values.Status,sourceStatus);
+    assert.equal(client.state.units[0].deployedAt,null);
+  }
+});
+test('approved to cancelled is a reviewed update on the same request with append-only revisions',async()=>{
+  const client=db(),original=input(first),prior=await planDemoImport(client,original,'approved.csv');
+  await applyDemoImport(client,original,'approved.csv',prior.digest,true,100);
+  const changed=input(row(first,{Status:'cancelled'})),preview=await planDemoImport(client,changed,'cancelled.csv');
+  assert.equal(preview.groups[0].disposition,'Source update available');
+  assert.ok(preview.groups[0].changes.some(change=>change.field==='Status'&&change.before==='APPROVED'&&change.after==='cancelled'));
+  assert.equal((await applyDemoImport(client,changed,'cancelled.csv',preview.digest,true,100)).updated,0);
+  assert.equal((await applyDemoImport(client,changed,'cancelled.csv',preview.digest,true,100,{},[first.values['Request ID']])).updated,1);
+  assert.equal(client.state.requests.length,1);
+  assert.equal(client.state.requests[0].status,'CANCELLED');
+  assert.equal(client.state.units[0].status,'APPROVED');
+  assert.equal(client.state.revisions.length,2);
+  assert.deepEqual(client.state.revisions.map(revision=>revision.sourceRows[0].values.Status),[first.values.Status,'cancelled']);
+  const repeat=await planDemoImport(client,changed,'cancelled.csv');
+  assert.equal(repeat.groups[0].disposition,'Already imported / No changes');
+  assert.equal((await applyDemoImport(client,changed,'cancelled.csv',repeat.digest,true,100)).updated,0);
+  assert.equal(client.state.requests.length,1);
+  assert.equal(client.state.revisions.length,2);
+});
+test('cancelled source with shipment retains deployed units and CRM returns on reimport',async()=>{
+  const client=db(),source=input(shipped),prior=await planDemoImport(client,source,'shipped.csv');
+  await applyDemoImport(client,source,'shipped.csv',prior.digest,true,100);
+  client.state.units[0].returnedAt=new Date('2026-10-01T12:00:00Z');client.state.units[0].status='RETURNED';
+  const cancelled=input(row(shipped,{Status:'cancelled'})),preview=await planDemoImport(client,cancelled,'cancelled.csv');
+  assert.equal(preview.groups[0].disposition,'Source update available');
+  await applyDemoImport(client,cancelled,'cancelled.csv',preview.digest,true,100,{},[shipped.values['Request ID']]);
+  assert.equal(client.state.requests.length,1);
+  assert.equal(client.state.requests[0].status,'CANCELLED');
+  assert.deepEqual(client.state.units.map(unit=>unit.status),['RETURNED','DEPLOYED']);
+  assert.equal(client.state.units[0].returnedAt.toISOString(),'2026-10-01T12:00:00.000Z');
+  assert.ok(client.state.units.every(unit=>unit.deployedAt));
+  assert.equal(client.state.revisions.length,2);
+  const newClient=db(),newPlan=await planDemoImport(newClient,cancelled,'cancelled.csv');
+  await applyDemoImport(newClient,cancelled,'cancelled.csv',newPlan.digest,true,100);
+  assert.ok(newClient.state.units.every(unit=>unit.status==='DEPLOYED'&&unit.deployedAt));
+});
+test('shipped to cancelled remains a valid source update when cancellation clears shipping fields',async()=>{
+  const client=db(),source=input(shipped),prior=await planDemoImport(client,source,'shipped.csv');
+  await applyDemoImport(client,source,'shipped.csv',prior.digest,true,100);
+  const cancelled=input(row(shipped,{Status:'cancelled','Shipped At':'','Shipped By':''}));
+  const preview=await planDemoImport(client,cancelled,'cancelled.csv');
+  assert.equal(preview.groups[0].disposition,'Source update available');
+  await applyDemoImport(client,cancelled,'cancelled.csv',preview.digest,true,100,{},[shipped.values['Request ID']]);
+  assert.equal(client.state.requests[0].shippedAt,null);
+  assert.equal(client.state.requests[0].status,'CANCELLED');
+  assert.ok(client.state.units.every(unit=>unit.status==='DEPLOYED'&&unit.deployedAt));
+});
+test('unknown source status remains an Error for new and existing requests',async()=>{
+  const unknown=input(row(first,{Status:'withdrawn'}));
+  assert.equal((await planDemoImport(db(),unknown,'unknown.csv')).groups[0].disposition,'Error');
+  const client=db(),prior=await planDemoImport(client,input(first),'approved.csv');
+  await applyDemoImport(client,input(first),'approved.csv',prior.digest,true,100);
+  const preview=await planDemoImport(client,unknown,'unknown.csv');
+  assert.equal(preview.groups[0].disposition,'Error');
+  assert.match(preview.groups[0].issues.join(' '),/Unsupported source status: withdrawn/);
+});
 test('lifecycle preview compares source against live CRM notes',async()=>{const client=db(),source=input(first),prior=await planDemoImport(client,source,'demo.csv');await applyDemoImport(client,source,'demo.csv',prior.digest,true,100);client.state.requests[0].notes='Sales follow-up note';const next=input(row(first,{'Demo Number':'DEMO093026-1'}));const preview=await planDemoImport(client,next,'later.csv');assert.ok(preview.groups[0].changes.some(change=>change.field==='Notes'&&change.before==='Sales follow-up note'));});
 test('changed item set is reviewed and old line is retired with source history retained',async()=>{const client=db(),source=input(...par),prior=await planDemoImport(client,source,'demo.csv');await applyDemoImport(client,source,'demo.csv',prior.digest,true,100);const changed=input(par[0]);const preview=await planDemoImport(client,changed,'later.csv');assert.equal(preview.groups[0].disposition,'Source update available');assert.ok(preview.groups[0].changes.some(item=>item.field==='Demo Items'));await applyDemoImport(client,changed,'later.csv',preview.digest,true,100,{},[par[0].values['Request ID']]);assert.equal(client.state.items.filter(item=>!item.retiredAt).length,1);assert.equal(client.state.items.length,2);assert.equal(client.state.revisions.length,2);});
 test('older source does not roll shipped state back to approved',async()=>{const client=db(),current=input(shipped),prior=await planDemoImport(client,current,'demo.csv');await applyDemoImport(client,current,'demo.csv',prior.digest,true,100);const older=input(row(shipped,{Status:'approved','Shipped At':'','Shipped By':'','Tracking Numbers':''}));const preview=await planDemoImport(client,older,'older.csv');assert.equal(preview.groups[0].disposition,'Older source submission detected');const result=await applyDemoImport(client,older,'older.csv',preview.digest,true,100);assert.equal(result.updated,0);assert.equal(client.state.requests[0].status,'SHIPPED');});
