@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { formatEasternDateTime } from './display-format';
+import { isAbsentPriceExceptionParty } from './price-exception-party';
 
 export const rosaHeaders = ['PE Number','Status','Requested At','Reviewed At','Requested By','Reviewed By','Customer','VAR','End User','Expiration Date','SKU','Quantity','Original Price','Approved Price','Currency','Description'] as const;
 export type RosaColumn = typeof rosaHeaders[number];
@@ -62,6 +64,9 @@ export function parseRosaExpirationDate(value:string){
 }
 function decimal(value:string,scale:number,whole:number){const raw=value.trim();if(!new RegExp(`^\\d{1,${whole}}(?:\\.\\d{1,${scale}})?$`).test(raw))return null;const number=new Prisma.Decimal(raw);return number.gt(0)?number.toFixed(scale):null;}
 function resolve(source:string,candidates:{id:number;name:string}[],normalizer:(value:string)=>string):RosaResolution{const value=source.trim();if(!value)return {source,id:null,name:null,issue:'Missing source value.'};const matches=candidates.filter(candidate=>normalizer(candidate.name)===normalizer(value));return matches.length===1?{source,id:matches[0].id,name:matches[0].name,issue:null}:{source,id:null,name:null,issue:matches.length?'Multiple CRM matches.':'No CRM match.'};}
+function resolveParty(source:string,candidates:{id:number;name:string}[]):RosaResolution{
+  return isAbsentPriceExceptionParty(source)?{source,id:null,name:null,issue:null}:resolve(source,candidates,normalizedName);
+}
 function resolveUser(source:string,users:{id:number;name:string;firstName:string}[]):RosaResolution{const value=source.trim();if(!value)return {source,id:null,name:null,issue:'Missing source value.'};const normalized=normalizedName(value);const matches=users.filter(user=>normalizedName(user.name)===normalized||normalizedName(user.firstName)===normalized);return matches.length===1?{source,id:matches[0].id,name:matches[0].name,issue:null}:{source,id:null,name:null,issue:matches.length?'Multiple CRM matches.':'No CRM match.'};}
 function sourceFingerprint(row:RosaSourceRow){return hash(JSON.stringify(rosaHeaders.map(header=>row.values[header])));}
 const headerFields = ['Status','Requested At','Reviewed At','Requested By','Reviewed By','Customer','VAR','End User','Expiration Date','Currency','Description'] as const;
@@ -82,6 +87,7 @@ function headerValue(field:HeaderField,value:string){
   if(field==='Expiration Date')return parseRosaExpirationDate(value)??value.trim();
   if(field==='Status'||field==='Currency')return value.normalize('NFKC').trim().toUpperCase();
   if(field==='Description')return value.normalize('NFKC').trim().replace(/\s+/g,' ');
+  if(accountFields.includes(field as typeof accountFields[number])&&isAbsentPriceExceptionParty(value))return '';
   return normalizedName(value);
 }
 function canonicalHeader(row:RosaSourceRow){return Object.fromEntries(headerFields.map(field=>[field,headerValue(field,row.values[field])])) as Record<HeaderField,string>;}
@@ -101,7 +107,7 @@ function tierDifferences(current:string[],proposed:string[]){
   return [{field:'Pricing tier combinations',current:describe(current),proposed:describe(proposed)}];
 }
 function conflictingHeaderFields(rows:RosaSourceRow[]){const first=canonicalHeader(rows[0]);return headerFields.filter(field=>rows.some(row=>canonicalHeader(row)[field]!==first[field]));}
-function headerConflictMessage(field:HeaderField,rows:RosaSourceRow[]){return `${field} differs across source lines: ${rows.map(row=>`${row.line}=${JSON.stringify(row.values[field].slice(0,100))}`).join('; ')}.`;}
+function headerConflictMessage(field:HeaderField,rows:RosaSourceRow[]){return `${field} differs across source lines: ${rows.map(row=>{const value=row.values[field];const parsed=(field==='Requested At'||field==='Reviewed At')&&timestamp(value);return `${row.line}=${JSON.stringify((parsed?formatEasternDateTime(new Date(parsed)):value).slice(0,100))}`;}).join('; ')}.`;}
 function safeHeaderConflict(field:HeaderField,rows:RosaSourceRow[]):field is RosaHeaderChoiceField{
   if(!choiceHeaderFields.includes(field as RosaHeaderChoiceField))return false;
   return rows.every(row=>field==='Requested At'||field==='Reviewed At'?!!timestamp(row.values[field]):!!row.values[field].trim());
@@ -145,7 +151,7 @@ export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:s
     for(const [field,line] of Object.entries(headerLines??{}))raw[field as RosaHeaderChoiceField]=sourceRows.find(row=>row.line===line)!.values[field as RosaHeaderChoiceField];
     const accountSource:{[K in typeof accountFields[number]]:string}={Customer:raw.Customer,VAR:raw.VAR,'End User':raw['End User']};
     const userSource:{[K in typeof userFields[number]]:string}={'Requested By':raw['Requested By'],'Reviewed By':raw['Reviewed By']};
-    const accountIds=Object.fromEntries(Object.entries(prior.accountIds??{}).filter(([field,id])=>accountFields.includes(field as typeof accountFields[number])&&accountChoices.some(item=>item.id===id)&&(!resolve(accountSource[field as typeof accountFields[number]],accountChoices,normalizedName).id||resolve(accountSource[field as typeof accountFields[number]],accountChoices,normalizedName).id===id))) as RosaManualGroupChoice['accountIds'];
+    const accountIds=Object.fromEntries(Object.entries(prior.accountIds??{}).filter(([field,id])=>accountFields.includes(field as typeof accountFields[number])&&!isAbsentPriceExceptionParty(accountSource[field as typeof accountFields[number]])&&accountChoices.some(item=>item.id===id)&&(!resolveParty(accountSource[field as typeof accountFields[number]],accountChoices).id||resolveParty(accountSource[field as typeof accountFields[number]],accountChoices).id===id))) as RosaManualGroupChoice['accountIds'];
     const userIds=Object.fromEntries(Object.entries(prior.userIds??{}).filter(([field,id])=>userFields.includes(field as typeof userFields[number])&&userChoices.some(item=>item.id===id)&&(!resolveUser(userSource[field as typeof userFields[number]],userChoices).id||resolveUser(userSource[field as typeof userFields[number]],userChoices).id===id))) as RosaManualGroupChoice['userIds'];
     const skuIds=Object.fromEntries(Object.entries(prior.skuIds??{}).filter(([line,id])=>{const row=sourceRows.find(item=>String(item.line)===line);if(!row||!skuChoices.some(item=>item.id===id))return false;const automatic=resolve(row.values.SKU,skuChoices,normalizePartNumber);return !automatic.id||automatic.id===id;}));
     restoredChoices[groupKey]={headerLines,accountIds,userIds,skuIds};
@@ -172,7 +178,7 @@ export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:s
     const conflictOptions=safeConflicts.map(field=>({field,values:sourceRows.map(row=>({line:row.line,value:row.values[field]})).filter((item,index,all)=>all.findIndex(other=>headerValue(field,other.value)===headerValue(field,item.value))===index)}));
     for(const line of Object.keys(skuIds))if(!sourceRows.some(row=>String(row.line)===line))throw new Error('SKU choice does not match a source line. Preview the file again.');
     const automaticUsers={ 'Requested By':resolveUser(raw['Requested By'],userChoices),'Reviewed By':resolveUser(raw['Reviewed By'],userChoices) };
-    const automaticAccounts={Customer:resolve(raw.Customer,accountChoices,normalizedName),VAR:resolve(raw.VAR,accountChoices,normalizedName),'End User':resolve(raw['End User'],accountChoices,normalizedName)};
+    const automaticAccounts={Customer:resolveParty(raw.Customer,accountChoices),VAR:resolveParty(raw.VAR,accountChoices),'End User':resolveParty(raw['End User'],accountChoices)};
     for(const field of Object.keys(userIds))if(!automaticUsers[field as keyof typeof automaticUsers].issue&&automaticUsers[field as keyof typeof automaticUsers].id!==userIds[field])throw new Error('User choice is no longer needed. Preview the file again.');
     for(const field of Object.keys(accountIds))if(!automaticAccounts[field as keyof typeof automaticAccounts].issue&&automaticAccounts[field as keyof typeof automaticAccounts].id!==accountIds[field])throw new Error('Account choice is no longer needed. Preview the file again.');
     const requestedBy=Object.hasOwn(userIds,'Requested By')?manualResolution(raw['Requested By'],userIds['Requested By'],userChoices,'Requested By'):automaticUsers['Requested By'];
@@ -187,13 +193,13 @@ export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:s
     if(requestedAt&&reviewedAt&&requestedAt>reviewedAt)sourceError('Reviewed At is before Requested At.');
     if(!expirationDate)sourceError('Expiration Date is invalid or outside 1900–2100.');
     if(!raw.Description.trim())sourceError('Description is required.');
-    if(!raw.Customer.trim())sourceError('Customer is required.');
+    if(isAbsentPriceExceptionParty(raw.Customer))sourceError('Customer is required.');
     if(Object.keys(headerLines).length){
       const original=first.values,originalRequested=timestamp(original['Requested At']),originalReviewed=timestamp(original['Reviewed At']);
       if(!originalRequested||!originalReviewed)sourceError(`Line ${first.line}: Requested At and Reviewed At must be valid timestamps with offsets.`);
       if(originalRequested&&originalReviewed&&originalRequested>originalReviewed)sourceError(`Line ${first.line}: Reviewed At is before Requested At.`);
       if(!original.Description.trim())sourceError(`Line ${first.line}: Description is required.`);
-      if(!original.Customer.trim())sourceError(`Line ${first.line}: Customer is required.`);
+      if(isAbsentPriceExceptionParty(original.Customer))sourceError(`Line ${first.line}: Customer is required.`);
     }
     for(const row of sourceRows.slice(1)){
       const value=row.values,requested=timestamp(value['Requested At']),reviewed=timestamp(value['Reviewed At']);
@@ -202,7 +208,7 @@ export async function planRosaPriceExceptions(db:Db,parsed:RosaParsed,fileName:s
       if(requested&&reviewed&&requested>reviewed)sourceError(`Line ${row.line}: Reviewed At is before Requested At.`);
       if(value.Status.trim().toLowerCase()!=='approved')sourceError(`Line ${row.line}: Unsupported status: ${value.Status.trim()||'(blank)'}.`);
       if(!value.Description.trim())sourceError(`Line ${row.line}: Description is required.`);
-      if(!value.Customer.trim())sourceError(`Line ${row.line}: Customer is required.`);
+      if(isAbsentPriceExceptionParty(value.Customer))sourceError(`Line ${row.line}: Customer is required.`);
     }
     for(const [label,item] of [['Requested By',requestedBy],['Reviewed By',reviewedBy],['Customer',customer],['VAR',varAccount],['End User',endUser]] as const)if(item.issue)messages.push(`${label}: ${item.issue}`);
     const tierOccurrences=new Map<string,number>();

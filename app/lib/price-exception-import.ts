@@ -3,6 +3,7 @@ import readExcelFile from 'read-excel-file/node';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { inspectZip, maxXlsxBytes } from './import-xlsx';
 import { normalizePartNumber } from './product-import';
+import { isAbsentPriceExceptionParty } from './price-exception-party';
 
 export const legacyPriceExceptionSheets = ['Active Disty PEs', 'Expired Disty PEs'] as const;
 export const legacyPriceExceptionAdapter = 'BIXOLON_DISTRIBUTOR_PE_V1';
@@ -89,7 +90,7 @@ export async function planPriceExceptionImport(db:Db, parsed:LegacyParseResult, 
   const groups=new Map<string,ParsedRow[]>(); for(const row of parsed.rows){const key=headerIdentity(row);groups.set(key,[...(groups.get(key)??[]),row]);}
   const items:PriceExceptionImportItem[]=[];
   for(const [sourceKey,rows] of groups){const first=rows[0];const messages:string[]=[];
-    const resolve=(name:Raw,role:string)=>{if(!name)return undefined;const matches=accountMap.get(normalizeAccountName(name))??[];if(matches.length===1){counts.resolvedAccounts++;return matches[0].id;}counts.unresolvedAccounts++;messages.push(matches.length?`${role} account is ambiguous (${matches.length} matches).`:`${role} account is unresolved.`);return undefined;};
+    const resolve=(name:Raw,role:string)=>{if(isAbsentPriceExceptionParty(name))return undefined;const matches=accountMap.get(normalizeAccountName(name!))??[];if(matches.length===1){counts.resolvedAccounts++;return matches[0].id;}counts.unresolvedAccounts++;messages.push(matches.length?`${role} account is ambiguous (${matches.length} matches).`:`${role} account is unresolved.`);return undefined;};
     const occurrences=new Map<string,number>(); const lines=rows.map((row,index)=>{const base=[row.sku,row.price,row.quantity,row.comments,row.competitor].map(normalized).join('|');const occurrence=(occurrences.get(base)??0)+1;occurrences.set(base,occurrence);const skuId=row.sku?skuMap.get(normalizePartNumber(row.sku)):undefined;if(skuId)counts.resolvedSkus++;else {counts.unresolvedSkus++;messages.push(`Row ${row.rowNumber}: SKU ${row.sku??'(blank)'} is unresolved.`);}const parsedPrice=money(row.price);if(row.price&&!parsedPrice)messages.push(`Row ${row.rowNumber}: price “${row.price}” could not be read as a number. The original value was kept; the unit price is blank.`);const qty=quantity(row.quantity);if(row.quantity&&!qty.value)messages.push(`Row ${row.rowNumber}: quantity “${row.quantity}” could not be read as a number. The original value was kept; MOQ is blank.`);return {sourceLineKey:lineIdentity(row,occurrence),sourceSku:row.sku,productSkuId:skuId,price:parsedPrice,currency:'USD' as const,currencyDefaulted:true as const,sourceQuantity:qty.value,sourceQuantityRaw:row.quantity,sourceUnit:qty.unit,comments:row.comments,competitor:row.competitor,sortOrder:index,rawValues:row.rawValues,unresolvedSku:!skuId};});
     const existingRow=existingMap.get(sourceKey); const existingId=existingRow?.id; const expirationDate=parseLegacyDate(first.expirationDate); if(first.expirationDate&&!expirationDate)messages.push(`Expiration date “${first.expirationDate}” could not be read. The original value was kept; the expiration date is blank.`);
     const automaticDistributorAccountId=resolve(first.distributor,'Distributor/OEM');

@@ -6,6 +6,7 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Improved Price Exception import review by treating N/A party roles as intentionally blank, clarifying revision choices, and formatting source timestamps.
 - Added a Lead Sources report that counts unique prospects without double-counting resolved leads and Contacts.
 - Improved the Marketing dashboard and added Marketing Attribution reporting for Campaign Influence activity.
 
