@@ -15,7 +15,7 @@ export function peNotificationRecipient(pe: Pe, users: Map<number, { role: strin
 
 export function peNotificationCandidates(pe: Pe, userId: number, today: Date): Candidate[] {
   if (pe.archivedAt || pe.status === 'ARCHIVED') return [];
-  const label = pe.peCode ?? `PE #${pe.id}`;
+  const label = pe.peCode ?? 'Price Exception';
   const days = daysUntilExpiration(pe.expirationDate, today);
   const candidates: Candidate[] = [];
   if (days !== null && days >= 31 && days <= 60) candidates.push({ type: 'PE_EXPIRING_60', severity: 'INFO', title: 'Price Exception expires within 60 days', message: `${label} expires in ${days} days.`, sourceKey: `PE:${pe.id}:${userId}:EXPIRING_60` });
@@ -68,5 +68,5 @@ export async function notifyPeFollowUpAssignment(db: Prisma.TransactionClient, p
   const pe = await db.priceException.findUnique({ where: { id: peId }, select: { peCode: true, assignedSalesRepUserId: true } });
   const user = await db.user.findUnique({ where: { id: userId }, select: { active: true, archivedAt: true, role: true } });
   if (!pe || !user?.active || user.archivedAt || (user.role === 'SALES' && pe.assignedSalesRepUserId !== userId)) return;
-  await db.notification.createMany({ data: [{ userId, type: 'PE_FOLLOW_UP_ASSIGNED', severity: 'INFO', title: 'Price Exception follow-up assigned to you', message: `${pe.peCode ?? `PE #${peId}`} follow-up was assigned to you.`, entityType: 'PRICE_EXCEPTION', entityId: peId, actionUrl: `/price-exceptions/${peId}`, sourceKey: `PE:${peId}:${userId}:FOLLOW_UP_ASSIGNED:${eventId}`, createdAt: now }], skipDuplicates: true });
+  await db.notification.createMany({ data: [{ userId, type: 'PE_FOLLOW_UP_ASSIGNED', severity: 'INFO', title: 'Price Exception follow-up assigned to you', message: `${pe.peCode ?? 'Price Exception'} follow-up was assigned to you.`, entityType: 'PRICE_EXCEPTION', entityId: peId, actionUrl: `/price-exceptions/${peId}`, sourceKey: `PE:${peId}:${userId}:FOLLOW_UP_ASSIGNED:${eventId}`, createdAt: now }], skipDuplicates: true });
 }

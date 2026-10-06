@@ -8,11 +8,38 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
 const require = Module.createRequire(fileURLToPath(import.meta.url));
-const { peNotificationCandidates, peNotificationRecipient, evaluatePeNotifications } = require(path.join(root, 'lib/pe-notification-evaluator.ts'));
+const { peNotificationCandidates, peNotificationRecipient, evaluatePeNotifications, notifyPeFollowUpAssignment } = require(path.join(root, 'lib/pe-notification-evaluator.ts'));
 const { notificationWhere, notificationSummary, notificationPage, updateNotification } = require(path.join(root, 'lib/notifications.ts'));
+const { notificationDisplayMessage, notificationEntityLabels } = require(path.join(root, 'lib/notification-presentation.ts'));
 const today = new Date('2026-10-05T00:00:00Z');
 const add = days => new Date(today.getTime() + days * 86400000);
 const pe = { id: 12, peCode: 'PE-12', status: 'ACTIVE', archivedAt: null, expirationDate: add(60), assignedSalesRepUserId: 7, followUp: null };
+
+test('notification presentation uses category labels while retaining business identifiers', () => {
+  assert.equal(notificationEntityLabels.TASK, 'Task');
+  assert.equal(notificationEntityLabels.OPPORTUNITY, 'Opportunity');
+  assert.equal(notificationEntityLabels.PRICE_EXCEPTION, 'Price Exception');
+  assert.deepEqual(Object.values(notificationEntityLabels).filter(label => /#\d/.test(label)), []);
+  assert.equal(notificationDisplayMessage({ entityType: 'TASK', entityId: 3, message: 'Call the account' }), 'Call the account');
+  assert.equal(notificationDisplayMessage({ entityType: 'OPPORTUNITY', entityId: 8, message: 'Renewal' }), 'Renewal');
+  assert.equal(notificationDisplayMessage({ entityType: 'PRICE_EXCEPTION', entityId: 12, message: 'PE-12 expires in 30 days.' }), 'PE-12 expires in 30 days.');
+  assert.equal(notificationDisplayMessage({ entityType: 'PRICE_EXCEPTION', entityId: 12, message: 'PE #12 expires in 30 days.' }), 'Price Exception expires in 30 days.');
+  assert.equal(notificationDisplayMessage({ entityType: 'PRICE_EXCEPTION', entityId: 12, message: 'PE #123 expires in 30 days.' }), 'PE #123 expires in 30 days.');
+});
+
+test('unnumbered PE notifications use a business label in new messages', async () => {
+  assert.equal(peNotificationCandidates({ ...pe, peCode: null }, 7, today)[0].message, 'Price Exception expires in 60 days.');
+  const rows = [];
+  const db = {
+    priceException: { findUnique: async () => ({ peCode: null, assignedSalesRepUserId: 7 }) },
+    user: { findUnique: async () => ({ active: true, archivedAt: null, role: 'SALES' }) },
+    notification: { createMany: async ({ data }) => { rows.push(...data); return { count: data.length }; } },
+  };
+  await notifyPeFollowUpAssignment(db, 12, 7, 5, 9, today);
+  assert.equal(rows[0].message, 'Price Exception follow-up was assigned to you.');
+  assert.equal(rows[0].entityId, 12);
+  assert.equal(rows[0].actionUrl, '/price-exceptions/12');
+});
 
 test('notification states are per-user and active excludes dismissed and resolved', () => {
   assert.deepEqual(notificationWhere(7, 'active'), { userId: 7, dismissedAt: null, resolvedAt: null });
