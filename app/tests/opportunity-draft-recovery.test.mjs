@@ -17,6 +17,14 @@ function storage() {
   return { items, getItem: key => items.get(key) ?? null, setItem: (key, value) => items.set(key, value), removeItem: key => items.delete(key) };
 }
 
+test('unfinished product search text and other Opportunity values survive draft recovery', () => {
+  const store = storage();
+  const key = drafts.draftKey(7);
+  const saved = { ...blank, name: 'Printer rollout', description: 'Keep this context', lines: [{ id: 0, productId: 0, skuId: 0, searchText: 'XT5-40NRFS', quantity: '2', price: '35.00' }] };
+  assert.equal(drafts.persistDraft(store, key, saved, key), true);
+  assert.deepEqual(drafts.restoreDraft(store, key, blank), saved);
+});
+
 test('a New Opportunity starts clean and only offers recovery for its user and context', () => {
   const store = storage();
   const key = drafts.draftKey(7);

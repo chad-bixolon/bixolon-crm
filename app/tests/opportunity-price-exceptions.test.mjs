@@ -100,6 +100,15 @@ test('Opportunity form parsing still validates source fields; the save path chec
   assert.equal(parsed.value.lines[0].priceSource, 'PRICE_EXCEPTION');
   assert.equal(parsed.value.lines[0].priceExceptionLineId, 102);
 });
+test('unselected product text is rejected by server parsing, while a selected SKU is accepted', () => {
+  const form = new FormData();
+  for (const [key, value] of [['name','Deal'],['stageId','1'],['currencyCode','USD'],['accountId','7'],['participantRoles','DISTRIBUTOR'],['productId',''],['skuId',''],['productSearchText','XT5-40NRFS'],['quantity','2'],['price','35.00'],['priceSource','MANUAL']]) form.append(key, value);
+  assert.equal(parseOpportunity(form).errors.lines, 'Select a product from the suggestions.');
+  form.set('productId', '3');
+  form.set('skuId', '9');
+  form.set('productSearchText', '');
+  assert.deepEqual(parseOpportunity(form).errors, {});
+});
 
 function saveDb({ existingLine = null, selectedLines = [], catalogPrices = [], odmPrices = [] } = {}) {
   const writes = [];
@@ -116,6 +125,12 @@ function saveDb({ existingLine = null, selectedLines = [], catalogPrices = [], o
 }
 const input = lineInput => ({ name: 'Deal', description: null, ownerId: null, projectIds: [], stageId: 1, expectedCloseDate: null, probability: null, forecastCategory: null, currencyCode: 'USD', participants, lines: [lineInput] });
 const selectedLine = (overrides = {}) => ({ id: 102, productSkuId: 9, approvedUnitPrice: new Prisma.Decimal('189.00'), currencyCode: 'USD', sourceQuantity: new Prisma.Decimal('1000'), sourceQuantityRaw: '1000', sourceUnit: null, priceException: parent(), ...overrides });
+
+test('stale or invalid SKU ID fails before Opportunity writes', async () => {
+  const db = saveDb();
+  await assert.rejects(saveOpportunity(db.client, input({ productId: 3, skuId: 999, quantity: 2, price: '35.00' })), /Select a product from the suggestions/);
+  assert.deepEqual(db.writes, []);
+});
 
 test('ODM customer source snapshots final price and preserves it after terms change',async()=>{
   const selected={id:201,skuId:9,accountId:7,customerPrice:new Prisma.Decimal('100'),tariffPercent:new Prisma.Decimal('10'),tariffAmount:new Prisma.Decimal('10'),finalUnitPrice:new Prisma.Decimal('110'),currencyCode:'USD',effectiveDate:new Date('2026-09-01'),archivedAt:null,odmCustomer:{archivedAt:null,sku:{catalogSource:'ODM',odmSubtype:'CUSTOMER_SPECIFIC'}}};

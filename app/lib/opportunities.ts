@@ -65,6 +65,7 @@ export function parseOpportunity(form: FormData) {
   if (primaryContactId && !contacts.some(contact => String(contact.contactId) === primaryContactId)) errors.contacts = "Primary Contact must be one of the selected Contacts.";
   const productIds = form.getAll("productId").map(String);
   const skuIds = form.getAll("skuId").map(String);
+  const productSearchTexts = form.getAll("productSearchText").map(String);
   const quantities = form.getAll("quantity").map(String);
   const prices = form.getAll("price").map(String);
   const priceSources = form.getAll("priceSource").map(String);
@@ -75,8 +76,9 @@ export function parseOpportunity(form: FormData) {
   const lineIds = form.getAll("lineId").map(String);
   const lines: Line[] = [];
   for (let i = 0; i < productIds.length; i++) {
-    if (!productIds[i] && !quantities[i] && !prices[i]) continue;
+    if (!productIds[i] && !quantities[i] && !prices[i] && !productSearchTexts[i]) continue;
     const productId = positiveId(productIds[i]), skuId = skuIds[i] ? positiveId(skuIds[i]) : null, quantity = Number(quantities[i]);
+    if (!productId || (productSearchTexts[i]?.trim() && !skuId)) { errors.lines = "Select a product from the suggestions."; continue; }
     const price = prices[i]; const id = lineIds[i] ? positiveId(lineIds[i]) : undefined;
     const rawPriceSource = priceSources[i] || "MANUAL";
     const priceSource = Object.values(OpportunityProductPriceSource).includes(rawPriceSource as OpportunityProductPriceSource) ? rawPriceSource as OpportunityProductPriceSource : null;
@@ -85,7 +87,7 @@ export function parseOpportunity(form: FormData) {
     const odmCustomerPriceId = odmCustomerPriceIds[i] ? positiveId(odmCustomerPriceIds[i]) : null;
     const odmCustomerAccountId = odmCustomerAccountIds[i] ? positiveId(odmCustomerAccountIds[i]) : null;
     const provenanceValid = priceSource === "MANUAL" ? !catalogPriceTier && !priceExceptionLineId && !odmCustomerPriceId && !odmCustomerAccountId : priceSource === "CATALOG" ? !!catalogPriceTier && !priceExceptionLineId && !odmCustomerPriceId && !odmCustomerAccountId : priceSource === "PRICE_EXCEPTION" ? !catalogPriceTier && !!priceExceptionLineId && !odmCustomerPriceId && !odmCustomerAccountId : priceSource === "ODM_CUSTOMER" ? !catalogPriceTier && !priceExceptionLineId && !!odmCustomerPriceId && !!odmCustomerAccountId : false;
-    if (!productId || (skuIds[i] && !skuId) || !Number.isSafeInteger(quantity) || quantity <= 0 || !/^\d+(\.\d{1,2})?$/.test(price) || Number(price) > 9999999999.99 || (lineIds[i] && !id) || !provenanceValid) { errors.lines = "Each product needs a valid quantity, price, and pricing source."; continue; }
+    if ((skuIds[i] && !skuId) || !Number.isSafeInteger(quantity) || quantity <= 0 || !/^\d+(\.\d{1,2})?$/.test(price) || Number(price) > 9999999999.99 || (lineIds[i] && !id) || !provenanceValid) { errors.lines = "Each product needs a valid quantity, price, and pricing source."; continue; }
     lines.push({ id: id ?? undefined, productId, ...(skuId ? { skuId } : {}), quantity, price, ...(priceSources[i] ? { priceSource: priceSource!, catalogPriceTier, priceExceptionLineId: priceExceptionLineId ?? null, odmCustomerPriceId, odmCustomerAccountId } : {}) });
   }
   if (new Set(lines.map((line) => line.id).filter(Boolean)).size !== lines.filter((line) => line.id).length) errors.lines = "Duplicate line item.";
@@ -143,7 +145,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
     if (contacts.some(contact => contact.accountId && !participantIds.has(contact.accountId))) throw new Error("Each selected Contact must belong to a participating Account, or be unassigned.");
     if (input.contacts.filter(contact => contact.isPrimary).length > 1) throw new Error("Choose at most one Primary Contact.");
     if (products.length !== new Set(input.lines.map((l) => l.productId)).size) throw new Error("Choose active products for all line items.");
-    for (const line of input.lines) if (line.skuId && !skus.some(sku => sku.id === line.skuId && sku.productId === line.productId && (sku.active || existingLines.some(old => old.id === line.id && old.productId === line.productId && old.skuId === line.skuId)))) throw new Error("Choose an active SKU belonging to the selected product.");
+    for (const line of input.lines) if (line.skuId && !skus.some(sku => sku.id === line.skuId && sku.productId === line.productId && (sku.active || existingLines.some(old => old.id === line.id && old.productId === line.productId && old.skuId === line.skuId)))) throw new Error("Choose an active SKU belonging to the selected product. Select a product from the suggestions.");
     for (const line of input.lines) {
       if (line.priceSource === 'ODM_CUSTOMER') {
         const selected = odmPrices.find(candidate => candidate.id === line.odmCustomerPriceId);

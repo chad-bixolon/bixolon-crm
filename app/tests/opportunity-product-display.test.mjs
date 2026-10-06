@@ -49,7 +49,7 @@ function picker(product = item, price = '990.22') {
   const props = { index: 0, productId: product?.productId ?? 0, skuId: product?.id ?? 0, categories: [{ id: 1, name: 'Printers' }], currencyCode: 'USD', price, onChange(productId, skuId, nextPrice) { Object.assign(props, { productId, skuId, price: nextPrice ?? props.price }); } };
   const h = harness('components/product-picker.tsx', props);
   h.render();
-  h.slots[2] = product; // Catalog detail that the existing fetch effect supplies.
+  h.slots[1] = product; // Catalog detail that the existing fetch effect supplies.
   return h;
 }
 test('selected product hides selection controls; Change and replacement restore compact display', () => {
@@ -65,7 +65,7 @@ test('selected product hides selection controls; Change and replacement restore 
   assert.equal(by(tree, 'role', 'combobox').length, 1);
   assert.equal(h.props.price, '990.22');
   const replacement = { ...item, id: 10, productId: 4, partNumber: 'REPLACEMENT' };
-  h.slots[1] = [replacement];
+  h.slots[0] = [replacement];
   by(h.render(), 'role', 'option')[0].props.onClick();
   tree = h.render();
   assert.equal(h.props.skuId, 10);
@@ -89,6 +89,24 @@ test('price tiers, manual overrides and reopened prices retain existing semantic
   legacy.props.productId = 3;
   assert.match(text(legacy.render()), /Historical product line/);
   assert.equal(by(legacy.render(), 'role', 'combobox').length, 0);
+});
+test('unselected typed SKU remains in the visible picker until an explicit suggestion is chosen', () => {
+  const props = { index: 0, productId: 0, skuId: 0, searchText: '', categories: [], currencyCode: 'USD', price: '0.00', error: undefined,
+    onSearchChange(value) { props.searchText = value; },
+    onChange(productId, skuId) { props.productId = productId; props.skuId = skuId; props.searchText = ''; } };
+  const h = harness('components/product-picker.tsx', props);
+  by(h.render(), 'role', 'combobox')[0].props.onChange({ target: { value: 'XT5-40NRFS' } });
+  props.error = 'Select a product from the suggestions.';
+  let tree = h.render();
+  assert.equal(by(tree, 'role', 'combobox')[0].props.value, 'XT5-40NRFS');
+  assert.equal(by(tree, 'role', 'combobox')[0].props['aria-invalid'], true);
+  assert.match(text(tree), /Select a product from the suggestions/);
+  assert.equal(by(tree, 'name', 'productSearchText')[0].props.value, 'XT5-40NRFS');
+  h.slots[0] = [item];
+  by(h.render(), 'role', 'option')[0].props.onClick();
+  tree = h.render();
+  assert.equal(props.skuId, 9);
+  assert.equal(by(tree, 'role', 'combobox').length, 0);
 });
 const Picker = () => null;
 function form(lines) {
@@ -131,4 +149,33 @@ test('five lines keep values, totals and identities when adding, changing and re
   assert.equal(pickers[0].props.skuId, 30);
   assert.equal(pickers[1].props.skuId, 12);
   assert.equal(by(tree, 'aria-label', 'Quantity 1')[0].props.value, '2');
+});
+test('typed part number stays visible, blocks save inline, and leaves the rest of the form intact', () => {
+  const h = form([{ id: 0, productId: 0, skuId: 0, searchText: '', quantity: '2', price: '35.00' }]);
+  let tree = h.render();
+  let selected = nodes(tree, n => n.type === Picker)[0];
+  selected.props.onSearchChange('XT5-40NRFS');
+  tree = h.render();
+  selected = nodes(tree, n => n.type === Picker)[0];
+  assert.equal(selected.props.searchText, 'XT5-40NRFS');
+  assert.equal(selected.props.productId, 0);
+  const event = { prevented: false, preventDefault() { this.prevented = true; } };
+  nodes(tree, n => n.type === 'form')[0].props.onSubmit(event);
+  assert.equal(event.prevented, true);
+  tree = h.render();
+  selected = nodes(tree, n => n.type === Picker)[0];
+  assert.equal(selected.props.error, 'Select a product from the suggestions.');
+  assert.equal(selected.props.searchText, 'XT5-40NRFS');
+  assert.equal(by(tree, 'name', 'name')[0].props.value, 'Deal');
+  assert.equal(by(tree, 'aria-label', 'Quantity 1')[0].props.value, '2');
+  selected.props.onChange(3, 9, '35.00');
+  tree = h.render();
+  selected = nodes(tree, n => n.type === Picker)[0];
+  assert.equal(selected.props.productId, 3);
+  assert.equal(selected.props.skuId, 9);
+  assert.equal(selected.props.searchText, '');
+  assert.equal(selected.props.error, undefined);
+  const valid = { prevented: false, preventDefault() { this.prevented = true; } };
+  nodes(tree, n => n.type === 'form')[0].props.onSubmit(valid);
+  assert.equal(valid.prevented, false);
 });
