@@ -2,6 +2,7 @@ import { Prisma, type PriceExceptionFollowUpStatus, type PrismaClient } from '@p
 import { can, type Actor } from './authorization';
 import { scopedPriceExceptionWhere } from './price-exception-visibility';
 import { businessToday } from './price-exception-expiration';
+import { notifyPeFollowUpAssignment, syncPeNotificationsInTransaction } from './pe-notification-evaluator';
 
 export const followUpStatuses = ['NOT_STARTED','IN_PROGRESS','RENEWAL_REQUESTED','REPLACEMENT_SUBMITTED','NO_RENEWAL_NEEDED','COMPLETED'] as const;
 export const followUpLabels: Record<PriceExceptionFollowUpStatus,string> = {
@@ -37,7 +38,7 @@ export async function updatePriceExceptionFollowUp(db:Client,id:number,actor:Act
     const pe=await tx.priceException.findFirst({where:scopedPriceExceptionWhere(actor,{id}),select:{id:true,assignedSalesRepUserId:true,followUp:true}});
     if(!pe)throw new Error('Price Exception not found.');
     const old=pe.followUp;
-    const previous={status:old?.status??'NOT_STARTED',ownerId:old?.ownerId??pe.assignedSalesRepUserId,nextFollowUpAt:old?.nextFollowUpAt?.toISOString().slice(0,10)??null,replacementPriceExceptionId:old?.replacementPriceExceptionId??null,replacementPeNumber:old?.replacementPeNumber??null,summary:old?.summary??null};
+    const previous={status:old?.status??'NOT_STARTED',ownerId:old?old.ownerId:pe.assignedSalesRepUserId,nextFollowUpAt:old?.nextFollowUpAt?.toISOString().slice(0,10)??null,replacementPriceExceptionId:old?.replacementPriceExceptionId??null,replacementPeNumber:old?.replacementPeNumber??null,summary:old?.summary??null};
     if(actor.role==='SALES'&&patch.ownerId!==previous.ownerId)throw new Error('Sales cannot reassign follow-up ownership.');
     if(patch.ownerId!==null&&patch.ownerId!==previous.ownerId){
       const owner=await tx.user.findFirst({where:{id:patch.ownerId,active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true}});
@@ -52,7 +53,9 @@ export async function updatePriceExceptionFollowUp(db:Client,id:number,actor:Act
     if(JSON.stringify(previous)===JSON.stringify(next))return {changed:false};
     const completed=patch.status==='COMPLETED'||patch.status==='NO_RENEWAL_NEEDED';
     await tx.priceExceptionFollowUp.upsert({where:{priceExceptionId:id},create:{priceExceptionId:id,status:patch.status,ownerId:patch.ownerId,lastFollowUpAt:now,nextFollowUpAt:patch.nextFollowUpAt,summary:next.summary,completedAt:completed?now:null,completedById:completed?actor.id:null,replacementPriceExceptionId:patch.replacementPriceExceptionId,replacementPeNumber:patch.replacementPeNumber},update:{status:patch.status,ownerId:patch.ownerId,lastFollowUpAt:now,nextFollowUpAt:patch.nextFollowUpAt,summary:next.summary,completedAt:completed?(old?.completedAt??now):null,completedById:completed?(old?.completedById??actor.id):null,replacementPriceExceptionId:patch.replacementPriceExceptionId,replacementPeNumber:patch.replacementPeNumber}});
-    await tx.priceExceptionFollowUpEvent.create({data:{priceExceptionId:id,previousValues:previous as Prisma.InputJsonValue,newValues:next as Prisma.InputJsonValue,note:patch.note,actorId:actor.id,createdAt:now}});
+    const event=await tx.priceExceptionFollowUpEvent.create({data:{priceExceptionId:id,previousValues:previous as Prisma.InputJsonValue,newValues:next as Prisma.InputJsonValue,note:patch.note,actorId:actor.id,createdAt:now}});
+    if(patch.ownerId!==null&&patch.ownerId!==previous.ownerId)await notifyPeFollowUpAssignment(tx,id,patch.ownerId,event.id,actor.id,now);
+    await syncPeNotificationsInTransaction(tx,id,now);
     return {changed:true};
   },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
 }

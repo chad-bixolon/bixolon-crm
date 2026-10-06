@@ -6,6 +6,10 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added SalesHub Notification Center with in-app Price Exception expiration and follow-up alerts.
+
+- Added manual lifecycle expiration for eligible Price Exceptions, including bulk cleanup and per-PE audit history.
+
 - Added a Sales expiration follow-up workflow for Price Exceptions with ownership, dated actions, audit history, report filters, dashboard counts, and Excel fields; stored PE status remains independent.
 
 - Added Sales Rep filtering to Account and Contact lists for faster CRM follow-up.

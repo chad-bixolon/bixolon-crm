@@ -18,6 +18,7 @@ Module._load = function(request, parent, isMain) {
   if (request === '@/app/sign-out-action') return { signOutAction: async () => {} };
   if (request === '@/app/dev/impersonation/actions') return { endImpersonation: async () => {} };
   if (request === '@/lib/role-labels') return require(path.join(root, 'lib/role-labels.ts'));
+  if (request === './notification-bell') return { NotificationBell: () => React.createElement('span', null, 'Notifications') };
   return originalLoad.call(this, request, parent, isMain);
 };
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText, filename);

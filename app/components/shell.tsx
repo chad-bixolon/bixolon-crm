@@ -8,6 +8,8 @@ import type { ReactNode } from "react";
 import { signOutAction } from "@/app/sign-out-action";
 import { endImpersonation } from "@/app/dev/impersonation/actions";
 import type { LabelMap } from "@/lib/configuration";
+import { NotificationBell } from './notification-bell';
+import type { NotificationItem } from '@/lib/notifications';
 
 const navSections = [
   { label: "CRM", items: ["Dashboard", "Accounts", "Contacts"] },
@@ -37,7 +39,7 @@ function canSeeNavItem(item: NavItem, user: ShellUser | null) {
     default: return true;
   }
 }
-export function Shell({ children, user, labels, developmentAdmin = false, impersonating = null }: { children: ReactNode; user: ShellUser | null; labels?: LabelMap; developmentAdmin?: boolean; impersonating?: { realName: string; effectiveName: string; role: UserRole } | null }) {
+export function Shell({ children, user, labels, notifications, developmentAdmin = false, impersonating = null }: { children: ReactNode; user: ShellUser | null; labels?: LabelMap; notifications?: { unread: number; rows: NotificationItem[] } | null; developmentAdmin?: boolean; impersonating?: { realName: string; effectiveName: string; role: UserRole } | null }) {
   const pathname = usePathname();
   if (pathname === "/sign-in") return <div className="min-h-screen">{children}</div>;
   return <div className="min-h-screen lg:flex lg:h-dvh lg:min-h-0 lg:overflow-hidden">
@@ -52,7 +54,18 @@ export function Shell({ children, user, labels, developmentAdmin = false, impers
           return <Link key={item} href={href} aria-current={active ? "page" : undefined} className={`block whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${active ? "bg-orange-50 text-orange-800 border-l-2 border-orange-600" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}>{title}</Link>; })}</div> : null; })}
       </nav>
     </aside>
-    <div className="min-w-0 flex-1 lg:h-full lg:min-h-0 lg:overflow-y-auto">{impersonating && <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-400 bg-amber-100 px-5 py-3 text-sm text-amber-950 lg:px-8"><div><strong>Development mode — Testing as {impersonating.effectiveName} · {roleLabels[impersonating.role]}</strong><span className="ml-3 text-xs">Signed in as {impersonating.realName}</span></div><form action={endImpersonation}><button type="submit" className="rounded-md bg-amber-900 px-3 py-1.5 font-semibold text-white">Return to Admin</button></form></div>}<header className="flex min-h-16 items-center justify-end gap-4 border-b border-slate-200 bg-white px-5 py-3 lg:px-8">{user && <div className="flex items-center gap-4">{developmentAdmin && <Link href="/dev/impersonation" className="btn-secondary">Test as user</Link>}<div className="text-right"><div className="text-sm font-semibold text-slate-900">{user.name}</div><div className="text-xs text-slate-500">{roleLabels[user.role]}</div></div><form action={signOutAction}><button type="submit" className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Sign out</button></form></div>}</header>{children}</div>
+    <div className="min-w-0 flex-1 lg:h-full lg:min-h-0 lg:overflow-y-auto">
+      {impersonating && <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-400 bg-amber-100 px-5 py-3 text-sm text-amber-950 lg:px-8"><div><strong>Development mode — Testing as {impersonating.effectiveName} · {roleLabels[impersonating.role]}</strong><span className="ml-3 text-xs">Signed in as {impersonating.realName}</span></div><form action={endImpersonation}><button type="submit" className="rounded-md bg-amber-900 px-3 py-1.5 font-semibold text-white">Return to Admin</button></form></div>}
+      <header className="flex min-h-16 items-center justify-end gap-4 border-b border-slate-200 bg-white px-5 py-3 lg:px-8">
+        {user && <div className="flex items-center gap-4">
+          {notifications && <NotificationBell {...notifications} />}
+          {developmentAdmin && <Link href="/dev/impersonation" className="btn-secondary">Test as user</Link>}
+          <div className="text-right"><div className="text-sm font-semibold text-slate-900">{user.name}</div><div className="text-xs text-slate-500">{roleLabels[user.role]}</div></div>
+          <form action={signOutAction}><button type="submit" className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Sign out</button></form>
+        </div>}
+      </header>
+      {children}
+    </div>
   </div>;
 }
 export function Content({ children }: { children: ReactNode }) { return <main className="mx-auto max-w-7xl px-5 py-8 lg:px-8">{children}</main>; }

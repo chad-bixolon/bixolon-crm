@@ -136,6 +136,22 @@ enum PriceExceptionFollowUpStatus {
   COMPLETED
 }
 
+enum NotificationSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum NotificationEntityType {
+  PRICE_EXCEPTION
+  OPPORTUNITY
+  TASK
+  DEMO
+  PROJECT
+  TRADE_SHOW
+  CAMPAIGN
+}
+
 enum DemoStatus {
   PENDING
   APPROVED
@@ -215,6 +231,7 @@ enum TradeShowImportFormat {
 }
 
 model User {
+  notifications Notification[]
   createdCampaigns MarketingCampaign[] @relation("CampaignCreator")
   updatedCampaigns MarketingCampaign[] @relation("CampaignEditor")
   capturedInfluences CampaignInfluence[] @relation("InfluenceCapture")
@@ -301,6 +318,30 @@ model User {
   archivedDocuments       Document[]         @relation("DocumentArchivedBy")
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
+}
+
+model Notification {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  type String
+  severity NotificationSeverity
+  title String
+  message String
+  entityType NotificationEntityType
+  entityId Int
+  actionUrl String
+  sourceKey String @unique
+  metadata Json?
+  createdAt DateTime @default(now())
+  readAt DateTime?
+  dismissedAt DateTime?
+  resolvedAt DateTime?
+
+  @@index([userId, dismissedAt, resolvedAt, createdAt])
+  @@index([userId, readAt, dismissedAt, resolvedAt])
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
 }
 
 /// A saved, validated query against a curated BIXOLON report type. Results are never persisted.
