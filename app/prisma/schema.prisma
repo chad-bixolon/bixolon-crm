@@ -273,6 +273,7 @@ model User {
   ownedPeFollowUps PriceExceptionFollowUp[] @relation("PeFollowUpOwner")
   completedPeFollowUps PriceExceptionFollowUp[] @relation("PeFollowUpCompletedBy")
   peFollowUpEvents PriceExceptionFollowUpEvent[] @relation("PeFollowUpActor")
+  peLifecycleEvents PriceExceptionLifecycleEvent[] @relation("PeLifecycleActor")
   ownedReports            ReportDefinition[] @relation("ReportOwner")
   createdReports          ReportDefinition[] @relation("ReportCreatedBy")
   updatedReports          ReportDefinition[] @relation("ReportUpdatedBy")
@@ -1236,6 +1237,7 @@ model PriceException {
   currentSourceRevision   PriceExceptionSourceRevision? @relation("CurrentPeRevision", fields: [currentSourceRevisionId, id], references: [id, priceExceptionId], onDelete: Restrict)
   sourceRevisions         PriceExceptionSourceRevision[] @relation("PeSourceRevisions")
   followUp                PriceExceptionFollowUp? @relation("PeFollowUpSource")
+  lifecycleEvents         PriceExceptionLifecycleEvent[]
   replacementForFollowUps PriceExceptionFollowUp[] @relation("PeFollowUpReplacement")
   lines                  PriceExceptionLine[]
   archivedAt             DateTime?
@@ -1290,6 +1292,20 @@ model PriceExceptionFollowUpEvent {
   note String?
   actorId Int
   actor User @relation("PeFollowUpActor", fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+
+  @@index([priceExceptionId, createdAt])
+}
+
+model PriceExceptionLifecycleEvent {
+  id Int @id @default(autoincrement())
+  priceExceptionId Int
+  priceException PriceException @relation(fields: [priceExceptionId], references: [id], onDelete: Restrict)
+  oldStatus PriceExceptionStatus
+  newStatus PriceExceptionStatus
+  actorId Int
+  actor User @relation("PeLifecycleActor", fields: [actorId], references: [id], onDelete: Restrict)
+  source String
   createdAt DateTime @default(now())
 
   @@index([priceExceptionId, createdAt])

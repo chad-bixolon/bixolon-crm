@@ -23,6 +23,7 @@ Module._load=function(name,parent,isMain){
  if(name==='@/lib/save-feedback')return require(path.join(root,'lib/save-feedback.ts'));
  if(name==='@/lib/price-exception-resolution')return require(path.join(root,'lib/price-exception-resolution.ts'));
  if(name==='@/lib/price-exception-follow-up')return require(path.join(root,'lib/price-exception-follow-up.ts'));
+ if(name==='@/lib/price-exception-lifecycle')return require(path.join(root,'lib/price-exception-lifecycle.ts'));
  return load.call(this,name,parent,isMain);
 };
 const activities=require(path.join(root,'app/activities/actions.ts'));

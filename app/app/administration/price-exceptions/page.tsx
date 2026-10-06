@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { classifyPriceException, duplicatePeCodes, cleanupIssueKeys, type CleanupRecord } from '@/lib/price-exception-cleanup';
 import { CleanupWorkflow } from './workflow';
 import { accountOptions } from '@/lib/accounts';
+import { businessToday } from '@/lib/price-exception-expiration';
 
 export const dynamic = 'force-dynamic';
 export default async function PriceExceptionCleanupPage() {
@@ -26,8 +27,7 @@ export default async function PriceExceptionCleanupPage() {
     accountOptions(prisma),
   ]);
   const duplicates = duplicatePeCodes(records);
-  const today = new Date();
-  const startToday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const startToday = businessToday();
   const rows = records.map(record => {
     const issues = classifyPriceException(record as CleanupRecord, duplicates, startToday);
     const clues = new Set<number>();

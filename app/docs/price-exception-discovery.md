@@ -10,9 +10,12 @@ The Price Exception lookup lists those tiers before an Opportunity exists. Searc
 
 The stored PE status (`ACTIVE`, `EXPIRED`, or `ARCHIVED`) and expiration state are separate. An **Active but Expired** PE has stored status `ACTIVE` and an expiration date before the current New York business date. Reporting never changes its status. The general Price Exceptions page can combine Status = Active with Expiration = Expired.
 
+An Admin or Sales Manager can use **Mark Price Exception Expired** on an eligible detail page. Admins can also select **Active past expiration** records in PE Cleanup and use **Set Expired** in bulk. Both actions change stored status from ACTIVE to EXPIRED and write lifecycle history with the actor and action source. Records expiring today or later are ineligible. There is no automatic expiration or manual reactivation action.
+
 The [Expiring Price Exceptions report](/reports/price-exceptions-expiring) defaults to active PEs that expired or expire within 90 calendar days. Next 30, 60, and 90 day filters include today through the selected day, cumulatively. The Dashboard counts use exclusive Expired, 0–30, 31–60, and 61–90 day ranges. The Dashboard and Excel export use the report's shared server-side expiration definitions and PE visibility scope.
 ### Sales follow-up workflow
 
 Price Exceptions have three separate concepts. **Stored Status** is the source lifecycle value (ACTIVE, EXPIRED, or ARCHIVED). **Expiration State** is calculated from the expiration date and the current New York business date; an ACTIVE PE can therefore be Expired. **Follow-up Status** records Sales work: Not Started, In Progress, Renewal Requested, Replacement Submitted, No Renewal Needed, or Completed.
+Marking a PE Expired leaves its expiration date, follow-up status, owner, replacement, and follow-up history unchanged.
 
 Expiration answers: “What is true about the PE?” Follow-up answers: “What are we doing about it?” Follow-up edits never change stored PE status or source import data. An untouched PE displays Not Started and defaults its follow-up owner to its assigned Sales Rep without creating a workflow row or history. If the PE has no assigned Sales Rep, it displays Unassigned. A saved follow-up has a current summary and append-only events with actor, time, and before/after values. The optional next follow-up date is a Sales action date, separate from expiration. An existing replacement PE can be linked, or its reference number can be recorded until it exists in SalesHub.

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { assertPermission, type Actor } from './authorization';
+import { businessToday } from './price-exception-expiration';
 
 import type { CleanupIssue, CleanupRequest } from './price-exception-cleanup-shared';
 export { cleanupIssues, cleanupIssueKeys } from './price-exception-cleanup-shared';
@@ -14,7 +15,7 @@ export type CleanupRecord = {
   distributorAccount: AccountRef; varAccount: AccountRef; endUserAccount: AccountRef;
   lines: { productSkuId: number | null; sourceSku: string | null; productSku?: {partNumber:string;active:boolean;product:{active:boolean;archivedAt:Date|null}} | null }[];
 };
-export function utcToday(now = new Date()) { return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())); }
+export const utcToday = businessToday;
 const filled = (value: string | null) => !!value?.trim();
 export function classifyPriceException(row: CleanupRecord, duplicateCodes: ReadonlySet<string>, today = utcToday()): CleanupIssue[] {
   const issues: CleanupIssue[] = [];
@@ -90,8 +91,10 @@ async function prepare(db: PrismaClient | Prisma.TransactionClient, actor: Actor
   const rows = await db.priceException.findMany({ where: { id: { in: request.ids } }, select: selected, orderBy: { id:'asc' } });
   if (rows.length !== request.ids.length) throw new Error('Selection changed. Refresh the audit and preview again.');
   const today = utcToday();
-  if (rows.some(row => !eligible(row, request, today))) throw new Error('Some selected records are not eligible. Narrow the selection and preview again.');
-  return { request, rows, targetLabel, fingerprint: digest(rows, request), changes: rows.map(row => ({ id:row.id, code:row.peCode ?? `#${row.id}`, ...beforeAfter(row, request, targetLabel) })) };
+  const eligibleRows = rows.filter(row => eligible(row, request, today));
+  if (request.action !== 'expire' && eligibleRows.length !== rows.length) throw new Error('Some selected records are not eligible. Narrow the selection and preview again.');
+  if (!eligibleRows.length) throw new Error('No selected Price Exceptions are eligible. Refresh the audit.');
+  return { request, rows:eligibleRows, skipped:rows.length-eligibleRows.length, targetLabel, fingerprint: digest(rows, request), changes: eligibleRows.map(row => ({ id:row.id, code:row.peCode ?? `#${row.id}`, ...beforeAfter(row, request, targetLabel) })) };
 }
 export async function previewPriceExceptionCleanup(db: PrismaClient, actor: Actor, request: CleanupRequest) { return prepare(db, actor, request); }
 export async function applyPriceExceptionCleanup(db: PrismaClient, actor: Actor, request: CleanupRequest, expectedFingerprint: string, confirmedCount: number, confirmed: boolean) {
@@ -105,6 +108,7 @@ export async function applyPriceExceptionCleanup(db: PrismaClient, actor: Actor,
     for (const row of plan.rows) {
       const result = await tx.priceException.updateMany({ where: { id: row.id, updatedAt: row.updatedAt }, data });
       if (result.count !== 1) throw new Error('A Price Exception changed. Preview again.');
+      if (request.action === 'expire') await tx.priceExceptionLifecycleEvent.create({data:{priceExceptionId:row.id,oldStatus:'ACTIVE',newStatus:'EXPIRED',actorId:actor.id,source:'Bulk cleanup action',createdAt:now}});
     }
     return plan.rows.length;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 });

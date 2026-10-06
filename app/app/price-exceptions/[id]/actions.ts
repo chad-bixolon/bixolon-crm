@@ -5,6 +5,17 @@ import { requireMutation } from '@/lib/current-user';
 import { parseAssignedSalesRepUserId, parsePriceExceptionAccountPatch, PriceExceptionAccountValidationError, updatePriceExceptionAccountLinks, updatePriceExceptionSalesRep, type PriceExceptionAccountValues } from '@/lib/price-exception-resolution';
 import { parseFollowUpForm, updatePriceExceptionFollowUp } from '@/lib/price-exception-follow-up';
 import { currentUser } from '@/lib/current-user';
+import { markPriceExceptionExpired } from '@/lib/price-exception-lifecycle';
+
+export async function markExpiredPriceException(id:number) {
+  const actor=await currentUser();
+  try {
+    await markPriceExceptionExpired(prisma,actor,id);
+    revalidatePath('/price-exceptions');revalidatePath(`/price-exceptions/${id}`);
+    revalidatePath('/administration/price-exceptions');revalidatePath('/reports/price-exceptions-expiring');revalidatePath('/');
+    return {ok:true as const};
+  } catch(error) {return {ok:false as const,message:error instanceof Error?error.message:'Status could not be updated.'};}
+}
 
 export type ResolvePriceExceptionState = { errors: Record<string, string>; values?: PriceExceptionAccountValues; saved?: boolean };
 export type AssignPriceExceptionSalesRepState = { error?: string; value?: string; saved?: boolean };
