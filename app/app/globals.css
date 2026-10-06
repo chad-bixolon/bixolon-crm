@@ -5,6 +5,10 @@ input, select, button { font: inherit; }
 .field { width: 100%; border: 1px solid #cbd5e1; border-radius: .375rem; background: white; padding: .65rem .75rem; color: #0f172a; }
 .field:focus { outline: 2px solid #ea580c; outline-offset: 1px; }
 .label { display: block; margin-bottom: .4rem; font-size: .875rem; font-weight: 600; color: #334155; }
+.search-results-popover { position: fixed; z-index: 1000; box-sizing: border-box; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: .375rem; background: white; box-shadow: 0 10px 15px -3px rgb(0 0 0 / .1); }
+.search-results-option { display: block; box-sizing: border-box; width: 100%; min-width: 0; padding: .375rem .625rem; text-align: left; font-size: .8125rem; line-height: 1.25rem; }
+.search-results-option:focus-visible { outline: 2px solid #ea580c; outline-offset: -2px; }
+.search-results-option-single { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .btn-primary { display: inline-flex; align-items: center; justify-content: center; border-radius: .375rem; background: #c2410c; padding: .65rem 1rem; color: white; font-size: .875rem; font-weight: 600; }
 .btn-primary:hover { background: #9a3412; }
 .btn-secondary { display: inline-flex; align-items: center; justify-content: center; border: 1px solid #cbd5e1; border-radius: .375rem; background: white; padding: .65rem 1rem; color: #334155; font-size: .875rem; font-weight: 600; }

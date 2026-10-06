@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { SearchResultsPopover } from './search-results-popover';
 import { catalogSourceLabels, odmSubtypeLabels } from '@/lib/product-labels';
 import type { ProductSubmittedValues } from '@/app/products/actions';
 import { addOdmCustomer, removeOdmCustomer, type OdmCustomerChoice } from '@/lib/odm-customer-selection';
@@ -34,6 +35,7 @@ function BaseSkuChoice({ initial, values }: { initial?: Initial['baseSku']; valu
 
 function AccountChoices({ initial = [], values, customerSpecific }: { initial?: Initial['odmCustomers']; values?: ProductSubmittedValues; customerSpecific: boolean }) {
   const uid = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<OdmCustomerChoice[]>(values ? values.odmCustomerAccountIds.map((id, index) => ({ id: Number(id), label: values.odmCustomerNames[index] ?? "Account unavailable" })) : initial.map(row => ({ id: row.account.id, label: row.account.name })));
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<Choice[]>([]);
@@ -62,14 +64,14 @@ function AccountChoices({ initial = [], values, customerSpecific }: { initial?: 
   return <div className="min-w-0">
     <div className="relative min-w-0">
       <label className="label" htmlFor={`${uid}-search`}>Associated ODM Customers</label>
-      <input id={`${uid}-search`} className="field min-w-0" type="search" role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={`${uid}-results`} aria-activedescendant={open && available[active] ? `${uid}-option-${active}` : undefined} value={query} placeholder="Search active Accounts" onFocus={() => setOpen(true)} onChange={event => { setQuery(event.target.value); setOpen(true); setActive(0); }} onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); setActive(value => Math.min(value + 1, Math.max(0, available.length - 1))); } if (event.key === 'ArrowUp') { event.preventDefault(); setActive(value => Math.max(value - 1, 0)); } if (event.key === 'Enter' && open) { event.preventDefault(); if (available[active]) choose(available[active]); } if (event.key === 'Escape') setOpen(false); }} onBlur={() => setTimeout(() => setOpen(false), 100)}/>
-      {open && <div id={`${uid}-results`} role="listbox" className="absolute z-30 mt-1 max-h-64 w-full max-w-full overflow-y-auto rounded border border-slate-300 bg-white shadow-lg">
-        {available.map((account, index) => <button type="button" role="option" aria-selected={index === active} id={`${uid}-option-${index}`} key={account.id} className={`block w-full break-words px-3 py-2 text-left text-sm ${index === active ? 'bg-orange-50' : 'hover:bg-slate-50 focus:bg-orange-50'}`} onMouseDown={event => event.preventDefault()} onClick={() => choose(account)}>{account.label}</button>)}
+      <input ref={inputRef} id={`${uid}-search`} className="field min-w-0" type="search" role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? `${uid}-results` : undefined} aria-activedescendant={open && available[active] ? `${uid}-option-${active}` : undefined} value={query} placeholder="Search active Accounts" onFocus={() => setOpen(true)} onChange={event => { setQuery(event.target.value); setOpen(true); setActive(0); }} onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); setActive(value => Math.min(value + 1, Math.max(0, available.length - 1))); } if (event.key === 'ArrowUp') { event.preventDefault(); setActive(value => Math.max(value - 1, 0)); } if (event.key === 'Enter' && open) { event.preventDefault(); if (available[active]) choose(available[active]); } if (event.key === 'Escape') setOpen(false); }} onBlur={() => setTimeout(() => setOpen(false), 100)}/>
+      {open && <SearchResultsPopover anchorRef={inputRef} id={`${uid}-results`} activeIndex={active}>
+        {available.map((account, index) => <button type="button" role="option" data-result-index={index} aria-selected={index === active} id={`${uid}-option-${index}`} key={account.id} title={account.label} className={`search-results-option search-results-option-single ${index === active ? 'bg-orange-50' : 'hover:bg-slate-50'}`} onMouseDown={event => event.preventDefault()} onClick={() => choose(account)}>{account.label}</button>)}
         {!search && <p className="p-3 text-sm text-slate-500">Type to search active Accounts.</p>}
         {search && searchError && <p className="p-3 text-sm text-red-700" role="alert">Account search failed. Try again.</p>}
         {search && !searchError && (loading || fetchedQuery !== search) && <p className="p-3 text-sm text-slate-500" role="status">Searching…</p>}
         {search && !searchError && !loading && fetchedQuery === search && !available.length && <p className="p-3 text-sm text-slate-500">No matching active Accounts.</p>}
-      </div>}
+      </SearchResultsPopover>}
     </div>
     {!!selected.length && <div className="mt-2 space-y-2">{selected.map(item => <div key={item.id} className="rounded bg-orange-50 p-2"><div className="flex items-center justify-between gap-2 text-sm"><strong>{item.label}</strong><button type="button" className="text-orange-800 underline" aria-label={`Remove ${item.label}`} onClick={() => setSelected(rows => removeOdmCustomer(rows, item.id))}>Remove</button></div><input type="hidden" name="odmCustomerAccountIds" value={item.id}/><input type="hidden" name="odmCustomerNames" value={item.label}/>{customerSpecific && <CustomerPriceFields key={item.id} accountId={item.id} initial={initial.find(row => row.account.id === item.id)?.prices} values={values}/>}</div>)}</div>}
   </div>;

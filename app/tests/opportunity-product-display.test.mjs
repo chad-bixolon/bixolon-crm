@@ -26,7 +26,10 @@ function harness(filename, props, overrides = {}) {
     new Function('require', 'module', 'exports', code)(name => {
       if (name === 'react') return hooks;
       if (name in overrides) return overrides[name];
-      if (name.startsWith('./')) return load(path.resolve(path.dirname(file), `${name}.ts`));
+      if (name.startsWith('./')) {
+        const base = path.resolve(path.dirname(file), name);
+        return load(fs.existsSync(`${base}.tsx`) ? `${base}.tsx` : `${base}.ts`);
+      }
       if (name.startsWith('@/')) return load(path.join(root, `${name.slice(2)}.ts`));
       return require(name);
     }, mod, mod.exports);
@@ -106,6 +109,24 @@ test('unselected typed SKU remains in the visible picker until an explicit sugge
   by(h.render(), 'role', 'option')[0].props.onClick();
   tree = h.render();
   assert.equal(props.skuId, 9);
+  assert.equal(by(tree, 'role', 'combobox').length, 0);
+});
+test('catalog keyboard navigation reaches later suggestions and Enter preserves product selection', () => {
+  const props = { index: 0, productId: 0, skuId: 0, searchText: '', categories: [], currencyCode: 'USD', price: '0.00',
+    onSearchChange(value) { props.searchText = value; },
+    onChange(productId, skuId) { props.productId = productId; props.skuId = skuId; } };
+  const h = harness('components/product-picker.tsx', props);
+  h.render();
+  h.slots[0] = Array.from({ length: 30 }, (_, i) => ({ ...item, id: i + 1, productId: i + 100, productName: `Product ${i + 1}` }));
+  by(h.render(), 'role', 'combobox')[0].props.onFocus();
+  for (let i = 0; i < 25; i++) by(h.render(), 'role', 'combobox')[0].props.onKeyDown({ key: 'ArrowDown', preventDefault() {} });
+  let tree = h.render();
+  assert.equal(by(tree, 'role', 'combobox')[0].props['aria-activedescendant'], 'picker-option-25');
+  assert.equal(by(tree, 'role', 'option').length, 30);
+  by(tree, 'role', 'combobox')[0].props.onKeyDown({ key: 'Enter', preventDefault() {} });
+  tree = h.render();
+  assert.equal(props.skuId, 26);
+  assert.equal(props.productId, 125);
   assert.equal(by(tree, 'role', 'combobox').length, 0);
 });
 const Picker = () => null;
