@@ -32,26 +32,27 @@ async function evaluateOne(db: Db, pe: Pe, users: Map<number, { role: string }>,
   const keys = new Set(candidates.map(candidate => candidate.sourceKey));
   const obsolete = current.filter(row => !keys.has(row.sourceKey)).map(row => row.id);
   if (obsolete.length) await db.notification.updateMany({ where: { id: { in: obsolete } }, data: { resolvedAt: new Date() } });
+  let created = 0;
   for (const candidate of candidates) {
-    await db.notification.createMany({ data: [{ userId: recipient!, type: candidate.type, severity: candidate.severity, title: candidate.title, message: candidate.message, entityType: 'PRICE_EXCEPTION', entityId: pe.id, actionUrl: `/price-exceptions/${pe.id}`, sourceKey: candidate.sourceKey }], skipDuplicates: true });
+    created += (await db.notification.createMany({ data: [{ userId: recipient!, type: candidate.type, severity: candidate.severity, title: candidate.title, message: candidate.message, entityType: 'PRICE_EXCEPTION', entityId: pe.id, actionUrl: `/price-exceptions/${pe.id}`, sourceKey: candidate.sourceKey }], skipDuplicates: true })).count;
     // Keep the actionable expired message in sync when follow-up starts.
     if (candidate.type === 'PE_EXPIRED') await db.notification.updateMany({ where: { sourceKey: candidate.sourceKey, resolvedAt: null }, data: { message: candidate.message } });
   }
-  return { createdCandidates: candidates.length, resolved: obsolete.length };
+  return { created, resolved: obsolete.length };
 }
 
 /** Safe to rerun; source keys are unique and obsolete active notifications are resolved. */
 export async function evaluatePeNotifications(db: PrismaClient, now = new Date()) {
   const today = businessToday(now);
   const users = new Map((await db.user.findMany({ where: { active: true, archivedAt: null }, select: { id: true, role: true } })).map(user => [user.id, { role: user.role }]));
-  let cursor = 0, evaluated = 0, resolved = 0;
+  let cursor = 0, evaluated = 0, created = 0, resolved = 0;
   while (true) {
     const rows = await db.priceException.findMany({ where: { id: { gt: cursor } }, orderBy: { id: 'asc' }, take: 200, select: { id: true, peCode: true, status: true, archivedAt: true, expirationDate: true, assignedSalesRepUserId: true, followUp: { select: { ownerId: true, status: true, nextFollowUpAt: true } } } });
     if (!rows.length) break;
-    for (const row of rows) { const result = await evaluateOne(db, row, users, today); evaluated++; resolved += result.resolved; }
+    for (const row of rows) { const result = await evaluateOne(db, row, users, today); evaluated++; created += result.created; resolved += result.resolved; }
     cursor = rows.at(-1)!.id;
   }
-  return { evaluated, resolved };
+  return { evaluated, created, resolved };
 }
 
 export async function syncPeNotificationsInTransaction(db: Prisma.TransactionClient, peId: number, now = new Date()) {

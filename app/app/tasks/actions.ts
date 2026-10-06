@@ -2,6 +2,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { syncTaskNotifications } from '@/lib/work-notification-evaluator';
 import { parseTask, saveTask } from '@/lib/work';
 import { currentUser } from '@/lib/current-user';
 import { assertProjectWorkEdit } from '@/lib/projects';
@@ -20,13 +21,13 @@ export async function submitTask(id: number | null, _old: WorkState, form: FormD
 }
 export async function archiveTask(id: number, _old: WorkState): Promise<WorkState> {
   void _old; const row = await prisma.task.findUnique({ where: { id } }); if (!row) return { errors: {}, message: 'Task not found.' }; await assertProjectWorkEdit(prisma, await currentUser(), row.projectId);
-  if (!row.archivedAt) await prisma.task.update({ where: { id }, data: { archivedAt: new Date() } });
+  if (!row.archivedAt) await prisma.$transaction(async tx => { await tx.task.update({ where: { id }, data: { archivedAt: new Date() } }); await syncTaskNotifications(tx, id); });
   revalidatePath('/tasks'); revalidatePath(`/tasks/${id}/edit`); revalidatePath('/'); if (row.accountId) revalidatePath(`/accounts/${row.accountId}`); if (row.opportunityId) revalidatePath(`/opportunities/${row.opportunityId}`);
   redirect('/tasks?visibility=archived');
 }
 export async function reactivateTask(id: number, _old: WorkState): Promise<WorkState> {
   void _old; const row = await prisma.task.findUnique({ where: { id } }); if (!row) return { errors: {}, message: 'Task not found.' }; await assertProjectWorkEdit(prisma, await currentUser(), row.projectId);
-  if (row.archivedAt) await prisma.task.update({ where: { id }, data: { archivedAt: null } });
+  if (row.archivedAt) await prisma.$transaction(async tx => { await tx.task.update({ where: { id }, data: { archivedAt: null } }); await syncTaskNotifications(tx, id); });
   revalidatePath('/tasks'); revalidatePath(`/tasks/${id}/edit`); revalidatePath('/'); if (row.accountId) revalidatePath(`/accounts/${row.accountId}`); if (row.opportunityId) revalidatePath(`/opportunities/${row.opportunityId}`);
   redirect(`/tasks/${id}/edit`);
 }

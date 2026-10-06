@@ -1,12 +1,14 @@
 import { Prisma, type PrismaClient, type Notification, type NotificationSeverity } from '@prisma/client';
 import type { Actor } from './authorization';
-import { can } from './authorization';
+import { can, opportunityScope, taskScope } from './authorization';
 import { scopedPriceExceptionWhere } from './price-exception-visibility';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 export type NotificationView = 'active' | 'unread' | 'all' | 'dismissed' | 'resolved';
 export const notificationViews: NotificationView[] = ['active', 'unread', 'all', 'dismissed', 'resolved'];
 export const severityLabels: Record<NotificationSeverity, string> = { INFO: 'Info', WARNING: 'Warning', CRITICAL: 'Critical' };
+export type NotificationCategory = 'all' | 'price-exceptions' | 'tasks' | 'opportunities';
+export const notificationCategories: NotificationCategory[] = ['all', 'price-exceptions', 'tasks', 'opportunities'];
 
 export function notificationWhere(userId: number, view: NotificationView): Prisma.NotificationWhereInput {
   const state = view === 'active' ? { dismissedAt: null, resolvedAt: null }
@@ -17,17 +19,26 @@ export function notificationWhere(userId: number, view: NotificationView): Prism
 }
 
 /** Entity permission is checked on reads as well as at the normal deep link. */
-async function visibleEntityIds(db: Db, actor: Actor) {
-  if (!can(actor, 'pricing.read')) return [];
-  const candidates = await db.notification.findMany({ where: { userId: actor.id, entityType: 'PRICE_EXCEPTION' }, select: { entityId: true }, distinct: ['entityId'] });
-  if (!candidates.length) return [];
-  const rows = await db.priceException.findMany({ where: scopedPriceExceptionWhere(actor, { id: { in: candidates.map(row => row.entityId) } }), select: { id: true } });
-  return rows.map(row => row.id);
+async function visibleEntityWhere(db: Db, actor: Actor, category: NotificationCategory = 'all'): Promise<Prisma.NotificationWhereInput> {
+  const types = category === 'all' ? ['PRICE_EXCEPTION', 'TASK', 'OPPORTUNITY'] as const : [category === 'price-exceptions' ? 'PRICE_EXCEPTION' : category === 'tasks' ? 'TASK' : 'OPPORTUNITY'] as const;
+  const clauses: Prisma.NotificationWhereInput[] = [];
+  for (const entityType of types) {
+    const permission = entityType === 'PRICE_EXCEPTION' ? 'pricing.read' : entityType === 'TASK' ? 'tasks.read' : 'opportunities.read';
+    if (!can(actor, permission)) continue;
+    const candidates = await db.notification.findMany({ where: { userId: actor.id, entityType }, select: { entityId: true }, distinct: ['entityId'] });
+    const ids = candidates.map(row => row.entityId);
+    if (!ids.length) continue;
+    const rows = entityType === 'PRICE_EXCEPTION' ? await db.priceException.findMany({ where: scopedPriceExceptionWhere(actor, { id: { in: ids } }), select: { id: true } })
+      : entityType === 'TASK' ? await db.task.findMany({ where: { id: { in: ids }, ...taskScope(actor) }, select: { id: true } })
+      : await db.opportunity.findMany({ where: { id: { in: ids }, ...opportunityScope(actor) }, select: { id: true } });
+    if (rows.length) clauses.push({ entityType, entityId: { in: rows.map(row => row.id) } });
+  }
+  return { OR: clauses };
 }
 
-export async function notificationPage(db: Db, actor: Actor, view: NotificationView, page = 1, take = 20) {
-  const ids = await visibleEntityIds(db, actor);
-  const where: Prisma.NotificationWhereInput = { ...notificationWhere(actor.id, view), entityType: 'PRICE_EXCEPTION', entityId: { in: ids } };
+export async function notificationPage(db: Db, actor: Actor, view: NotificationView, page = 1, take = 20, category: NotificationCategory = 'all', severity?: NotificationSeverity) {
+  const visible = await visibleEntityWhere(db, actor, category);
+  const where: Prisma.NotificationWhereInput = { ...notificationWhere(actor.id, view), AND: [visible], ...(severity ? { severity } : {}) };
   const count = await db.notification.count({ where });
   const pages = Math.max(1, Math.ceil(count / take));
   const current = Math.min(Math.max(1, page), pages);
@@ -36,8 +47,7 @@ export async function notificationPage(db: Db, actor: Actor, view: NotificationV
 }
 
 export async function notificationSummary(db: Db, actor: Actor) {
-  const ids = await visibleEntityIds(db, actor);
-  const where: Prisma.NotificationWhereInput = { ...notificationWhere(actor.id, 'active'), entityType: 'PRICE_EXCEPTION', entityId: { in: ids } };
+  const where: Prisma.NotificationWhereInput = { ...notificationWhere(actor.id, 'active'), AND: [await visibleEntityWhere(db, actor)] };
   const [unread, rows] = await Promise.all([
     db.notification.count({ where: { ...where, readAt: null } }),
     db.notification.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 7 }),
@@ -48,21 +58,19 @@ export async function notificationSummary(db: Db, actor: Actor) {
 export async function updateNotification(db: Db, actor: Actor, id: number, operation: 'read' | 'dismiss') {
   if (!Number.isSafeInteger(id) || id <= 0) return false;
   const row = await db.notification.findFirst({ where: { id, userId: actor.id }, select: { entityType: true, entityId: true } });
-  if (!row || row.entityType !== 'PRICE_EXCEPTION' || !can(actor, 'pricing.read')) return false;
-  const pe = await db.priceException.findFirst({ where: scopedPriceExceptionWhere(actor, { id: row.entityId }), select: { id: true } });
-  if (!pe) return false;
+  if (!row || !['PRICE_EXCEPTION', 'TASK', 'OPPORTUNITY'].includes(row.entityType)) return false;
+  const visible = await visibleEntityWhere(db, actor, row.entityType === 'PRICE_EXCEPTION' ? 'price-exceptions' : row.entityType === 'TASK' ? 'tasks' : 'opportunities');
+  if (!(await db.notification.findFirst({ where: { id, userId: actor.id, AND: [visible] }, select: { id: true } }))) return false;
   await db.notification.updateMany({ where: { id, userId: actor.id, ...(operation === 'read' ? { readAt: null } : { dismissedAt: null }) }, data: operation === 'read' ? { readAt: new Date() } : { dismissedAt: new Date() } });
   return true;
 }
 
 export async function markAllNotificationsRead(db: Db, actor: Actor) {
-  const ids = await visibleEntityIds(db, actor);
-  await db.notification.updateMany({ where: { ...notificationWhere(actor.id, 'unread'), entityType: 'PRICE_EXCEPTION', entityId: { in: ids } }, data: { readAt: new Date() } });
+  await db.notification.updateMany({ where: { ...notificationWhere(actor.id, 'unread'), AND: [await visibleEntityWhere(db, actor)] }, data: { readAt: new Date() } });
 }
 
 export async function dismissAllReadNotifications(db: Db, actor: Actor) {
-  const ids = await visibleEntityIds(db, actor);
-  await db.notification.updateMany({ where: { ...notificationWhere(actor.id, 'active'), readAt: { not: null }, entityType: 'PRICE_EXCEPTION', entityId: { in: ids } }, data: { dismissedAt: new Date() } });
+  await db.notification.updateMany({ where: { ...notificationWhere(actor.id, 'active'), readAt: { not: null }, AND: [await visibleEntityWhere(db, actor)] }, data: { dismissedAt: new Date() } });
 }
 
 export function friendlyNotificationTime(createdAt: Date, now = new Date()) {

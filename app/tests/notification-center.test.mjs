@@ -26,12 +26,13 @@ test('bell is bounded and notification mutations use effective-user identity and
   const actor = { id: 7, role: 'SALES', active: true, archivedAt: null };
   const db = {
     notification: {
-      findMany: async args => { queries.push(args); return args.distinct ? [{ entityId: 12 }] : []; },
+      findMany: async args => { queries.push(args); return args.distinct ? (args.where.entityType === 'PRICE_EXCEPTION' ? [{ entityId: 12 }] : []) : []; },
       findFirst: async args => { queries.push(args); return { entityType: 'PRICE_EXCEPTION', entityId: 12 }; },
       count: async args => { queries.push(args); return 1; },
       updateMany: async args => { queries.push(args); return { count: 1 }; },
     },
     priceException: { findMany: async args => { queries.push(args); return [{ id: 12 }]; }, findFirst: async args => { queries.push(args); return { id: 12 }; } },
+    task: { findMany: async () => [] }, opportunity: { findMany: async () => [] },
   };
   const summary = await notificationSummary(db, actor);
   assert.equal(summary.unread, 1);
@@ -92,4 +93,26 @@ test('evaluator dedupes reruns, supersedes thresholds, and resolves overdue when
   row.followUp.nextFollowUpAt = add(2);
   await evaluatePeNotifications(db, now);
   assert.ok(notifications[3].resolvedAt);
+});
+
+test('category and severity filters preserve per-user scope and page boundaries', async () => {
+  const actor = { id: 7, role: 'SALES', active: true, archivedAt: null };
+  const queries = [];
+  const db = {
+    notification: {
+      findMany: async args => { queries.push(args); return args.distinct ? [{ entityId: args.where.entityType === 'TASK' ? 4 : 8 }] : []; },
+      count: async args => { queries.push(args); return 41; },
+    },
+    task: { findMany: async args => { queries.push(args); return [{ id: 4 }]; } },
+    opportunity: { findMany: async args => { queries.push(args); return [{ id: 8 }]; } },
+  };
+  const tasks = await notificationPage(db, actor, 'unread', 3, 20, 'tasks', 'WARNING');
+  assert.deepEqual([tasks.count, tasks.page, tasks.pages], [41, 3, 3]);
+  const query = queries.find(item => item.take === 20);
+  assert.equal(query.skip, 40);
+  assert.equal(query.where.userId, 7);
+  assert.equal(query.where.severity, 'WARNING');
+  assert.deepEqual(query.where.AND[0].OR, [{ entityType: 'TASK', entityId: { in: [4] } }]);
+  assert.ok(queries.some(item => item.where?.assignedToId === 7));
+  assert.equal(queries.some(item => item.where?.ownerId === 7), false);
 });

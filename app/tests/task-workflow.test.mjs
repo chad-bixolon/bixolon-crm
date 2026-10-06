@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const require=Module.createRequire(fileURLToPath(import.meta.url));
 for(const ext of ['.ts','.tsx']) Module._extensions[ext]=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true,jsx:ts.JsxEmit.ReactJSX}}).outputText,filename);
+const initialLoad=Module._load;
+Module._load=function(name,parent,isMain){if(name==='./work-notification-evaluator')return {notifyTaskAssignment:async()=>{},syncTaskNotifications:async()=>{},syncOpportunityNotifications:async()=>{}};return initialLoad.call(this,name,parent,isMain);};
 const work=require(path.join(root,'lib/work.ts'));
 let row={id:7,subject:'Follow up',archivedAt:null,accountId:null,opportunityId:null};
 const prisma={task:{findUnique:async()=>row,update:async({data})=>(row={...row,...data})}};
@@ -21,6 +23,7 @@ Module._load=function(name,parent,isMain){
  if(name==='next/link') return {__esModule:true,default:({href,children,...props})=>React.createElement('a',{href,...props},children)};
  if(name==='@/lib/prisma') return {prisma};
  if(name==='@/lib/work') return work;
+ if(name==='@/lib/work-notification-evaluator') return {syncTaskNotifications:async()=>{}};
  if(name==='@/lib/current-user') return {currentUser:async()=>({id:7,role:'SALES',active:true,archivedAt:null})};
  if(name==='@/lib/projects') return {assertProjectWorkEdit:async()=>{}};
  if(name==='@/lib/authorization') return {can:()=>true};

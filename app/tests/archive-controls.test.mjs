@@ -19,6 +19,8 @@ Module._load=function(name,parent,isMain){
  if(name==='@/lib/current-user')return {currentUser:async()=>({id:7,role:'ADMIN',active:true,archivedAt:null}),requireMutation:async()=>({id:7,role:'ADMIN',active:true,archivedAt:null})};
  if(name==='@/lib/projects')return {assertProjectWorkEdit:async()=>{}};
  if(name==='@/lib/work')return require(path.join(root,'lib/work.ts'));
+ if(name==='@/lib/work-notification-evaluator')return {syncOpportunityNotifications:async()=>{}};
+ if(name==='@/lib/configuration')return {getSettings:async()=>({COMMIT_FOLLOW_UP_DAYS:14})};
  if(name==='@/lib/authorization')return require(path.join(root,'lib/authorization.ts'));
  if(name==='@/lib/save-feedback')return require(path.join(root,'lib/save-feedback.ts'));
  if(name==='@/lib/price-exception-resolution')return require(path.join(root,'lib/price-exception-resolution.ts'));

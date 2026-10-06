@@ -4,6 +4,8 @@ import { ActivityDirection, Prisma, TaskPriority, TaskStatus, type PrismaClient 
 import { field, optional, positiveId, required, type Errors } from './crm-validation';
 import { archivedWhere, recordVisibility } from './record-visibility';
 import { eligibleUserWhere } from './assignment-eligibility';
+import { notifyTaskAssignment, syncTaskNotifications, syncOpportunityNotifications } from './work-notification-evaluator';
+import { getSettings } from './configuration';
 export const taskStatuses = Object.values(TaskStatus);
 export const taskPriorities = Object.values(TaskPriority);
 export function dateField(raw: string, key: string, errors: Errors) {
@@ -63,7 +65,14 @@ export async function saveTask(
       }
     : {}),
 };
-    return id ? tx.task.update({ where: { id }, data }) : tx.task.create({ data });
+    const row = id ? await tx.task.update({ where: { id }, data }) : await tx.task.create({ data });
+    // Partial Prisma clients used by existing domain tests omit Notification.
+    if (tx.notification && value.assignedToId && value.assignedToId !== existing?.assignedToId) {
+      const event = await tx.taskAssignmentEvent.create({ data: { taskId: row.id, fromUserId: existing?.assignedToId ?? null, toUserId: value.assignedToId, actorId } });
+      await notifyTaskAssignment(tx, row.id, value.assignedToId, event.id);
+    }
+    if (tx.notification) await syncTaskNotifications(tx, row.id);
+    return row;
   }); } catch (error) {
     // A concurrent request may have won the unique-key race.
     if (!id && createKey && typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
@@ -173,7 +182,17 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
       const contact = contactIds.length ? await tx.contact.findFirst({where:{id:{in:contactIds}},select:{firstName:true,lastName:true},orderBy:{id:'asc'}}) : null;
       const account = contact ? null : await tx.account.findUnique({where:{id:value.accountId},select:{name:true}});
       const subject = contact ? `Follow up with ${contact.firstName} ${contact.lastName}` : account ? `Follow up with ${account.name}` : 'Follow up on activity';
-      await tx.task.create({data:{createKey:followUpTaskCreateKey,subject,dueDate:value.followUpDate,status:'OPEN',priority:'NORMAL',assignedToId:value.userId,accountId:value.accountId,opportunityId:value.opportunityId,projectId:value.projectId,createdById:actorId??value.userId,updatedById:actorId??value.userId}});
+      const task = await tx.task.create({data:{createKey:followUpTaskCreateKey,subject,dueDate:value.followUpDate,status:'OPEN',priority:'NORMAL',assignedToId:value.userId,accountId:value.accountId,opportunityId:value.opportunityId,projectId:value.projectId,createdById:actorId??value.userId,updatedById:actorId??value.userId}});
+      if (tx.notification) {
+        const event = await tx.taskAssignmentEvent.create({ data: { taskId: task.id, fromUserId: null, toUserId: value.userId, actorId } });
+        await notifyTaskAssignment(tx, task.id, value.userId, event.id);
+        await syncTaskNotifications(tx, task.id);
+      }
+    }
+    const affectedOpportunities = [...new Set([existing?.opportunityId, row.opportunityId].filter((item): item is number => !!item))];
+    if (tx.notification && affectedOpportunities.length) {
+      const days = (await getSettings(tx as PrismaClient)).COMMIT_FOLLOW_UP_DAYS;
+      for (const opportunityId of affectedOpportunities) await syncOpportunityNotifications(tx, opportunityId, days);
     }
     return { ...row, followUpTaskCreated: !id && createFollowUpTask };
   });

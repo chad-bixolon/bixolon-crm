@@ -4,6 +4,8 @@ import { field, optional, pageNumber, positiveId, required, type Errors } from "
 import { archivedWhere, recordVisibility } from "./record-visibility";
 import { moqEligibility, priceExceptionSnapshot } from "./opportunity-price-exceptions";
 import { assertPermission, opportunityScope, type Actor } from "./authorization";
+import { notifyOpportunityAssignment, syncOpportunityNotifications } from './work-notification-evaluator';
+import { getSettings } from './configuration';
 import { canViewPriceException } from "./price-exception-visibility";
 import { odmCustomerSnapshot } from './opportunity-odm-pricing';
 import { priceExceptionMatchesParticipants, unrelatedPriceExceptionMessage } from './price-exception-account-match';
@@ -260,8 +262,16 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       const currentProjects = new Set(input.projectIds);
       for (const link of existing?.projects ?? []) if (!currentProjects.has(link.projectId)) add('PROJECT_UNLINKED', { relatedRecordId: link.projectId, relatedRecordName: link.project?.name ?? 'Project unavailable' });
       for (const project of projects) if (!previousProjects.has(project.id)) add('PROJECT_LINKED', { relatedRecordId: project.id, relatedRecordName: project.name ?? 'Project unavailable' });
-      if (events.length) await tx.opportunityHistoryEvent.createMany({ data: events });
+      if (tx.notification && input.ownerId && input.ownerId !== existing?.ownerId) {
+        let assignmentEventId: number | null = null;
+        for (const event of events) {
+          const created = await tx.opportunityHistoryEvent.create({ data: event });
+          if (event.eventType === 'BASELINE' || event.eventType === 'OWNER') assignmentEventId = created.id;
+        }
+        if (assignmentEventId) await notifyOpportunityAssignment(tx, opportunityId, input.ownerId, assignmentEventId);
+      } else if (events.length) await tx.opportunityHistoryEvent.createMany({ data: events });
     }
+    if (tx.notification) await syncOpportunityNotifications(tx, opportunityId, (await getSettings(tx as PrismaClient)).COMMIT_FOLLOW_UP_DAYS);
     return opportunityId;
   };
   // Transaction clients intentionally omit $transaction. This permits conversion to
@@ -275,6 +285,7 @@ export async function setOpportunityArchived(client: PrismaClient, id: number, a
     if (actor?.role === 'SALES' && row.ownerId !== actor.id) throw new Error('Sales users may edit only their own Opportunities.');
     if (!!row.archivedAt === archived) throw new Error(archived ? "Opportunity is already archived." : "Opportunity is already active.");
     await tx.opportunity.update({ where: { id }, data: { archivedAt: archived ? new Date() : null } });
+    if (tx.notification) await syncOpportunityNotifications(tx, id, (await getSettings(tx as PrismaClient)).COMMIT_FOLLOW_UP_DAYS);
     if (actor) {
       const user = await tx.user.findUnique({ where: { id: actor.id }, select: { firstName: true, lastName: true } });
       await tx.opportunityHistoryEvent.create({ data: { opportunityId: id, opportunityName: row.name, accountName: row.participants[0]?.account.name ?? null, actorId: actor.id, actorName: user ? `${user.firstName} ${user.lastName}` : null, eventType: archived ? 'ARCHIVED' : 'REOPENED', oldArchived: !archived, newArchived: archived } });

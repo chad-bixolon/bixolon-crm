@@ -1,5 +1,6 @@
 import type { Prisma, TradeShowLeadRouting } from '@prisma/client';
 import { eligibleUserWhere } from './assignment-eligibility';
+import { notifyTaskAssignment, syncTaskNotifications } from './work-notification-evaluator';
 
 export const TRADE_SHOW_FOLLOW_UP_SOURCE = 'TRADE_SHOW_LEAD_FOLLOW_UP';
 type Client = Prisma.TransactionClient;
@@ -43,7 +44,7 @@ export async function syncTradeShowFollowUp(tx: Client, before: Pick<FollowUpLea
   if (previousRep === nextRep) return;
   const active = await tx.task.findFirst({ where: { source: TRADE_SHOW_FOLLOW_UP_SOURCE, tradeShowLeadId: after.id, archivedAt: null, status: { in: ['OPEN', 'IN_PROGRESS'] } }, orderBy: { id: 'desc' } });
   if (!nextRep) {
-    if (active) await tx.task.update({ where: { id: active.id }, data: { status: 'CANCELLED', updatedById: actorId } });
+    if (active) { await tx.task.update({ where: { id: active.id }, data: { status: 'CANCELLED', updatedById: actorId } }); if (tx.notification) await syncTaskNotifications(tx, active.id); }
     return;
   }
   const eligible = await tx.user.findFirst({ where: { id: nextRep, ...eligibleUserWhere('tasks.write') }, select: { id: true } });
@@ -52,7 +53,8 @@ export async function syncTradeShowFollowUp(tx: Client, before: Pick<FollowUpLea
     if (active.assignedToId !== nextRep) {
       const fromUserId = active.assignedToId;
       await tx.task.update({ where: { id: active.id }, data: { assignedToId: nextRep, updatedById: actorId } });
-      await tx.taskAssignmentEvent.create({ data: { taskId: active.id, fromUserId, toUserId: nextRep, actorId } });
+      const event = await tx.taskAssignmentEvent.create({ data: { taskId: active.id, fromUserId, toUserId: nextRep, actorId } });
+      if (tx.notification) { await notifyTaskAssignment(tx, active.id, nextRep, event.id); await syncTaskNotifications(tx, active.id); }
     }
     return;
   }
@@ -65,5 +67,6 @@ export async function syncTradeShowFollowUp(tx: Client, before: Pick<FollowUpLea
     accountId: after.accountId, contactId: after.contactId,
     dueDate: followUpDueDate(assignedAt, businessDays), status: 'OPEN', priority: 'NORMAL',
   } });
-  await tx.taskAssignmentEvent.create({ data: { taskId: task.id, fromUserId: previousRep, toUserId: nextRep, actorId } });
+  const event = await tx.taskAssignmentEvent.create({ data: { taskId: task.id, fromUserId: previousRep, toUserId: nextRep, actorId } });
+  if (tx.notification) { await notifyTaskAssignment(tx, task.id, nextRep, event.id); await syncTaskNotifications(tx, task.id); }
 }

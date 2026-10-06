@@ -8,6 +8,8 @@ import { currentUser } from '@/lib/current-user';
 import { assertProjectWorkEdit } from '@/lib/projects';
 import { assertPermission } from '@/lib/authorization';
 import { saveFeedbackPath } from '@/lib/save-feedback';
+import { syncOpportunityNotifications } from '@/lib/work-notification-evaluator';
+import { getSettings } from '@/lib/configuration';
 export async function submitActivity(id: number | null, _old: WorkState, form: FormData): Promise<WorkState> {
   const parsed = parseActivity(form); if (!parsed.value) return activityFailureState(form, parsed.errors);
   if (!id && !parsed.value.userId) return activityFailureState(form, { userId: 'Choose a responsible user.' });
@@ -24,7 +26,12 @@ export async function setActivityArchived(form: FormData) {
   if(!row)throw new Error('Activity not found.');
   await assertProjectWorkEdit(prisma,actor,row.projectId);
   if(Boolean(row.archivedAt)===archived)throw new Error('Activity state has already changed.');
-  await prisma.activity.update({where:{id},data:{archivedAt:archived?new Date():null,archivedById:archived?actor.id:null,updatedById:actor.id}});
+  const data = {archivedAt:archived?new Date():null,archivedById:archived?actor.id:null,updatedById:actor.id};
+  if (prisma.notification) await prisma.$transaction(async tx => {
+    await tx.activity.update({where:{id},data});
+    if (row.opportunityId) await syncOpportunityNotifications(tx, row.opportunityId, (await getSettings(tx as typeof prisma)).COMMIT_FOLLOW_UP_DAYS);
+  });
+  else await prisma.activity.update({where:{id},data});
   revalidatePath('/');revalidatePath('/reports/engagement');revalidatePath(`/activities/${id}/edit`);
   if(row.accountId)revalidatePath(`/accounts/${row.accountId}`);
   if(row.opportunityId)revalidatePath(`/opportunities/${row.opportunityId}`);

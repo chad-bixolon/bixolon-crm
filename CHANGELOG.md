@@ -6,6 +6,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Expanded Notification Center with Task and Opportunity attention alerts and category filtering.
+
 - Added SalesHub Notification Center with in-app Price Exception expiration and follow-up alerts.
 
 - Added manual lifecycle expiration for eligible Price Exceptions, including bulk cleanup and per-PE audit history; refined PE Cleanup issue shortcuts, filters, selection feedback, and bulk correction controls.
