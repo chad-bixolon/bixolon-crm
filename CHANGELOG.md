@@ -6,6 +6,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added My Day dashboard and daily activity view with Calendar meeting time, Activities, and Tasks.
+
 - Added Calendar Matches review with Contact/Account matching and prefilled Activity logging.
 
 - Completed an application-wide UI consistency pass across forms, filters, buttons, dropdowns, and administration pages.
