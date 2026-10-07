@@ -59,6 +59,7 @@ export function Shell({ children, user, labels, notifications, developmentAdmin 
       <header className="flex min-h-16 items-center justify-end gap-4 border-b border-slate-200 bg-white px-5 py-3 lg:px-8">
         {user && <div className="flex items-center gap-4">
           {notifications && <NotificationBell {...notifications} />}
+          <Link href="/my-integrations" className="text-sm font-medium text-orange-800 hover:underline">My integrations</Link>
           {developmentAdmin && <Link href="/dev/impersonation" className="btn-secondary">Test as user</Link>}
           <div className="text-right"><div className="text-sm font-semibold text-slate-900">{user.name}</div><div className="text-xs text-slate-500">{roleLabels[user.role]}</div></div>
           <form action={signOutAction}><button type="submit" className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Sign out</button></form>

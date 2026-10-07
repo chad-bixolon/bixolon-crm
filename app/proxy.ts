@@ -19,4 +19,4 @@ export default auth(async (request) => {
   if (context.clearCookie) response.cookies.delete(DEV_IMPERSONATION_COOKIE);
   return response;
 });
-export const config = { matcher: ['/((?!api/auth/|api/internal/notifications/evaluate$|_next/static|_next/image|brand/|icon\\.png).*)'] };
+export const config = { matcher: ['/((?!api/auth/|api/internal/notifications/evaluate$|api/internal/calendar/sync$|_next/static|_next/image|brand/|icon\\.png).*)'] };

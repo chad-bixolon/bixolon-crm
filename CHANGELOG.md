@@ -6,6 +6,10 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added Google Calendar event synchronization foundation with bounded initial sync and incremental updates, plus personal time-zone settings for Calendar timestamp display.
+
+- Added the Google Calendar connection foundation with read-only OAuth consent and secure credential storage.
+
 - Expanded Notification Center with Task and Opportunity attention alerts and category filtering.
 
 - Added SalesHub Notification Center with in-app Price Exception expiration and follow-up alerts.

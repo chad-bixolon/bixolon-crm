@@ -31,6 +31,11 @@ enum IdentityProvider {
   GOOGLE
 }
 
+enum CalendarConnectionStatus {
+  CONNECTED
+  NEEDS_REAUTH
+}
+
 enum AccountBusinessRoleCode {
   END_USER
   DISTRIBUTOR
@@ -252,10 +257,13 @@ model User {
   email                   String             @unique
   firstName               String
   lastName                String
+  timeZone                String             @default("America/New_York")
   active                  Boolean            @default(true)
   role                    UserRole           @default(READ_ONLY)
   archivedAt              DateTime?
   identities              ExternalIdentity[]
+  googleCalendarConnection GoogleCalendarConnection?
+  googleCalendarEvents     GoogleCalendarEvent[]
   ownedAccounts           Account[]          @relation("AccountOwner")
   opportunities           Opportunity[]      @relation("OpportunityOwner")
   tasks                   Task[]             @relation("TaskAssignee")
@@ -428,6 +436,84 @@ model ExternalIdentity {
 
   @@unique([issuer, subject])
   @@unique([userId, provider])
+}
+
+model GoogleCalendarConnection {
+  id                    Int                      @id @default(autoincrement())
+  userId                Int                      @unique
+  user                  User                      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  googleAccountId       String                   @unique
+  googleEmail           String
+  refreshTokenEncrypted String
+  grantedScopes         String
+  connectionStatus      CalendarConnectionStatus @default(CONNECTED)
+  lastConnectedAt       DateTime                 @default(now())
+  lastError             String?
+  primaryCalendarId     String                   @default("primary")
+  syncToken             String?
+  lastSuccessfulSyncAt  DateTime?
+  lastSyncStartedAt     DateTime?
+  lastSyncCompletedAt   DateTime?
+  syncLeaseUntil        DateTime?
+  events                GoogleCalendarEvent[]
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+}
+
+model GoogleCalendarEvent {
+  id                   Int                         @id @default(autoincrement())
+  connectionId         Int
+  connection           GoogleCalendarConnection    @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  userId               Int
+  user                 User                         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  googleCalendarId     String
+  googleEventId        String
+  googleICalUid        String?
+  status               String
+  summary              String?
+  location             String?
+  htmlLink             String?
+  hangoutLink          String?
+  organizerEmail       String?
+  organizerDisplayName String?
+  startAt              DateTime?
+  endAt                DateTime?
+  startTimeZone        String?
+  endTimeZone          String?
+  allDay               Boolean                     @default(false)
+  startDate            String?
+  endDate              String?
+  googleCreatedAt      DateTime?
+  googleUpdatedAt      DateTime?
+  recurringEventId     String?
+  originalStartTime    String?
+  visibility           String?
+  transparency         String?
+  cancelledAt          DateTime?
+  syncedAt             DateTime                    @default(now())
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  attendees            GoogleCalendarAttendee[]
+
+  @@unique([connectionId, googleCalendarId, googleEventId])
+  @@index([userId, startAt])
+  @@index([userId, startDate])
+  @@index([connectionId, status])
+}
+
+model GoogleCalendarAttendee {
+  id             Int                 @id @default(autoincrement())
+  eventId        Int
+  event          GoogleCalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  email          String
+  normalizedEmail String
+  displayName    String?
+  responseStatus String?
+  organizer      Boolean             @default(false)
+  self           Boolean             @default(false)
+
+  @@unique([eventId, normalizedEmail])
+  @@index([normalizedEmail])
 }
 
 model Account {

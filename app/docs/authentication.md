@@ -1,5 +1,7 @@
 # Google Workspace sign-in
 
+Personal Google Calendar consent and credentials use a separate flow. See [Google Calendar connection](google-calendar-connection.md). Normal sign-in continues to request `openid email profile` only.
+
 Set `AUTH_SECRET` to a long random secret. Set `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` to the OAuth web application's credentials. Set `GOOGLE_WORKSPACE_DOMAIN` to the actual BIXOLON Workspace hosted domain; this checks Google's signed `hd` claim. `AUTH_URL` must be the exact browser origin used for each environment. None of these values belongs in Git.
 
 ## Local development through SSH
@@ -18,11 +20,11 @@ When rebuilding after a dependency change, run `docker compose up -d --build --r
 
 From the browser computer, forward local port 3000 to the CRM host, for example `ssh -L 3000:127.0.0.1:3000 <ssh-user>@192.168.60.18`. Open **`http://localhost:3000` in that same computer's browser**. Register **`http://localhost:3000/api/auth/callback/google`** as the exact authorized redirect URI for the Google web OAuth client. `AUTH_URL`, the browser origin, and the redirect URI must agree. The application listens on the remote host; `localhost` in the OAuth redirect belongs to the browser computer and reaches the app through the tunnel.
 
-Google Cloud setup is manual: create a Web application OAuth client, configure its consent screen for the BIXOLON Workspace audience, register the localhost callback, and supply the client ID and secret. The app requests `openid email profile` only. Set `GOOGLE_WORKSPACE_DOMAIN` to the domain present in Google's signed `hd` claim. Restart the app after changing environment variables. Do not register the LAN IP as a Google redirect URI.
+Google Cloud setup is manual: create a Web application OAuth client, configure its consent screen for the BIXOLON Workspace audience, register the localhost callback, and supply the client ID and secret. Normal sign-in requests `openid email profile` only. Set `GOOGLE_WORKSPACE_DOMAIN` to the domain present in Google's signed `hd` claim. Restart the app after changing environment variables. Do not register the LAN IP as a Google redirect URI.
 
 ## Create and verify a test user
 
-An existing ADMIN can open **Administration → Users → New user**, enter the test user's exact verified Google Workspace email, select a CRM role, and leave the user Active. The edit page can change the role or active status. The list and edit pages show **Google sign-in: Not linked** until the first successful Google sign-in, then **Linked**. No local password or Google token is stored.
+An existing ADMIN can open **Administration → Users → New user**, enter the test user's exact verified Google Workspace email, select a CRM role, and leave the user Active. The edit page can change the role or active status. The list and edit pages show **Google sign-in: Not linked** until the first successful Google sign-in, then **Linked**. No local password or Google token is stored for normal sign-in; personal Calendar connections store a separate encrypted refresh token.
 
 For a new database with no ADMIN user, a database operator must bootstrap one approved ADMIN with their own exact Workspace email. Connect with `docker compose exec db sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'` and run this statement after replacing the placeholders:
 
@@ -35,7 +37,7 @@ Then sign in through the localhost tunnel with that Google account. The first lo
 
 An ADMIN can reset a linked Google identity from the user edit page for account recovery. The action requires the exact CRM email and a confirmation prompt. Existing sessions for the removed identity stop working on their next request; a later approved Google sign-in may link again. If a Google account should no longer regain access, deactivate its CRM user before resetting the link.
 
-Use only the `openid email profile` scopes. Google establishes identity. An ADMIN pre-creates each CRM `User` with an email, role, and active status. On first sign-in, the app requires a verified Google email and the configured Workspace `hd` claim. It first searches `ExternalIdentity` by issuer `https://accounts.google.com` and Google subject. If absent, it finds an existing active CRM user by exact verified email and creates the `ExternalIdentity` link. It never creates a CRM user or changes their preassigned role. An unknown or inactive user is denied. After linking, issuer and subject are authoritative, even if the Google email later changes. Unique database constraints prevent a Google subject or CRM user from being silently relinked.
+Normal sign-in uses only the `openid email profile` scopes. Google establishes identity. An ADMIN pre-creates each CRM `User` with an email, role, and active status. On first sign-in, the app requires a verified Google email and the configured Workspace `hd` claim. It first searches `ExternalIdentity` by issuer `https://accounts.google.com` and Google subject. If absent, it finds an existing active CRM user by exact verified email and creates the `ExternalIdentity` link. It never creates a CRM user or changes their preassigned role. An unknown or inactive user is denied. After linking, issuer and subject are authoritative, even if the Google email later changes. Unique database constraints prevent a Google subject or CRM user from being silently relinked.
 
 Expected callbacks by browser URL are below. Register only URIs that satisfy Google's OAuth validation rules:
 

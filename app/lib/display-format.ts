@@ -8,6 +8,16 @@ export function formatCalendarDate(value: Date): string { return calendarDateFor
 export function formatEasternDate(value: Date): string { return easternDateFormatter.format(value); }
 export function formatEasternDateTime(value: Date): string { return `${formatEasternDate(value)} at ${easternTimeFormatter.format(value)}`; }
 
+/** Format a UTC instant for personal display; Intl applies the zone's DST rules. */
+export function formatDateTimeForUser(value: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone, month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short',
+  }).formatToParts(value);
+  const part = (type: string) => parts.find(item => item.type === type)?.value ?? '';
+  return `${part('month')} ${part('day')}, ${part('year')} at ${part('hour')}:${part('minute')} ${part('dayPeriod')} ${part('timeZoneName')}`;
+}
+
 export function formatCurrency(value: Money, currency: string, showCode = false): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
