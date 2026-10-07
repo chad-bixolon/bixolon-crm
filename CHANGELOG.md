@@ -10,7 +10,7 @@ boundaries. Dates are the dates of the last commits in each group.
 
 - Added Calendar Matches review with Contact/Account matching and prefilled Activity logging.
 
-- Completed an application-wide UI consistency pass across forms, filters, buttons, dropdowns, and administration pages.
+- Completed an application-wide UI consistency pass across forms, filters, buttons, dropdowns, and administration pages; refined Notification Center filtering and presentation, and changed coverage KPIs to percentage display.
 
 - Added Google Calendar event synchronization foundation with bounded initial sync and incremental updates, plus personal time-zone settings for Calendar timestamp display.
 

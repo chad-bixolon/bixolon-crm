@@ -55,6 +55,16 @@ export async function notificationSummary(db: Db, actor: Actor) {
   return { unread, rows };
 }
 
+/** Read-only counts for the two existing Notification Center bulk actions. */
+export async function notificationBulkActionAvailability(db: Db, actor: Actor) {
+  const where: Prisma.NotificationWhereInput = { ...notificationWhere(actor.id, 'active'), AND: [await visibleEntityWhere(db, actor)] };
+  const [unread, read] = await Promise.all([
+    db.notification.count({ where: { ...where, readAt: null } }),
+    db.notification.count({ where: { ...where, readAt: { not: null } } }),
+  ]);
+  return { canMarkAllRead: unread > 0, canDismissRead: read > 0 };
+}
+
 export async function updateNotification(db: Db, actor: Actor, id: number, operation: 'read' | 'dismiss') {
   if (!Number.isSafeInteger(id) || id <= 0) return false;
   const row = await db.notification.findFirst({ where: { id, userId: actor.id }, select: { entityType: true, entityId: true } });

@@ -9,7 +9,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
 const require = Module.createRequire(fileURLToPath(import.meta.url));
 const { peNotificationCandidates, peNotificationRecipient, evaluatePeNotifications, notifyPeFollowUpAssignment } = require(path.join(root, 'lib/pe-notification-evaluator.ts'));
-const { notificationWhere, notificationSummary, notificationPage, updateNotification } = require(path.join(root, 'lib/notifications.ts'));
+const { notificationWhere, notificationSummary, notificationPage, notificationBulkActionAvailability, updateNotification } = require(path.join(root, 'lib/notifications.ts'));
 const { notificationDisplayMessage, notificationEntityLabels } = require(path.join(root, 'lib/notification-presentation.ts'));
 const today = new Date('2026-10-05T00:00:00Z');
 const add = days => new Date(today.getTime() + days * 86400000);
@@ -46,6 +46,25 @@ test('notification states are per-user and active excludes dismissed and resolve
   assert.deepEqual(notificationWhere(7, 'unread'), { userId: 7, readAt: null, dismissedAt: null, resolvedAt: null });
   assert.deepEqual(notificationWhere(7, 'dismissed'), { userId: 7, dismissedAt: { not: null } });
   assert.deepEqual(notificationWhere(7, 'resolved'), { userId: 7, resolvedAt: { not: null } });
+});
+
+test('bulk button availability uses the same visible active scope as bulk actions', async () => {
+  const queries = [];
+  const db = {
+    notification: {
+      findMany: async ({ where }) => where.entityType === 'TASK' ? [{ entityId: 4 }] : [],
+      count: async ({ where }) => { queries.push(where); return where.readAt === null ? 2 : 0; },
+    },
+    task: { findMany: async () => [{ id: 4 }] },
+    priceException: { findMany: async () => [] },
+    opportunity: { findMany: async () => [] },
+  };
+  const actor = { id: 7, role: 'SALES', active: true, archivedAt: null };
+  assert.deepEqual(await notificationBulkActionAvailability(db, actor), { canMarkAllRead: true, canDismissRead: false });
+  assert.equal(queries.length, 2);
+  assert.ok(queries.every(where => where.userId === 7 && where.dismissedAt === null && where.resolvedAt === null));
+  assert.deepEqual(queries.map(where => where.readAt), [null, { not: null }]);
+  assert.deepEqual(queries[0].AND[0].OR, [{ entityType: 'TASK', entityId: { in: [4] } }]);
 });
 
 test('bell is bounded and notification mutations use effective-user identity and PE scope', async () => {

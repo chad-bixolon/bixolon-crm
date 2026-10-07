@@ -21,6 +21,7 @@ Use the existing classes in `app/app/globals.css` for forms and actions. Keep pa
 
 - `PageHeader` already places the heading on the left and actions on the right. Wrap multiple actions in `.page-header-actions`.
 - Use `.filter-panel.filter-grid.filter-row` for compact report filters, `.field.filter-control` for their controls, and `.filter-actions` for submit and clear actions. Keep labels with their controls.
+- For a small set of server-filtered states or categories, group labeled link controls in one `.filter-panel`; mark the selected link with `aria-current="page"` and a visible non-color cue. Keep a server-side select and its Apply action together when selection does not submit immediately.
 - Use `.inline-field-action` for a labeled control beside Save or Apply. Use `.form-action-row` for related actions and form footer buttons.
 - Existing `.panel` provides card border, background, and radius. Add responsive padding and gaps with the page's layout classes.
 - Let rows wrap at tablet widths. On narrow screens, controls stack and the main inline action can fill the row. Do not set fixed widths that cause horizontal overflow.

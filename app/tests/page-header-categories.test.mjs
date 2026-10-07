@@ -48,5 +48,5 @@ test('shared section labels match the primary sidebar and preserve personal exce
   }
   assert.match(read('app/page.tsx'), /eyebrow="BIXOLON SalesHub" title="Dashboard"/);
   assert.match(read('app/my-integrations/page.tsx'), /eyebrow="Personal integrations"/);
-  assert.match(read('app/notifications/page.tsx'), /eyebrow="Personal attention queue"/);
+  assert.match(read('app/notifications/page.tsx'), /eyebrow="Notifications"/);
 });

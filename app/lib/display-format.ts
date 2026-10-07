@@ -56,6 +56,11 @@ export function formatPlanPercent(value: number): string {
   return `${Number(value.toFixed(1))}%`;
 }
 
+/** Forecast coverage is stored as an amount-to-target ratio. */
+export function formatCoveragePercent(value: string | null): string {
+  return value === null ? '—' : formatPlanPercent(Number(value) * 100);
+}
+
 export function formatCloseMonth(month: string): string {
   if (month === "Unscheduled") return month;
   return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" })
