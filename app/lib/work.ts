@@ -6,6 +6,7 @@ import { archivedWhere, recordVisibility } from './record-visibility';
 import { eligibleUserWhere } from './assignment-eligibility';
 import { notifyTaskAssignment, syncTaskNotifications, syncOpportunityNotifications } from './work-notification-evaluator';
 import { getSettings } from './configuration';
+import { lockCalendarEvent } from './calendar-event-lock';
 export const taskStatuses = Object.values(TaskStatus);
 export const taskPriorities = Object.values(TaskPriority);
 export function dateField(raw: string, key: string, errors: Errors) {
@@ -136,9 +137,15 @@ export function activityErrorField(message: string) {
   if (message.includes('responsible user')) return 'userId';
   return null;
 }
-export async function saveActivity(client: PrismaClient, value: NonNullable<ReturnType<typeof parseActivity>['value']>, id?: number, actorId?: number) {
+export async function saveActivity(client: PrismaClient, value: NonNullable<ReturnType<typeof parseActivity>['value']>, id?: number, actorId?: number, calendarEventId?: number) {
   if (!id && value.createFollowUpTask && await client.task.findUnique({ where: { createKey: value.followUpTaskCreateKey } })) throw new Error('This follow-up Task has already been scheduled.');
   return client.$transaction(async tx => {
+    if (calendarEventId) {
+      await lockCalendarEvent(tx, calendarEventId);
+      const review = await tx.googleCalendarEventReview.findUnique({ where: { eventId: calendarEventId }, include: { event: true } });
+      const meetingEnd = review?.event.endAt ?? (review?.event.endDate ? new Date(`${review.event.endDate}T00:00:00Z`) : null);
+      if (!review || review.activityId || review.ignoredAt || review.event.status.toUpperCase() === 'CANCELLED' || review.event.cancelledAt || !meetingEnd || meetingEnd > new Date()) throw new Error('This Calendar event is no longer available for logging.');
+    }
     const existing = id ? await tx.activity.findFirst({ where: { id, archivedAt: null } }) : null;
     if (id && !existing) throw new Error('Activity not found or archived.');
     if (!value.accountId) throw new Error('Choose an Account.');
@@ -173,6 +180,7 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
       })) throw new Error('This Contact is not associated with the selected Account. Choose an active Contact at this Account or an unassigned Contact.');
     }
     const row = id ? await tx.activity.update({ where: { id }, data }) : await tx.activity.create({ data });
+    if (calendarEventId) await tx.googleCalendarEventReview.update({ where: { eventId: calendarEventId }, data: { activityId: row.id, reviewedAt: new Date(), reviewedById: actorId, selectedContactIds: value.contactIds, selectedAccountId: value.accountId, selectedOpportunityId: value.opportunityId, selectedProjectId: value.projectId, selectionsConfirmed: true } });
     const removedContactIds = linked.filter(link => !contactIds.includes(link.contactId)).map(link => link.contactId);
     if (removedContactIds.length) await tx.activityContact.deleteMany({ where: { activityId: row.id, contactId: { in: removedContactIds } } });
     for (const contactId of contactIds) await tx.activityContact.createMany({ data: [{ activityId: row.id, contactId }], skipDuplicates: true });

@@ -264,6 +264,8 @@ model User {
   identities              ExternalIdentity[]
   googleCalendarConnection GoogleCalendarConnection?
   googleCalendarEvents     GoogleCalendarEvent[]
+  ignoredCalendarReviews GoogleCalendarEventReview[] @relation("CalendarReviewIgnoredBy")
+  reviewedCalendarReviews GoogleCalendarEventReview[] @relation("CalendarReviewReviewedBy")
   ownedAccounts           Account[]          @relation("AccountOwner")
   opportunities           Opportunity[]      @relation("OpportunityOwner")
   tasks                   Task[]             @relation("TaskAssignee")
@@ -494,11 +496,40 @@ model GoogleCalendarEvent {
   createdAt            DateTime                    @default(now())
   updatedAt            DateTime                    @updatedAt
   attendees            GoogleCalendarAttendee[]
+  review               GoogleCalendarEventReview?
 
   @@unique([connectionId, googleCalendarId, googleEventId])
   @@index([userId, startAt])
   @@index([userId, startDate])
   @@index([connectionId, status])
+}
+
+model GoogleCalendarEventReview {
+  eventId                Int @id
+  event                  GoogleCalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  matchStatus            String @default("UNMATCHED")
+  explanations           String[] @default([])
+  suggestedContactIds    Int[] @default([])
+  suggestedAccountId     Int?
+  suggestedOpportunityId Int?
+  suggestedProjectId     Int?
+  selectedContactIds     Int[] @default([])
+  selectedAccountId      Int?
+  selectedOpportunityId  Int?
+  selectedProjectId      Int?
+  selectionsConfirmed    Boolean @default(false)
+  ignoredAt              DateTime?
+  ignoredById            Int?
+  ignoredBy              User? @relation("CalendarReviewIgnoredBy", fields: [ignoredById], references: [id], onDelete: Restrict)
+  activityId             Int? @unique
+  activity               Activity? @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  reviewedAt             DateTime?
+  reviewedById           Int?
+  reviewedBy             User? @relation("CalendarReviewReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([matchStatus, ignoredAt, activityId])
 }
 
 model GoogleCalendarAttendee {
@@ -1654,6 +1685,7 @@ model Activity {
   nextStep      String?
   followUpDate  DateTime?
   contacts      ActivityContact[]
+  calendarReview GoogleCalendarEventReview?
   activityDate  DateTime          @default(now())
   archivedAt    DateTime?
   createdById   Int?

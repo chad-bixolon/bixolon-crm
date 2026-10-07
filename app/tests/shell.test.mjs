@@ -36,7 +36,7 @@ function render(user, route = '/', extras = {}) {
 
 const expectedSections = {
   CRM: ['/', '/accounts', '/contacts'],
-  Sales: ['/opportunities', '/pipeline', '/sales-plan', '/tasks', '/demos'],
+  Sales: ['/opportunities', '/pipeline', '/sales-plan', '/tasks', '/calendar-matches', '/demos'],
   Programs: ['/projects'],
   Marketing: ['/trade-shows', '/marketing/campaigns', '/marketing/audiences'],
   'Catalog & Pricing': ['/products', '/price-exceptions'],
@@ -129,7 +129,7 @@ test('navigation groups preserve every route once and match effective role acces
     const expected = Object.fromEntries(Object.entries(expectedSections).map(([section, routes]) => [section, routes.filter(route =>
       (route !== '/demos' || role === 'ADMIN') &&
       (route !== '/opportunities' || can(actor, 'opportunities.read')) &&
-      (!['/pipeline', '/sales-plan'].includes(route) || can(actor, route === '/sales-plan' ? 'sales-plan.read' : 'sales.read')) &&
+      (!['/pipeline', '/sales-plan', '/calendar-matches'].includes(route) || can(actor, route === '/sales-plan' ? 'sales-plan.read' : 'sales.read')) &&
       (route !== '/marketing/audiences' || can(actor, 'marketing.read')) &&
       (!['/administration', '/integrations'].includes(route) || can(actor, route === '/administration' ? 'users.manage' : 'integrations.manage'))
     )]).filter(([, routes]) => routes.length));

@@ -13,14 +13,14 @@ import type { NotificationItem } from '@/lib/notifications';
 
 const navSections = [
   { label: "CRM", items: ["Dashboard", "Accounts", "Contacts"] },
-  { label: "Sales", items: ["Opportunities", "Pipeline", "Sales Plan", "Tasks", "Demos"] },
+  { label: "Sales", items: ["Opportunities", "Pipeline", "Sales Plan", "Tasks", "Calendar Matches", "Demos"] },
   { label: "Programs", items: ["Projects"] },
   { label: "Marketing", items: ["Trade Shows", "Campaigns", "Marketing Audiences"] },
   { label: "Catalog & Pricing", items: ["Products", "Price Exceptions"] },
   { label: "Reports", items: ["Reports"] },
   { label: "Administration", items: ["Administration", "Integrations"] },
 ] as const;
-const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Sales Plan" ? "/sales-plan" : item === "Price Exceptions" ? "/price-exceptions" : item === "Trade Shows" ? "/trade-shows" : item === "Campaigns" ? "/marketing/campaigns" : item === "Marketing Audiences" ? "/marketing/audiences" : `/${item.toLowerCase()}`;
+const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Sales Plan" ? "/sales-plan" : item === "Calendar Matches" ? "/calendar-matches" : item === "Price Exceptions" ? "/price-exceptions" : item === "Trade Shows" ? "/trade-shows" : item === "Campaigns" ? "/marketing/campaigns" : item === "Marketing Audiences" ? "/marketing/audiences" : `/${item.toLowerCase()}`;
 const navLabelKeys: Partial<Record<string, keyof LabelMap>> = { Accounts: "ACCOUNT", Contacts: "CONTACT", Projects: "PROJECT", Opportunities: "OPPORTUNITY", Tasks: "TASK" };
 type ShellUser = { name: string; role: UserRole; canManageUsers: boolean; canViewReports: boolean; canViewMarketing:boolean; canViewSales:boolean; canViewOpportunities:boolean };
 type NavItem = (typeof navSections)[number]["items"][number];
@@ -33,6 +33,7 @@ function canSeeNavItem(item: NavItem, user: ShellUser | null) {
     case "Opportunities": return user.canViewOpportunities;
     case "Pipeline":
     case "Sales Plan": return user.canViewSales;
+    case "Calendar Matches": return user.canViewSales;
     case "Campaigns": return true;
     case "Marketing Audiences": return user.canViewMarketing;
     case "Demos": return user.role === "ADMIN";
