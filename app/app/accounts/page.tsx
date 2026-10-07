@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from "next/link";
 import { AccountTableRow } from "@/components/account-table-row";
 import { Content, PageHeader } from "@/components/shell";
@@ -17,7 +18,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   const resolvedFilters = { ...filters, view };
   const [{ accounts, count, page, pages }, options, labels, salesReps] = await Promise.all([listAccounts(prisma, resolvedFilters, actor.id), accountOptions(prisma), getLabels(prisma), listSalesReps(prisma)]);
   const linkFor = (target: number) => accountHref(resolvedFilters, { page: String(target) });
-  return <Content><PageHeader eyebrow="CRM records" title="Accounts" description="Organizations and relationships in the CRM." action={can(actor, 'accounts.write') && <Link href="/accounts/new" className="btn-primary">New account</Link>}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.crm} title="Accounts" description="Organizations and relationships in the CRM." action={can(actor, 'accounts.write') && <Link href="/accounts/new" className="btn-primary">New account</Link>}/>
     <nav aria-label="Account views" className="mb-4 flex gap-1 border-b border-slate-200">{([ ["all", "All Accounts"], ["my", "My Accounts"] ] as const).map(([value, label]) => <Link key={value} href={accountHref(filters, { view: value, ...(value === "my" ? { salesRepId: "" } : {}) })} aria-current={view === value ? "page" : undefined} className={`border-b-2 px-4 py-2.5 text-sm font-semibold ${view === value ? "border-orange-600 text-orange-800" : "border-transparent text-slate-600 hover:text-slate-900"}`}>{label}</Link>)}</nav>
     <form className="panel mb-3 flex w-full flex-wrap items-end gap-x-1.5 gap-y-1.5 p-1.5" method="get" aria-label="Filter accounts">
       <input type="hidden" name="view" value={view}/>

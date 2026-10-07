@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
@@ -15,5 +16,5 @@ export default async function PipelineViewPage({ searchParams }: { searchParams:
   const params = await searchParams;
   const config = pipelineConfigFromParams(params);
   const result = await executePipelineReport(prisma, actor, config);
-  return <Content><PageHeader eyebrow="Reports" title="Pipeline Report" description="Current Opportunities in your sales view." action={<Link className="btn-secondary" href="/reports">Reports</Link>}/><ReportResults result={result} config={config} groupKey={typeof params.group === 'string' ? params.group : undefined}/></Content>;
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.reports} title="Pipeline Report" description="Current Opportunities in your sales view." action={<Link className="btn-secondary" href="/reports">Reports</Link>}/><ReportResults result={result} config={config} groupKey={typeof params.group === 'string' ? params.group : undefined}/></Content>;
 }

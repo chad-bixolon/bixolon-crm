@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Content, PageHeader } from "@/components/shell";
@@ -75,7 +76,7 @@ export default async function OpportunityPage({ params, searchParams }: { params
     }
   };
   const saveMessage = saveFeedbackMessage(workViews.saved, 'Opportunity');
-  return <Content><PageHeader eyebrow="Opportunities" title={o.name} description={`Opportunity #${id}`} action={<div className="page-header-actions"><Link className="btn-secondary" href="/opportunities">All opportunities</Link>{can(actor, "sales.write") && !o.archivedAt && (actor.role !== "SALES" || o.ownerId === actor.id) && <Link className="btn-primary" href={`/opportunities/${id}/edit`}>Edit opportunity</Link>}</div>}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.sales} title={o.name} description={`Opportunity #${id}`} action={<div className="page-header-actions"><Link className="btn-secondary" href="/opportunities">All opportunities</Link>{can(actor, "sales.write") && !o.archivedAt && (actor.role !== "SALES" || o.ownerId === actor.id) && <Link className="btn-primary" href={`/opportunities/${id}/edit`}>Edit opportunity</Link>}</div>}/>
     {saveMessage && <SaveSuccess message={saveMessage}/>}
     <div className="mb-5"><MarketingAttributionCard actor={actor} leadSource={attribution.leadSource} influences={attribution.influences}/></div>
     <div className="panel mb-5 flex flex-wrap items-center gap-3 p-5"><span className="rounded bg-slate-100 px-3 py-1 text-sm">{o.archivedAt ? "Archived" : "Current"}</span>{can(actor, "sales.write") && <CrmStateControl kind="opportunity" id={id} state={o.archivedAt ? "archived" : "active"}/>}</div>

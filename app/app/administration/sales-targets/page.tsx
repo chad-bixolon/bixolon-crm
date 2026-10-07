@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
 import { requirePermission } from '@/lib/current-user';
@@ -9,7 +10,7 @@ export const dynamic = 'force-dynamic';
 type Filters = { userId?: string; year?: string; quarter?: string; currencyCode?: string; status?: string; error?: string; edit?: string };
 export default async function SalesTargetsPage({ searchParams }: { searchParams: Promise<Filters> }) {
   const actor = await requirePermission('users.manage');
-  if (actor.role !== 'ADMIN') return <Content><PageHeader title="Sales Targets" eyebrow="Administration"/><p>Access denied.</p></Content>;
+  if (actor.role !== 'ADMIN') return <Content><PageHeader title="Sales Targets" eyebrow={NAV_CATEGORIES.administration}/><p>Access denied.</p></Content>;
   const f = await searchParams;
   const [users, currencies, targets] = await Promise.all([
     prisma.user.findMany({ where: { active: true, archivedAt: null, role: { in: ['SALES', 'SALES_MANAGER'] } }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
@@ -18,7 +19,7 @@ export default async function SalesTargetsPage({ searchParams }: { searchParams:
   ]);
   const edit = targets.find(row => row.id === Number(f.edit) && !row.archivedAt);
   const year = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric' }).format(new Date());
-  return <Content><PageHeader eyebrow="Administration" title="Sales Targets" description="One active target per rep, calendar quarter, and currency." action={<Link href="/administration" className="btn-secondary">Administration</Link>}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Sales Targets" description="One active target per rep, calendar quarter, and currency." action={<Link href="/administration" className="btn-secondary">Administration</Link>}/>
     {f.error && <p role="alert" className="mb-4 rounded bg-red-50 p-3 text-sm text-red-800">{f.error}</p>}
     <section className="panel mb-5 p-5"><h2 className="mb-4 text-lg font-semibold">{edit ? 'Edit target' : 'Add target'}</h2><form action={saveTargetAction} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{edit && <input type="hidden" name="id" value={edit.id}/>}
       <label className="label">Sales Rep<select className="field" name="userId" required defaultValue={edit?.userId ?? ''}><option value="">Choose rep</option>{users.map(user => <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>)}</select></label>

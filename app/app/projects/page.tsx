@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import { operationalProjectWhere, operationalOpportunityWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import { ProjectStatus, type Prisma } from '@prisma/client';
@@ -23,7 +24,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     prisma.account.findMany({ where: { archivedAt: null, status: 'ACTIVE' }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
     prisma.user.findMany({ where: { active: true, archivedAt: null }, select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }),
   ]);
-  return <Content><PageHeader eyebrow="CRM records" title="Projects" description="Programs and initiatives with optional Account relationships." action={can(actor, 'projects.write') ? <Link className="btn-primary" href="/projects/new">New Project</Link> : undefined}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.programs} title="Projects" description="Programs and initiatives with optional Account relationships." action={can(actor, 'projects.write') ? <Link className="btn-primary" href="/projects/new">New Project</Link> : undefined}/>
     <form method="get" className="panel filter-panel filter-grid filter-grid-five mb-5" aria-label="Filter projects">
       <label className="label">Search<input className="field filter-control" name="q" defaultValue={filters.q ?? ''} placeholder="Project name"/></label>
       <label className="label">Status<select className="field filter-control" name="status" defaultValue={filters.status ?? ''}><option value="">All statuses</option>{Object.entries(projectStatusLabels).map(([code,label]) => <option key={code} value={code}>{label}</option>)}</select></label>

@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../../lib/navigation-categories';
 import { notFound } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
 import { TradeShowForm } from '@/components/trade-show-form';
@@ -14,5 +15,5 @@ export default async function EditTradeShowPage({ params }: { params: Promise<{ 
     prisma.user.findMany({ where: { role: 'MARKETING_MANAGER', active: true, archivedAt: null }, select: { id: true, firstName: true, lastName: true }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
   ]);
   if (!show) notFound();
-  return <Content><PageHeader eyebrow="Trade Shows" title={`Edit ${show.name}`}/>{show.archivedAt ? <div className="panel p-6">Reactivate this Trade Show before editing it.</div> : <TradeShowForm id={id} initial={show} owners={owners} currentOwner={show.marketingOwner}/>}</Content>;
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.marketing} title={`Edit ${show.name}`}/>{show.archivedAt ? <div className="panel p-6">Reactivate this Trade Show before editing it.</div> : <TradeShowForm id={id} initial={show} owners={owners} currentOwner={show.marketingOwner}/>}</Content>;
 }

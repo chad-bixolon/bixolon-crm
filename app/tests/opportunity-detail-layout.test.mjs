@@ -14,6 +14,7 @@ const originalLoad = Module._load;
 Module._extensions['.tsx'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
 }).outputText, filename);
+Module._extensions['.ts'] = Module._extensions['.tsx'];
 const Link = ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children);
 const actor = { id: 1, role: 'ADMIN' };
 let opportunity;

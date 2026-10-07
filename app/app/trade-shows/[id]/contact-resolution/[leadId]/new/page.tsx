@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../../../../lib/navigation-categories';
 import Link from 'next/link';
 import {notFound,redirect} from 'next/navigation';
 import {ContactForm} from '@/components/contact-form';
@@ -16,7 +17,7 @@ export default async function NewResolutionContactPage({params,searchParams}:{pa
   const sourceAddress={addressLine1:reviewedValue(lead.addressLine1),addressLine2:reviewedValue(lead.addressLine2),city:reviewedValue(lead.city),stateProvince:reviewedValue(lead.stateProvince),postalCode:reviewedValue(lead.postalCode),country:reviewedValue(lead.country)};
   const initial={accountId:lead.accountId,useAccountAddress:lead.accountId !== null && !sourceAddressDiffersFromAccount(sourceAddress,accounts.find(account=>account.id===lead.accountId)??null),firstName:reviewedValue(lead.firstName)??'',lastName:reviewedValue(lead.lastName)??'',title:reviewedValue(lead.title),email,phone:reviewedValue(lead.phone),mobile:null,active:true,isPrimary:false,...sourceAddress};
   const back=`/trade-shows/${tradeShowId}/contact-resolution?resolveLead=${lead.id}${returnTo?`&returnTo=${encodeURIComponent(returnTo)}`:''}`;
-  return <Content><PageHeader eyebrow="Contact Resolution" title={`Create Contact for ${lead.firstName} ${lead.lastName}`} description="Review the normalized Contact fields below. The original Trade Show lead remains unchanged." action={<Link className="btn-secondary" href={back}>Back to Review</Link>}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.marketing} title={`Create Contact for ${lead.firstName} ${lead.lastName}`} description="Review the normalized Contact fields below. The original Trade Show lead remains unchanged." action={<Link className="btn-secondary" href={back}>Back to Review</Link>}/>
     {matches.length>0&&<div className="mb-5 rounded border border-amber-300 bg-amber-50 p-4"><strong>Do not create a duplicate Contact</strong><p className="mt-1 text-sm">This email already belongs to {matches.length===1?'a Contact':'multiple Contacts'}. Return to review and explicitly link the correct record.</p><ul className="mt-2 text-sm">{matches.map(match=><li key={match.id}><Link className="font-semibold text-orange-800 underline" href={`/contacts/${match.id}`}>{match.firstName} {match.lastName}</Link>{match.account?` · ${match.account.name}`:' · Unassigned'}</li>)}</ul></div>}
     <ContactForm accounts={accounts} initial={initial} resolutionContext={{tradeShowId,leadId,returnTo}}/>
   </Content>;

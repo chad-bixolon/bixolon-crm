@@ -10,7 +10,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 test('Account detail and list identify accounts by name while retaining ID routes', () => {
   const detail = read('app/accounts/[id]/page.tsx');
   const list = read('app/accounts/page.tsx');
-  assert.match(detail, /<PageHeader eyebrow="Accounts" title=\{account\.name\} action=/);
+  assert.match(detail, /<PageHeader eyebrow=\{NAV_CATEGORIES\.crm\} title=\{account\.name\} action=/);
   assert.match(list, /href=\{`\/accounts\/\$\{a\.id\}`\}>\{a\.name\}<\/Link>/);
   assert.match(detail, /href=\{`\/accounts\/\$\{id\}\/edit`\}/);
   assert.match(detail, /<RelatedWork accountId=\{id\}/);

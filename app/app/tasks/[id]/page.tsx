@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
@@ -26,7 +27,7 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
     ['Due date', task.dueDate?.toISOString().slice(0, 10) ?? 'None'],
   ];
   return <Content>
-    <PageHeader eyebrow="Tasks" title={task.subject} action={<div className="page-header-actions"><Link className="btn-secondary" href="/tasks">All tasks</Link>{can(actor, 'tasks.write') && <Link className="btn-primary" href={`/tasks/${id}/edit`}>Edit task</Link>}</div>}/>
+    <PageHeader eyebrow={NAV_CATEGORIES.sales} title={task.subject} action={<div className="page-header-actions"><Link className="btn-secondary" href="/tasks">All tasks</Link>{can(actor, 'tasks.write') && <Link className="btn-primary" href={`/tasks/${id}/edit`}>Edit task</Link>}</div>}/>
     {saveFeedbackMessage(query.saved, 'Task') && <SaveSuccess message={saveFeedbackMessage(query.saved, 'Task')!}/>}
     <section className="panel space-y-5 p-6">
       {task.archivedAt && <span className="inline-block rounded bg-slate-100 px-3 py-1 text-sm font-semibold">Archived</span>}

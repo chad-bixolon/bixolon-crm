@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import { operationalOpportunityWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import type { Actor } from '@/lib/authorization';
@@ -33,7 +34,7 @@ export async function PriceExceptionUsageBuilder({params,actor,saved}:{params:Pa
   const between=config.filters.find(x=>x.field==='closeDate'&&x.operator==='between')?.value as {from:string;to:string}|undefined;
   const definition=reportRegistry.PRICE_EXCEPTION_USAGE;
   const select=(name:string,label:string,items:{value:string|number;label:string}[],empty='All')=><label className="label">{label}<select className="field" name={name} defaultValue={selected(name)}><option value="">{empty}</option>{items.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</select></label>;
-  return <Content><PageHeader eyebrow="Reports" title={saved?'Edit Price Exception Usage':'Price Exception Usage'} description="Analyze Price Exception usage by account, product, sales rep, and PE." action={<Link className="btn-secondary" href="/reports">Reports</Link>}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.reports} title={saved?'Edit Price Exception Usage':'Price Exception Usage'} description="Analyze Price Exception usage by account, product, sales rep, and PE." action={<Link className="btn-secondary" href="/reports">Reports</Link>}/>
     <div className="mb-2 flex flex-wrap gap-2"><Link className="btn-secondary" href="/reports/new?reportType=PIPELINE">Pipeline</Link><Link className="btn-secondary" href="/reports/new?reportType=ACCOUNT_ACTIVITY">Account Activity</Link><Link className="btn-secondary" href="/reports/new?reportType=PRODUCT_PERFORMANCE">Product Performance</Link><Link className="btn-secondary" href="/reports/new?reportType=CHANNEL_PARTNER">Channel / Partner</Link><Link className="btn-secondary" href="/reports/new?reportType=PROJECT_INITIATIVE">Project Performance</Link><Link className="btn-secondary" href="/reports/new?reportType=PRICE_EXCEPTION_USAGE">Price Exception Usage</Link></div>
     <form method="get" className="panel report-builder p-3 md:p-4"><input type="hidden" name="configured" value="1"/><input type="hidden" name="reportType" value="PRICE_EXCEPTION_USAGE"/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}
       <fieldset className="report-section report-primary-filters"><legend className="report-section-title">Primary filters</legend><div className="report-filter-grid">

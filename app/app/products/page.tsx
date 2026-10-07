@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from "next/link";
 import { Content, PageHeader } from "@/components/shell";
 import { odmSubtypeLabels } from "@/lib/product-labels";
@@ -20,7 +21,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const linkFor = (target: number) => productHref(filters, target);
 
   return <Content>
-    <PageHeader eyebrow="CRM records" title="Products" description="Products available for opportunity estimates." action={canManageProducts ? <Link className="btn-primary" href="/products/new">New product</Link> : undefined}/>
+    <PageHeader eyebrow={NAV_CATEGORIES.catalogPricing} title="Products" description="Products available for opportunity estimates." action={canManageProducts ? <Link className="btn-primary" href="/products/new">New product</Link> : undefined}/>
     <form method="get" className="panel filter-panel filter-grid filter-row mb-4" aria-label="Filter products">
       <label className="label">Search<input className="field filter-control" name="q" id="q" placeholder="SKU or name" defaultValue={filters.q ?? ""}/></label>
       <label className="label">Status<select className="field filter-control" name="active" id="active" defaultValue={filters.active ?? ""}><option value="">Current</option><option value="all">All</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="archived">Archived</option></select></label>

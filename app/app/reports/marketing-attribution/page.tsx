@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
@@ -20,7 +21,7 @@ export default async function MarketingAttributionPage({ searchParams }: { searc
   ]);
   const query = (page: number) => { const next = new URLSearchParams(); for (const [key, value] of Object.entries(params)) if (key !== 'page' && typeof value === 'string') next.set(key, value); next.set('page', String(page)); return `/reports/marketing-attribution?${next}`; };
   return <Content>
-    <PageHeader eyebrow="Marketing reports" title="Marketing Attribution" description="Recorded Campaign Influence activity. Each touch appears once; voided touches remain visible for review." />
+    <PageHeader eyebrow={NAV_CATEGORIES.reports} title="Marketing Attribution" description="Recorded Campaign Influence activity. Each touch appears once; voided touches remain visible for review." />
     <form className="panel filter-panel filter-grid filter-row mb-5" method="get" aria-label="Filter Marketing Attribution">
       <label className="text-sm">From<input className="field mt-1 block w-full" name="from" type="date" defaultValue={params.from}/></label>
       <label className="text-sm">To<input className="field mt-1 block w-full" name="to" type="date" defaultValue={params.to}/></label>

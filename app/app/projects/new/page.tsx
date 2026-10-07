@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import { Content, PageHeader } from '@/components/shell';
 import { ProjectForm } from '@/components/project-form';
 import { prisma } from '@/lib/prisma';
@@ -12,5 +13,5 @@ export default async function NewProjectPage({ searchParams }: { searchParams: P
     prisma.user.findMany({ where: eligibleUserWhere('projects.write'), select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }), searchParams,
   ]);
   const candidate = positiveId(params.primaryAccountId ?? '');
-  return <Content><PageHeader eyebrow="Projects" title="New Project" description="Use Projects for broader initiatives, evaluations, implementations, or programs that may involve multiple Opportunities."/><ProjectForm accounts={accounts} owners={owners} defaultOwnerId={defaultEligibleUserId(owners, actor.id)} primaryAccountId={accounts.some(a => a.id === candidate) ? candidate! : undefined}/></Content>;
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.programs} title="New Project" description="Use Projects for broader initiatives, evaluations, implementations, or programs that may involve multiple Opportunities."/><ProjectForm accounts={accounts} owners={owners} defaultOwnerId={defaultEligibleUserId(owners, actor.id)} primaryAccountId={accounts.some(a => a.id === candidate) ? candidate! : undefined}/></Content>;
 }

@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
@@ -21,7 +22,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       ['Due date', row.dueDate?.toISOString().slice(0, 10) ?? 'None'],
       ['Archived on', row.archivedAt.toISOString().slice(0, 10)],
     ];
-    return <Content><PageHeader title={row.subject} eyebrow="Tasks" action={<Link className="btn-secondary" href="/tasks?visibility=archived">Archived tasks</Link>}/>
+    return <Content><PageHeader title={row.subject} eyebrow={NAV_CATEGORIES.sales} action={<Link className="btn-secondary" href="/tasks?visibility=archived">Archived tasks</Link>}/>
       <div className="panel space-y-5 p-6">
         <span className="inline-block rounded bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">Archived</span>
         {row.description && <p className="whitespace-pre-wrap text-sm">{row.description}</p>}
@@ -35,5 +36,5 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   }
 
   const options = await workOptions({ userId: row.assignedToId });
-  return <Content><PageHeader title={`Edit task: ${row.subject}`} eyebrow="Tasks"/><WorkForm kind="task" id={id} {...options} initial={{ subject: row.subject, description: row.description, accountId: row.accountId, opportunityId: row.opportunityId, projectId: row.projectId, assignedToId: row.assignedToId, status: row.status, priority: row.priority, dueDate: row.dueDate?.toISOString().slice(0, 10) ?? '' }}/></Content>;
+  return <Content><PageHeader title={`Edit task: ${row.subject}`} eyebrow={NAV_CATEGORIES.sales}/><WorkForm kind="task" id={id} {...options} initial={{ subject: row.subject, description: row.description, accountId: row.accountId, opportunityId: row.opportunityId, projectId: row.projectId, assignedToId: row.assignedToId, status: row.status, priority: row.priority, dueDate: row.dueDate?.toISOString().slice(0, 10) ?? '' }}/></Content>;
 }

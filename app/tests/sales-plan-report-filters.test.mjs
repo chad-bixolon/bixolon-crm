@@ -12,6 +12,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const require=Module.createRequire(import.meta.url);
 const originalLoad=Module._load;
 Module._extensions['.tsx']=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,filename);
+Module._extensions['.ts']=Module._extensions['.tsx'];
 const prisma={
   salesPlan:{findMany:async()=>[]},
   user:{findMany:async()=>[{id:7,firstName:'Alex',lastName:'Rivera'}]},

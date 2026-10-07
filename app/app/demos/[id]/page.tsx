@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
@@ -42,7 +43,7 @@ export default async function DemoPage({ params }: { params: Promise<{ id: strin
   const result = request.opportunity ? opportunityResult(request.opportunity) : null;
 
   return <Content>
-    <PageHeader eyebrow="Demos" title={demoLabel(request)} action={<Link href={`/accounts/${request.accountId}?tab=demos`} className="btn-secondary">Account Demos</Link>}/>
+    <PageHeader eyebrow={NAV_CATEGORIES.sales} title={demoLabel(request)} action={<Link href={`/accounts/${request.accountId}?tab=demos`} className="btn-secondary">Account Demos</Link>}/>
     <div className="panel grid gap-3 p-5 text-sm sm:grid-cols-2">
       <p><b>Status:</b> {demoStatusLabel(request.status)}</p>
       <p><b>Account:</b> <Link className="text-orange-800 underline" href={`/accounts/${request.accountId}`}>{request.account.name}</Link></p>

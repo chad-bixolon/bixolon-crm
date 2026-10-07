@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import { followUpLabels, followUpStatuses } from '@/lib/price-exception-follow-up';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -16,7 +17,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Expiring
   const reps=actor.role==='SALES'?[]:await prisma.user.findMany({where:{OR:[{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},{assignedPriceExceptions:{some:{}}}]},select:{id:true,firstName:true,lastName:true},orderBy:[{lastName:'asc'},{firstName:'asc'}]});
   const query=new URLSearchParams(Object.entries(filters).filter(([key,value])=>key!=='page'&&!!value) as [string,string][]);
   const href=(page:number)=>{const next=new URLSearchParams(query);next.set('page',String(page));return `/reports/price-exceptions-expiring?${next}`};
-  return <Content><PageHeader eyebrow="Reports / Price Exceptions" title="Expiring Price Exceptions" description="Follow up on expired and upcoming Price Exceptions. Stored status and expiration state are shown separately." action={<Link className="btn-primary" href={`/reports/price-exceptions-expiring/export?${query}`}>Export Excel</Link>}/>
+  return <Content><PageHeader eyebrow={`${NAV_CATEGORIES.reports} / Price Exceptions`} title="Expiring Price Exceptions" description="Follow up on expired and upcoming Price Exceptions. Stored status and expiration state are shown separately." action={<Link className="btn-primary" href={`/reports/price-exceptions-expiring/export?${query}`}>Export Excel</Link>}/>
     <form method="get" className="panel filter-panel filter-grid mb-5" aria-label="Filter Expiring Price Exceptions">
       <label className="label">Expiration window<select className="field filter-control" name="expiration" defaultValue={window}>{windows.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
       <label className="label">Stored Status<select className="field filter-control" name="status" defaultValue={filters.status??(window==='follow-up'||window==='activeExpired'?'ACTIVE':'ALL')}><option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="EXPIRED">Expired status</option><option value="ARCHIVED">Archived</option></select></label>

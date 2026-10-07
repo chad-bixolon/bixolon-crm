@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import { Content, PageHeader } from "@/components/shell";
 import { OpportunityForm } from "@/components/opportunity-form";
 import { opportunityOptions } from "@/lib/opportunities";
@@ -14,5 +15,5 @@ export default async function NewOpportunityPage({ searchParams }: { searchParam
   const accountContextId = rawAccountId === undefined ? undefined : typeof rawAccountId === 'string' && /^[1-9]\d*$/.test(rawAccountId) ? Number(rawAccountId) : NaN;
   if (accountContextId !== undefined && (!Number.isSafeInteger(accountContextId) || !options.accounts.some(account => account.id === accountContextId))) notFound();
   const owners = actor.role === 'SALES' ? options.owners.filter(owner => owner.id === actor.id) : options.owners;
-  return <Content><PageHeader eyebrow="Opportunities" title="New opportunity" description="Use Opportunities for specific commercial pursuits with expected revenue and close timing."/><OpportunityForm key={accountContextId ? `new-account-${accountContextId}` : "new"} userId={actor.id} accountContextId={accountContextId} {...options} owners={owners} defaultOwnerId={defaultEligibleUserId(owners, actor.id) ?? undefined} labels={labels}/></Content>;
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.sales} title="New opportunity" description="Use Opportunities for specific commercial pursuits with expected revenue and close timing."/><OpportunityForm key={accountContextId ? `new-account-${accountContextId}` : "new"} userId={actor.id} accountContextId={accountContextId} {...options} owners={owners} defaultOwnerId={defaultEligibleUserId(owners, actor.id) ?? undefined} labels={labels}/></Content>;
 }

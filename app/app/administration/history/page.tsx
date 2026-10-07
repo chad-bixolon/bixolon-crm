@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SalesQuarter } from '@prisma/client';
@@ -46,7 +47,7 @@ export default async function HistoryAdministration({ searchParams }: { searchPa
   const capturedWeek = formatSnapshotWeekQuery(feedback.week);
   const createdCount = Number(feedback.count);
   const eligible = preview.events > 0 || preview.snapshots > 0;
-  return <Content><PageHeader eyebrow="Administration" title="Opportunity & Forecast History" action={<Link className="btn-secondary" href="/administration/settings">Retention setting</Link>}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Opportunity & Forecast History" action={<Link className="btn-secondary" href="/administration/settings">Retention setting</Link>}/>
     {feedback.capture === 'created' && capturedWeek && Number.isSafeInteger(createdCount) && createdCount > 0 && <p className="panel mb-4 p-4 text-sm">{captureFeedback(createdCount, capturedWeek)}</p>}
     {feedback.capture === 'existing' && capturedWeek && <p className="panel mb-4 p-4 text-sm">{existingCaptureFeedback(capturedWeek)}</p>}
     {feedback.restore === 'complete' && <p className="panel mb-4 p-4 text-sm">Archive batch restored.</p>}

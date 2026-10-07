@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from 'next/link';
 import { restoreReportAction } from './actions';
 import { notFound } from 'next/navigation';
@@ -93,7 +94,7 @@ export default async function ReportsPage({searchParams}:{searchParams:Promise<{
   const shared = reports.filter(report => report.visibility === 'SHARED' && report.ownerId !== actor.id);
 
   return <Content>
-    <PageHeader eyebrow="Reporting" title="Reports" description="Create, save, and review reports using current SalesHub data." action={creatableReportTypes.length ? <Link className="btn-primary" href={creatableReportTypes.includes('PIPELINE')?'/reports/new':'/reports/new?reportType=TRADE_SHOW'}>Create Report</Link> : undefined} />
+    <PageHeader eyebrow={NAV_CATEGORIES.reports} title="Reports" description="Create, save, and review reports using current SalesHub data." action={creatableReportTypes.length ? <Link className="btn-primary" href={creatableReportTypes.includes('PIPELINE')?'/reports/new':'/reports/new?reportType=TRADE_SHOW'}>Create Report</Link> : undefined} />
     {marketingReports&&<section className="panel mb-6 p-5"><h2 className="text-lg font-semibold">Marketing</h2><div className="mt-3 grid gap-3 sm:grid-cols-2"><Link className="rounded-md border p-4 hover:border-orange-400" href="/reports/trade-shows"><strong>Trade Show Report</strong><p className="mt-1 text-sm text-slate-600">Review event leads and follow-up.</p></Link><Link className="rounded-md border p-4 hover:border-orange-400" href="/reports/marketing-attribution"><strong>Marketing Attribution</strong><p className="mt-1 text-sm text-slate-600">Review recorded Campaign Influence activity.</p></Link><Link className="rounded-md border p-4 hover:border-orange-400" href="/reports/lead-sources"><strong>Lead Sources</strong><p className="mt-1 text-sm text-slate-600">Count unique prospects by first-touch source.</p></Link></div></section>}
     {visibleReportTypes.includes('PIPELINE')&&<section className="-mt-1 mb-6">
       <Link className="group flex flex-col gap-3 rounded-lg border border-orange-200 bg-orange-50/70 p-4 transition-colors hover:border-orange-400 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600 sm:flex-row sm:items-center sm:justify-between" href="/reports/forecast">

@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../../lib/navigation-categories';
 import { notFound, redirect } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
 import { ProjectForm } from '@/components/project-form';
@@ -23,5 +24,5 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
     accounts.push(...linkedAccounts.map(account => ({ ...account, name: `${account.name} (inactive)` })));
   }
   const initial = { ...project, participants: project.participants.map(p => ({ accountId: p.accountId, roles: p.roles.map(r => r.role) })) };
-  return <Content><PageHeader eyebrow="Projects" title={`Edit ${project.name}`}/>{project.archivedAt ? <div className="panel p-6">Reactivate this Project before editing it.</div> : <ProjectForm id={id} initial={initial} accounts={accounts} owners={owners} currentOwner={project.owner}/>}</Content>;
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.programs} title={`Edit ${project.name}`}/>{project.archivedAt ? <div className="panel p-6">Reactivate this Project before editing it.</div> : <ProjectForm id={id} initial={initial} accounts={accounts} owners={owners} currentOwner={project.owner}/>}</Content>;
 }

@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import type {Actor} from '@/lib/authorization';
 import {Content,PageHeader} from '@/components/shell';
@@ -26,7 +27,7 @@ export async function TradeShowBuilder({params,actor,saved}:{params:Params;actor
   const selected=(field:string)=>String(filterValue(config,field)??'');
   const select=(name:string,label:string,items:{value:string|number;label:string}[],empty='All')=><label className="label">{label}<select className="field" name={name} defaultValue={selected(name)}><option value="">{empty}</option>{items.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</select></label>;
   const dateFilter=config.filters.find(filter=>filter.field==='showDate'),dateChoice=dateFilter?.operator==='preset'?String(dateFilter.value):dateFilter?.operator==='between'?'CUSTOM':'ANY',dateRange=dateFilter?.operator==='between'?dateFilter.value as {from:string;to:string}:null;
-  return <Content><PageHeader eyebrow="Reports" title={saved?'Edit Trade Show Performance Report':'Trade Show Performance'} description={definition.description} action={<Link className="btn-secondary" href="/reports">Reports</Link>}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.reports} title={saved?'Edit Trade Show Performance Report':'Trade Show Performance'} description={definition.description} action={<Link className="btn-secondary" href="/reports">Reports</Link>}/>
     <form method="get" className="panel report-builder p-3 md:p-4"><input type="hidden" name="configured" value="1"/><input type="hidden" name="reportType" value="TRADE_SHOW"/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>} 
       <fieldset className="report-section report-primary-filters"><legend className="report-section-title">Lead filters</legend><div className="report-filter-grid">
         {select('tradeShowId','Trade Show',shows.map(show=>({value:show.id,label:show.name})))}

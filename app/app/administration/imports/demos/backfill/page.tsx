@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../../../lib/navigation-categories';
 import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
 import { requirePermission } from '@/lib/current-user';
@@ -12,7 +13,7 @@ export default async function RosaBackfillPage({ searchParams }: { searchParams:
     prisma.account.findMany({ where: { status: 'ACTIVE', archivedAt: null }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
     prisma.productSku.findMany({ where: { active: true, product: { active: true, archivedAt: null } }, select: { id: true, partNumber: true }, orderBy: { partNumber: 'asc' } }),
   ]);
-  return <Content><PageHeader eyebrow="Administration → Imports → Demo Requests" title="Add existing Demo record" description="Use this only to add a Demo that already exists in the source system." action={<Link className="btn-secondary" href="/administration/imports/demos">Import demos</Link>}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Add existing Demo record" description="Use this only to add a Demo that already exists in the source system." action={<Link className="btn-secondary" href="/administration/imports/demos">Import demos</Link>}/>
     {error && <p role="alert" className="mb-4 rounded bg-red-50 p-4 text-sm text-red-800">{error}</p>}
     <form action={saveRosaBackfill} className="panel max-w-4xl space-y-5 p-6 text-sm">
       <p className="rounded bg-amber-50 p-3 text-amber-900">Enter values from the existing source record. A real Source Request ID is required and checked against imported and manually entered Demos. A matching ID opens the existing Demo for reconciliation.</p>

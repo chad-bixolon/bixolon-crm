@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
@@ -21,7 +22,7 @@ export default async function LeadSourcesPage({ searchParams }: { searchParams: 
   const query = (changes: Record<string, string>) => { const next = new URLSearchParams(); for (const [key, value] of Object.entries(params)) if (typeof value === 'string' && !(key in changes)) next.set(key, value); for (const [key, value] of Object.entries(changes)) if (value) next.set(key, value); return `/reports/lead-sources?${next}`; };
   const metrics = [['Unique Prospects', report.summary.uniqueProspects], ['Resolved Contacts', report.summary.resolvedContacts], ['Contact-only Prospects', report.summary.contactOnly], ['Unresolved Leads', report.summary.unresolvedLeads], ['Prospects with Opportunities', report.summary.withOpportunities], ['Source Conflicts', report.summary.sourceConflicts]] as const;
   return <Content>
-    <PageHeader eyebrow="Marketing reports" title="Lead Sources" description="Unique people by their current first-touch Lead Source, with linked Trade Show leads counted through their Contact." />
+    <PageHeader eyebrow={NAV_CATEGORIES.reports} title="Lead Sources" description="Unique people by their current first-touch Lead Source, with linked Trade Show leads counted through their Contact." />
     <form className="panel filter-panel filter-grid filter-row mb-5" method="get" aria-label="Filter Lead Sources">
       <label className="text-sm">From<input className="field mt-1 block w-full" type="date" name="from" defaultValue={params.from} /></label>
       <label className="text-sm">To<input className="field mt-1 block w-full" type="date" name="to" defaultValue={params.to} /></label>

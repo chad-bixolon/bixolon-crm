@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
 import { requirePermission } from '@/lib/current-user';
@@ -11,7 +12,7 @@ export default async function PriceExceptionLookupPage({ searchParams }: { searc
   const filters = await searchParams;
   const { rows, count, page, pages } = await listActivePriceExceptionLines(prisma, actor, filters);
   return <Content>
-    <PageHeader eyebrow="Price Exceptions" title="Find a valid Price Exception" description="Search active, unexpired pricing tiers with a linked customer and usable MOQ. Match the Account, SKU, currency, and quantity before creating an Opportunity." action={<Link className="btn-secondary" href="/price-exceptions">All Price Exceptions</Link>}/>
+    <PageHeader eyebrow={NAV_CATEGORIES.catalogPricing} title="Find a valid Price Exception" description="Search active, unexpired pricing tiers with a linked customer and usable MOQ. Match the Account, SKU, currency, and quantity before creating an Opportunity." action={<Link className="btn-secondary" href="/price-exceptions">All Price Exceptions</Link>}/>
     <form className="panel filter-panel filter-grid mb-5" method="get" aria-label="Find active Price Exceptions">
       {filters.productId && <input type="hidden" name="productId" value={filters.productId}/>}
       {filters.skuId && <input type="hidden" name="skuId" value={filters.skuId}/>}

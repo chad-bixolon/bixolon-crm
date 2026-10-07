@@ -10,15 +10,16 @@ import { endImpersonation } from "@/app/dev/impersonation/actions";
 import type { LabelMap } from "@/lib/configuration";
 import { NotificationBell } from './notification-bell';
 import type { NotificationItem } from '@/lib/notifications';
+import { NAV_CATEGORIES } from '../lib/navigation-categories';
 
 const navSections = [
-  { label: "CRM", items: ["Dashboard", "Accounts", "Contacts"] },
-  { label: "Sales", items: ["Opportunities", "Pipeline", "Sales Plan", "Tasks", "Calendar Matches", "Demos"] },
-  { label: "Programs", items: ["Projects"] },
-  { label: "Marketing", items: ["Trade Shows", "Campaigns", "Marketing Audiences"] },
-  { label: "Catalog & Pricing", items: ["Products", "Price Exceptions"] },
-  { label: "Reports", items: ["Reports"] },
-  { label: "Administration", items: ["Administration", "Integrations"] },
+  { label: NAV_CATEGORIES.crm, items: ["Dashboard", "Accounts", "Contacts"] },
+  { label: NAV_CATEGORIES.sales, items: ["Opportunities", "Pipeline", "Sales Plan", "Tasks", "Calendar Matches", "Demos"] },
+  { label: NAV_CATEGORIES.programs, items: ["Projects"] },
+  { label: NAV_CATEGORIES.marketing, items: ["Trade Shows", "Campaigns", "Marketing Audiences"] },
+  { label: NAV_CATEGORIES.catalogPricing, items: ["Products", "Price Exceptions"] },
+  { label: NAV_CATEGORIES.reports, items: ["Reports"] },
+  { label: NAV_CATEGORIES.administration, items: ["Administration", "Integrations"] },
 ] as const;
 const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Sales Plan" ? "/sales-plan" : item === "Calendar Matches" ? "/calendar-matches" : item === "Price Exceptions" ? "/price-exceptions" : item === "Trade Shows" ? "/trade-shows" : item === "Campaigns" ? "/marketing/campaigns" : item === "Marketing Audiences" ? "/marketing/audiences" : `/${item.toLowerCase()}`;
 const navLabelKeys: Partial<Record<string, keyof LabelMap>> = { Accounts: "ACCOUNT", Contacts: "CONTACT", Projects: "PROJECT", Opportunities: "OPPORTUNITY", Tasks: "TASK" };

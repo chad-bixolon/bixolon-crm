@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { randomUUID } from 'crypto';
@@ -29,7 +30,7 @@ export default async function LogCalendarMeeting({ params }: { params: Promise<{
   const zone = await prisma.user.findUnique({ where: { id: real.id }, select: { timeZone: true } });
   const timeZone = zone?.timeZone ?? 'America/New_York';
   const meetingType = options.activityTypes.find(type => type.code === 'MEETING') ?? options.activityTypes.find(type => /^meeting$/i.test(type.name));
-  return <Content><PageHeader eyebrow="Calendar Matches" title="Log as Activity" description="Review the meeting details and save the Activity." action={<Link className="btn-secondary" href={`/calendar-matches/${id}`}>Back to match</Link>}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.sales} title="Log as Activity" description="Review the meeting details and save the Activity." action={<Link className="btn-secondary" href={`/calendar-matches/${id}`}>Back to match</Link>}/>
     {!meetingType && <p className="mb-4 rounded bg-amber-50 p-4 text-sm text-amber-900">No active Meeting Activity type is configured. Choose an appropriate type before saving.</p>}
     {!accountId && <p className="mb-4 rounded bg-amber-50 p-4 text-sm text-amber-900">Choose an Account before saving this Activity.</p>}
     <WorkForm kind="activity" calendarAction={submitCalendarActivity.bind(null, id)} calendarTimeZone={timeZone} createKey={randomUUID()} {...options} linkedContactIds={contactIds} initial={{ subject: event.summary || 'Meeting', accountId: accountId ?? '', opportunityId: opportunityId ?? '', projectId: projectId ?? '', userId: defaultEligibleUserId(options.users, actor.id), type: meetingType?.code ?? '', activityDate: event.startAt ? calendarLocalInput(event.startAt, timeZone) : event.startDate ? `${event.startDate}T12:00` : '', direction: 'NA' }}/>

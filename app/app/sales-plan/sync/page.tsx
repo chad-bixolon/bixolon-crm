@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { Prisma } from '@prisma/client';
 import { Content, PageHeader } from '@/components/shell';
@@ -17,7 +18,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Filters>
   let preview:Awaited<ReturnType<typeof previewTargetSync>>|null=null,error='';
   try {preview=await previewTargetSync(prisma,actor,input);} catch(e) {error=e instanceof Error?e.message:'Preview unavailable.';}
   const fmt=(v:Prisma.Decimal|null)=>v===null?'—':formatCurrency(v,input.currencyCode);
-  return <Content><PageHeader eyebrow="Sales Plan management" title="Sync Sales Targets" description="Review the official annual Sales Plan and forecast targets before confirming." action={<Link className="btn-secondary" href="/sales-plan">Sales Plan</Link>}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.sales} title="Sync Sales Targets" description="Review the official annual Sales Plan and forecast targets before confirming." action={<Link className="btn-secondary" href="/sales-plan">Sales Plan</Link>}/>
     <p className="panel mb-5 p-4 text-sm">Sales Targets are used by forecast coverage. Syncing divides the approved annual Sales Plan evenly across four quarters. This does not change the rep’s quarterly Sales Plan allocation.</p>
     {f.error&&<p role="alert" className="mb-4 rounded bg-red-50 p-3 text-red-800">{f.error}</p>}
     {f.saved&&<p className="mb-4 rounded bg-green-50 p-3 text-green-800">Sales Targets reconciled. The current values are shown below.</p>}

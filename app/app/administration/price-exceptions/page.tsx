@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
 import { requirePermission } from '@/lib/current-user';
@@ -53,5 +54,5 @@ export default async function PriceExceptionCleanupPage() {
         archive: !record.archivedAt && record.status !== 'ARCHIVED' } };
   });
   const counts = Object.fromEntries(cleanupIssueKeys.map(key => [key, rows.filter(row => row.issues.includes(key)).length]));
-  return <Content><PageHeader eyebrow="Administration" title="PE Cleanup" description="Review and correct imported Price Exceptions, account mappings, owners, statuses, and other data issues." action={<Link className="btn-secondary" href="/price-exceptions">Price Exceptions</Link>}/><CleanupWorkflow rows={rows} counts={counts} salesReps={salesReps} accounts={accounts} skus={skus.map(sku=>({id:sku.id,name:`${sku.partNumber} · ${sku.product.name}`}))} accountOptions={{industries:options.industries.map(x=>({code:x.code,name:x.name})),territories:options.territories.map(x=>({code:x.code,name:x.name}))}}/></Content>;
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="PE Cleanup" description="Review and correct imported Price Exceptions, account mappings, owners, statuses, and other data issues." action={<Link className="btn-secondary" href="/price-exceptions">Price Exceptions</Link>}/><CleanupWorkflow rows={rows} counts={counts} salesReps={salesReps} accounts={accounts} skus={skus.map(sku=>({id:sku.id,name:`${sku.partNumber} · ${sku.product.name}`}))} accountOptions={{industries:options.industries.map(x=>({code:x.code,name:x.name})),territories:options.territories.map(x=>({code:x.code,name:x.name}))}}/></Content>;
 }

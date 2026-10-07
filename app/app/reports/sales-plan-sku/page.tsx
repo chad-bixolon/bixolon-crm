@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import type { Prisma } from '@prisma/client';
 import { Content, PageHeader } from '@/components/shell';
@@ -32,7 +33,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Params>}
   const exportHref=`/reports/sales-plan-sku/export?${params.toString()}`;
   const detailHref=(skuId:number)=>`/reports/sales-plan-sku?${params.toString()}&detailSkuId=${skuId}#sku-detail`;
   const completion=(annual:Prisma.Decimal|null,allocated:Prisma.Decimal|null)=>{const p=allocationPercent(annual,allocated);return p===null?'—':formatPlanPercent(p);};
-  return <Content><PageHeader eyebrow="Reports / Sales Plan" title="Sales Plan SKU Rollup" description="Approved Sales Plan demand by exact SKU. Quarterly values reflect rep-entered allocation, not actual orders, shipments, revenue, or inventory." action={<div className="page-header-actions"><Link className="btn-primary" href={exportHref}>Export Excel</Link><Link className="btn-secondary" href="/reports/sales-plan">Sales Plan report</Link></div>}/>
+  return <Content><PageHeader eyebrow={`${NAV_CATEGORIES.reports} / Sales Plan`} title="Sales Plan SKU Rollup" description="Approved Sales Plan demand by exact SKU. Quarterly values reflect rep-entered allocation, not actual orders, shipments, revenue, or inventory." action={<div className="page-header-actions"><Link className="btn-primary" href={exportHref}>Export Excel</Link><Link className="btn-secondary" href="/reports/sales-plan">Sales Plan report</Link></div>}/>
     <form method="get" className="panel filter-panel filter-grid filter-row mb-5">
       <label className="label">Plan Year<input className="field filter-control" name="year" type="number" min="2000" max="2100" defaultValue={year}/></label>
       <label className="label">Currency<select className="field filter-control" name="currencyCode" defaultValue={currencyCode}>{currencies.map(c=><option key={c.code} value={c.code}>{c.code}</option>)}</select></label>

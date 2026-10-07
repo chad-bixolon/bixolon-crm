@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
 import { prisma } from '@/lib/prisma';
@@ -20,7 +21,7 @@ export default async function Page({searchParams}:{searchParams:Promise<TaskFilt
   const select=(key:keyof TaskFilters,label:string,items:{value:string;label:string}[]) => <label className="label">{label}<select className="field filter-control" name={key} defaultValue={f[key]??''}><option value="">All</option>{items.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></label>;
 
   return <Content>
-    <PageHeader title="Tasks" eyebrow="CRM records" action={<Link className="btn-primary" href="/tasks/new">New task</Link>}/>
+    <PageHeader title="Tasks" eyebrow={NAV_CATEGORIES.sales} action={<Link className="btn-primary" href="/tasks/new">New task</Link>}/>
     <form method="get" className="panel filter-panel filter-grid mb-5" aria-label="Filter tasks">
       <label className="label">Search<input className="field filter-control" name="q" defaultValue={f.q??''} placeholder="Subject or description"/></label>
       <label className="label">Visibility<select className="field filter-control" name="visibility" defaultValue={recordVisibility(f.visibility)}><option value="active">Active</option><option value="archived">Archived</option><option value="all">All</option></select></label>

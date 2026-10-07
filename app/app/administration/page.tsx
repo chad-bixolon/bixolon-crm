@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from "next/link";
 import { Content, PageHeader } from "@/components/shell";
 import { requirePermission } from "@/lib/current-user";
@@ -34,7 +35,7 @@ const groups = [
 export default async function AdministrationPage() {
   await requirePermission("users.manage");
   return <Content>
-    <PageHeader eyebrow="CRM" title="Administration" description="Manage users, CRM configuration, sales settings, and system tools."/>
+    <PageHeader eyebrow={NAV_CATEGORIES.administration} title="Administration" description="Manage users, CRM configuration, sales settings, and system tools."/>
     <div className="space-y-7">{groups.map((group, index) => <section aria-labelledby={`admin-group-${index}`} key={group.title}>
       <h2 className="mb-3 text-lg font-semibold text-slate-900" id={`admin-group-${index}`}>{group.title}</h2>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{group.tools.map(([title, href, description]) => <Link className="panel flex flex-col p-4 transition-colors hover:border-orange-300 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600" href={href} key={href}>

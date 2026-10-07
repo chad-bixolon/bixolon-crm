@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
@@ -50,7 +51,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
     ...(campaign.endDate ? [['End date', date(campaign.endDate)]] : []),
   ];
   return <Content>
-    <PageHeader eyebrow="Campaigns" title={campaign.name} description={[campaignStatusLabel(campaign.status, campaign.archivedAt), campaign.year, campaign.category, campaign.startDate && date(campaign.startDate), campaign.endDate && date(campaign.endDate)].filter(Boolean).join(' · ')} action={<div className="page-header-actions">{manage && <Link className="btn-primary" href={`/marketing/campaigns/${id}/edit`}>Edit Campaign</Link>}<Link className="btn-secondary" href="/marketing/campaigns">All Campaigns</Link></div>}/>
+    <PageHeader eyebrow={NAV_CATEGORIES.marketing} title={campaign.name} description={[campaignStatusLabel(campaign.status, campaign.archivedAt), campaign.year, campaign.category, campaign.startDate && date(campaign.startDate), campaign.endDate && date(campaign.endDate)].filter(Boolean).join(' · ')} action={<div className="page-header-actions">{manage && <Link className="btn-primary" href={`/marketing/campaigns/${id}/edit`}>Edit Campaign</Link>}<Link className="btn-secondary" href="/marketing/campaigns">All Campaigns</Link></div>}/>
     <div className="mb-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[['Trade Show Leads', leadCount], ['Contacts', contactCount], ['Opportunities', opportunityCount], ['Active Influences', activeCount]].map(([label, count]) => <div key={label} className="panel p-4"><p className="text-xs font-medium text-slate-600">{label}</p><p className="mt-1 text-2xl font-semibold text-slate-950">{count}</p></div>)}</div>
     <p className="mb-5 text-xs text-slate-500">Counts reflect current links and active Campaign Influences; they do not assign revenue credit.</p>
     <section className="panel p-5"><div className="flex flex-wrap items-start justify-between gap-3"><h2 className="text-lg font-semibold">Campaign Details</h2>{manage && <form action={setCampaignArchive}><input type="hidden" name="id" value={id}/><input type="hidden" name="archive" value={campaign.archivedAt ? 'false' : 'true'}/><button className="text-sm font-medium text-orange-800 underline">{campaign.archivedAt ? 'Reactivate' : 'Archive'} Campaign</button></form>}</div>

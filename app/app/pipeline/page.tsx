@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import { operationalOpportunityWhere, operationalProjectWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
@@ -29,7 +30,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Filters>
   const control='field filter-control';
 
   return <Content>
-    <PageHeader title="Pipeline" eyebrow="Sales forecast" description="Open opportunities valued from active product line items."/>
+    <PageHeader title="Pipeline" eyebrow={NAV_CATEGORIES.sales} description="Open opportunities valued from active product line items."/>
     <form method="get" className="panel filter-panel filter-grid mb-5" aria-label="Filter pipeline">
       <label className="label">Owner<select className={control} name="ownerId" defaultValue={f.ownerId??''}><option value="">All</option>{owners.map(o=><option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select></label>
       <label className="label">Stage<select className={control} name="stageId" defaultValue={f.stageId??''}><option value="">All</option>{stages.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>

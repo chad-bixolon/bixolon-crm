@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../../lib/navigation-categories';
 import { notFound } from "next/navigation";
 import { Content, PageHeader } from "@/components/shell";
 import { AccountForm } from "@/components/account-form";
@@ -11,8 +12,8 @@ export default async function EditAccountPage({ params }: { params: Promise<{ id
   const id = Number((await params).id); if (!Number.isSafeInteger(id) || id <= 0) notFound();
   const [account, options, labels] = await Promise.all([prisma.account.findUnique({ where: { id }, include: { owner: { select: { firstName: true, lastName: true } }, businessRoles: true, industryCategory: true, territoryCategory: true } }), accountOptions(prisma), getLabels(prisma)]);
   if (!account) notFound();
-  if (account.status === "ARCHIVED") return <Content><PageHeader eyebrow="Accounts" title={account.name}/><div className="panel p-6 text-sm text-slate-600">Reactivate this account before editing it.</div></Content>;
+  if (account.status === "ARCHIVED") return <Content><PageHeader eyebrow={NAV_CATEGORIES.crm} title={account.name}/><div className="panel p-6 text-sm text-slate-600">Reactivate this account before editing it.</div></Content>;
   const industries = account.industryCategory && !options.industries.some((item) => item.code === account.industry) ? [...options.industries, account.industryCategory] : options.industries;
   const territories = accountEditTerritories(options.territories, account.territoryCategory);
-  return <Content><PageHeader eyebrow="Accounts" title={`Edit ${account.name}`} description="Update account profile and classifications."/><AccountForm id={id} initial={{ ...account, roles: account.businessRoles.map((r) => r.role) }} {...options} industries={industries} territories={territories} currentOwner={account.owner} labels={labels}/></Content>;
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.crm} title={`Edit ${account.name}`} description="Update account profile and classifications."/><AccountForm id={id} initial={{ ...account, roles: account.businessRoles.map((r) => r.role) }} {...options} industries={industries} territories={territories} currentOwner={account.owner} labels={labels}/></Content>;
 }

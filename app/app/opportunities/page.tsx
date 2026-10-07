@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from "next/link";
 import { Content, PageHeader } from "@/components/shell";
 import { forecastLabels } from "@/lib/crm-validation";
@@ -24,7 +25,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   const control = "field filter-control";
 
   return <Content>
-    <PageHeader eyebrow="CRM records" title="Opportunities" description="Sales opportunities and participating accounts." action={can(actor, 'sales.write') && <Link className="btn-primary" href="/opportunities/new">New opportunity</Link>}/>
+    <PageHeader eyebrow={NAV_CATEGORIES.sales} title="Opportunities" description="Sales opportunities and participating accounts." action={can(actor, 'sales.write') && <Link className="btn-primary" href="/opportunities/new">New opportunity</Link>}/>
     <form method="get" className="panel filter-panel filter-grid opportunity-filter-grid mb-5" aria-label="Filter opportunities">
       <div className="opportunity-filter-search"><label className="label" htmlFor="q">Search</label><input className={control} id="q" name="q" defaultValue={filters.q ?? ""} placeholder="Search opportunity, competitor, or model"/></div>
       <div><label className="label" htmlFor="stageId">Stage</label><select className={control} id="stageId" name="stageId" defaultValue={filters.stageId ?? ""}><option value="">All stages</option>{options.stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>

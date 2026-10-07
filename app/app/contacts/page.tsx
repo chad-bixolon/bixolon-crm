@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from "next/link";
 import { Content, PageHeader } from "@/components/shell";
 import { ContactAccountFilter } from "@/components/contact-account-filter";
@@ -21,7 +22,7 @@ export default async function ContactsPage({searchParams}:{searchParams:Promise<
     return <Link href={contactListUrl(filters,next)} className="inline-flex items-center gap-1 hover:text-orange-800" aria-label={`Sort by ${label}${direction?`, currently ${direction}ending`:""}`}><span>{label}</span><span className="text-[10px] text-slate-400" aria-hidden="true">{direction==="asc"?"▲":direction==="desc"?"▼":"↕"}</span></Link>;
   };
   return <Content>
-    <PageHeader eyebrow="CRM records" title="Contacts" description="Manage customer, partner, and prospect contacts." action={can(actor, 'contacts.write') && <Link className="btn-primary" href="/contacts/new">New contact</Link>}/>
+    <PageHeader eyebrow={NAV_CATEGORIES.crm} title="Contacts" description="Manage customer, partner, and prospect contacts." action={can(actor, 'contacts.write') && <Link className="btn-primary" href="/contacts/new">New contact</Link>}/>
     <form method="get" className="panel filter-panel filter-grid filter-grid-five mb-5" aria-label="Filter contacts">
       <input type="hidden" name="sort" value={filters.sort??""}/><input type="hidden" name="dir" value={filters.dir??""}/><input type="hidden" name="pageSize" value={pageSize}/>
       <div><label className="label" htmlFor="q">Search</label><input className="field filter-control" id="q" name="q" defaultValue={filters.q??""} placeholder="Name, email, or title"/></div>

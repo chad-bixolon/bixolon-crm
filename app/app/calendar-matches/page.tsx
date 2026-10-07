@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
@@ -43,7 +44,7 @@ export default async function CalendarMatchesPage({ searchParams }: { searchPara
   const name = (list: { id: number; name: string }[], id: number | null) => list.find(x => x.id === id)?.name ?? '—';
   const contactNames = contacts.map(c => ({ id: c.id, name: `${c.firstName} ${c.lastName}` }));
   const link = (next: number) => `/calendar-matches?${new URLSearchParams({ status, page: String(next), ...(q ? { q } : {}), ...(p.from ? { from: p.from } : {}), ...(p.to ? { to: p.to } : {}), ...(accountId > 0 ? { accountId: String(accountId) } : {}) })}`;
-  return <Content><PageHeader title="Calendar Matches" eyebrow="My Calendar" description="Review customer meetings from Google Calendar before logging them as SalesHub Activities." action={<Link className="btn-secondary" href="/my-integrations">My integrations</Link>}/>
+  return <Content><PageHeader title="Calendar Matches" eyebrow={NAV_CATEGORIES.sales} description="Review customer meetings from Google Calendar before logging them as SalesHub Activities." action={<Link className="btn-secondary" href="/my-integrations">My integrations</Link>}/>
     {!connection ? <div className="panel p-6"><p>Connect your Google Calendar in My integrations to review meetings here.</p><Link className="btn-primary mt-4" href="/my-integrations">Connect Calendar</Link></div> : <>
       <nav aria-label="Review status" className="mb-4 flex flex-wrap gap-2">{statuses.map(s => <Link key={s} className={s === status ? 'btn-primary' : 'btn-secondary'} href={`/calendar-matches?status=${s}`}>{s === 'review' ? 'Needs Review' : s[0].toUpperCase() + s.slice(1)}</Link>)}</nav>
       <form className="panel filter-panel filter-grid filter-row mb-5" method="get"><input type="hidden" name="status" value={status}/><label className="label">Search<input className="field filter-control" name="q" defaultValue={q}/></label><label className="label">From<input className="field filter-control" type="date" name="from" defaultValue={p.from ?? ''}/></label><label className="label">To<input className="field filter-control" type="date" name="to" defaultValue={p.to ?? ''}/></label><label className="label">Account<select className="field filter-control" name="accountId" defaultValue={accountId > 0 ? accountId : ''}><option value="">All Accounts</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label><div className="filter-actions"><button className="btn-filter-primary">Apply</button></div></form>

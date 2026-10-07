@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import type { Actor } from '@/lib/authorization';
 import { Content,PageHeader } from '@/components/shell';
@@ -21,7 +22,7 @@ export async function AccountActivityBuilder({params,actor,saved}:{params:Params
  ]);
  const selected=(field:string)=>String(filterValue(config,field)??'');
  const definition=reportRegistry.ACCOUNT_ACTIVITY;
- return <Content><PageHeader eyebrow="Reports" title={saved?'Edit Account Activity Report':'Account Activity Report'} description="Review Account activity, follow-up, and Accounts that may need attention." action={<Link className="btn-secondary" href="/reports">Reports</Link>}/>
+ return <Content><PageHeader eyebrow={NAV_CATEGORIES.reports} title={saved?'Edit Account Activity Report':'Account Activity Report'} description="Review Account activity, follow-up, and Accounts that may need attention." action={<Link className="btn-secondary" href="/reports">Reports</Link>}/>
  <div className="mb-2 flex flex-wrap gap-2"><Link className="btn-secondary" href="/reports/new?reportType=PIPELINE">Pipeline</Link><Link className="btn-secondary" href="/reports/new?reportType=ACCOUNT_ACTIVITY">Account Activity</Link><Link className="btn-secondary" href="/reports/new?reportType=PRODUCT_PERFORMANCE">Product Performance</Link><Link className="btn-secondary" href="/reports/new?reportType=CHANNEL_PARTNER">Channel / Partner</Link><Link className="btn-secondary" href="/reports/new?reportType=PROJECT_INITIATIVE">Project Performance</Link></div><form method="get" className="panel report-builder p-3 md:p-4"><input type="hidden" name="configured" value="1"/><input type="hidden" name="reportType" value="ACCOUNT_ACTIVITY"/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}
  <fieldset className="report-section report-primary-filters"><legend className="report-section-title">Account filters</legend><div className="report-filter-grid">
  <ReportSalesRepFilter actor={actor} reps={owners} selected={selected('ownerId')}/>

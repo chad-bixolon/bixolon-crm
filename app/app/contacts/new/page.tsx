@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import { Content, PageHeader } from "@/components/shell";
 import { ContactForm } from "@/components/contact-form";
 import { prisma } from "@/lib/prisma";
@@ -11,5 +12,5 @@ export default async function NewContactPage({ searchParams }: { searchParams: P
   const rawAccountId = (await searchParams).accountId;
   const accountId = rawAccountId ? positiveId(rawAccountId) : null;
   if (rawAccountId && (!accountId || !accounts.some(account => account.id === accountId))) notFound();
-  return <Content><PageHeader eyebrow="Contacts" title="New contact"/><ContactForm accounts={accounts} accountId={accountId ?? undefined}/></Content>;
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.crm} title="New contact"/><ContactForm accounts={accounts} accountId={accountId ?? undefined}/></Content>;
 }
