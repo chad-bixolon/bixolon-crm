@@ -22,7 +22,7 @@ export default async function LeadSourcesPage({ searchParams }: { searchParams: 
   const metrics = [['Unique Prospects', report.summary.uniqueProspects], ['Resolved Contacts', report.summary.resolvedContacts], ['Contact-only Prospects', report.summary.contactOnly], ['Unresolved Leads', report.summary.unresolvedLeads], ['Prospects with Opportunities', report.summary.withOpportunities], ['Source Conflicts', report.summary.sourceConflicts]] as const;
   return <Content>
     <PageHeader eyebrow="Marketing reports" title="Lead Sources" description="Unique people by their current first-touch Lead Source, with linked Trade Show leads counted through their Contact." />
-    <form className="panel mb-5 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4" method="get" aria-label="Filter Lead Sources">
+    <form className="panel filter-panel filter-grid filter-row mb-5" method="get" aria-label="Filter Lead Sources">
       <label className="text-sm">From<input className="field mt-1 block w-full" type="date" name="from" defaultValue={params.from} /></label>
       <label className="text-sm">To<input className="field mt-1 block w-full" type="date" name="to" defaultValue={params.to} /></label>
       <label className="text-sm">Lead Source<select className="field mt-1 block w-full" name="leadSourceId" defaultValue={params.leadSourceId ?? ''}><option value="">All sources</option><option value="none">Unspecified</option>{sources.map(source => <option value={source.id} key={source.id}>{source.name}{source.active ? '' : ' (inactive)'}</option>)}</select></label>

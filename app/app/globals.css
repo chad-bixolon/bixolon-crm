@@ -27,7 +27,7 @@ input, select, button { font: inherit; }
 .inline-field-action > .label { flex: 1 1 14rem; min-width: 0; margin-bottom: 0; }
 .inline-field-action > div { min-width: 0; }
 .filter-row { align-items: end; }
-@media (max-width: 39.999rem) { .inline-field-action > .btn-primary, .inline-field-action > .btn-secondary, .filter-actions > button, .form-action-row > .btn-primary { width: 100%; } .form-action-row > form { flex: 1 1 100%; } .form-action-row > form > button { width: 100%; } }
+@media (max-width: 39.999rem) { .page-header-actions { width: 100%; } .page-header-actions > .btn-primary { flex: 1 1 100%; } .inline-field-action > .btn-primary, .inline-field-action > .btn-secondary, .filter-actions > button, .filter-actions > a, .form-action-row > .btn-primary { width: 100%; } .filter-actions { flex-wrap: wrap; width: 100%; } .form-action-row > form { flex: 1 1 100%; } .form-action-row > form > button { width: 100%; } }
 .filter-panel { border-color: #fed7aa; background: rgb(255 247 237 / .65); padding: .875rem; }
 .filter-grid { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: .625rem .75rem; }
 .filter-grid > .label { margin-bottom: 0; }
@@ -112,7 +112,6 @@ select.pe-cleanup-control { padding-right: 2rem; }
 .trade-show-import { container-type: inline-size; }
 .trade-show-import input.field, .trade-show-import select.field { min-width: 0; }
 .trade-show-import select.field { padding-right: 2rem; overflow: visible; }
-.trade-show-import textarea.field { box-sizing: border-box; min-width: 0; padding: .5rem; line-height: 1.25rem; }
 .trade-show-import-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: .375rem; }
 .trade-show-import-defaults { display: grid; grid-template-columns: minmax(0, 1fr); gap: .625rem; }
 @container (min-width: 32rem) { .trade-show-import-defaults { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

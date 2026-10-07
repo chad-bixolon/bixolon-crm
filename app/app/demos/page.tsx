@@ -31,9 +31,9 @@ export default async function DemosPage({ searchParams }: { searchParams: Promis
 
   return <Content>
     <PageHeader eyebrow="Sales" title="Demo Requests" description="Track imported demo requests, shipment status, and deployed units." action={<Link className="btn-secondary" href="/administration/imports/demos">Import demos</Link>}/>
-    <form className="panel mb-4 flex flex-wrap items-end gap-3 p-3" method="get">
-      <label className="min-w-64 flex-1"><span className="sr-only">Search demos</span><input className="field h-11 w-full" name="q" placeholder="Search demo #, customer, requester, or SKU" defaultValue={q}/></label>
-      <label className="w-44 max-w-full"><span className="label">Status</span><select className="field h-11 w-full" name="status" defaultValue={status ?? ''}><option value="">All statuses</option><option value="PENDING">Requested</option><option value="APPROVED">Approved</option><option value="SHIPPED">Shipped</option><option value="CANCELLED">Cancelled</option></select></label>
+    <form className="panel filter-panel filter-grid filter-row mb-5" method="get">
+      <label className="min-w-64 flex-1"><span className="sr-only">Search demos</span><input className="field w-full" name="q" placeholder="Search demo #, customer, requester, or SKU" defaultValue={q}/></label>
+      <label className="w-44 max-w-full"><span className="label">Status</span><select className="field w-full" name="status" defaultValue={status ?? ''}><option value="">All statuses</option><option value="PENDING">Requested</option><option value="APPROVED">Approved</option><option value="SHIPPED">Shipped</option><option value="CANCELLED">Cancelled</option></select></label>
       <button className="btn-secondary h-11">Search</button>
     </form>
     <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4" aria-label="Demo summary">{metrics.map(([label, value]) => <div className="panel px-4 py-2" key={label}><p className="text-xs text-slate-600">{label}</p><p className="text-lg font-semibold tabular-nums">{value}</p></div>)}</div>

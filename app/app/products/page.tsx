@@ -21,14 +21,13 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
 
   return <Content>
     <PageHeader eyebrow="CRM records" title="Products" description="Products available for opportunity estimates." action={canManageProducts ? <Link className="btn-primary" href="/products/new">New product</Link> : undefined}/>
-    <form method="get" className={`panel ${styles.toolbar}`} aria-label="Filter products">
-      <div className={styles.filterField}><label className={styles.filterLabel} htmlFor="q">Search</label><input className={`field ${styles.control}`} name="q" id="q" placeholder="SKU or name" defaultValue={filters.q ?? ""}/></div>
-      <div className={`${styles.filterField} ${styles.statusField}`}><label className={styles.filterLabel} htmlFor="active">Status</label><select className={`field ${styles.control}`} name="active" id="active" defaultValue={filters.active ?? ""}><option value="">Current</option><option value="all">All</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="archived">Archived</option></select></div>
-      <div className={styles.filterField}><label className={styles.filterLabel} htmlFor="category">Product Category</label><select className={`field ${styles.control}`} name="category" id="category" defaultValue={filters.category ?? ""}><option value="">All</option>{categories.map(category=><option key={category.id} value={category.code}>{category.name}{category.active ? "" : " (inactive)"}</option>)}</select></div>
-      <div className={styles.filterField}><label className={styles.filterLabel} htmlFor="catalogSource">Catalog Source</label><select className={`field ${styles.control}`} name="catalogSource" id="catalogSource" defaultValue={filters.catalogSource ?? ""}><option value="">All</option>{Object.entries(catalogSourceLabels).filter(([value])=>value!=='SPECIAL_SKU_LIST').map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div>
-      <div className={styles.filterField}><label className={styles.filterLabel} htmlFor="priceException">Price Exception</label><select className={`field ${styles.control}`} name="priceException" id="priceException" defaultValue={filters.priceException ?? ""}><option value="">Any</option><option value="has">Has active PE</option><option value="none">No active PE</option></select></div>
-      <button className={`btn-primary ${styles.action}`}>Apply</button>
-      <Link className={`btn-secondary ${styles.action}`} href="/products">Clear</Link>
+    <form method="get" className="panel filter-panel filter-grid filter-row mb-4" aria-label="Filter products">
+      <label className="label">Search<input className="field filter-control" name="q" id="q" placeholder="SKU or name" defaultValue={filters.q ?? ""}/></label>
+      <label className="label">Status<select className="field filter-control" name="active" id="active" defaultValue={filters.active ?? ""}><option value="">Current</option><option value="all">All</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="archived">Archived</option></select></label>
+      <label className="label">Product Category<select className="field filter-control" name="category" id="category" defaultValue={filters.category ?? ""}><option value="">All</option>{categories.map(category=><option key={category.id} value={category.code}>{category.name}{category.active ? "" : " (inactive)"}</option>)}</select></label>
+      <label className="label">Catalog Source<select className="field filter-control" name="catalogSource" id="catalogSource" defaultValue={filters.catalogSource ?? ""}><option value="">All</option>{Object.entries(catalogSourceLabels).filter(([value])=>value!=='SPECIAL_SKU_LIST').map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+      <label className="label">Price Exception<select className="field filter-control" name="priceException" id="priceException" defaultValue={filters.priceException ?? ""}><option value="">Any</option><option value="has">Has active PE</option><option value="none">No active PE</option></select></label>
+      <div className="filter-actions"><button className="btn-filter-primary">Apply</button><Link className="btn-filter-secondary" href="/products">Clear</Link></div>
     </form>
     <p className="mb-3 text-sm text-slate-600">Need a customer and SKU match? <Link className="text-orange-800 underline" href="/price-exceptions/lookup">Find a valid Price Exception</Link>.</p>
     <div className="panel overflow-x-auto">
@@ -42,7 +41,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             <td><Link className={styles.model} href={canManageProducts ? `/products/${p.id}/edit` : `/products/${p.id}`}>{p.name}</Link></td>
             <td>{peIds.length ? <Link className="font-semibold text-orange-800 underline" href={priceExceptionLookupHref({ productId: String(p.id), catalogSource: filters.catalogSource })}>{peIds.length === 1 ? 'Active PE available' : `${peIds.length} active PEs`}</Link> : <span className="text-slate-400">—</span>}</td>
             <td><span className={`${styles.badge} ${styles[state]}`}>{state[0].toUpperCase() + state.slice(1)}</span></td>
-            {canManageProducts && <td><div className={styles.stateAction}><CrmStateControl kind="product" id={p.id} state={state}/></div></td>}
+            {canManageProducts && <td><CrmStateControl kind="product" id={p.id} state={state}/></td>}
           </ProductTableRow>;
         })}</tbody>
       </table>

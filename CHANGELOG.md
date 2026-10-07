@@ -8,7 +8,7 @@ boundaries. Dates are the dates of the last commits in each group.
 
 - Added Calendar Matches review with Contact/Account matching and prefilled Activity logging.
 
-- Standardized SalesHub form controls, dropdown typography, action rows, and report filter layouts.
+- Completed an application-wide UI consistency pass across forms, filters, buttons, dropdowns, and administration pages.
 
 - Added Google Calendar event synchronization foundation with bounded initial sync and incremental updates, plus personal time-zone settings for Calendar timestamp display.
 

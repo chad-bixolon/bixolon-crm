@@ -40,7 +40,7 @@ export default async function DemoInventoryReport({ searchParams }: { searchPara
     ...(['Open','Won','Lost'] as const).map(result => [`Demos Associated with ${result} Opportunities`, scoped.filter(entry => opportunityResult(entry.request.opportunity) === result).length] as [string, number]),
   ] as [string, number][];
   return <Content><PageHeader eyebrow="Reports" title="Demo Inventory / Deployment" description="Physical units deployed to Accounts and associated sales context." action={<Link className="btn-secondary" href="/reports">Reports</Link>}/>
-    <form className="panel mb-5 grid gap-3 p-5 text-sm sm:grid-cols-3 lg:grid-cols-5" method="get">
+    <form className="panel filter-panel filter-grid filter-row mb-5" method="get">
       <label>Inventory state<select className="field mt-1 w-full" name="state" defaultValue={f.state ?? 'all'}><option value="all">All</option><option value="open">Open units</option><option value="returned">Returned units</option></select></label>
       <label>Overdue<select className="field mt-1 w-full" name="overdue" defaultValue={f.overdue ?? ''}><option value="">Any</option><option value="yes">Overdue</option></select></label>
       <label>Recovery attention<select className="field mt-1 w-full" name="recovery" defaultValue={f.recovery ?? ''}><option value="">Any</option><option value="yes">Needs attention</option></select></label>

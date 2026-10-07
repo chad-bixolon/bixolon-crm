@@ -21,7 +21,7 @@ export default async function MarketingAttributionPage({ searchParams }: { searc
   const query = (page: number) => { const next = new URLSearchParams(); for (const [key, value] of Object.entries(params)) if (key !== 'page' && typeof value === 'string') next.set(key, value); next.set('page', String(page)); return `/reports/marketing-attribution?${next}`; };
   return <Content>
     <PageHeader eyebrow="Marketing reports" title="Marketing Attribution" description="Recorded Campaign Influence activity. Each touch appears once; voided touches remain visible for review." />
-    <form className="panel mb-5 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4" method="get" aria-label="Filter Marketing Attribution">
+    <form className="panel filter-panel filter-grid filter-row mb-5" method="get" aria-label="Filter Marketing Attribution">
       <label className="text-sm">From<input className="field mt-1 block w-full" name="from" type="date" defaultValue={params.from}/></label>
       <label className="text-sm">To<input className="field mt-1 block w-full" name="to" type="date" defaultValue={params.to}/></label>
       <label className="text-sm">Lead Source<select className="field mt-1 block w-full" name="leadSourceId" defaultValue={params.leadSourceId ?? ''}><option value="">All sources</option>{sources.map(source => <option value={source.id} key={source.id}>{source.name}{source.active ? '' : ' (inactive)'}</option>)}</select></label>

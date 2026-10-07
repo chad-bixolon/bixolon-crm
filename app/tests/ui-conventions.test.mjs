@@ -49,3 +49,35 @@ test('save and filter actions use primary styling while close navigation is seco
   assert.match(read('app/notifications/page.tsx'), /<button className="btn-primary">Apply<\/button>/);
   assert.match(read('app/price-exceptions/[id]/page.tsx'), /className=\{resolving\?'btn-secondary':'btn-primary'\}/);
 });
+
+test('System Settings keeps independent saves in compact labeled action rows', () => {
+  const setting = read('components/setting-form.tsx');
+  const page = read('app/administration/settings/page.tsx');
+  assert.match(setting, /<form action=\{action\} className="py-3"/);
+  assert.match(setting, /htmlFor=\{inputId\}/);
+  assert.match(setting, /className="inline-field-action"/);
+  assert.match(setting, /id=\{inputId\} className="field"/);
+  assert.match(page, /className="panel max-w-3xl px-5 py-2"/);
+});
+
+test('import and product selects share control typography', () => {
+  for (const file of ['app/administration/imports/workflow.tsx', 'app/administration/imports/products/workflow.tsx']) {
+    assert.match(read(file), /<select className="field mt-1 max-w-xs"/);
+  }
+  assert.match(read('components/product-picker.tsx'), /id=\{`\$\{uid\}-tier`\} className="field max-w-full"/);
+});
+
+test('multi-action detail headers use the wrapping shared action group', () => {
+  for (const file of ['app/accounts/[id]/page.tsx', 'app/contacts/[id]/page.tsx', 'app/projects/[id]/page.tsx', 'app/tasks/[id]/page.tsx', 'app/trade-shows/[id]/page.tsx']) {
+    assert.match(read(file), /action=\{<div className="page-header-actions"/);
+  }
+});
+
+test('product filters and mobile action groups use shared responsive structure', () => {
+  const products = read('app/products/page.tsx');
+  assert.match(products, /className="panel filter-panel filter-grid filter-row mb-4"/);
+  assert.match(products, /className="field filter-control"/);
+  assert.match(products, /className="filter-actions"/);
+  assert.match(css, /\.page-header-actions \{ width: 100%; \}/);
+  assert.match(css, /\.filter-actions \{ flex-wrap: wrap; width: 100%; \}/);
+});
