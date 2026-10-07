@@ -19,6 +19,6 @@ export function UserForm({ id, initial, created = false }: { id?: number; initia
     <div><label className="label" htmlFor="role">Role *</label><select key={valueKey} className="field" id="role" name="role" defaultValue={value("role", initial?.role ?? UserRole.SALES)}>{Object.entries(roleLabels).map(([role, label]) => <option key={role} value={role}>{label}</option>)}</select>{error("role")}</div>
     <div><label className="label" htmlFor="active">Status</label><select key={valueKey} className="field" id="active" name="active" defaultValue={value("active", initial?.active === false ? "false" : "true")}><option value="true">Active</option><option value="false">Inactive</option></select>{error("active")}</div>
     <p className="text-sm text-slate-500">User records identify owners. Sign-in and passwords are not configured here.</p>
-    <div className="flex justify-end gap-2"><Link className="btn-secondary" href="/administration/users">Cancel</Link><button type="submit" className="btn-primary" disabled={pending}>{pending ? "Saving…" : id ? "Save user" : "Create user"}</button></div>
+    <div className="form-action-row justify-end"><Link className="btn-secondary" href="/administration/users">Cancel</Link><button type="submit" className="btn-primary" disabled={pending}>{pending ? "Saving…" : id ? "Save user" : "Create user"}</button></div>
   </form>;
 }

@@ -6,6 +6,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Standardized SalesHub form controls, dropdown typography, action rows, and report filter layouts.
+
 - Added Google Calendar event synchronization foundation with bounded initial sync and incremental updates, plus personal time-zone settings for Calendar timestamp display.
 
 - Added the Google Calendar connection foundation with read-only OAuth consent and secure credential storage.

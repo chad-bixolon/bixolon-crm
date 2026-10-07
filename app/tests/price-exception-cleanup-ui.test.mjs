@@ -131,8 +131,9 @@ test('bulk fields and preview state follow action and eligible selection', () =>
 
 test('cleanup CSS gives controls equal height and responsive compact layouts', () => {
   const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
-  assert.match(css, /\.pe-cleanup-control\s*\{[^}]*height: 2\.25rem;[^}]*min-height: 2\.25rem;/);
+  assert.match(css, /\.field:not\(textarea\):not\(\[type="file"\]\)\s*\{\s*height: var\(--control-height\)/);
+  assert.match(css, /\.pe-cleanup-control\s*\{[^}]*margin-top: \.25rem;/);
   assert.match(css, /\.pe-cleanup-issue-card\s*\{[^}]*min-height: 4rem;/);
-  assert.match(css, /\.pe-cleanup-preview:disabled/);
+  assert.match(css, /\.btn-primary:disabled/);
   assert.match(css, /min-width: 64rem\) \{ \.pe-cleanup-filter-grid/);
 });

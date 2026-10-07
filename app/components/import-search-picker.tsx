@@ -8,8 +8,8 @@ export function ImportSearchPicker({ value, onChange, items, label, emptyLabel =
   const selected = items.find(item => item.id === value);
 
   return <div className="import-search-picker min-w-0 w-full">
-    <input aria-label={`Search ${label}`} className="field mb-1 h-9 w-full min-w-0 px-2 py-1 text-sm" value={search} disabled={disabled} onChange={event => setSearch(event.target.value)} placeholder={searchPlaceholder ?? `Search ${label}`} />
-    <select aria-label={label} title={selected?.name} className="field h-9 w-full min-w-0 px-2 py-1 text-sm" value={value ?? ''} disabled={disabled} onChange={event => onChange(event.target.value ? Number(event.target.value) : null)}>
+    <input aria-label={`Search ${label}`} className="field mb-1 w-full min-w-0" value={search} disabled={disabled} onChange={event => setSearch(event.target.value)} placeholder={searchPlaceholder ?? `Search ${label}`} />
+    <select aria-label={label} title={selected?.name} className="field w-full min-w-0" value={value ?? ''} disabled={disabled} onChange={event => onChange(event.target.value ? Number(event.target.value) : null)}>
       <option value="">{emptyLabel}</option>
       {selected && !filtered.some(item => item.id === selected.id) && <option value={selected.id}>{selected.name}</option>}
       {filtered.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}

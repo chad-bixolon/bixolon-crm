@@ -42,7 +42,7 @@ test('Sales Plan report renders a compact responsive filter row and scoped actio
   const html=renderToStaticMarkup(await SalesPlan({searchParams:Promise.resolve({year:'2027',currencyCode:'EUR',userId:'7'})}));
   const form=html.match(/<form[^>]*aria-label="Filter Sales Plan report"[^>]*>.*?<\/form>/)?.[0];
   assert.ok(form);
-  assert.match(form,/class="panel filter-panel filter-grid sales-plan-report-filters mb-5"/);
+  assert.match(form,/class="panel filter-panel filter-grid filter-row sales-plan-report-filters mb-5"/);
   for(const name of ['year','currencyCode','userId'])assert.match(form,new RegExp(`name="${name}"`));
   assert.equal((form.match(/class="field filter-control"/g)??[]).length,3);
   assert.match(form,/<div class="filter-actions"><button class="btn-filter-primary w-full sm:w-auto"[^>]*>View report<\/button><\/div>/);
@@ -56,7 +56,7 @@ test('SKU Rollup keeps its filters and routes with an orange View report action'
   const form=html.match(/<form[^>]*method="get"[^>]*>.*?<\/form>/)?.[0];
   assert.ok(form);
   for(const name of ['year','currencyCode','userId','productId','skuId','accountId','search'])assert.match(form,new RegExp(`name="${name}"`));
-  assert.match(form,/sm:grid-cols-3 xl:grid-cols-4/);
+  assert.match(form,/class="panel filter-panel filter-grid filter-row mb-5"/);
   assert.match(form,/<button class="btn-primary w-full sm:w-auto"[^>]*>View report<\/button>/);
   assert.match(html,/href="\/reports\/sales-plan-sku\/export\?year=2027&amp;currencyCode=EUR&amp;userId=7&amp;search=printer"/);
   assert.match(html,/href="\/reports\/sales-plan" class="btn-secondary">Sales Plan report<\/a>/);

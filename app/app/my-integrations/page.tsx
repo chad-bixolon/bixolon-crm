@@ -34,8 +34,8 @@ export default async function MyIntegrationsPage({ searchParams }: { searchParam
     {result && notices[result] && <p role="status" className="mb-5 rounded-md bg-slate-100 p-3 text-sm">{notices[result]}</p>}
     <section className="panel mb-5 max-w-2xl space-y-4 p-6" aria-labelledby="personal-settings-heading">
       <h2 id="personal-settings-heading" className="text-xl font-semibold">Personal settings</h2>
-      <form action={saveMyTimeZone} className="flex flex-wrap items-end gap-3">
-        <label className="label min-w-64">Time Zone
+      <form action={saveMyTimeZone} className="inline-field-action">
+        <label className="label">Time Zone
           <select className="field mt-1" name="timeZone" defaultValue={user.timeZone} required>
             {USER_TIME_ZONE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label} ({option.value})</option>)}
           </select>
@@ -53,7 +53,7 @@ export default async function MyIntegrationsPage({ searchParams }: { searchParam
         <p className="text-sm">Last successful sync: {connection.lastSuccessfulSyncAt ? displayTime(connection.lastSuccessfulSyncAt) : 'Never'}</p>
         {connection.lastSyncCompletedAt && <p className="text-sm">Last sync result ({displayTime(connection.lastSyncCompletedAt)}): {connection.lastError ? connection.lastError : 'Completed successfully'}</p>}
         <p className="text-sm text-slate-600">Read-only access. Events are stored for future review; no Activities are created by sync.</p>
-        <div className="flex flex-wrap gap-3">{connection.connectionStatus === 'CONNECTED' && <form action={syncMyGoogleCalendar}><button className="btn-primary" type="submit">Sync now</button></form>}<form action={connectGoogleCalendar}><button className="btn-secondary" type="submit">Reconnect / Reauthorize</button></form><form action={disconnectGoogleCalendar}><button className="btn-secondary" type="submit">Disconnect</button></form></div>
+        <div className="form-action-row">{connection.connectionStatus === 'CONNECTED' && <form action={syncMyGoogleCalendar}><button className="btn-primary" type="submit">Sync now</button></form>}<form action={connectGoogleCalendar}><button className="btn-secondary" type="submit">Reconnect / Reauthorize</button></form><form action={disconnectGoogleCalendar}><button className="btn-secondary" type="submit">Disconnect</button></form></div>
       </>}
     </section>
   </Content>;

@@ -21,7 +21,8 @@ test('main Sales Plan shortcut reuses the protected report export and selected m
   assert.match(main,/userId\?`&userId=\$\{userId\}`/);
   assert.ok(!/f\.(account|sku|status|search|history).*?\/reports\/sales-plan\/export/.test(main));
   assert.match(route,/buildSalesPlanManagementExport\(prisma, actor, selection\)/);
-  for(const page of [main,report,sku])assert.match(page,/action=\{.*?flex flex-wrap items-center gap-2/);
+  assert.match(main,/action=\{.*?flex flex-wrap items-center gap-2/);
+  for(const page of [report,sku])assert.match(page,/action=\{<div className="page-header-actions"/);
 });
 const D=n=>new Prisma.Decimal(n);
 const actor=role=>({id:90,role,active:true,archivedAt:null,name:'Export Manager'});
