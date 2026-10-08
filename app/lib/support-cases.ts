@@ -179,17 +179,36 @@ export const archiveSupportCase = (db: PrismaClient, actor: Actor, caseId: numbe
 export const restoreSupportCase = (db: PrismaClient, actor: Actor, caseId: number) => setArchived(db, actor, caseId, false);
 export async function getSupportCaseById(db: PrismaClient, actor: Actor, caseId: number, includeArchived = false) {
   id(caseId, 'case');
-  return db.supportCase.findFirst({ where: { id: caseId, ...supportCaseReadWhere(actor, includeArchived) }, include: { account: true, contact: true, category: true, assignedTo: true, productSku: true, events: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] } } });
+  return db.supportCase.findFirst({ where: { id: caseId, ...supportCaseReadWhere(actor, includeArchived) }, include: { account: true, contact: true, category: true, assignedTo: true, productSku: true, events: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], include: { actor: { select: { firstName: true, lastName: true } } } } } });
 }
-export async function listSupportCases(db: PrismaClient, actor: Actor, options: { page?: number; includeArchived?: boolean; accountId?: number; assignedToId?: number; status?: SupportCaseStatus } = {}) {
-  const where: Prisma.SupportCaseWhereInput = { ...supportCaseReadWhere(actor, options.includeArchived), ...(options.accountId ? { accountId: options.accountId } : {}), ...(options.assignedToId ? { assignedToId: options.assignedToId } : {}), ...(options.status ? { status: options.status } : {}) };
+export type SupportCaseListOptions = { page?: number; archive?: 'active' | 'archived' | 'all'; includeArchived?: boolean; accountId?: number; assignedToId?: number; status?: SupportCaseStatus; priority?: SupportCasePriority; categoryId?: number; productSkuId?: number; product?: string; account?: string; openedFrom?: Date; openedTo?: Date; search?: string; sort?: 'current' | 'newest' | 'oldest' | 'priority' | 'follow-up' | 'number' | 'updated' };
+export function supportCaseListWhere(actor: Actor, options: SupportCaseListOptions = {}): Prisma.SupportCaseWhereInput {
+  const where: Prisma.SupportCaseWhereInput = { ...supportCaseReadWhere(actor, options.archive === 'all' || options.archive === 'archived' || options.includeArchived), ...(options.accountId ? { accountId: options.accountId } : {}), ...(options.assignedToId ? { assignedToId: options.assignedToId } : {}), ...(options.status ? { status: options.status } : {}), ...(options.priority ? { priority: options.priority } : {}), ...(options.categoryId ? { categoryId: options.categoryId } : {}), ...(options.productSkuId ? { productSkuId: options.productSkuId } : {}) };
   if (options.accountId !== undefined) id(options.accountId, 'Account');
   if (options.assignedToId !== undefined) id(options.assignedToId, 'assignee');
+  if (options.categoryId !== undefined) id(options.categoryId, 'category');
+  if (options.productSkuId !== undefined) id(options.productSkuId, 'Product/SKU');
   if (options.status !== undefined && !Object.values(SupportCaseStatus).includes(options.status)) throw new Error('Invalid status.');
+  if (options.priority !== undefined && !Object.values(SupportCasePriority).includes(options.priority)) throw new Error('Invalid priority.');
+  if (options.archive === 'archived') where.archivedAt = { not: null };
+  if (options.account?.trim()) where.account = { name: { contains: options.account.trim().slice(0, 100), mode: 'insensitive' } };
+  if (options.product?.trim()) where.productSku = { partNumber: { contains: options.product.trim().slice(0, 100), mode: 'insensitive' } };
+  if (options.openedFrom || options.openedTo) where.openedAt = { ...(options.openedFrom ? { gte: options.openedFrom } : {}), ...(options.openedTo ? { lt: options.openedTo } : {}) };
+  const q = options.search?.trim().slice(0, 100);
+  if (q && /^(BXS|SUP)-\d{4}-\d{6}$/i.test(q)) where.caseNumber = q.toUpperCase();
+  else if (q) { const parts = q.split(/\s+/); where.OR = [{ caseNumber: { contains: q, mode: 'insensitive' } }, { subject: { contains: q, mode: 'insensitive' } }, { serialNumber: { contains: q, mode: 'insensitive' } }, { account: { name: { contains: q, mode: 'insensitive' } } }, { contact: { OR: [{ firstName: { contains: q, mode: 'insensitive' } }, { lastName: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }, ...(parts.length > 1 ? [{ AND: [{ firstName: { contains: parts[0], mode: 'insensitive' as const } }, { lastName: { contains: parts.slice(1).join(' '), mode: 'insensitive' as const } }] }] : [])] } }]; }
+  return where;
+}
+export function supportCaseListOrder(sort: SupportCaseListOptions['sort']): Prisma.SupportCaseOrderByWithRelationInput[] {
+  const orders: Record<NonNullable<SupportCaseListOptions['sort']>, Prisma.SupportCaseOrderByWithRelationInput[]> = { current: [{ status: 'asc' }, { openedAt: 'desc' }], newest: [{ openedAt: 'desc' }], oldest: [{ openedAt: 'asc' }], priority: [{ priority: 'desc' }, { openedAt: 'desc' }], 'follow-up': [{ nextFollowUpAt: 'asc' }], number: [{ caseNumber: 'asc' }], updated: [{ updatedAt: 'desc' }] };
+  return [...(orders[sort ?? 'current'] ?? orders.current), { id: 'desc' }];
+}
+export async function listSupportCases(db: PrismaClient, actor: Actor, options: SupportCaseListOptions = {}) {
+  const where = supportCaseListWhere(actor, options);
   const count = await db.supportCase.count({ where });
   const pages = Math.max(1, Math.ceil(count / 20));
   const page = Number.isSafeInteger(options.page) ? Math.min(Math.max(options.page!, 1), pages) : 1;
-  const cases = await db.supportCase.findMany({ where, take: 20, skip: (page - 1) * 20, orderBy: [{ openedAt: 'desc' }, { id: 'desc' }], include: { account: { select: { id: true, name: true } }, category: { select: { name: true } }, assignedTo: { select: { id: true, firstName: true, lastName: true } } } });
+  const cases = await db.supportCase.findMany({ where, take: 20, skip: (page - 1) * 20, orderBy: supportCaseListOrder(options.sort), include: { account: { select: { id: true, name: true } }, contact: { select: { id: true, firstName: true, lastName: true } }, category: { select: { name: true } }, assignedTo: { select: { id: true, firstName: true, lastName: true } }, productSku: { select: { partNumber: true } } } });
   return { cases, count, page, pages };
 }
 export function canManageSupportCategories(actor: Actor) { return can(actor, 'support-categories.manage'); }

@@ -19,6 +19,7 @@ const groups = [
     ["Territories", "/administration/lookups/territories", "Manage account territory choices."],
   ] },
   { title: "CRM Configuration", tools: [
+    ["Support Case Categories", "/administration/support-case-categories", "Manage Support Case categories and display order."],
     ["Industries", "/administration/lookups/industries", "Manage account industry choices."],
     ["Activity Types", "/administration/lookups/activity-types", "Manage activity choices and order."],
     ["Labels & Terminology", "/administration/labels", "Edit business-facing display labels."],

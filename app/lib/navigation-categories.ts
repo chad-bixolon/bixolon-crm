@@ -2,6 +2,7 @@
 export const NAV_CATEGORIES = {
   crm: 'CRM',
   sales: 'Sales',
+  support: 'Support',
   programs: 'Programs',
   marketing: 'Marketing',
   catalogPricing: 'Catalog & Pricing',

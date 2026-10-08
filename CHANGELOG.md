@@ -6,6 +6,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added operational Support Case management with list, detail, create/edit, filtering, history, and category administration; creation fields appear together in Case History while audit events remain separate.
+
 - Added Support Case foundation with BXS case numbers, lifecycle auditing, configurable categories, and Support permissions.
 
 - Added My Day dashboard and daily activity view with Calendar meeting time, Activities, and Tasks.

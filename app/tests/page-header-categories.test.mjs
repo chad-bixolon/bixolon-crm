@@ -14,6 +14,7 @@ const categories = {
   opportunities: 'sales', pipeline: 'sales', 'sales-plan': 'sales', tasks: 'sales',
   'calendar-matches': 'sales', demos: 'sales', activities: 'sales', notes: 'sales',
   projects: 'programs',
+  support: 'support',
   'trade-shows': 'marketing', marketing: 'marketing',
   products: 'catalogPricing', 'price-exceptions': 'catalogPricing',
   reports: 'reports', administration: 'administration',
@@ -42,7 +43,7 @@ test('primary module page headers use the sidebar category, including subpages',
 test('shared section labels match the primary sidebar and preserve personal exceptions', () => {
   const labels = read('lib/navigation-categories.ts');
   const shell = read('components/shell.tsx');
-  for (const [key, value] of Object.entries({ crm: 'CRM', sales: 'Sales', programs: 'Programs', marketing: 'Marketing', catalogPricing: 'Catalog & Pricing', reports: 'Reports', administration: 'Administration' })) {
+  for (const [key, value] of Object.entries({ crm: 'CRM', sales: 'Sales', support: 'Support', programs: 'Programs', marketing: 'Marketing', catalogPricing: 'Catalog & Pricing', reports: 'Reports', administration: 'Administration' })) {
     assert.ok(labels.includes(`${key}: '${value}'`));
     assert.ok(shell.includes(`label: NAV_CATEGORIES.${key}`));
   }

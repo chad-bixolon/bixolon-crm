@@ -1,37 +1,21 @@
-# Support Cases: foundation
+# Support Cases
 
-Support Cases track customer issues as first-class CRM records. This step adds the data and service layer only; no case pages, navigation, Account/Contact tabs, activity links, notifications, or reports exist yet.
+Support Cases track customer issues as first-class CRM records. The **Support Cases** item under **Support** opens `/support/cases`. Support and Admin can create and manage cases. Sales, Sales Manager, Read Only, and Marketing Manager can read cases under the existing Account read policy but have no case mutation controls. Step 1 grants do not change. Support is a team-wide scope; assignment does not restrict editing. Current Account detail access is capability based and does not enforce owner or team scope, so case reads follow that policy.
 
-## Data and relationships
+## Operational pages
 
-A case requires an active Account, subject, description, source, and actor. Contact is optional but, when supplied, must be active and belong to the selected Account. Category, assignee, and Product/SKU are optional. A serial number is plain text; no Asset record or duplicated SKU details are created. `nextFollowUpAt` and other timestamps are stored as UTC instants and will be shown in the user's time zone by a later UI. Core fields are relational rather than JSON.
+The list shows current cases by default, working statuses first and newest opened within each status, with 20 cases per page. Archived cases are hidden unless **Archived** or **All** is selected. Filters are server-side and combine: Support Rep, status, priority, Account name, category, Product/SKU part number, opened date range, and search. Search covers case number, Account name, Contact first or last name and email, subject, and serial number. Sort choices are current statuses first, newest/oldest opened, priority (Critical first), next follow-up, case number, and recently updated. Pagination retains filters and sort. Opened date bounds use UTC calendar dates.
 
-Categories are Admin-managed lookup rows with unique names, active flags, and sort order. They are not seeded. The backend supports add, rename, activate/deactivate, and reorder. Historical category references remain when a category is deactivated; no delete service exists. Category administration UI is deferred.
+Create requires an active Account, subject, description, and source. Contact is optional and scoped to the chosen Account. Category, eligible assignee, active SKU, serial number, and follow-up are optional. Status starts at New, priority at Normal, and an eligible current user is preselected as assignee. The service generates `BXS-YYYY-NNNNNN` using the UTC year and server opened time. Neither is editable. Edit uses the same service validation and lifecycle tracking. Inactive historical categories remain selected and visible during edit, while new choices are active only.
 
-## Status, priority, and source
+The detail page shows the case summary, description, resolution summary when relevant, and a collapsed Case History with actor, timestamp, business labels, and old/new values. Case History groups the baseline creation event and its populated initial field events into one readable **Case created** item; later edits remain separate. The count shows the number of stored audit events, not visual items. The creation group only combines the first baseline event and consecutive initial fields in audit order with the same case, actor, CRM source, and creation timestamp. The underlying lifecycle events remain separate and append-only. Archived cases can be restored before editing. Archive and restore write history without changing status. Archive is not Close. The page does not link Activities, Tasks, or Notes.
 
-Statuses: New, Open, Waiting on Customer, Waiting on Internal, Resolved, Closed. New can move to any other status. Open and either Waiting state can move among working states, Resolved, or Closed. Resolved can move to Open or Closed. Closed can reopen to Open. Changes are explicit, never time driven. Priority is Low, Normal (default), High, or Critical. Source is Phone, Email, Web, Internal Referral, or Other; Web and Email are recorded context only.
+Case age is derived for display: open states use opened time to now; Resolved uses opened to resolved time; Closed uses opened to closed time. Days convert to approximate 30-day months from 60 days onward. No age is stored. Follow-up times use the viewer's configured time zone and show **Overdue** for unfinished cases with a past follow-up. No notification is generated.
 
-On entering Resolved, `resolvedAt` is set. On entering Closed, `closedAt` is set. Reopening to Open clears current `resolvedAt` and `closedAt`; history retains the previous values and transitions. Closing directly from a working state is allowed. `resolutionSummary` is editable separately. Archive is independent of Closed: archived cases are hidden from normal service reads, retained with history, and restorable. Archived cases must be restored before other edits.
+## Categories and lifecycle
 
-## Numbering and history
+Admins manage Support Case Categories at `/administration/support-case-categories`: add, rename, activate/deactivate, and reorder by sort number. Categories are retained when inactive, including their historical case references; the UI offers no delete. Statuses are New, Open, Waiting on Customer, Waiting on Internal, Resolved, and Closed. Priority is Low, Normal, High, or Critical. Source is Phone, Email, Web, Internal Referral, or Other. Existing service transitions, resolved/closed timestamp handling, reference validation, no-op suppression, and atomic history writes remain authoritative.
 
-A number is assigned once as `BXS-YYYY-NNNNNN`, using the UTC year at creation. A PostgreSQL counter row per year is incremented with `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` inside the case creation transaction. PostgreSQL serializes conflicting updates, so concurrent creation cannot reuse a number. The counter starts at 1 each UTC year and numbers may have gaps if records are removed by exceptional administration or transactions outside this service; normal rollbacks do not consume a committed counter value. The case number has a unique index and a database trigger blocks changes. Historical `SUP-` case numbers remain unchanged and readable.
+Support and Admin can create, update, archive, and restore all cases. Only active, unarchived Support or Admin users are eligible assignees. Sales and Sales Manager have read-only access under their existing Account visibility. Read Only and Marketing Manager retain their Step 1 read policy. Admin alone manages categories. Routes and actions check permissions server-side and pass the effective CRM actor to the Step 1 service. No migration is needed for the operational UI.
 
-Creation writes a baseline event and initial non-null field events. Updates write one event per changed core field, with old/new values, actor ID, timestamp, source, and display snapshots for referenced Account, Contact, assignee, category, and SKU. Archive and restore are audited. No-op edits create no events. Event writes and case mutations share a transaction; row locking serializes concurrent updates to the same case. A database trigger blocks event updates and deletes. Services should receive the effective CRM user, consistent with existing development impersonation behavior.
-
-## Access and assignment
-
-All access uses the existing `can` grant table. Support and Admin can create, read, update, archive, and restore all cases. Support is granted read access to Accounts, Contacts, and Products/SKUs, but no Sales Plan, Forecast, Sales Target, Price Exception mutation, Product administration, or general Administration capability. Only active, unarchived Support or Admin users are eligible assignees, via the existing eligibility helper. Support is a team-wide scope: assignment does not restrict editing.
-
-Sales and Sales Manager can read cases only while they retain `accounts.read`; they cannot mutate cases. Read Only and Marketing Manager can also read cases under their existing broad Account read policy and cannot mutate. Current Account detail access is capability based and does not enforce owner or team scoping, so case reads follow that exact existing policy. If Account visibility becomes owner scoped later, `supportCaseReadWhere` must be narrowed at the same time. No case operation exposes an Account to a role lacking `accounts.read`. Only Admin can configure categories.
-
-The services accept an explicit actor and enforce permissions and reference validation server side. No Support route or server action is exposed in this step. Any future route or action must call these services with `currentUser()` and must not trust role, scope, or actor IDs from a request.
-
-## Query indexes
-
-`caseNumber` is unique. `(accountId, openedAt)` supports Account history; `(assignedToId, status)` supports assignee queues; `(status, priority)` supports triage; category and SKU indexes support relational filters; `nextFollowUpAt` supports due work; `archivedAt` supports normal versus archived reads; `(supportCaseId, createdAt, id)` supports ordered history. The category `(active, sortOrder)` index supports configuration options.
-
-## Deferred
-
-Operational pages, Account and Contact tabs, Activity/Task/Note linkage, attachments, dashboards, reports, notifications, ingestion, RMA, SLA, portal, and knowledge base belong to later steps.
+Deferred: Account/Contact Support tabs; Activity, Task, and Note linkage; attachments; dashboards; reports; notifications; email ingestion; RMA; SLA; portal; knowledge base.

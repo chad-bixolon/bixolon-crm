@@ -37,6 +37,7 @@ function render(user, route = '/', extras = {}) {
 const expectedSections = {
   CRM: ['/', '/accounts', '/contacts'],
   Sales: ['/opportunities', '/pipeline', '/sales-plan', '/tasks', '/calendar-matches', '/demos'],
+  Support: ['/support/cases'],
   Programs: ['/projects'],
   Marketing: ['/trade-shows', '/marketing/campaigns', '/marketing/audiences'],
   'Catalog & Pricing': ['/products', '/price-exceptions'],
@@ -46,7 +47,7 @@ const expectedSections = {
 
 function shellUser(role) {
   const actor = { id: 7, role, active: true, archivedAt: null };
-  return { name: 'Test User', role, canManageUsers: can(actor, 'users.manage'), canViewReports: can(actor, 'sales.read') || can(actor, 'trade-shows.read'), canViewMarketing: can(actor, 'marketing.read'), canViewSales: can(actor, 'sales.read'), canViewOpportunities: can(actor, 'opportunities.read') };
+  return { name: 'Test User', role, canManageUsers: can(actor, 'users.manage'), canViewReports: can(actor, 'sales.read') || can(actor, 'trade-shows.read'), canViewMarketing: can(actor, 'marketing.read'), canViewSales: can(actor, 'sales.read'), canViewOpportunities: can(actor, 'opportunities.read'), canViewSupport: can(actor, 'support-cases.read') && can(actor, 'accounts.read') };
 }
 
 function navigation(html) {
@@ -140,6 +141,11 @@ test('navigation groups preserve every route once and match effective role acces
   assert.deepEqual(navigation(render(shellUser('MARKETING_MANAGER'))).Sales, ['/opportunities', '/tasks']);
   assert.deepEqual(navigation(render(shellUser('MARKETING_MANAGER'))).Programs, ['/projects']);
   assert.deepEqual(navigation(render({ name: 'No grants', role: 'MARKETING_MANAGER', canManageUsers: false, canViewReports: false, canViewMarketing: false, canViewSales: false })).Administration, undefined);
+});
+test('Support navigation shows case work and permitted CRM context', () => {
+  const links = Object.values(navigation(render(shellUser('SUPPORT')))).flat();
+  assert.deepEqual(links, ['/', '/accounts', '/contacts', '/support/cases', '/products']);
+  for (const route of links) assert.equal(routeAccess(route, { id: 7, role: 'SUPPORT', active: true, archivedAt: null }), 'allowed');
 });
 
 test('Pipeline navigation matches existing route permission for every role', () => {

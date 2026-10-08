@@ -121,6 +121,24 @@ test('category configuration is Admin only', async () => {
   await assert.rejects(category.saveSupportCaseCategory(db, actor('SUPPORT'), { name: 'Hardware', sortOrder: 0, active: true }), /Access denied/);
   assert.equal((await category.saveSupportCaseCategory(db, actor('ADMIN'), { name: ' Hardware ', sortOrder: 0, active: true })).name, 'Hardware');
 });
+test('category administration saves name, activation, and order without deleting historical rows', async () => {
+  const rows = new Map(); let nextId = 0;
+  const db = { supportCaseCategory: {
+    create: async ({ data }) => { const row = { id: ++nextId, ...data }; rows.set(row.id, row); return row; },
+    update: async ({ where, data }) => { const row = { ...rows.get(where.id), ...data }; rows.set(row.id, row); return row; },
+  } };
+  const admin = actor('ADMIN');
+  const first = await category.saveSupportCaseCategory(db, admin, { name: ' Hardware ', sortOrder: 10, active: true });
+  const second = await category.saveSupportCaseCategory(db, admin, { name: 'Software', sortOrder: 20, active: true });
+  assert.deepEqual([first.name, second.name], ['Hardware', 'Software']);
+  await category.saveSupportCaseCategory(db, admin, { name: 'Device hardware', sortOrder: 0, active: false }, first.id);
+  await category.saveSupportCaseCategory(db, admin, { name: 'Software', sortOrder: 5, active: true }, second.id);
+  assert.equal(rows.get(first.id).name, 'Device hardware'); assert.equal(rows.get(first.id).active, false); assert.equal(rows.get(first.id).sortOrder, 0);
+  assert.equal(rows.get(second.id).sortOrder, 5); assert.equal(rows.size, 2);
+  await category.saveSupportCaseCategory(db, admin, { name: 'Device hardware', sortOrder: 0, active: true }, first.id);
+  assert.equal(rows.get(first.id).active, true);
+  await assert.rejects(category.saveSupportCaseCategory(db, actor('SALES'), { name: 'Unauthorized', sortOrder: 0, active: true }), /Access denied/);
+});
 test('read services gate by role and preserve Account visibility policy', async () => {
   const f = fixture(); const row = await service.createSupportCase(f.db, actor('SUPPORT'), input);
   assert.equal((await service.getSupportCaseById(f.db, actor('SALES'), row.id)).id, row.id);

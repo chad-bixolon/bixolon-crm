@@ -15,22 +15,25 @@ import { NAV_CATEGORIES } from '../lib/navigation-categories';
 const navSections = [
   { label: NAV_CATEGORIES.crm, items: ["Dashboard", "Accounts", "Contacts"] },
   { label: NAV_CATEGORIES.sales, items: ["Opportunities", "Pipeline", "Sales Plan", "Tasks", "Calendar Matches", "Demos"] },
+  { label: NAV_CATEGORIES.support, items: ["Support Cases"] },
   { label: NAV_CATEGORIES.programs, items: ["Projects"] },
   { label: NAV_CATEGORIES.marketing, items: ["Trade Shows", "Campaigns", "Marketing Audiences"] },
   { label: NAV_CATEGORIES.catalogPricing, items: ["Products", "Price Exceptions"] },
   { label: NAV_CATEGORIES.reports, items: ["Reports"] },
   { label: NAV_CATEGORIES.administration, items: ["Administration", "Integrations"] },
 ] as const;
-const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Sales Plan" ? "/sales-plan" : item === "Calendar Matches" ? "/calendar-matches" : item === "Price Exceptions" ? "/price-exceptions" : item === "Trade Shows" ? "/trade-shows" : item === "Campaigns" ? "/marketing/campaigns" : item === "Marketing Audiences" ? "/marketing/audiences" : `/${item.toLowerCase()}`;
+const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Support Cases" ? "/support/cases" : item === "Sales Plan" ? "/sales-plan" : item === "Calendar Matches" ? "/calendar-matches" : item === "Price Exceptions" ? "/price-exceptions" : item === "Trade Shows" ? "/trade-shows" : item === "Campaigns" ? "/marketing/campaigns" : item === "Marketing Audiences" ? "/marketing/audiences" : `/${item.toLowerCase()}`;
 const navLabelKeys: Partial<Record<string, keyof LabelMap>> = { Accounts: "ACCOUNT", Contacts: "CONTACT", Projects: "PROJECT", Opportunities: "OPPORTUNITY", Tasks: "TASK" };
-type ShellUser = { name: string; role: UserRole; canManageUsers: boolean; canViewReports: boolean; canViewMarketing:boolean; canViewSales:boolean; canViewOpportunities:boolean };
+type ShellUser = { name: string; role: UserRole; canManageUsers: boolean; canViewReports: boolean; canViewMarketing:boolean; canViewSales:boolean; canViewOpportunities:boolean; canViewSupport:boolean };
 type NavItem = (typeof navSections)[number]["items"][number];
 function canSeeNavItem(item: NavItem, user: ShellUser | null) {
   if (!user) return false;
+  if (user.role === 'SUPPORT') return ['Dashboard', 'Accounts', 'Contacts', 'Products', 'Support Cases'].includes(item);
   switch (item) {
     case "Administration":
     case "Integrations": return user.canManageUsers;
     case "Reports": return user.canViewReports;
+    case "Support Cases": return user.canViewSupport;
     case "Opportunities": return user.canViewOpportunities;
     case "Pipeline":
     case "Sales Plan": return user.canViewSales;
