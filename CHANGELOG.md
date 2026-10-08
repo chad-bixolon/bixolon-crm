@@ -6,6 +6,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Integrated Support Cases with Accounts, Contacts, Activities, Tasks, Notes, and a unified case timeline.
+
 - Removed remaining user-facing internal database IDs in favor of business names and identifiers.
 
 - Added operational Support Case management with list, detail, create/edit, filtering, history, and category administration; creation fields appear together in Case History while audit events remain separate.

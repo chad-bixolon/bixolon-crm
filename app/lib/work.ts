@@ -20,12 +20,12 @@ function relation(form: FormData, key: string, errors: Errors) { const raw = fie
 export function parseTask(form: FormData) {
   const errors: Errors = {}; const subject = required(form, 'subject', 'Subject', 200, errors);
   const description = optional(form, 'description', 5000, errors);
-  const accountId = relation(form, 'accountId', errors), opportunityId = relation(form, 'opportunityId', errors), projectId = relation(form, 'projectId', errors), assignedToId = relation(form, 'assignedToId', errors);
+  const accountId = relation(form, 'accountId', errors), opportunityId = relation(form, 'opportunityId', errors), projectId = relation(form, 'projectId', errors), assignedToId = relation(form, 'assignedToId', errors), supportCaseId = relation(form, 'supportCaseId', errors), contactId = form.has('contactId') ? relation(form, 'contactId', errors) : undefined;
   const status = field(form, 'status') as TaskStatus, priority = field(form, 'priority') as TaskPriority;
   if (!taskStatuses.includes(status)) errors.status = 'Choose a status.';
   if (!taskPriorities.includes(priority)) errors.priority = 'Choose a priority.';
   const dueDate = dateField(field(form, 'dueDate'), 'dueDate', errors);
-  return { errors, value: Object.keys(errors).length ? undefined : { subject, description, accountId, opportunityId, projectId, assignedToId, status, priority, dueDate } };
+  return { errors, value: Object.keys(errors).length ? undefined : { subject, description, accountId, opportunityId, projectId, assignedToId, supportCaseId, contactId, status, priority, dueDate } };
 }
 export type TaskInput = NonNullable<ReturnType<typeof parseTask>['value']>;
 export async function checkRelations(client: PrismaClient | Prisma.TransactionClient, accountId: number | null, opportunityId: number | null, projectId: number | null = null) {
@@ -37,6 +37,12 @@ export async function checkRelations(client: PrismaClient | Prisma.TransactionCl
     const link = await client.opportunityProject.findUnique({ where: { opportunityId_projectId: { opportunityId, projectId } } });
     if (!link) throw new Error('Opportunity is not linked to this Project.');
   }
+}
+async function checkSupportCaseRelation(client: PrismaClient | Prisma.TransactionClient, supportCaseId: number | null, accountId: number | null, historical = false) {
+  if (!supportCaseId) return;
+  const row = await client.supportCase.findUnique({ where: { id: supportCaseId }, select: { accountId: true, archivedAt: true, status: true } });
+  if (!row || row.accountId !== accountId) throw new Error('Support Case Account does not match the selected Account.');
+  if (!historical && (row.archivedAt || row.status === 'CLOSED')) throw new Error('Reopen or restore the Support Case before adding work.');
 }
 export async function saveTask(
   client: PrismaClient,
@@ -53,7 +59,8 @@ export async function saveTask(
     await checkRelations(tx, value.accountId, value.opportunityId, value.projectId);
     const existing = id ? await tx.task.findUnique({ where: { id } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Task not found or archived.');
-    if (value.assignedToId && value.assignedToId !== existing?.assignedToId && !(await tx.user.findFirst({ where: { id: value.assignedToId, ...eligibleUserWhere('tasks.write') } }))) throw new Error('Choose an eligible assignee.');
+    await checkSupportCaseRelation(tx, value.supportCaseId, value.accountId, !!id && existing?.supportCaseId === value.supportCaseId);
+    if (value.assignedToId && value.assignedToId !== existing?.assignedToId && !(await tx.user.findFirst({ where: { id: value.assignedToId, ...eligibleUserWhere(value.supportCaseId ? 'support-work.write' : 'tasks.write') } }))) throw new Error('Choose an eligible assignee.');
     const completedAt = value.status === 'COMPLETED' ? existing?.completedAt ?? new Date() : null;
    const data = {
   ...value,
@@ -101,7 +108,7 @@ export function dayBounds(now = new Date()) { const parts = new Intl.DateTimeFor
 export function taskTiming(task: { status: TaskStatus; dueDate: Date | null }, now = new Date()) { if (!task.dueDate || !['OPEN','IN_PROGRESS'].includes(task.status)) return null; const { start, end } = dayBounds(now); return task.dueDate < start ? 'Overdue' : task.dueDate < end ? 'Due today' : null; }
 export function parseActivity(form: FormData) {
   const errors: Errors = {}; const subject = required(form, 'subject', 'Subject', 200, errors), description = optional(form, 'description', 5000, errors);
-  const accountId = relation(form, 'accountId', errors), opportunityId = relation(form, 'opportunityId', errors), projectId = relation(form, 'projectId', errors), userId = relation(form, 'userId', errors);
+  const accountId = relation(form, 'accountId', errors), opportunityId = relation(form, 'opportunityId', errors), projectId = relation(form, 'projectId', errors), userId = relation(form, 'userId', errors), supportCaseId = relation(form, 'supportCaseId', errors);
   if (!accountId) errors.accountId = 'Choose an Account.';
   const type = required(form, 'type', 'Activity type', 100, errors);
   const rawDate = field(form, 'activityDate');
@@ -118,9 +125,9 @@ export function parseActivity(form: FormData) {
   if (createFollowUpTask && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(followUpTaskCreateKey)) errors.createFollowUpTask = 'Reload the form and try again.';
   const contactIds = [...new Set(form.getAll('contactIds').map(String).filter(Boolean).map(positiveId))];
   if (contactIds.includes(null)) errors.contactIds = 'Choose valid Contacts.';
-  return { errors, value: Object.keys(errors).length ? undefined : { subject, description, accountId, opportunityId, projectId, userId, type, activityDate: activityDate!, direction, outcome, nextStep, followUpDate, contactIds: contactIds as number[], createFollowUpTask, followUpTaskCreateKey } };
+  return { errors, value: Object.keys(errors).length ? undefined : { subject, description, accountId, opportunityId, projectId, userId, supportCaseId, type, activityDate: activityDate!, direction, outcome, nextStep, followUpDate, contactIds: contactIds as number[], createFollowUpTask, followUpTaskCreateKey } };
 }
-const activityFields = ['subject','description','accountId','opportunityId','projectId','userId','type','activityDate','direction','outcome','nextStep','followUpDate','createKey'] as const;
+const activityFields = ['subject','description','accountId','opportunityId','projectId','userId','supportCaseId','type','activityDate','direction','outcome','nextStep','followUpDate','createKey'] as const;
 export function activitySubmittedValues(form: FormData) {
   return { ...Object.fromEntries(activityFields.map(key => [key, String(form.get(key) ?? '')])), createFollowUpTask: form.has('createFollowUpTask') ? 'true' : '', contactIds: form.getAll('contactIds').map(String).join(',') };
 }
@@ -148,6 +155,7 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
     }
     const existing = id ? await tx.activity.findFirst({ where: { id, archivedAt: null } }) : null;
     if (id && !existing) throw new Error('Activity not found or archived.');
+    await checkSupportCaseRelation(tx, value.supportCaseId, value.accountId, !!id && existing?.supportCaseId === value.supportCaseId);
     if (!value.accountId) throw new Error('Choose an Account.');
     const accountChanged = !existing || existing.accountId !== value.accountId;
     const opportunityChanged = !existing || existing.opportunityId !== value.opportunityId;
@@ -168,7 +176,7 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
     }
     if (existing?.accountId != null && existing.accountId !== value.accountId && await tx.activityContact.count({ where: { activityId: id } })) throw new Error('Account cannot change while Contact history is linked.');
     if (!(await tx.activityType.findFirst({ where: { code: value.type, active: true } })) && existing?.type !== value.type) throw new Error('Choose an active activity type.');
-    if (value.userId && value.userId !== existing?.userId && !(await tx.user.findFirst({ where: { id: value.userId, ...eligibleUserWhere('tasks.write') } }))) throw new Error('Choose an eligible responsible user.');
+    if (value.userId && value.userId !== existing?.userId && !(await tx.user.findFirst({ where: { id: value.userId, ...eligibleUserWhere(value.supportCaseId ? 'support-work.write' : 'tasks.write') } }))) throw new Error('Choose an eligible responsible user.');
     const { contactIds: suppliedContactIds, createFollowUpTask, followUpTaskCreateKey, ...data } = value;
     const contactIds = suppliedContactIds ?? [];
     const linked = id && tx.activityContact ? await tx.activityContact.findMany({ where: { activityId: id }, select: { contactId: true } }) : [];
@@ -190,7 +198,7 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
       const contact = contactIds.length ? await tx.contact.findFirst({where:{id:{in:contactIds}},select:{firstName:true,lastName:true},orderBy:{id:'asc'}}) : null;
       const account = contact ? null : await tx.account.findUnique({where:{id:value.accountId},select:{name:true}});
       const subject = contact ? `Follow up with ${contact.firstName} ${contact.lastName}` : account ? `Follow up with ${account.name}` : 'Follow up on activity';
-      const task = await tx.task.create({data:{createKey:followUpTaskCreateKey,subject,dueDate:value.followUpDate,status:'OPEN',priority:'NORMAL',assignedToId:value.userId,accountId:value.accountId,opportunityId:value.opportunityId,projectId:value.projectId,createdById:actorId??value.userId,updatedById:actorId??value.userId}});
+      const task = await tx.task.create({data:{createKey:followUpTaskCreateKey,subject,dueDate:value.followUpDate,status:'OPEN',priority:'NORMAL',assignedToId:value.userId,accountId:value.accountId,opportunityId:value.opportunityId,projectId:value.projectId,...(value.supportCaseId ? { supportCaseId:value.supportCaseId, contactId:contactIds[0]??null } : {}),createdById:actorId??value.userId,updatedById:actorId??value.userId}});
       if (tx.notification) {
         const event = await tx.taskAssignmentEvent.create({ data: { taskId: task.id, fromUserId: null, toUserId: value.userId, actorId } });
         await notifyTaskAssignment(tx, task.id, value.userId, event.id);
@@ -207,10 +215,10 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
 }
 export function parseNote(form: FormData) {
   const errors: Errors = {}; const body = required(form, 'body', 'Note', 10000, errors);
-  const accountId = relation(form, 'accountId', errors), opportunityId = relation(form, 'opportunityId', errors), projectId = relation(form, 'projectId', errors);
+  const accountId = relation(form, 'accountId', errors), opportunityId = relation(form, 'opportunityId', errors), projectId = relation(form, 'projectId', errors), supportCaseId = relation(form, 'supportCaseId', errors);
   if (!accountId && !opportunityId && !projectId) errors.accountId = 'Choose an Account, Opportunity, or Project.';
   const createdById = relation(form, 'createdById', errors);
-  return { errors, value: Object.keys(errors).length ? undefined : { body, accountId, opportunityId, projectId, createdById } };
+  return { errors, value: Object.keys(errors).length ? undefined : { body, accountId, opportunityId, projectId, supportCaseId, createdById } };
 }
 export async function saveNote(
   client: PrismaClient,
@@ -220,6 +228,9 @@ export async function saveNote(
 ) {
   return client.$transaction(async tx => {
     await checkRelations(tx, value.accountId, value.opportunityId, value.projectId);
+    const existing = id ? await tx.note.findFirst({ where: { id, archivedAt: null } }) : null;
+    if (id && !existing) throw new Error('Note not found or archived.');
+    await checkSupportCaseRelation(tx, value.supportCaseId, value.accountId, !!id && existing?.supportCaseId === value.supportCaseId);
     const createdById = actorId ?? value.createdById;
 
 if (!id && !actorId && createdById && !(await tx.user.findFirst({
@@ -227,7 +238,7 @@ if (!id && !actorId && createdById && !(await tx.user.findFirst({
 }))) {
   throw new Error('Choose an active author.');
 }
-    if (id) { const existing = await tx.note.findFirst({ where: { id, archivedAt: null } }); if (!existing) throw new Error('Note not found or archived.'); return tx.note.update({ where: { id }, data: { body: value.body, accountId: value.accountId, opportunityId: value.opportunityId, projectId: value.projectId } }); }
+    if (id) { return tx.note.update({ where: { id }, data: { body: value.body, accountId: value.accountId, opportunityId: value.opportunityId, projectId: value.projectId, supportCaseId: value.supportCaseId } }); }
     return tx.note.create({
   data: {
     ...value,

@@ -179,7 +179,7 @@ export const archiveSupportCase = (db: PrismaClient, actor: Actor, caseId: numbe
 export const restoreSupportCase = (db: PrismaClient, actor: Actor, caseId: number) => setArchived(db, actor, caseId, false);
 export async function getSupportCaseById(db: PrismaClient, actor: Actor, caseId: number, includeArchived = false) {
   id(caseId, 'case');
-  return db.supportCase.findFirst({ where: { id: caseId, ...supportCaseReadWhere(actor, includeArchived) }, include: { account: true, contact: true, category: true, assignedTo: true, productSku: true, events: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], include: { actor: { select: { firstName: true, lastName: true } } } } } });
+  return db.supportCase.findFirst({ where: { id: caseId, ...supportCaseReadWhere(actor, includeArchived) }, include: { account: true, contact: true, category: true, assignedTo: true, productSku: true, events: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 80, include: { actor: { select: { firstName: true, lastName: true } } } } } });
 }
 export type SupportCaseListOptions = { page?: number; archive?: 'active' | 'archived' | 'all'; includeArchived?: boolean; accountId?: number; assignedToId?: number; status?: SupportCaseStatus; priority?: SupportCasePriority; categoryId?: number; productSkuId?: number; product?: string; account?: string; openedFrom?: Date; openedTo?: Date; search?: string; sort?: 'current' | 'newest' | 'oldest' | 'priority' | 'follow-up' | 'number' | 'updated' };
 export function supportCaseListWhere(actor: Actor, options: SupportCaseListOptions = {}): Prisma.SupportCaseWhereInput {

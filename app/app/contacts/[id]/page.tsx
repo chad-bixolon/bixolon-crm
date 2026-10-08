@@ -13,14 +13,17 @@ import { can, taskScope } from "@/lib/authorization";
 import { effectiveContactAddress, usesAccountAddress } from "@/lib/address";
 import { contactAttribution, canManageAttribution } from "@/lib/marketing-attribution";
 import { MarketingAttributionCard } from "@/components/marketing-attribution-card";
+import { RelatedSupportCases } from '@/components/related-support-cases';
+import { contactSupportSummary } from '@/lib/related-support-cases';
 export const dynamic = "force-dynamic";
 export default async function ContactPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string }> }) {
   const id = Number((await params).id); if (!Number.isSafeInteger(id) || id <= 0) notFound();
   const c = await prisma.contact.findUnique({ where: { id }, include: { account: true, marketingPreferenceUpdatedBy: true } }); if (!c) notFound();
   const actor = await currentUser();
+  const support = can(actor, 'support-cases.read') ? await contactSupportSummary(prisma, actor, id) : null;
   const attribution = actor.role === 'SUPPORT' ? null : await contactAttribution(prisma, id);
   const [sources, campaigns] = canManageAttribution(actor) ? await Promise.all([prisma.leadSourceOption.findMany({ where: { active: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }), prisma.marketingCampaign.findMany({ where: { archivedAt: null }, select: { id: true, name: true }, orderBy: { name: 'asc' } })]) : [[], []];
-  const followUpTasks = can(actor, 'tasks.read') ? await prisma.task.findMany({ where: { contactId: id, archivedAt: null, ...taskScope(actor) }, orderBy: [{ dueDate: 'asc' }, { id: 'desc' }], take: 10, select: { id: true, subject: true, status: true, dueDate: true } }) : [];
+  const followUpTasks = actor.role !== 'SUPPORT' && can(actor, 'tasks.read') ? await prisma.task.findMany({ where: { contactId: id, archivedAt: null, ...taskScope(actor) }, orderBy: [{ dueDate: 'asc' }, { id: 'desc' }], take: 10, select: { id: true, subject: true, status: true, dueDate: true } }) : [];
   const state = c.archivedAt ? "archived" : c.active ? "active" : "inactive";
   const saveMessage = saveFeedbackMessage((await searchParams).saved, 'Contact');
   const address = effectiveContactAddress(c);
@@ -32,5 +35,6 @@ export default async function ContactPage({ params, searchParams }: { params: Pr
     {attribution && <div className="mt-5"><MarketingAttributionCard actor={actor} contactId={id} leadSource={attribution.leadSource} influences={attribution.influences} sources={sources} campaigns={campaigns}/></div>}
     <div className="panel mt-5 p-6"><h2 className="mb-1 text-lg font-semibold">Address</h2><p className="mb-4 text-sm text-slate-600">{accountAddress ? <>Using <Link className="text-orange-800 underline" href={`/accounts/${c.accountId}`}>Account address</Link></> : "Contact-specific address"}</p><dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[["Address line 1", address.addressLine1], ["Address line 2", address.addressLine2], ["City", address.city], ["State / Province", address.stateProvince], ["Postal code", address.postalCode], ["Country", address.country]].map(([label, value]) => <div key={label}><dt className="label">{label}</dt><dd className="text-sm">{value ?? "—"}</dd></div>)}</dl></div>
     {!!followUpTasks.length && <div className="panel mt-5 p-6"><h2 className="mb-4 text-lg font-semibold">Related Tasks</h2><ul className="divide-y">{followUpTasks.map(task => <li key={task.id} className="flex flex-wrap justify-between gap-2 py-2 text-sm"><Link className="text-orange-800 underline" href={`/tasks/${task.id}`}>{task.subject}</Link><span className="text-slate-600">{task.status.replace('_', ' ')}{task.dueDate ? ` · Due ${task.dueDate.toISOString().slice(0, 10)}` : ''}</span></li>)}</ul></div>}
+    {support && <div className="mt-5"><RelatedSupportCases title={`Support Cases (${support.openCount} open)`} rows={support.rows} showAccount/></div>}
   </Content>;
 }

@@ -178,7 +178,7 @@ test('Activity validation state retains every submitted field',()=>{
  const entries=[['subject','Call'],['description','Detailed notes'],['activityDate','2026-09-18T14:30'],['type','CALL'],['direction','OUTBOUND'],['accountId','1'],['opportunityId','10'],['projectId','20'],['contactIds','30'],['contactIds','32'],['outcome','Interested'],['nextStep','Send quote'],['followUpDate','2026-09-25'],['userId','4']];
  const submitted=form(entries);
  const state=work.activityFailureState(submitted,{projectId:'This Project does not include the selected Account.'});
- assert.deepEqual(state.values,Object.assign(Object.fromEntries(entries),{createKey:'',createFollowUpTask:'',contactIds:'30,32'}));
+ assert.deepEqual(state.values,Object.assign(Object.fromEntries(entries),{createKey:'',createFollowUpTask:'',contactIds:'30,32',supportCaseId:''}));
  assert.equal(state.errors.projectId,'This Project does not include the selected Account.');
  assert.equal(work.activityErrorField('This Project does not include the selected Account.'),'projectId');
  assert.equal(work.activityErrorField('Account is not a participant in this opportunity.'),'opportunityId');

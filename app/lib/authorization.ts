@@ -1,11 +1,11 @@
 import type { UserRole } from '@prisma/client';
 
-export type Permission = 'support-cases.read' | 'support-cases.write' | 'support-categories.manage' | 'sales-plan.read' | 'sales-plan.allocate' | 'sales-plan.manage' | 'accounts.read' | 'accounts.write' | 'contacts.read' | 'contacts.write' | 'opportunities.read' | 'sales.read' | 'sales.write' | 'pricing.read' | 'tasks.read' | 'tasks.write' | 'products.read' | 'products.write' | 'projects.read' | 'projects.write' | 'users.manage' | 'integrations.manage' | 'marketing.read' | 'marketing.write' | 'trade-shows.read' | 'trade-shows.manage' | 'trade-shows.leads.write' | 'trade-shows.assign' | 'trade-shows.resolve' | 'trade-shows.route';
+export type Permission = 'support-work.write' | 'support-cases.read' | 'support-cases.write' | 'support-categories.manage' | 'sales-plan.read' | 'sales-plan.allocate' | 'sales-plan.manage' | 'accounts.read' | 'accounts.write' | 'contacts.read' | 'contacts.write' | 'opportunities.read' | 'sales.read' | 'sales.write' | 'pricing.read' | 'tasks.read' | 'tasks.write' | 'products.read' | 'products.write' | 'projects.read' | 'projects.write' | 'users.manage' | 'integrations.manage' | 'marketing.read' | 'marketing.write' | 'trade-shows.read' | 'trade-shows.manage' | 'trade-shows.leads.write' | 'trade-shows.assign' | 'trade-shows.resolve' | 'trade-shows.route';
 export type Actor = { id: number; role: UserRole; active: boolean; archivedAt?: Date | null };
 
 const grants: Record<UserRole, readonly Permission[]> = {
   ADMIN: ['support-cases.read','support-cases.write','support-categories.manage','sales-plan.read','sales-plan.allocate','sales-plan.manage','accounts.read','accounts.write','contacts.read','contacts.write','sales.read','sales.write','pricing.read','tasks.read','tasks.write','products.read','products.write','projects.read','projects.write','users.manage','integrations.manage','marketing.read','marketing.write','trade-shows.read','trade-shows.manage','trade-shows.leads.write','trade-shows.assign','trade-shows.resolve','trade-shows.route'],
-  SUPPORT: ['accounts.read','contacts.read','products.read','support-cases.read','support-cases.write'],
+  SUPPORT: ['support-work.write','accounts.read','contacts.read','products.read','support-cases.read','support-cases.write'],
   SALES_MANAGER: ['support-cases.read','sales-plan.read','sales-plan.allocate','sales-plan.manage','accounts.read','accounts.write','contacts.read','contacts.write','sales.read','sales.write','pricing.read','tasks.read','tasks.write','products.read','projects.read','projects.write','trade-shows.read','trade-shows.leads.write','trade-shows.assign','trade-shows.resolve','trade-shows.route'],
   SALES: ['support-cases.read','sales-plan.read','sales-plan.allocate','accounts.read','accounts.write','contacts.read','contacts.write','sales.read','sales.write','pricing.read','tasks.read','tasks.write','products.read','projects.read','projects.write','trade-shows.read','trade-shows.leads.write','trade-shows.resolve','trade-shows.route'],
   MARKETING_MANAGER: ['support-cases.read','accounts.read','contacts.read','opportunities.read','pricing.read','tasks.read','tasks.write','products.read','projects.read','marketing.read','marketing.write','trade-shows.read','trade-shows.manage','trade-shows.leads.write','trade-shows.assign','trade-shows.resolve','trade-shows.route'],
@@ -13,6 +13,7 @@ const grants: Record<UserRole, readonly Permission[]> = {
 };
 export function can(actor: Actor | null | undefined, permission: Permission) {
   if (!actor?.active || actor.archivedAt) return false;
+  if (permission === 'support-work.write' && grants[actor.role]?.includes('tasks.write')) return true;
   return grants[actor.role]?.includes(permission) === true ||
     (permission === 'opportunities.read' && grants[actor.role]?.includes('sales.read') === true);
 }
@@ -47,6 +48,7 @@ export function routeAccess(path: string, actor: Actor | null): 'sign-in' | 'den
   if (path === '/sign-in' || path === '/access-denied' || path === '/brand/bixolon-logo.png' || path === '/icon.png' || path.startsWith('/api/auth/') || path === '/api/health') return 'allowed';
   if (!actor) return 'sign-in';
   if (!actor.active || actor.archivedAt) return 'denied';
+  if (actor.role === 'SUPPORT' && (['/activities/new', '/tasks/new', '/notes/new'].includes(path) || /^\/tasks\/\d+$/.test(path))) return 'allowed';
   if (path === '/demos' && actor.role !== 'ADMIN') return 'denied';
   if (path.startsWith('/demos/') && !/^\/demos\/\d+$/.test(path)) return 'denied';
   if (path === '/trade-shows/my-leads' && !['ADMIN','SALES_MANAGER','SALES'].includes(actor.role)) return 'denied';

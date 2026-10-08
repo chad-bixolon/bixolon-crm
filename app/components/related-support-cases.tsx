@@ -1,0 +1,8 @@
+import Link from 'next/link';
+import { supportPriorityLabels, supportStatusLabels } from '@/lib/support-cases';
+import type { SupportCasePriority, SupportCaseStatus } from '@prisma/client';
+
+export type RelatedCase = { id: number; caseNumber: string; subject: string; status: SupportCaseStatus; priority: SupportCasePriority; openedAt: Date; nextFollowUpAt: Date | null; account?: { name: string } | null; assignedTo: { firstName: string; lastName: string } | null; productSku?: { partNumber: string } | null };
+export function RelatedSupportCases({ rows, title, showAccount = false }: { rows: RelatedCase[]; title: string; showAccount?: boolean }) {
+  return <section className="panel p-6"><h2 className="mb-4 text-lg font-semibold">{title}</h2>{rows.length ? <ul className="divide-y divide-slate-100">{rows.map(row => <li key={row.id} className="py-3 text-sm"><div className="flex flex-wrap items-center gap-x-3 gap-y-1"><Link className="font-semibold text-orange-800 hover:underline" href={`/support/cases/${row.id}`}>{row.caseNumber}</Link><span className="font-medium">{row.subject}</span></div><p className="mt-1 text-slate-600">{showAccount && row.account ? `${row.account.name} · ` : ''}{supportStatusLabels[row.status]} · {supportPriorityLabels[row.priority]} · {row.assignedTo ? `${row.assignedTo.firstName} ${row.assignedTo.lastName}` : 'Unassigned'}{row.productSku ? ` · ${row.productSku.partNumber}` : ''} · Opened {row.openedAt.toISOString().slice(0,10)}{row.nextFollowUpAt ? ` · Next follow-up ${row.nextFollowUpAt.toISOString().slice(0,10)}` : ''}</p></li>)}</ul> : <p className="text-sm text-slate-500">No Support Cases to show.</p>}</section>;
+}

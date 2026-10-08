@@ -1258,6 +1258,9 @@ model SupportCase {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   events SupportCaseLifecycleEvent[]
+  activities Activity[]
+  tasks Task[]
+  notes Note[]
 
   @@index([accountId, openedAt])
   @@index([assignedToId, status])
@@ -1716,6 +1719,8 @@ model OpportunityProduct {
 
 model Task {
   id            Int                 @id @default(autoincrement())
+  supportCaseId Int?
+  supportCase SupportCase? @relation(fields: [supportCaseId], references: [id], onDelete: Restrict)
   projectId     Int?
   project       Project?            @relation(fields: [projectId], references: [id], onDelete: Restrict)
   createKey     String?             @unique @db.Uuid
@@ -1761,6 +1766,7 @@ model Task {
   @@index([archivedById])
   @@index([tradeShowLeadId, createdAt])
   @@index([contactId])
+  @@index([supportCaseId, dueDate])
 }
 
 model TaskAssignmentEvent {
@@ -1776,6 +1782,8 @@ model TaskAssignmentEvent {
 
 model Activity {
   id            Int               @id @default(autoincrement())
+  supportCaseId Int?
+  supportCase SupportCase? @relation(fields: [supportCaseId], references: [id], onDelete: Restrict)
   projectId     Int?
   project       Project?          @relation(fields: [projectId], references: [id], onDelete: Restrict)
   accountId     Int?
@@ -1814,6 +1822,7 @@ model Activity {
   @@index([createdById])
   @@index([updatedById])
   @@index([archivedById])
+  @@index([supportCaseId, activityDate])
 }
 
 model ActivityContact {
@@ -1829,6 +1838,8 @@ model ActivityContact {
 
 model Note {
   id            Int                 @id @default(autoincrement())
+  supportCaseId Int?
+  supportCase SupportCase? @relation(fields: [supportCaseId], references: [id], onDelete: Restrict)
   projectId     Int?
   project       Project?            @relation(fields: [projectId], references: [id], onDelete: Restrict)
   accountId     Int?
@@ -1855,6 +1866,7 @@ model Note {
   @@index([createdById])
   @@index([updatedById])
   @@index([archivedById])
+  @@index([supportCaseId, createdAt])
 }
 
 model Project {

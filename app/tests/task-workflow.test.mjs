@@ -26,7 +26,8 @@ Module._load=function(name,parent,isMain){
  if(name==='@/lib/work-notification-evaluator') return {syncTaskNotifications:async()=>{}};
  if(name==='@/lib/current-user') return {currentUser:async()=>({id:7,role:'SALES',active:true,archivedAt:null})};
  if(name==='@/lib/projects') return {assertProjectWorkEdit:async()=>{}};
- if(name==='@/lib/authorization') return {can:()=>true};
+ if(name==='@/lib/support-work') return {assertWorkPermission:()=>{},caseWorkContext:async()=>{}};
+ if(name==='@/lib/authorization') return {can:()=>true,assertPermission:()=>{}};
  if(name==='@/components/shell') return {Content:({children})=>React.createElement('main',null,children),PageHeader:({title,action})=>React.createElement('header',null,React.createElement('h1',null,title),action)};
  if(name==='@/components/work-form') return {WorkForm:()=>React.createElement('form'),ReactivateTask:()=>React.createElement('button',null,'Reactivate task')};
  if(name==='@/components/save-success') return {SaveSuccess:({message})=>React.createElement('p',{role:'status'},message)};
