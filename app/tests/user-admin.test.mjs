@@ -45,7 +45,7 @@ const entries = [['firstName', 'Ada'], ['lastName', 'Lovelace'], ['email', 'ADA@
 const form = (values = entries) => { const data = new FormData(); for (const [key, value] of values) data.set(key, value); return data; };
 
 test('role labels use consistent capitalization in the User form', () => {
-  assert.deepEqual(roleLabels, { ADMIN: 'Administrator', SALES_MANAGER: 'Sales Manager', SALES: 'Sales', MARKETING_MANAGER: 'Marketing Manager', READ_ONLY: 'Read Only' });
+  assert.deepEqual(roleLabels, { ADMIN: 'Administrator', SUPPORT: 'Support', SALES_MANAGER: 'Sales Manager', SALES: 'Sales', MARKETING_MANAGER: 'Marketing Manager', READ_ONLY: 'Read Only' });
   const html = renderToStaticMarkup(React.createElement(UserForm));
   for (const label of Object.values(roleLabels)) assert.ok(html.includes(`>${label}</option>`));
 });

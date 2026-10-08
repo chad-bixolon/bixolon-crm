@@ -56,6 +56,7 @@ export function dashboardItemPresentationSection(item:DashboardLayoutItem):Dashb
 // A role chooses the default presentation. Authorization still decides which
 // data and actions are accessible; future role-view settings must not grant access.
 const views: Record<UserRole, DashboardView> = {
+  SUPPORT: { title: 'Support overview', sections: [] },
   SALES: { title: 'My sales dashboard', sections: ['forecast','closing','stale','tasks','activities','tradeShowLeads','priceExceptions','stage'] },
   SALES_MANAGER: { title: 'Team sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','priceExceptions','stage','category'] },
   ADMIN: { title: 'Sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','priceExceptions','stage','category','admin','marketing'] },
@@ -65,6 +66,7 @@ const views: Record<UserRole, DashboardView> = {
 
 const item=(key:DashboardWidgetKey,size?:DashboardWidgetSize):DashboardBuiltinItem=>({kind:'BUILTIN',key,size:size??dashboardWidgetRegistry[key].defaultSize});
 export const systemDashboardDefaults: Record<UserRole,DashboardLayoutConfiguration> = {
+  SUPPORT:{version:1,items:[]},
   SALES:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('FORECAST_MOVEMENT'),item('SALES_PLAN_STATUS'),item('PIPELINE_BY_STAGE'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('MY_DAY'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('MY_TRADE_SHOW_LEADS'),item('EXPIRING_PRICE_EXCEPTIONS')]},
   SALES_MANAGER:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('FORECAST_MOVEMENT'),item('SALES_PLAN_STATUS'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('MY_DAY'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('EXPIRING_PRICE_EXCEPTIONS')]},
   ADMIN:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('FORECAST_MOVEMENT'),item('SALES_PLAN_STATUS'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('MY_DAY'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('ADMIN_SHORTCUTS')]},

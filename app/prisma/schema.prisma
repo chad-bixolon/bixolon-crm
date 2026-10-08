@@ -10,10 +10,35 @@ datasource db {
 
 enum UserRole {
   ADMIN
+  SUPPORT
   SALES_MANAGER
   SALES
   MARKETING_MANAGER
   READ_ONLY
+}
+
+enum SupportCaseStatus {
+  NEW
+  OPEN
+  WAITING_ON_CUSTOMER
+  WAITING_ON_INTERNAL
+  RESOLVED
+  CLOSED
+}
+
+enum SupportCasePriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum SupportCaseSource {
+  PHONE
+  EMAIL
+  WEB
+  INTERNAL_REFERRAL
+  OTHER
 }
 
 enum DocumentType {
@@ -236,6 +261,10 @@ enum TradeShowImportFormat {
 }
 
 model User {
+  assignedSupportCases SupportCase[] @relation("SupportCaseAssignee")
+  createdSupportCases SupportCase[] @relation("SupportCaseCreator")
+  updatedSupportCases SupportCase[] @relation("SupportCaseUpdater")
+  supportCaseEvents SupportCaseLifecycleEvent[] @relation("SupportCaseEventActor")
   notifications Notification[]
   createdCampaigns MarketingCampaign[] @relation("CampaignCreator")
   updatedCampaigns MarketingCampaign[] @relation("CampaignEditor")
@@ -548,6 +577,7 @@ model GoogleCalendarAttendee {
 }
 
 model Account {
+  supportCases SupportCase[]
   salesPlanLines SalesPlanLine[]
   demoRequests DemoRequest[]
   id                         Int                   @id @default(autoincrement())
@@ -674,6 +704,7 @@ model SystemSetting {
 }
 
 model Contact {
+  supportCases SupportCase[]
   leadSourceId Int?
   leadSource LeadSourceOption? @relation(fields: [leadSourceId], references: [id], onDelete: Restrict)
   leadSourceChanges LeadSourceChange[]
@@ -1148,6 +1179,7 @@ model Product {
 }
 
 model ProductSku {
+  supportCases SupportCase[]
   salesPlanLines SalesPlanLine[]
   demoItems DemoItem[]
   id                   Int                   @id @default(autoincrement())
@@ -1175,6 +1207,82 @@ model ProductSku {
   @@index([productId])
   @@index([catalogSource, productId])
   @@index([baseSkuId])
+}
+
+model SupportCaseCategory {
+  id Int @id @default(autoincrement())
+  name String @unique
+  active Boolean @default(true)
+  sortOrder Int @default(0)
+  cases SupportCase[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active, sortOrder])
+}
+
+model SupportCaseNumberCounter {
+  year Int @id
+  lastNumber Int
+}
+
+model SupportCase {
+  id Int @id @default(autoincrement())
+  caseNumber String @unique
+  accountId Int
+  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  contactId Int?
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  subject String
+  description String
+  status SupportCaseStatus @default(NEW)
+  priority SupportCasePriority @default(NORMAL)
+  categoryId Int?
+  category SupportCaseCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  assignedToId Int?
+  assignedTo User? @relation("SupportCaseAssignee", fields: [assignedToId], references: [id], onDelete: Restrict)
+  productSkuId Int?
+  productSku ProductSku? @relation(fields: [productSkuId], references: [id], onDelete: Restrict)
+  serialNumber String?
+  source SupportCaseSource
+  openedAt DateTime @default(now())
+  nextFollowUpAt DateTime?
+  resolvedAt DateTime?
+  closedAt DateTime?
+  resolutionSummary String?
+  archivedAt DateTime?
+  createdById Int
+  createdBy User @relation("SupportCaseCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById Int
+  updatedBy User @relation("SupportCaseUpdater", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  events SupportCaseLifecycleEvent[]
+
+  @@index([accountId, openedAt])
+  @@index([assignedToId, status])
+  @@index([status, priority])
+  @@index([categoryId])
+  @@index([productSkuId])
+  @@index([nextFollowUpAt])
+  @@index([archivedAt])
+}
+
+model SupportCaseLifecycleEvent {
+  id Int @id @default(autoincrement())
+  supportCaseId Int
+  supportCase SupportCase @relation(fields: [supportCaseId], references: [id], onDelete: Restrict)
+  field String
+  oldValue String?
+  newValue String?
+  oldLabel String?
+  newLabel String?
+  actorId Int
+  actor User @relation("SupportCaseEventActor", fields: [actorId], references: [id], onDelete: Restrict)
+  source String @default("CRM")
+  createdAt DateTime @default(now())
+
+  @@index([supportCaseId, createdAt, id])
 }
 
 model DemoRequest {
