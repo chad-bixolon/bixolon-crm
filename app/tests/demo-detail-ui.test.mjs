@@ -29,6 +29,7 @@ Module._load = function(specifier, parent, isMain) {
   if (specifier === '@/lib/authorization') return { can: () => false };
   if (specifier === '@/lib/demos') return { demoContextChoices: async () => ({ projects: [], opportunities: [] }), demoLabel: () => 'DEMO092326-3', demoReadWhere: () => ({}) };
   if (specifier === '@/lib/demo-display') return display;
+  if (specifier === '@/lib/audit-display') return require(path.join(root, 'lib/audit-display.ts'));
   if (specifier === '@/lib/demo-operations') return operations;
   if (specifier === '../actions') return { deployDemoUnits() {}, recordDemoReturn() {}, updateDemoContext() {}, updateDemoExpectedReturn() {}, updateDemoNotes() {} };
   return originalLoad.call(this, specifier, parent, isMain);

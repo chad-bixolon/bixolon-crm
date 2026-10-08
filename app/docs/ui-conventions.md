@@ -4,6 +4,8 @@ Use the existing classes in `app/app/globals.css` for forms and actions. Keep pa
 
 ## Controls and labels
 
+- Do not expose raw database IDs in user-facing UI unless the value is an intentional business identifier. Use BXS case numbers, PE Numbers, and SKUs where meaningful; do not show labels such as Contact #99. Keep internal IDs in routes and form values.
+
 - Use `.label` for form labels and associate separate labels with controls using `htmlFor` and `id`. Nested controls may use a wrapping label.
 - Use `.field` for text, search, date, number, native select, textarea, and searchable picker inputs. Standard controls are 2.5rem tall with 14px text and 12px horizontal padding. Textareas grow with content.
 - Native select fields use the same font and height as inputs. Browser option menus vary by platform; do not style their internals. Custom picker results use `.search-results-popover` and `.search-results-option` for bounded scrolling and compact 13px rows.

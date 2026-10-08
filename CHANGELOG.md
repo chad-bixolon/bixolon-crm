@@ -6,6 +6,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Removed remaining user-facing internal database IDs in favor of business names and identifiers.
+
 - Added operational Support Case management with list, detail, create/edit, filtering, history, and category administration; creation fields appear together in Case History while audit events remain separate.
 
 - Added Support Case foundation with BXS case numbers, lifecycle auditing, configurable categories, and Support permissions.

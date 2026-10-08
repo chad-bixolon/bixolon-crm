@@ -50,7 +50,7 @@ export async function PriceExceptionUsageBuilder({params,actor,saved}:{params:Pa
         {select('forecastCategory','Forecast Category',['PIPELINE','BEST_CASE','COMMIT','OMITTED','CLOSED'].map(x=>({value:x,label:x.replaceAll('_',' ')})))}
         {select('accountId','Account',accounts.map(x=>({value:x.id,label:x.name})))}
         {select('opportunityId','Opportunity',opportunities.map(x=>({value:x.id,label:x.name})))}
-        {select('priceExceptionId','Price Exception',priceExceptions.map(x=>({value:x.id,label:x.peCode??`Unnumbered #${x.id}`})))}
+        {select('priceExceptionId','Price Exception',priceExceptions.map(x=>({value:x.id,label:x.peCode??'Price Exception'})))}
         {select('peSalespersonId','Price Exception Sales Rep',peSalespeople.map(x=>({value:x.id,label:`${x.firstName} ${x.lastName}`})))}
         {select('moqStatus','MOQ Status',[{value:'MET',label:'MOQ Met'},{value:'NOT_MET',label:'MOQ Not Met'},{value:'UNKNOWN',label:'Unknown'}])}
         {select('overrideStatus','Override Status',[{value:'APPLIED',label:'Override Applied'},{value:'NONE',label:'No Override'}])}

@@ -48,8 +48,8 @@ export function ActivityContactPicker({ contacts, selectedIds, onChange, account
     {accountSelected && !searchActive && available.length === 0 && <p className="mt-2 text-sm text-slate-500">No matching Contacts.</p>}
     {selected.length ? <div className="mt-3 space-y-2" aria-label="Selected Contacts">{selected.map(({ id, contact }) => <div key={id} className="flex flex-wrap items-center gap-3 rounded border border-slate-200 p-3 text-sm">
       <input type="hidden" name="contactIds" value={id}/>
-      <span className="min-w-0 flex-1 break-words">{contact ? activityContactLabel(contact) : `Contact #${id} (review relationship)`}{contact?.archivedAt ? <span className="ml-2 text-xs text-slate-500">Archived</span> : contact && !contact.active ? <span className="ml-2 text-xs text-slate-500">Inactive</span> : null}</span>
-      <button type="button" className="btn-secondary" aria-label={`Remove ${contact?.name ?? `Contact #${id}`}`} onClick={() => onChange(selectedIds.filter(selectedId => selectedId !== id))}>Remove</button>
+      <span className="min-w-0 flex-1 break-words">{contact ? activityContactLabel(contact) : 'Contact (review relationship)'}{contact?.archivedAt ? <span className="ml-2 text-xs text-slate-500">Archived</span> : contact && !contact.active ? <span className="ml-2 text-xs text-slate-500">Inactive</span> : null}</span>
+      <button type="button" className="btn-secondary" aria-label={`Remove ${contact?.name ?? 'Contact'}`} onClick={() => onChange(selectedIds.filter(selectedId => selectedId !== id))}>Remove</button>
     </div>)}</div> : <p className="mt-3 text-sm text-slate-500">No Contacts selected.</p>}
     {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
   </div>;

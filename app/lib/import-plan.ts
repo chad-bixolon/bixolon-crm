@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { parseImportCsv, type CsvRow, type ImportHeader } from './import-csv';
 import { isRetiredSpecialAccountTerritory } from './accounts';
 import { eligibleUser } from './assignment-eligibility';
+import { contactDisplayName } from './entity-display';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Account = Prisma.AccountGetPayload<{include:{businessRoles:true}}>;
@@ -18,8 +19,8 @@ const email = (s:string) => s.trim().toLowerCase();
 const bool = (s:string) => /^(true|false|yes|no|1|0)$/i.test(s) ? /^(true|yes|1)$/i.test(s) : null;
 const has = (row:CsvRow,key:ImportHeader) => !!row.values[key]?.trim();
 const v = (row:CsvRow,key:ImportHeader) => row.values[key]?.trim() ?? '';
-const diff = (before:Record<string,unknown>, after:Record<string,unknown>) => Object.entries(after).filter(([k,value]) => JSON.stringify(before[k]) !== JSON.stringify(value)).map(([k,value]) => `${k}: ${String(before[k] ?? '—')} → ${String(value)}`);
-const describe = (data:Record<string,unknown>) => Object.entries(data).map(([k,val])=>`${k}: ${String(val ?? '—')}`).join('; ');
+const diff = (before:Record<string,unknown>, after:Record<string,unknown>, display:(key:string,value:unknown)=>string) => Object.entries(after).filter(([k,value]) => JSON.stringify(before[k]) !== JSON.stringify(value)).map(([k,value]) => `${k}: ${display(k,before[k])} → ${display(k,value)}`);
+const describe = (data:Record<string,unknown>, display:(key:string,value:unknown)=>string) => Object.entries(data).map(([k,val])=>`${k}: ${display(k,val)}`).join('; ');
 const validEmail = (s:string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) && s.length <= 254;
 
 export async function planImport(db:Db, csv:string):Promise<ImportPlan> {
@@ -29,6 +30,12 @@ export async function planImport(db:Db, csv:string):Promise<ImportPlan> {
   const [accounts,contacts,users,territories,industries] = await Promise.all([
     db.account.findMany({include:{businessRoles:true}}), db.contact.findMany(), db.user.findMany(), db.territory.findMany(), db.industry.findMany(),
   ]);
+  const display = (key:string,value:unknown):string => {
+    if (value == null) return '—';
+    if (key === 'accountId') return accounts.find(account => account.id === value)?.name ?? (typeof value === 'string' ? value : 'Account');
+    if (key === 'ownerId') { const user = users.find(user => user.id === value); return user ? `${user.firstName} ${user.lastName}` : 'User'; }
+    return String(value);
+  };
   const items:ImportItem[] = [], seenAccounts = new Set<string>(), seenContacts = new Set<string>();
   const proposedAccounts = new Map<string,ImportItem>();
   for (const row of parsed.rows.filter(r => norm(v(r,'record_type')) === 'account')) {
@@ -56,11 +63,11 @@ export async function planImport(db:Db, csv:string):Promise<ImportPlan> {
     let roles:AccountBusinessRoleCode[]|undefined;
     if (has(row,'business_roles')) { const values = v(row,'business_roles').split('|').map(x=>x.trim()).filter(Boolean); const invalid = values.filter(x=>!Object.values(AccountBusinessRoleCode).includes(x as AccountBusinessRoleCode)); if (invalid.length) messages.push(`Unknown business role: ${invalid.join(', ')}.`); else roles = [...new Set(values)] as AccountBusinessRoleCode[]; }
     const before = match ? Object.fromEntries(Object.keys(data).map(k=>[k,(match as unknown as Record<string,unknown>)[k]])) : {};
-    const changes = diff(before,data);
+    const changes = diff(before,data,display);
     const oldRoles = match?.businessRoles.map(x=>x.role).sort() ?? [];
     if (roles && JSON.stringify(oldRoles) !== JSON.stringify([...roles].sort())) changes.push(`businessRoles: ${oldRoles.join('|') || '—'} → ${roles.join('|')}`);
     const status = messages.length ? 'ERROR' : !match ? 'NEW' : changes.length ? 'UPDATE' : 'UNCHANGED';
-    const item:ImportItem = {line:row.line,type:'Account',label:name || '(missing name)',status,before:match ? describe(before) : 'New record',after:changes.join('; ') || (match ? 'No changes' : describe(data)),messages,id:match?.id,data,roles};
+    const item:ImportItem = {line:row.line,type:'Account',label:name || '(missing name)',status,before:match ? describe(before,display) : 'New record',after:changes.join('; ') || (match ? 'No changes' : describe(data,display)),messages,id:match?.id,data,roles};
     items.push(item); if (name && !proposedAccounts.has(key)) proposedAccounts.set(key,item);
   }
   for (const row of parsed.rows.filter(r => norm(v(r,'record_type')) === 'contact')) {
@@ -101,11 +108,12 @@ export async function planImport(db:Db, csv:string):Promise<ImportPlan> {
     if (!mail && !match && contacts.some(c=>norm(c.firstName)===norm(first) && norm(c.lastName)===norm(last) && c.accountId === (typeof target === 'number' ? target : null) && !c.archivedAt)) messages.push('Contact without email resembles an existing Contact; add an email or review manually.');
     let primaryTransferId:number|undefined;
     if (primary && typeof target === 'number') { const prior = contacts.find(c=>c.accountId === target && c.active && c.isPrimary && !c.archivedAt && c.id !== match?.id); if (prior) primaryTransferId = prior.id; }
+    const priorContact = primaryTransferId ? contacts.find(contact => contact.id === primaryTransferId) : undefined;
     const before = match ? Object.fromEntries(Object.keys(data).map(k=>[k,(match as unknown as Record<string,unknown>)[k]])) : {};
-    const changes = diff(before,data);
-    if (primaryTransferId) changes.push(`Primary Contact: #${primaryTransferId} → ${first} ${last}`);
+    const changes = diff(before,data,display);
+    if (primaryTransferId) changes.push(`Primary Contact: ${contactDisplayName(priorContact)} → ${first} ${last}`);
     const status = messages.length ? 'ERROR' : primaryTransferId ? 'WARNING' : !match ? 'NEW' : changes.length ? 'UPDATE' : 'UNCHANGED';
-    items.push({line:row.line,type:'Contact',label:`${first} ${last}`.trim() || '(missing name)',status,before:match ? describe(before) : 'New record',after:changes.join('; ') || (match ? 'No changes' : describe(data)),messages:primaryTransferId ? [...messages,`Existing Primary Contact #${primaryTransferId} will lose Primary status.`] : messages,id:match?.id,accountRef,data,primaryTransferId});
+    items.push({line:row.line,type:'Contact',label:`${first} ${last}`.trim() || '(missing name)',status,before:match ? describe(before,display) : 'New record',after:changes.join('; ') || (match ? 'No changes' : describe(data,display)),messages:primaryTransferId ? [...messages,`Existing Primary Contact ${contactDisplayName(priorContact)} will lose Primary status.`] : messages,id:match?.id,accountRef,data,primaryTransferId});
   }
   for (const row of parsed.rows.filter(r => !['account','contact'].includes(norm(v(r,'record_type'))))) items.push({line:row.line,type:'Account',label:v(row,'record_type') || '(blank type)',status:'ERROR',before:'',after:'',messages:['record_type must be account or contact.'],data:{}});
   const primaryTargets = new Map<string,ImportItem>();

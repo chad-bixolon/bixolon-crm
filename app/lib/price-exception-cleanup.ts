@@ -94,7 +94,7 @@ async function prepare(db: PrismaClient | Prisma.TransactionClient, actor: Actor
   const eligibleRows = rows.filter(row => eligible(row, request, today));
   if (request.action !== 'expire' && eligibleRows.length !== rows.length) throw new Error('Some selected records are not eligible. Narrow the selection and preview again.');
   if (!eligibleRows.length) throw new Error('No selected Price Exceptions are eligible. Refresh the audit.');
-  return { request, rows:eligibleRows, skipped:rows.length-eligibleRows.length, targetLabel, fingerprint: digest(rows, request), changes: eligibleRows.map(row => ({ id:row.id, code:row.peCode ?? `#${row.id}`, ...beforeAfter(row, request, targetLabel) })) };
+  return { request, rows:eligibleRows, skipped:rows.length-eligibleRows.length, targetLabel, fingerprint: digest(rows, request), changes: eligibleRows.map(row => ({ id:row.id, code:row.peCode ?? 'Price Exception', ...beforeAfter(row, request, targetLabel) })) };
 }
 export async function previewPriceExceptionCleanup(db: PrismaClient, actor: Actor, request: CleanupRequest) { return prepare(db, actor, request); }
 export async function applyPriceExceptionCleanup(db: PrismaClient, actor: Actor, request: CleanupRequest, expectedFingerprint: string, confirmedCount: number, confirmed: boolean) {

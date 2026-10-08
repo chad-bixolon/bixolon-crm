@@ -22,6 +22,8 @@ test('notification presentation uses category labels while retaining business id
   assert.deepEqual(Object.values(notificationEntityLabels).filter(label => /#\d/.test(label)), []);
   assert.equal(notificationDisplayMessage({ entityType: 'TASK', entityId: 3, message: 'Call the account' }), 'Call the account');
   assert.equal(notificationDisplayMessage({ entityType: 'OPPORTUNITY', entityId: 8, message: 'Renewal' }), 'Renewal');
+  assert.equal(notificationDisplayMessage({ entityType: 'TASK', entityId: 3, message: 'Task #3 is overdue' }), 'Task is overdue');
+  assert.equal(notificationDisplayMessage({ entityType: 'OPPORTUNITY', entityId: 8, message: 'Opportunity #8 needs review' }), 'Opportunity needs review');
   assert.equal(notificationDisplayMessage({ entityType: 'PRICE_EXCEPTION', entityId: 12, message: 'PE-12 expires in 30 days.' }), 'PE-12 expires in 30 days.');
   assert.equal(notificationDisplayMessage({ entityType: 'PRICE_EXCEPTION', entityId: 12, message: 'PE #12 expires in 30 days.' }), 'Price Exception expires in 30 days.');
   assert.equal(notificationDisplayMessage({ entityType: 'PRICE_EXCEPTION', entityId: 12, message: 'PE #123 expires in 30 days.' }), 'PE #123 expires in 30 days.');

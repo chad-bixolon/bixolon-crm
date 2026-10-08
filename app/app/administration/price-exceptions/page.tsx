@@ -27,6 +27,9 @@ export default async function PriceExceptionCleanupPage() {
     prisma.productSku.findMany({where:{active:true,product:{active:true,archivedAt:null}},select:{id:true,partNumber:true,product:{select:{name:true}}},orderBy:{partNumber:'asc'}}),
     accountOptions(prisma),
   ]);
+  const userIds=[...new Set(records.flatMap(record=>[record.assignedSalesRepUserId,record.createdById]).filter((id):id is number=>id!==null))];
+  const knownUsers=await prisma.user.findMany({where:{id:{in:userIds}},select:{id:true,firstName:true,lastName:true}});
+  const userName=(id:number|null)=>{const user=knownUsers.find(item=>item.id===id);return user?`${user.firstName} ${user.lastName}`:null;};
   const duplicates = duplicatePeCodes(records);
   const startToday = businessToday();
   const rows = records.map(record => {
@@ -35,16 +38,16 @@ export default async function PriceExceptionCleanupPage() {
     for (const account of [record.distributorAccount,record.varAccount,record.endUserAccount]) if (account?.ownerId) clues.add(account.ownerId);
     for (const line of record.lines) for (const product of line.opportunityProducts) if (product.opportunity.ownerId) clues.add(product.opportunity.ownerId);
     const creator = record.sourceType === 'LEGACY_WORKBOOK' ? null : record.createdById;
-    return { id:record.id, code:record.peCode ?? `#${record.id}`,status:record.status,sourceType:record.sourceType,
+    return { id:record.id, code:record.peCode ?? 'Price Exception',status:record.status,sourceType:record.sourceType,
       expiration:record.expirationDate?.toISOString().slice(0,10) ?? null,
-      owner: salesReps.find(user => user.id === record.assignedSalesRepUserId)?.firstName ?? (record.assignedSalesRepUserId ? `User #${record.assignedSalesRepUserId}` : 'Unassigned'),
+      owner: userName(record.assignedSalesRepUserId) ?? (record.assignedSalesRepUserId ? 'User unavailable' : 'Unassigned'),
       parties: [record.distributorAccount?.name ?? record.distributorSourceName,record.varAccount?.name ?? record.varSourceName,record.endUserAccount?.name ?? record.endUserSourceName].filter(Boolean).join(' · ') || 'No customer details',
       updatedAt:record.updatedAt.toISOString(), archived:!!record.archivedAt||record.status==='ARCHIVED',
       roles:[{field:'distributorAccountId' as const,label:'Customer / Distributor',source:record.distributorSourceName,current:record.distributorAccount?.name??null,id:record.distributorAccountId},{field:'varAccountId' as const,label:'VAR',source:record.varSourceName,current:record.varAccount?.name??null,id:record.varAccountId},{field:'endUserAccountId' as const,label:'End User',source:record.endUserSourceName,current:record.endUserAccount?.name??null,id:record.endUserAccountId}],
       assignedSalesRepUserId:record.assignedSalesRepUserId,
       lines:record.lines.map(line=>({id:line.id,sourceSku:line.sourceSku,productSkuId:line.productSkuId,linkedSku:line.productSku?.partNumber??null})),
       issues, clues: [...clues].map(id => salesReps.find(user => user.id === id)).filter((user): user is typeof salesReps[number] => !!user).map(user => `${user.firstName} ${user.lastName}`),
-      creator: creator ? `Creator #${creator}` : null,
+      creator: creator ? `Created by ${userName(creator)??'User unavailable'}` : null,
       sourceRep: [record.sourceSalesRepName, record.distributorSalesRep].filter(Boolean).join(' / ') || null,
       eligible: { assignOwner: record.assignedSalesRepUserId === null && !record.archivedAt && record.status !== 'ARCHIVED',
         linkDistributor: record.distributorAccountId === null && !record.archivedAt && record.status !== 'ARCHIVED',

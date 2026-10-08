@@ -17,7 +17,7 @@ function UpdateForm({ context, update, options }: { context: UpdateContext; upda
     <select id={`update-other-${context.kind}-${update?.id ?? 'new'}`} name={other} className="field w-full" defaultValue={current ?? ''}>
       <option value="">None</option>
       {options.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
-      {current && !options.some(option => option.id === current) && <option value={current}>Linked record #{current}</option>}
+      {current && !options.some(option => option.id === current) && <option value={current}>Linked {context.kind === 'project' ? 'Opportunity' : 'Project'}</option>}
     </select>
     <div className="flex items-center gap-3"><button className="btn-primary" disabled={pending}>{pending ? 'Saving…' : update ? 'Save update' : 'Add update'}</button>{state.message && <span role={state.saved ? 'status' : 'alert'} className="text-sm">{state.message}</span>}</div>
   </form>;

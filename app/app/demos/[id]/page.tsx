@@ -1,3 +1,4 @@
+import { auditDisplayJson } from '@/lib/audit-display';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -123,7 +124,7 @@ export default async function DemoPage({ params }: { params: Promise<{ id: strin
         <summary className="cursor-pointer font-medium">{revision.sourceFileName} · {revision.createdAt.toISOString().slice(0, 16).replace('T', ' ')} · {revision.recordedBy.firstName} {revision.recordedBy.lastName}</summary>
         <p className="mt-2">Source timestamp: {revision.sourceTimestamp.toISOString()} · Digest: {revision.contentHash}</p>
         <p>Rows: {JSON.stringify(revision.sourceRowNumbers)}</p>
-        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap">{JSON.stringify({ sourceRows: revision.sourceRows, reviewedMappings: revision.reviewedMappings, resolvedHeader: revision.resolvedHeader, resolvedItems: revision.resolvedItems }, null, 2)}</pre>
+        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap">{auditDisplayJson({ sourceRows: revision.sourceRows, reviewedMappings: revision.reviewedMappings, resolvedHeader: revision.resolvedHeader, resolvedItems: revision.resolvedItems })}</pre>
       </details>)}
     </section>}
   </Content>;

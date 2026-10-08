@@ -11,8 +11,7 @@ export const notificationEntityLabels: Record<NotificationEntityType, string> = 
 };
 
 export function notificationDisplayMessage(row: { entityType: NotificationEntityType; entityId: number; message: string }) {
-  // Older unnumbered PE notifications used the database ID as a fallback label.
-  return row.entityType === 'PRICE_EXCEPTION'
-    ? row.message.replaceAll(new RegExp(`PE #${row.entityId}(?![\\w-])`, 'g'), 'Price Exception')
-    : row.message;
+  const label = notificationEntityLabels[row.entityType];
+  const names = row.entityType === 'PRICE_EXCEPTION' ? ['PE', label] : [label];
+  return names.reduce((message, name) => message.replaceAll(new RegExp(`${name} #${row.entityId}(?![\\w-])`, 'g'), label), row.message);
 }
