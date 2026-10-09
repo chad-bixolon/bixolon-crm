@@ -21,7 +21,7 @@ async function readForm(form: FormData, actorId: number) {
   if (!Object.values(SupportCaseStatus).includes(status) || !Object.values(SupportCasePriority).includes(priority) || !Object.values(SupportCaseSource).includes(source)) throw new Error('Choose a valid status, priority, and source.');
   const accountId = optionalId(form, 'accountId');
   if (!accountId) throw new Error('Choose an Account.');
-  return { accountId, contactId: optionalId(form, 'contactId'), subject: String(form.get('subject') ?? '').trim(), description: String(form.get('description') ?? '').trim(), status, priority, categoryId: optionalId(form, 'categoryId'), assignedToId: optionalId(form, 'assignedToId'), productSkuId: optionalId(form, 'productSkuId'), serialNumber: String(form.get('serialNumber') ?? '').trim() || null, source, nextFollowUpAt, resolutionSummary: String(form.get('resolutionSummary') ?? '').trim() || null };
+  return { accountId, contactId: optionalId(form, 'contactId'), subject: String(form.get('subject') ?? '').trim(), description: String(form.get('description') ?? '').trim(), purchaseSourceText: String(form.get('purchaseSourceText') ?? '').trim() || null, purchasedFromAccountId: optionalId(form, 'purchasedFromAccountId'), status, priority, categoryId: optionalId(form, 'categoryId'), assignedToId: optionalId(form, 'assignedToId'), productSkuId: optionalId(form, 'productSkuId'), serialNumber: String(form.get('serialNumber') ?? '').trim() || null, source, nextFollowUpAt, resolutionSummary: String(form.get('resolutionSummary') ?? '').trim() || null };
 }
 export async function saveSupportCase(id: number | null, _state: SupportFormState, form: FormData): Promise<SupportFormState> {
   const actor = await requireMutation('support-cases.write');

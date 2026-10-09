@@ -6,6 +6,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added Purchased From capture on Support Cases with optional CRM Account normalization for channel reporting.
+
 - Integrated Support Cases with Accounts, Contacts, Activities, Tasks, Notes, and a unified case timeline.
 
 - Removed remaining user-facing internal database IDs in favor of business names and identifiers.

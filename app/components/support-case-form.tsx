@@ -7,7 +7,7 @@ import { SupportCasePicker } from './support-case-picker';
 import { supportPriorityLabels, supportSourceLabels, supportStatusLabels } from '@/lib/support-cases';
 
 type Option = { id: number; name: string; active?: boolean };
-type Case = { id: number; account: Option; contact: { id: number; firstName: string; lastName: string } | null; productSku: { id: number; partNumber: string } | null; assignedTo: { id: number; firstName: string; lastName: string } | null; accountId: number; subject: string; description: string; status: SupportCaseStatus; priority: SupportCasePriority; source: SupportCaseSource; categoryId: number | null; assignedToId: number | null; serialNumber: string | null; nextFollowUpAt: string | null; resolutionSummary: string | null };
+type Case = { id: number; account: Option; purchasedFromAccount: Option | null; purchaseSourceText: string | null; contact: { id: number; firstName: string; lastName: string } | null; productSku: { id: number; partNumber: string } | null; assignedTo: { id: number; firstName: string; lastName: string } | null; accountId: number; subject: string; description: string; status: SupportCaseStatus; priority: SupportCasePriority; source: SupportCaseSource; categoryId: number | null; assignedToId: number | null; serialNumber: string | null; nextFollowUpAt: string | null; resolutionSummary: string | null };
 export function SupportCaseForm({ initial, categories, assignees, defaultAssigneeId, zone }: { initial?: Case; categories: Option[]; assignees: Option[]; defaultAssigneeId: number | null; zone: string }) {
   const [state, action, pending] = useActionState(saveSupportCase.bind(null, initial?.id ?? null), {});
   const [accountId, setAccountId] = useState<number | null>(initial?.accountId ?? null);
@@ -26,6 +26,10 @@ export function SupportCaseForm({ initial, categories, assignees, defaultAssigne
       <label className="label">Serial Number<input className="field mt-1" name="serialNumber" maxLength={300} defaultValue={initial?.serialNumber ?? ''}/></label>
       <label className="label">Next Follow-up <span className="font-normal text-slate-500">({zone})</span><input className="field mt-1" type="datetime-local" name="nextFollowUpAt" defaultValue={initial?.nextFollowUpAt ?? ''}/></label>
     </div>
+    <section className="space-y-3 border-t border-slate-200 pt-5" aria-label="Purchase source">
+      <label className="label">Purchased From<input className="field mt-1" name="purchaseSourceText" maxLength={500} defaultValue={initial?.purchaseSourceText ?? ''}/><span className="mt-1 block font-normal text-slate-600">Reseller, distributor, retailer, or other source where the end user purchased the equipment.</span></label>
+      <div><SupportCasePicker kind="account" name="purchasedFromAccountId" label="Link to CRM Account (optional)" initial={initial?.purchasedFromAccount}/><p className="mt-1 text-sm text-slate-600">Use this when the reseller or distributor already exists in SalesHub.</p></div>
+    </section>
     <label className="label">Description<textarea className="field mt-1 min-h-36" name="description" required maxLength={20000} defaultValue={initial?.description}/></label>
     {initial && <label className="label">Resolution Summary{status === 'RESOLVED' && <span className="ml-2 font-normal text-slate-600">Describe how the issue was resolved.</span>}<textarea className="field mt-1 min-h-24" name="resolutionSummary" maxLength={20000} defaultValue={initial.resolutionSummary ?? ''}/></label>}
     {state.message && <p role="alert" className="text-sm text-red-700">{state.message}</p>}

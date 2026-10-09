@@ -30,14 +30,15 @@ export function supportCaseReadWhere(actor: Actor, includeArchived = false): Pri
 }
 export type SupportCaseInput = {
   accountId: number; contactId?: number | null; subject: string; description: string;
+  purchaseSourceText?: string | null; purchasedFromAccountId?: number | null;
   priority?: SupportCasePriority; categoryId?: number | null; assignedToId?: number | null;
   productSkuId?: number | null; serialNumber?: string | null; source: SupportCaseSource;
   nextFollowUpAt?: Date | null; resolutionSummary?: string | null;
 };
 export type SupportCasePatch = Partial<SupportCaseInput> & { status?: SupportCaseStatus };
-const writableFields = ['accountId', 'contactId', 'subject', 'description', 'priority', 'categoryId', 'assignedToId', 'productSkuId', 'serialNumber', 'source', 'nextFollowUpAt', 'resolutionSummary', 'status'] as const;
+const writableFields = ['accountId', 'contactId', 'subject', 'description', 'purchaseSourceText', 'purchasedFromAccountId', 'priority', 'categoryId', 'assignedToId', 'productSkuId', 'serialNumber', 'source', 'nextFollowUpAt', 'resolutionSummary', 'status'] as const;
 function cleanPatch(patch: SupportCasePatch): SupportCasePatch {
-  return Object.fromEntries(writableFields.filter(key => Object.prototype.hasOwnProperty.call(patch, key)).map(key => [key, patch[key]])) as SupportCasePatch;
+  return Object.fromEntries(writableFields.filter(key => Object.prototype.hasOwnProperty.call(patch, key)).map(key => [key, key === 'purchaseSourceText' && patch[key] != null ? patch[key].trim() || null : patch[key]])) as SupportCasePatch;
 }
 function id(value: number | null | undefined, field: string) {
   if (value != null && (!Number.isSafeInteger(value) || value < 1)) throw new Error(`Invalid ${field}.`);
@@ -51,12 +52,16 @@ function optionalText(value: string | null | undefined, field: string, max: numb
 function date(value: Date | null | undefined, field: string) {
   if (value != null && (!(value instanceof Date) || !Number.isFinite(value.getTime()))) throw new Error(`Invalid ${field}.`);
 }
-async function validateReferences(tx: Prisma.TransactionClient, data: SupportCasePatch, current?: { accountId: number; contactId: number | null; categoryId: number | null; assignedToId: number | null; productSkuId: number | null }) {
+async function validateReferences(tx: Prisma.TransactionClient, data: SupportCasePatch, current?: { accountId: number; contactId: number | null; categoryId: number | null; assignedToId: number | null; productSkuId: number | null; purchasedFromAccountId: number | null }) {
   if (data.accountId !== undefined) {
     id(data.accountId, 'Account');
     if (data.accountId !== current?.accountId && !await tx.account.findFirst({ where: { id: data.accountId, archivedAt: null, status: 'ACTIVE' }, select: { id: true } })) throw new Error('Choose an active Account.');
   }
   const accountId = data.accountId ?? current?.accountId;
+  if (data.purchasedFromAccountId !== undefined) {
+    id(data.purchasedFromAccountId, 'purchased-from Account');
+    if (data.purchasedFromAccountId != null && data.purchasedFromAccountId !== current?.purchasedFromAccountId && !await tx.account.findFirst({ where: { id: data.purchasedFromAccountId, archivedAt: null, status: 'ACTIVE' }, select: { id: true } })) throw new Error('Choose an active purchased-from Account.');
+  }
   if (data.contactId !== undefined || data.accountId !== undefined) {
     const contactId = data.contactId !== undefined ? data.contactId : current?.contactId;
     id(contactId, 'Contact');
@@ -82,6 +87,7 @@ function validateFields(data: SupportCasePatch) {
   if (data.source !== undefined && !Object.values(SupportCaseSource).includes(data.source)) throw new Error('Invalid source.');
   if (data.status !== undefined && !Object.values(SupportCaseStatus).includes(data.status)) throw new Error('Invalid status.');
   optionalText(data.serialNumber, 'serial number', 300);
+  optionalText(data.purchaseSourceText, 'Purchased From', 500);
   optionalText(data.resolutionSummary, 'resolution summary', 20000);
   date(data.nextFollowUpAt, 'next follow-up date');
 }
@@ -89,11 +95,11 @@ function auditValue(value: unknown): string | null {
   if (value == null) return null;
   return value instanceof Date ? value.toISOString() : String(value);
 }
-const auditFields = ['accountId', 'contactId', 'subject', 'description', 'status', 'priority', 'categoryId', 'assignedToId', 'productSkuId', 'serialNumber', 'source', 'nextFollowUpAt', 'resolvedAt', 'closedAt', 'resolutionSummary', 'archivedAt'] as const;
+const auditFields = ['accountId', 'contactId', 'subject', 'description', 'status', 'priority', 'categoryId', 'assignedToId', 'productSkuId', 'serialNumber', 'source', 'purchaseSourceText', 'purchasedFromAccountId', 'nextFollowUpAt', 'resolvedAt', 'closedAt', 'resolutionSummary', 'archivedAt'] as const;
 async function labels(tx: Prisma.TransactionClient, field: string, values: (number | null)[]) {
   const ids = values.filter((value): value is number => value != null);
   if (!ids.length) return [null, null] as const;
-  if (field === 'accountId') { const rows = await tx.account.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }); return values.map(v => rows.find(r => r.id === v)?.name ?? null); }
+  if (field === 'accountId' || field === 'purchasedFromAccountId') { const rows = await tx.account.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }); return values.map(v => rows.find(r => r.id === v)?.name ?? null); }
   if (field === 'contactId') { const rows = await tx.contact.findMany({ where: { id: { in: ids } }, select: { id: true, firstName: true, lastName: true } }); return values.map(v => { const r = rows.find(r => r.id === v); return r ? `${r.firstName} ${r.lastName}` : null; }); }
   if (field === 'assignedToId') { const rows = await tx.user.findMany({ where: { id: { in: ids } }, select: { id: true, firstName: true, lastName: true } }); return values.map(v => { const r = rows.find(r => r.id === v); return r ? `${r.firstName} ${r.lastName}` : null; }); }
   if (field === 'categoryId') { const rows = await tx.supportCaseCategory.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }); return values.map(v => rows.find(r => r.id === v)?.name ?? null); }
@@ -135,6 +141,7 @@ export async function createSupportCase(db: PrismaClient, actor: Actor, input: S
 }
 export async function updateSupportCase(db: PrismaClient, actor: Actor, caseId: number, patch: SupportCasePatch) {
   assertPermission(actor, 'support-cases.write');
+  assertPermission(actor, 'accounts.read');
   id(caseId, 'case');
   patch = cleanPatch(patch);
   validateFields(patch);
@@ -179,7 +186,7 @@ export const archiveSupportCase = (db: PrismaClient, actor: Actor, caseId: numbe
 export const restoreSupportCase = (db: PrismaClient, actor: Actor, caseId: number) => setArchived(db, actor, caseId, false);
 export async function getSupportCaseById(db: PrismaClient, actor: Actor, caseId: number, includeArchived = false) {
   id(caseId, 'case');
-  return db.supportCase.findFirst({ where: { id: caseId, ...supportCaseReadWhere(actor, includeArchived) }, include: { account: true, contact: true, category: true, assignedTo: true, productSku: true, events: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 80, include: { actor: { select: { firstName: true, lastName: true } } } } } });
+  return db.supportCase.findFirst({ where: { id: caseId, ...supportCaseReadWhere(actor, includeArchived) }, include: { account: true, purchasedFromAccount: { select: { id: true, name: true, archivedAt: true, status: true } }, contact: true, category: true, assignedTo: true, productSku: true, events: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 80, include: { actor: { select: { firstName: true, lastName: true } } } } } });
 }
 export type SupportCaseListOptions = { page?: number; archive?: 'active' | 'archived' | 'all'; includeArchived?: boolean; accountId?: number; assignedToId?: number; status?: SupportCaseStatus; priority?: SupportCasePriority; categoryId?: number; productSkuId?: number; product?: string; account?: string; openedFrom?: Date; openedTo?: Date; search?: string; sort?: 'current' | 'newest' | 'oldest' | 'priority' | 'follow-up' | 'number' | 'updated' };
 export function supportCaseListWhere(actor: Actor, options: SupportCaseListOptions = {}): Prisma.SupportCaseWhereInput {

@@ -52,6 +52,8 @@ test('age stops when resolved or closed and history labels avoid raw reference I
   assert.equal(supportAge(opened, 'RESOLVED', end, null, now), '2 days');
   assert.equal(supportAge(opened, 'CLOSED', end, end, now), '2 days');
   assert.equal(supportEventValue('assignedToId', '23', null, 'UTC'), 'Unavailable');
+  assert.equal(supportEventValue('purchasedFromAccountId', '21', null, 'UTC'), 'Unavailable');
+  assert.equal(supportEventValue('purchasedFromAccountId', '21', 'CDW Corporation', 'UTC'), 'CDW Corporation');
   assert.equal(supportEventValue('status', 'WAITING_ON_CUSTOMER', null, 'UTC'), 'Waiting on Customer');
 });
 test('creation history renders stored initial fields together while later edits stay separate', () => {

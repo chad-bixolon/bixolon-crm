@@ -18,7 +18,7 @@ function fixture() {
   const sequenceByYear = new Map(); let nextId = 0;
   const rows = new Map(), events = [];
   const tx = {
-    account: { findFirst: async ({ where }) => where.id === 11 ? { id: 11 } : null, findMany: async () => [{ id: 11, name: 'Customer' }] },
+    account: { findFirst: async ({ where }) => [11, 21, 22].includes(where.id) && where.archivedAt === null && where.status === 'ACTIVE' ? { id: where.id } : null, findMany: async () => [{ id: 11, name: 'Customer' }, { id: 21, name: 'CDW Corporation' }, { id: 22, name: 'POSGuys' }] },
     contact: { findFirst: async ({ where }) => where.id === 12 && where.accountId === 11 ? { id: 12 } : null, findMany: async () => [{ id: 12, firstName: 'Jane', lastName: 'Smith' }] },
     supportCaseCategory: { findFirst: async ({ where }) => where.id === 13 ? { id: 13 } : null, findMany: async () => [{ id: 13, name: 'Hardware' }] },
     productSku: { findFirst: async ({ where }) => where.id === 14 ? { id: 14 } : null, findMany: async () => [{ id: 14, partNumber: 'SKU-14' }] },
@@ -30,7 +30,7 @@ function fixture() {
       return [{ lastNumber }];
     },
     supportCase: {
-      create: async ({ data }) => { const row = { id: ++nextId, status: 'NEW', priority: 'NORMAL', contactId: null, categoryId: null, assignedToId: null, productSkuId: null, serialNumber: null, nextFollowUpAt: null, resolvedAt: null, closedAt: null, resolutionSummary: null, archivedAt: null, ...data }; rows.set(row.id, row); return row; },
+      create: async ({ data }) => { const row = { id: ++nextId, status: 'NEW', priority: 'NORMAL', contactId: null, categoryId: null, assignedToId: null, productSkuId: null, serialNumber: null, purchaseSourceText: null, purchasedFromAccountId: null, nextFollowUpAt: null, resolvedAt: null, closedAt: null, resolutionSummary: null, archivedAt: null, ...data }; rows.set(row.id, row); return row; },
       findUnique: async ({ where }) => rows.get(where.id) ?? null,
       update: async ({ where, data }) => { const row = { ...rows.get(where.id), ...data }; rows.set(row.id, row); return row; },
       findFirst: async ({ where }) => {
@@ -162,4 +162,39 @@ test('Account changes require a Contact on the new Account; status transitions a
   await service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { caseNumber: 'SUP-2026-999999' });
   assert.equal(f.rows.get(row.id).caseNumber, row.caseNumber);
   assert.equal(f.events.length, eventCount);
+});
+
+test('Purchased From accepts neither, text, link, or both without changing the customer Account', async () => {
+  const f = fixture();
+  const variants = [{}, { purchaseSourceText: '  Local reseller  ' }, { purchasedFromAccountId: 21 }, { purchaseSourceText: '  CDW-G ', purchasedFromAccountId: 21 }];
+  for (const variant of variants) {
+    const row = await service.createSupportCase(f.db, actor('SUPPORT'), { ...input, ...variant });
+    assert.equal(row.accountId, 11);
+    assert.equal(row.purchaseSourceText, variant.purchaseSourceText?.trim() ?? null);
+    assert.equal(row.purchasedFromAccountId, variant.purchasedFromAccountId ?? null);
+  }
+  assert.equal(f.events.find(e => e.field === 'purchasedFromAccountId').newLabel, 'CDW Corporation');
+  assert.ok(f.events.some(e => e.field === 'purchaseSourceText' && e.newValue === 'CDW-G'));
+  await assert.rejects(service.createSupportCase(f.db, actor('SUPPORT'), { ...input, purchasedFromAccountId: 99 }), /active purchased-from Account/);
+  await assert.rejects(service.createSupportCase(f.db, actor('SUPPORT'), { ...input, purchaseSourceText: 'x'.repeat(501) }), /Purchased From/);
+});
+
+test('Purchased From sparse edits audit text and Account names; no-op and permissions stay quiet', async () => {
+  const f = fixture();
+  const row = await service.createSupportCase(f.db, actor('SUPPORT'), input);
+  f.events.length = 0;
+  await service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { purchaseSourceText: '  CDW-G  ' });
+  await service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { purchasedFromAccountId: 21 });
+  await service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { purchasedFromAccountId: 22 });
+  await service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { purchasedFromAccountId: null });
+  const count = f.events.length;
+  await service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { purchaseSourceText: 'CDW-G', purchasedFromAccountId: null });
+  assert.equal(f.events.length, count);
+  assert.deepEqual(f.events.filter(e => e.field === 'purchasedFromAccountId').map(e => [e.oldLabel, e.newLabel]), [[null, 'CDW Corporation'], ['CDW Corporation', 'POSGuys'], ['POSGuys', null]]);
+  assert.deepEqual(f.events.filter(e => e.field === 'purchaseSourceText').map(e => [e.oldValue, e.newValue]), [[null, 'CDW-G']]);
+  assert.equal(f.rows.get(row.id).accountId, 11);
+  assert.equal(f.rows.get(row.id).purchaseSourceText, 'CDW-G');
+  await assert.rejects(service.updateSupportCase(f.db, actor('SALES'), row.id, { purchaseSourceText: 'Other' }), /Access denied/);
+  await assert.rejects(service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { purchasedFromAccountId: 99 }), /active purchased-from Account/);
+  assert.equal(f.events.length, count);
 });
