@@ -6,6 +6,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Split Support Case history into a concise operational timeline and a separate field-level audit view, both collapsed by default.
+
 - Added a local Chromium Playwright E2E suite for failed-save forms, pickers, Opportunity intake, and Price Exception correction.
 
 - Support Cases can now be created directly as Resolved or Closed with a required Resolution Summary in the initial save.

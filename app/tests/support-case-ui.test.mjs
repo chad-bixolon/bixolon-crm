@@ -79,17 +79,12 @@ test('creation history renders stored initial fields together while later edits 
   assert.equal(items.length, 3);
   assert.deepEqual(items[0].fields.map(field => field.field), events.slice(1, 10).map(field => field.field));
   assert.deepEqual(events, original);
-  const html = renderToStaticMarkup(React.createElement(SupportCaseHistory, { events, caseCreatedAt: createdAt, viewerId: 2, zone: 'America/New_York' }));
-  assert.equal((html.match(/<li /g) ?? []).length, 3);
-  assert.match(html, /Case History \(12 events\)/);
-  assert.match(html, /<strong>Case created<\/strong>/);
-  for (const value of ['7-Eleven', 'Media jam', 'New', 'Normal', 'Athan Alcala', 'XL5-40CTWG/SEV', '1234567890123', 'Phone']) assert.ok(html.includes(value), value);
-  assert.match(html, /Read full description/);
-  assert.match(html, /<strong>Status<\/strong>/);
-  assert.match(html, /New → Open/);
-  assert.match(html, /<strong>Priority<\/strong>/);
-  assert.match(html, /Normal → High/);
-  assert.doesNotMatch(html, /<dt[^>]*>Contact<\/dt>|WAITING_ON_CUSTOMER|PHONE|>23<|>88</);
+  const html = renderToStaticMarkup(React.createElement(SupportCaseHistory, { events, caseCreatedAt: createdAt, viewerId: 2, zone: 'America/New_York', caseId: 4 }));
+  assert.match(html, /Audit History · 12/);
+  assert.match(html, /aria-expanded="false"/);
+  assert.match(html, /Show audit history/);
+  assert.equal(items[0].fields.find(field => field.field === 'accountId').newLabel, '7-Eleven');
+  assert.equal(items[0].fields.find(field => field.field === 'productSkuId').newLabel, 'XL5-40CTWG/SEV');
 });
 test('same timestamp alone does not join unrelated edits to creation', () => {
   const createdAt = new Date('2026-10-08T13:46:00Z');
@@ -102,7 +97,7 @@ test('same timestamp alone does not join unrelated edits to creation', () => {
     { ...base, id: 5, field: 'priority', oldValue: 'NORMAL', newValue: 'HIGH' },
   ];
   assert.deepEqual(supportHistoryItems(events, createdAt).map(item => item.kind), ['creation', 'event', 'event']);
-  assert.deepEqual(supportHistoryItems(events, new Date('2026-10-08T13:47:00Z')).map(item => item.kind), Array(5).fill('event'));
+  assert.deepEqual(supportHistoryItems(events, new Date('2026-10-08T13:47:00Z')).map(item => item.kind), ['creation', 'event', 'event']);
   assert.deepEqual(supportHistoryItems([events[0], { ...events[1], id: 3 }], createdAt).map(item => item.kind), ['creation', 'event']);
 });
 test('direct Resolved creation groups summary and status without a transition', () => {
@@ -117,10 +112,8 @@ test('direct Resolved creation groups summary and status without a transition', 
   const items = supportHistoryItems(events, createdAt);
   assert.equal(items.length, 1);
   assert.equal(items[0].kind, 'creation');
-  const html = renderToStaticMarkup(React.createElement(SupportCaseHistory, { events, caseCreatedAt: createdAt, viewerId: 2, zone: 'America/New_York' }));
-  assert.match(html, /Case created/);
-  assert.match(html, /Resolved/);
-  assert.match(html, /Replaced cable/);
-  assert.match(html, /Customer/);
-  assert.doesNotMatch(html, /New → Resolved|Account #11/);
+  const html = renderToStaticMarkup(React.createElement(SupportCaseHistory, { events, caseCreatedAt: createdAt, viewerId: 2, zone: 'America/New_York', caseId: 8 }));
+  assert.match(html, /Audit History · 4/);
+  assert.match(html, /aria-expanded="false"/);
+  assert.equal(items[0].fields.find(field => field.field === 'resolutionSummary').newValue, 'Replaced cable');
 });

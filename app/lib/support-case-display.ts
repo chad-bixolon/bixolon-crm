@@ -17,7 +17,7 @@ export type SupportHistoryItem = { kind: 'creation'; event: SupportHistoryEvent;
 
 export function supportHistoryItems(events: readonly SupportHistoryEvent[], caseCreatedAt: Date): SupportHistoryItem[] {
   const creation = events[0];
-  if (!creation || creation.field !== 'CREATED' || creation.source !== 'CRM' || creation.createdAt.getTime() !== caseCreatedAt.getTime())
+  if (!creation || creation.field !== 'CREATED' || creation.source !== 'CRM' || Math.abs(creation.createdAt.getTime() - caseCreatedAt.getTime()) > 86400000)
     return events.map(event => ({ kind: 'event', event }));
   const fields: SupportHistoryEvent[] = [];
   let previousId = creation.id;

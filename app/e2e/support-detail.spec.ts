@@ -1,0 +1,90 @@
+import { test, expect } from '@playwright/test';
+import { names } from './constants.mjs';
+import { signInAs, uniqueName } from './helpers';
+
+test('Support detail separates a concise timeline from complete audit history', async ({ page }) => {
+  await signInAs(page, 'support');
+  await page.goto('/support/cases/new');
+  const subject = uniqueName('E2E timeline case');
+  await page.getByLabel('Customer / End User').fill('E2E timeline customer');
+  await page.getByRole('combobox', { name: 'Linked CRM Account (optional)' }).fill(names.account);
+  await page.getByRole('option', { name: names.account }).click();
+  await page.getByLabel('Subject').fill(subject);
+  await page.getByRole('combobox', { name: 'Source', exact: true }).selectOption('PHONE');
+  await page.getByLabel('Status').selectOption('RESOLVED');
+  await page.getByRole('combobox', { name: 'Product / SKU' }).fill(names.sku);
+  await page.getByRole('option', { name: new RegExp(names.sku) }).click();
+  await page.getByLabel('Description').fill('Customer reported a media jam during intake.');
+  await page.getByLabel(/Resolution Summary/).fill('Reseated media and confirmed printing.');
+  await page.getByRole('button', { name: 'Create case' }).click();
+  await expect(page).toHaveURL(/\/support\/cases\/\d+$/);
+
+  const timeline = page.getByRole('region', { name: 'Case Timeline' });
+  const audit = page.getByRole('region', { name: 'Audit History' });
+  const timelineButton = timeline.getByRole('button', { name: 'Show timeline' });
+  const auditButton = audit.getByRole('button', { name: 'Show audit history' });
+  await expect(timelineButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(auditButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(timeline.getByRole('heading', { name: /Case Timeline · 1$/ })).toBeVisible();
+  await timelineButton.focus();
+  await page.keyboard.press('Enter');
+  await expect(timeline.getByRole('button', { name: 'Hide timeline' })).toHaveAttribute('aria-expanded', 'true');
+  await expect(timeline.getByRole('heading', { name: 'Case created' })).toHaveCount(1);
+  await expect(timeline.getByText(names.account)).toBeVisible();
+  await expect(timeline.getByText(names.sku)).toBeVisible();
+  await expect(timeline).toContainText(subject);
+  await expect(timeline).toContainText('Resolved');
+  await expect(timeline).toContainText('Normal');
+  await expect(timeline).toContainText('Customer reported a media jam');
+  await expect(timeline).not.toContainText('Subject changed');
+  await expect(timeline).not.toContainText('Resolved at changed');
+  await expect(timeline).not.toContainText('New → Resolved');
+  await expect(timeline).not.toContainText(/Account #\d+|Product #\d+/);
+
+  await auditButton.focus();
+  await page.keyboard.press('Enter');
+  await expect(audit.getByRole('button', { name: 'Hide audit history' })).toHaveAttribute('aria-expanded', 'true');
+  await expect(audit.getByRole('heading', { name: /Case created · Initial values/ })).toBeVisible();
+  await expect(audit.getByText(names.account)).toBeVisible();
+  await expect(audit.getByText(names.sku)).toBeVisible();
+  await expect(audit).not.toContainText(/Account #\d+|Product #\d+/);
+
+  await page.getByRole('link', { name: 'Edit', exact: true }).click();
+  await page.getByLabel('Status').selectOption('CLOSED');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page).toHaveURL(/\/support\/cases\/\d+$/);
+  const closedTimeline = page.getByRole('region', { name: 'Case Timeline' });
+  await closedTimeline.getByRole('button', { name: 'Show timeline' }).click();
+  await expect(closedTimeline.getByRole('heading', { name: 'Case closed' })).toBeVisible();
+  await expect(closedTimeline).not.toContainText('Closed at changed');
+  const closedAudit = page.getByRole('region', { name: 'Audit History' });
+  await closedAudit.getByRole('button', { name: 'Show audit history' }).click();
+  await expect(closedAudit.getByRole('heading', { name: 'Closed at changed' })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Edit', exact: true }).click();
+  await page.getByLabel('Status').selectOption('OPEN');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page).toHaveURL(/\/support\/cases\/\d+$/);
+  const reopenedTimeline = page.getByRole('region', { name: 'Case Timeline' });
+  await reopenedTimeline.getByRole('button', { name: 'Show timeline' }).click();
+  await expect(reopenedTimeline.getByRole('heading', { name: 'Case reopened' })).toBeVisible();
+  await expect(reopenedTimeline).toContainText('Closed → Open');
+
+  await page.getByRole('link', { name: 'Edit', exact: true }).click();
+  await page.getByLabel('Status').selectOption('RESOLVED');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page).toHaveURL(/\/support\/cases\/\d+$/);
+  const resolvedTimeline = page.getByRole('region', { name: 'Case Timeline' });
+  await resolvedTimeline.getByRole('button', { name: 'Show timeline' }).click();
+  await expect(resolvedTimeline.getByRole('heading', { name: 'Case resolved' })).toBeVisible();
+  await expect(resolvedTimeline).toContainText('Resolution: Reseated media and confirmed printing.');
+  await expect(resolvedTimeline).not.toContainText('Resolved at changed');
+
+  await page.getByRole('link', { name: 'Edit', exact: true }).click();
+  await page.getByLabel('Description').fill('Additional investigation details. '.repeat(20));
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page).toHaveURL(/\/support\/cases\/\d+$/);
+  const longAudit = page.getByRole('region', { name: 'Audit History' });
+  await longAudit.getByRole('button', { name: 'Show audit history' }).click();
+  await expect(longAudit.getByText('Read full change')).toBeVisible();
+});
