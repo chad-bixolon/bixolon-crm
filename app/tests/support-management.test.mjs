@@ -42,6 +42,18 @@ test('Support Dashboard defaults and bounded aggregate queries',async()=>{
   assert.equal(calls.filter(x=>x.take).length,3);assert.ok(calls.filter(x=>x.take).every(x=>x.take===5));
   assert.ok(calls.some(x=>x.where.assignedToId===7));
 });
+test('one-touch Resolved and Closed cases stay out of active dashboard and overdue queries',async()=>{
+  const calls=[];
+  const db={supportCase:{groupBy:async args=>(calls.push(args),[]),count:async args=>(calls.push(args),0),findMany:async args=>(calls.push(args),[])}};
+  const result=await supportDashboard(db,actor('SUPPORT'),now);
+  assert.equal(result.mine.total,0);
+  assert.equal(result.overdueCount,0);
+  for(const query of calls){
+    const statuses=query.where.status.in;
+    assert.ok(statuses.includes('NEW')&&statuses.includes('OPEN'));
+    assert.ok(!statuses.includes('RESOLVED')&&!statuses.includes('CLOSED'));
+  }
+});
 test('overdue notification dedupes and resolves on date, assignee, and closure',async()=>{
   const notifications=[];
   const row={id:11,caseNumber:'BXS-2026-000011',assignedToId:7,status:'OPEN',archivedAt:null,nextFollowUpAt:new Date('2026-10-07T12:00:00Z')};
@@ -91,4 +103,20 @@ test('report pagination and export apply the same scoped database where',async()
   const exported=await supportReport(db,actor('SALES'),filters,{all:true,now});
   const exportQuery=calls.find(([kind,args])=>kind==='rows'&&args.include)[1];
   assert.deepEqual(exportQuery.where,pageQuery.where);assert.equal(exportQuery.take,undefined);assert.equal(exported.rows[0].caseNumber,row.caseNumber);
+});
+test('one-touch resolution is counted in period and has a nonnegative duration for report and export',async()=>{
+  const calls=[];
+  const openedAt=new Date('2026-10-08T15:00:00Z');
+  const row={id:12,caseNumber:'BXS-2026-000012',account:{name:'Acme'},contact:null,category:null,assignedTo:null,productSku:null,purchasedFromAccount:null,subject:'Fixed during intake',status:'RESOLVED',priority:'NORMAL',source:'PHONE',openedAt,resolvedAt:openedAt,closedAt:null,nextFollowUpAt:null,archivedAt:null,purchaseSourceText:null,serialNumber:null};
+  const db={supportCase:{count:async args=>(calls.push(args),args.where?.AND?.some(x=>x.resolvedAt)?1:args.where?.AND?.some(x=>x.openedAt)?1:0),groupBy:async()=>[],findFirst:async()=>null,findMany:async()=>[row]},supportCaseCategory:{findMany:async()=>[]},productSku:{findMany:async()=>[]},user:{findMany:async()=>[]},account:{findMany:async()=>[]},$queryRaw:async()=>[{openAge:null,resolutionAge:'0'}]};
+  const report=await supportReport(db,actor('SUPPORT'),{}, {all:true,now});
+  assert.equal(report.summary.opened,1);
+  assert.equal(report.summary.resolved,1);
+  assert.equal(report.summary.averageResolutionDays,0);
+  assert.equal(supportCaseAge(row,now),0);
+  const sheet=supportReportWorkbook(report,{},'Support Rep').Sheets['Support Cases'];
+  assert.equal(sheet.A2.v,row.caseNumber);
+  assert.equal(sheet.N2.t,'d');
+  assert.equal(sheet.P2.t,'d');
+  assert.equal(sheet.S2.v,0);
 });

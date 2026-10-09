@@ -6,6 +6,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Support Cases can now be created directly as Resolved or Closed with a required Resolution Summary in the initial save.
+
 - Standardized form validation behavior so failed saves preserve entered values and entity selections across SalesHub.
 
 - Support Cases now retain the reported Customer / End User without requiring a CRM Account. Optional Account linking, complete failed-save form state, and the shared scrollable Product / SKU popover improve intake.

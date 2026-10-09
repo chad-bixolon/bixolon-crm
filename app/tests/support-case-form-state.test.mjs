@@ -18,7 +18,7 @@ Module._load = function(request, parent, isMain) {
   if (request === 'next/navigation') return { redirect: () => { throw new Error('Unexpected redirect'); } };
   if (request === '@/lib/current-user') return { requireMutation: async () => ({ id: 2, role: 'SUPPORT' }) };
   if (request === '@/lib/prisma') return { prisma };
-  if (request === '@/lib/support-cases') return { createSupportCase: async (_db, _actor, input) => { calls.push({ mode: 'create', input }); throw new Error('Unrelated validation error.'); }, updateSupportCase: async (_db, _actor, id, patch) => { calls.push({ mode: 'edit', id, input: patch }); throw new Error('Unrelated validation error.'); } };
+  if (request === '@/lib/support-cases') return { createSupportCase: async (_db, _actor, input) => { calls.push({ mode: 'create', input }); throw new Error(input.status === 'RESOLVED' && !input.resolutionSummary ? 'Resolution Summary is required when resolving or closing a Support Case.' : 'Unrelated validation error.'); }, updateSupportCase: async (_db, _actor, id, patch) => { calls.push({ mode: 'edit', id, input: patch }); throw new Error('Unrelated validation error.'); } };
   if (request === '@/lib/calendar-time') return { calendarLocalToUtc: value => new Date(value + ':00Z') };
   if (request === '@/lib/user-time-zone') return { DEFAULT_USER_TIME_ZONE: 'America/New_York' };
   return originalLoad.call(this, request, parent, isMain);
@@ -43,6 +43,17 @@ test('unrelated save error retains selected Support case values for create and e
     assert.equal(data.get('contactIdLabel'), 'Jane Smith');
     assert.equal(data.get('nextFollowUpAt'), '2026-10-10T10:00');
   }
+});
+test('direct Resolved create returns a field error while preserving every submitted value and picker label', async () => {
+  const data = form({ status: 'RESOLVED', resolutionSummary: '' });
+  const snapshot = [...data.entries()];
+  const result = await saveSupportCase(null, {}, data);
+  assert.deepEqual(result, { message: 'Resolution Summary is required when resolving or closing a Support Case.', field: 'resolutionSummary' });
+  assert.deepEqual([...data.entries()], snapshot);
+  assert.equal(calls.at(-1).input.status, 'RESOLVED');
+  assert.equal(data.get('productSkuIdLabel'), 'SKU-14');
+  assert.equal(data.get('contactIdLabel'), 'Jane Smith');
+  assert.equal(data.get('purchasedFromAccountIdLabel'), 'CDW Corporation');
 });
 test('typed but unselected Product stays text and produces a field error', async () => {
   calls = [];

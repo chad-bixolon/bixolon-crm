@@ -36,8 +36,9 @@ export type SupportCaseInput = {
   priority?: SupportCasePriority; categoryId?: number | null; assignedToId?: number | null;
   productSkuId?: number | null; serialNumber?: string | null; source: SupportCaseSource;
   nextFollowUpAt?: Date | null; resolutionSummary?: string | null;
+  status?: SupportCaseStatus;
 };
-export type SupportCasePatch = Partial<SupportCaseInput> & { status?: SupportCaseStatus };
+export type SupportCasePatch = Partial<SupportCaseInput>;
 const writableFields = ['customerNameText', 'accountId', 'contactId', 'subject', 'description', 'purchaseSourceText', 'purchasedFromAccountId', 'priority', 'categoryId', 'assignedToId', 'productSkuId', 'serialNumber', 'source', 'nextFollowUpAt', 'resolutionSummary', 'status'] as const;
 function cleanPatch(patch: SupportCasePatch): SupportCasePatch {
   return Object.fromEntries(writableFields.filter(key => Object.prototype.hasOwnProperty.call(patch, key)).map(key => [key, (key === 'purchaseSourceText' || key === 'customerNameText') && patch[key] != null ? patch[key].trim() || null : patch[key]])) as SupportCasePatch;
@@ -94,6 +95,11 @@ function validateFields(data: SupportCasePatch) {
   optionalText(data.resolutionSummary, 'resolution summary', 20000);
   date(data.nextFollowUpAt, 'next follow-up date');
 }
+function validateResolution(status: SupportCaseStatus, summary: string | null | undefined) {
+  if ((status === 'RESOLVED' || status === 'CLOSED') && !summary?.trim()) {
+    throw new Error('Resolution Summary is required when resolving or closing a Support Case.');
+  }
+}
 function auditValue(value: unknown): string | null {
   if (value == null) return null;
   return value instanceof Date ? value.toISOString() : String(value);
@@ -128,9 +134,10 @@ export async function createSupportCase(db: PrismaClient, actor: Actor, input: S
   assertPermission(actor, 'support-cases.write');
   assertPermission(actor, 'accounts.read');
   const clean = cleanPatch(input);
-  delete clean.status;
   input = clean as SupportCaseInput;
   validateFields(input);
+  const status = input.status ?? 'NEW';
+  validateResolution(status, input.resolutionSummary);
   id(input.accountId, 'Account');
   if (!input.customerNameText && !input.accountId) throw new Error('Enter a customer/end user or link a CRM Account.');
   if (!input.subject || !input.description || !input.source) throw new Error('Subject, description, and source are required.');
@@ -140,9 +147,9 @@ export async function createSupportCase(db: PrismaClient, actor: Actor, input: S
     const year = openedAt.getUTCFullYear();
     const rows = await tx.$queryRaw<{ lastNumber: number }[]>`INSERT INTO "SupportCaseNumberCounter" ("year", "lastNumber") VALUES (${year}, 1) ON CONFLICT ("year") DO UPDATE SET "lastNumber" = "SupportCaseNumberCounter"."lastNumber" + 1 RETURNING "lastNumber"`;
     const caseNumber = `BXS-${year}-${String(rows[0].lastNumber).padStart(6, '0')}`;
-    const row = await tx.supportCase.create({ data: { ...input, priority: input.priority ?? 'NORMAL', caseNumber, openedAt, createdById: actor.id, updatedById: actor.id } });
+    const row = await tx.supportCase.create({ data: { ...input, status, priority: input.priority ?? 'NORMAL', nextFollowUpAt: status === 'RESOLVED' || status === 'CLOSED' ? null : input.nextFollowUpAt, resolvedAt: status === 'RESOLVED' ? openedAt : null, closedAt: status === 'CLOSED' ? openedAt : null, caseNumber, openedAt, createdById: actor.id, updatedById: actor.id } });
     const events = await appendChanges(tx, row.id, actor.id, null, row as unknown as Record<string, unknown>);
-    if (row.assignedToId) await notifySupportEvent(tx, row.id, row.assignedToId, events.get(row.priority === 'CRITICAL' ? 'priority' : 'assignedToId') ?? 0, row.priority === 'CRITICAL' ? 'CRITICAL' : 'ASSIGNED', row.caseNumber);
+    if (row.assignedToId && status !== 'RESOLVED' && status !== 'CLOSED') await notifySupportEvent(tx, row.id, row.assignedToId, events.get(row.priority === 'CRITICAL' ? 'priority' : 'assignedToId') ?? 0, row.priority === 'CRITICAL' ? 'CRITICAL' : 'ASSIGNED', row.caseNumber);
     await syncSupportNotifications(tx, row.id, openedAt);
     return row;
   });
@@ -161,6 +168,7 @@ export async function updateSupportCase(db: PrismaClient, actor: Actor, caseId: 
     if (before.archivedAt) throw new Error('Restore the case before editing.');
     if (!(patch.customerNameText === undefined ? before.customerNameText : patch.customerNameText) && !(patch.accountId === undefined ? before.accountId : patch.accountId)) throw new Error('Enter a customer/end user or link a CRM Account.');
     if (patch.status !== undefined && !validSupportTransition(before.status, patch.status)) throw new Error('Invalid status transition.');
+    validateResolution(patch.status ?? before.status, patch.resolutionSummary === undefined ? before.resolutionSummary : patch.resolutionSummary);
     await validateReferences(tx, patch, before);
     const next = { ...patch } as SupportCasePatch & { resolvedAt?: Date | null; closedAt?: Date | null };
     if (patch.status && patch.status !== before.status) {

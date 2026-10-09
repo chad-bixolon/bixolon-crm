@@ -45,8 +45,8 @@ export async function saveSupportCase(id: number | null, _state: SupportFormStat
       })) as SupportCasePatch;
       await updateSupportCase(prisma, actor, id, patch); caseId = id;
     }
-    else { const { status: _status, ...createInput } = input; void _status; const row = await createSupportCase(prisma, actor, createInput as SupportCaseInput); caseId = row.id; }
-  } catch (error) { const message = error instanceof Error ? error.message : 'Could not save Support Case.'; return { message, field: message.includes('customer/end user') ? 'customerNameText' : message.includes('product') || message.includes('Product') ? 'productSkuId' : message.includes('Support Rep') || message.includes('assignee') ? 'assignedToId' : message.includes('Contact') ? 'contactId' : message.includes('Purchased From Account') ? 'purchasedFromAccountId' : message.includes('Account') ? 'accountId' : message.includes('source') ? 'source' : message.includes('follow-up') ? 'nextFollowUpAt' : undefined }; }
+    else { const row = await createSupportCase(prisma, actor, input as SupportCaseInput); caseId = row.id; }
+  } catch (error) { const message = error instanceof Error ? error.message : 'Could not save Support Case.'; return { message, field: message.includes('Resolution Summary') ? 'resolutionSummary' : message.includes('customer/end user') ? 'customerNameText' : message.includes('product') || message.includes('Product') ? 'productSkuId' : message.includes('Support Rep') || message.includes('assignee') ? 'assignedToId' : message.includes('Contact') ? 'contactId' : message.includes('Purchased From Account') ? 'purchasedFromAccountId' : message.includes('Account') ? 'accountId' : message.includes('source') ? 'source' : message.includes('follow-up') ? 'nextFollowUpAt' : undefined }; }
   revalidatePath('/support/cases');
   revalidatePath(`/support/cases/${caseId}`);
   redirect(`/support/cases/${caseId}`);

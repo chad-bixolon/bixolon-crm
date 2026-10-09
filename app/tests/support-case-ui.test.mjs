@@ -105,3 +105,22 @@ test('same timestamp alone does not join unrelated edits to creation', () => {
   assert.deepEqual(supportHistoryItems(events, new Date('2026-10-08T13:47:00Z')).map(item => item.kind), Array(5).fill('event'));
   assert.deepEqual(supportHistoryItems([events[0], { ...events[1], id: 3 }], createdAt).map(item => item.kind), ['creation', 'event']);
 });
+test('direct Resolved creation groups summary and status without a transition', () => {
+  const createdAt = new Date('2026-10-09T12:00:00Z');
+  const base = { supportCaseId: 8, oldValue: null, oldLabel: null, newLabel: null, actorId: 2, source: 'CRM', createdAt, actor: { firstName: 'Support', lastName: 'Rep' } };
+  const events = [
+    { ...base, id: 1, field: 'CREATED', newValue: null },
+    { ...base, id: 2, field: 'accountId', newValue: '11', newLabel: 'Customer' },
+    { ...base, id: 3, field: 'status', newValue: 'RESOLVED' },
+    { ...base, id: 4, field: 'resolutionSummary', newValue: 'Replaced cable' },
+  ];
+  const items = supportHistoryItems(events, createdAt);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].kind, 'creation');
+  const html = renderToStaticMarkup(React.createElement(SupportCaseHistory, { events, caseCreatedAt: createdAt, viewerId: 2, zone: 'America/New_York' }));
+  assert.match(html, /Case created/);
+  assert.match(html, /Resolved/);
+  assert.match(html, /Replaced cable/);
+  assert.match(html, /Customer/);
+  assert.doesNotMatch(html, /New → Resolved|Account #11/);
+});

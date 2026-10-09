@@ -68,12 +68,49 @@ test('creation validates Account and relationships and records baseline', async 
   await assert.rejects(service.createSupportCase(f.db, actor('SUPPORT'), { ...input, categoryId: 99 }), /category/);
   await assert.rejects(service.createSupportCase(f.db, actor('SUPPORT'), { ...input, productSkuId: 99 }), /Product\/SKU/);
   await assert.rejects(service.createSupportCase(f.db, actor('SALES'), input), /Access denied/);
-  const row = await service.createSupportCase(f.db, actor('SUPPORT'), { ...input, contactId: 12, categoryId: 13, productSkuId: 14, serialNumber: 'SN-1', assignedToId: 2, status: 'CLOSED', caseNumber: 'tampered' });
+  const row = await service.createSupportCase(f.db, actor('SUPPORT'), { ...input, contactId: 12, categoryId: 13, productSkuId: 14, serialNumber: 'SN-1', assignedToId: 2, caseNumber: 'tampered' });
   assert.match(row.caseNumber, /^BXS-\d{4}-000001$/);
   assert.equal(row.status, 'NEW'); assert.equal(row.priority, 'NORMAL'); assert.equal(row.serialNumber, 'SN-1');
   assert.equal(f.events[0].field, 'CREATED');
   for (const field of ['accountId', 'contactId', 'categoryId', 'productSkuId', 'assignedToId', 'source', 'serialNumber']) assert.ok(f.events.some(e => e.field === field && e.actorId === 2));
   assert.equal(f.events.find(e => e.field === 'accountId').newLabel, 'Customer');
+});
+test('direct New, Open, Resolved, and Closed creation uses one atomic baseline', async () => {
+  const f = fixture();
+  for (const status of ['NEW', 'OPEN']) {
+    const row = await service.createSupportCase(f.db, actor('SUPPORT'), { ...input, status });
+    assert.equal(row.status, status);
+    assert.equal(row.resolvedAt, null);
+    assert.equal(row.closedAt, null);
+  }
+  for (const status of ['RESOLVED', 'CLOSED']) {
+    const before = f.events.length;
+    const row = await service.createSupportCase(f.db, actor('SUPPORT'), { ...input, status, assignedToId: 2, priority: 'CRITICAL', resolutionSummary: 'Replaced cable during intake', nextFollowUpAt: new Date('2026-10-01T10:00:00Z') });
+    const events = f.events.slice(before);
+    assert.equal(row.status, status);
+    assert.equal(row.resolutionSummary, 'Replaced cable during intake');
+    assert.equal(row.nextFollowUpAt, null);
+    assert.equal(row.resolvedAt?.getTime() ?? null, status === 'RESOLVED' ? row.openedAt.getTime() : null);
+    assert.equal(row.closedAt?.getTime() ?? null, status === 'CLOSED' ? row.openedAt.getTime() : null);
+    assert.equal(events[0].field, 'CREATED');
+    assert.ok(events.some(e => e.field === 'status' && e.oldValue === null && e.newValue === status));
+    assert.ok(events.some(e => e.field === 'resolutionSummary' && e.newValue === 'Replaced cable during intake'));
+    assert.equal(events.some(e => e.field === 'status' && e.oldValue === 'NEW'), false);
+    assert.equal(f.notifications.length, 0);
+  }
+});
+test('create and edit require a resolution summary for Resolved or Closed', async () => {
+  const f = fixture();
+  for (const status of ['RESOLVED', 'CLOSED']) {
+    await assert.rejects(service.createSupportCase(f.db, actor('SUPPORT'), { ...input, status, resolutionSummary: '  ' }), /Resolution Summary is required/);
+  }
+  const row = await service.createSupportCase(f.db, actor('SUPPORT'), input);
+  for (const status of ['RESOLVED', 'CLOSED']) {
+    await assert.rejects(service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { status }), /Resolution Summary is required/);
+  }
+  await service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { status: 'RESOLVED', resolutionSummary: 'Fixed during callback' });
+  await service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { status: 'CLOSED' });
+  assert.equal(f.rows.get(row.id).resolutionSummary, 'Fixed during callback');
 });
 test('counter SQL assigns distinct numbers across concurrent creations', async () => {
   const f = fixture();
@@ -91,7 +128,7 @@ test('Support lifecycle sends one Critical assignment notice and a reopen notice
   assert.deepEqual(f.notifications.map(n => n.type), ['SUPPORT_CRITICAL']);
   assert.equal(f.notifications[0].userId, 2);
   assert.match(f.notifications[0].sourceKey, new RegExp(`^SUPPORT:${critical.id}:2:CRITICAL:`));
-  await service.changeSupportCaseStatus(f.db, actor('SUPPORT'), critical.id, 'RESOLVED');
+  await service.changeSupportCaseStatus(f.db, actor('SUPPORT'), critical.id, 'RESOLVED', 'Resolved issue');
   await service.changeSupportCaseStatus(f.db, actor('SUPPORT'), critical.id, 'OPEN');
   assert.deepEqual(f.notifications.map(n => n.type), ['SUPPORT_CRITICAL','SUPPORT_REOPENED']);
 });
@@ -180,7 +217,7 @@ test('Account changes require a Contact on the new Account; status transitions a
   const f = fixture(); const row = await service.createSupportCase(f.db, actor('SUPPORT'), { ...input, contactId: 12 });
   await assert.rejects(service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { accountId: 99 }), /active Account/);
   assert.equal(service.validSupportTransition('CLOSED', 'WAITING_ON_CUSTOMER'), false);
-  await service.changeSupportCaseStatus(f.db, actor('SUPPORT'), row.id, 'CLOSED');
+  await service.changeSupportCaseStatus(f.db, actor('SUPPORT'), row.id, 'CLOSED', 'Closed issue');
   await assert.rejects(service.changeSupportCaseStatus(f.db, actor('SUPPORT'), row.id, 'WAITING_ON_CUSTOMER'), /transition/);
   await service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { serialNumber: 'SN-2', subject: 'Updated', description: 'More details', source: 'EMAIL' });
   for (const field of ['serialNumber', 'subject', 'description', 'source']) assert.ok(f.events.some(e => e.field === field));
