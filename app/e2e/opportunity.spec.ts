@@ -1,0 +1,33 @@
+import { test, expect } from '@playwright/test';
+import { names } from './constants.mjs';
+import { signInAs, uniqueName } from './helpers';
+
+test('Opportunity preserves Account, product, date, stage, and forecast after server validation', async ({ page }) => {
+  await signInAs(page, 'salesManager');
+  await page.goto('/opportunities/new');
+  const form = page.getByRole('form', { name: 'Create opportunity' });
+  const name = uniqueName('E2E opportunity');
+  await form.getByLabel('Opportunity name *').fill(name);
+  await form.getByLabel('Description').fill('E2E customer purchase');
+  await form.getByLabel('Sales stage *').selectOption({ label: 'E2E Qualification · 20%' });
+  await form.getByLabel('Expected close date').fill('2026-11-15');
+  await form.getByLabel('Forecast category').selectOption('BEST_CASE');
+  await form.getByLabel('Existing account').selectOption({ label: names.account });
+  await form.getByRole('button', { name: 'Add account' }).click();
+  await form.getByRole('button', { name: 'Add product' }).click();
+  await form.getByRole('combobox', { name: 'Catalog item 1' }).fill(names.sku);
+  await page.getByRole('option', { name: new RegExp(names.sku) }).click();
+  await form.getByLabel('Estimated unit price 1').fill('199.00');
+  await form.getByRole('button', { name: 'Create opportunity' }).click();
+  await expect(form.getByText('Add at least one participating account with a role.')).toBeVisible();
+  await expect(form.getByLabel('Opportunity name *')).toHaveValue(name);
+  await expect(form.getByLabel('Expected close date')).toHaveValue('2026-11-15');
+  await expect(form.getByLabel('Forecast category')).toHaveValue('BEST_CASE');
+  await expect(form.getByLabel('Sales stage *')).not.toHaveValue('');
+  await expect(form.getByText(names.account, { exact: true })).toBeVisible();
+  await expect(form.getByText(`SKU: ${names.sku}`)).toBeVisible();
+  await form.getByRole('checkbox', { name: /End User/ }).check();
+  await form.getByRole('button', { name: 'Create opportunity' }).click();
+  await expect(page).toHaveURL(/\/opportunities\/\d+/);
+  await expect(page.getByText(name).first()).toBeVisible();
+});

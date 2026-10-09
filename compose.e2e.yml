@@ -1,0 +1,19 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: saleshub_e2e
+      POSTGRES_USER: saleshub_e2e
+      POSTGRES_PASSWORD: saleshub_e2e_local_only
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - e2e-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U saleshub_e2e -d saleshub_e2e"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+volumes:
+  e2e-postgres:

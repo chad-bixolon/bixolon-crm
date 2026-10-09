@@ -7,9 +7,12 @@ export function catalogRank(item: SearchCandidate, query: string) {
   const q = query.trim().toLocaleLowerCase();
   if (!q) return 0;
   const model = item.product.name.toLocaleLowerCase();
-  const skus = [item.partNumber, item.product.sku].map(value => value.toLocaleLowerCase());
+  const partNumber = item.partNumber.toLocaleLowerCase();
+  const productSku = item.product.sku.toLocaleLowerCase();
+  const skus = [partNumber, productSku];
   if (model === q) return 0;
-  if (skus.some(value => value === q)) return 1;
+  if (partNumber === q) return 1;
+  if (productSku === q) return 2;
   if (model.startsWith(q)) return 2;
   if (skus.some(value => value.startsWith(q))) return 3;
   if (model.includes(q)) return 4;

@@ -1,4 +1,9 @@
 node_modules
+.playwright-browsers/
+.playwright-deps/
+playwright-report/
+test-results/
+.next-e2e/
 # Keep environment variables out of version control
 .env
 .env.*

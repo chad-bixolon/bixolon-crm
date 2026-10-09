@@ -23,6 +23,11 @@ test('result limit is applied after ranking', () => {
   assert.equal(rankCatalogResults([...ribbons, rows[1]], 'XT5')[0].id, 2);
   assert.equal(rankCatalogResults([...ribbons, rows[1]], 'XT5').length, 25);
 });
+test('an exact part number remains visible when its product has more than 25 variants', () => {
+  const variants = Array.from({ length: 25 }, (_, i) => row(200 + i, 'Receipt Printer', `E2E-PICK-${i}`, '', 'E2E-XD5'));
+  const exact = row(999, 'Receipt Printer', 'E2E-XD5', '', 'E2E-XD5');
+  assert.equal(rankCatalogResults([...variants, exact], 'E2E-XD5')[0].id, 999);
+});
 function mockClient() {
   const calls = [];
   return { calls, productSku: { findMany: async args => {

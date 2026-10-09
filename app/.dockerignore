@@ -1,5 +1,10 @@
 node_modules
 .next
+.next-e2e
+.playwright-browsers
+.playwright-deps
+playwright-report
+test-results
 .git
 .env
 .env.*

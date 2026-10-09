@@ -16,6 +16,11 @@
     "db:status": "prisma migrate status",
     "db:seed-stages": "node scripts/seed-sales-stages.mjs",
     "test": "node --test tests/*.test.mjs",
+    "test:e2e:prepare": "node e2e/prepare.mjs",
+    "test:e2e": "node e2e/run.mjs",
+    "test:e2e:headed": "node e2e/run.mjs --headed",
+    "test:e2e:ui": "node e2e/run.mjs --ui",
+    "test:e2e:reset": "docker compose -f ../compose.e2e.yml -p saleshub-e2e down -v",
     "db:seed-activity-types": "node scripts/seed-activity-types.mjs",
     "storage:check": "node scripts/operations/check-document-storage.mjs",
     "audit:production-cleanup": "node scripts/operations/audit-production-cleanup.mjs"
@@ -36,6 +41,7 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

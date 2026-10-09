@@ -13,8 +13,9 @@ export async function GET(request: NextRequest) {
   if (kind === 'contact') return NextResponse.json({ results: Number.isSafeInteger(accountId) && accountId > 0 ? await prisma.contact.findMany({ where: { accountId, active: true, archivedAt: null, ...(q ? { OR: [{ firstName: contains }, { lastName: contains }, { email: contains }] } : {}) }, select: { id: true, firstName: true, lastName: true }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }], take: 30 }).then(rows => rows.map(row => ({ id: row.id, name: `${row.firstName} ${row.lastName}` }))) : [] });
   if (kind === 'sku') {
     const search = (mode: 'equals' | 'startsWith' | 'contains') => prisma.productSku.findMany({ where: { active: true, ...(q ? { OR: [{ partNumber: { [mode]: q, mode: 'insensitive' as const } }, { product: { name: { [mode]: q, mode: 'insensitive' as const } } }, { product: { sku: { [mode]: q, mode: 'insensitive' as const } } }] } : {}) }, select: { id: true, partNumber: true, description: true, product: { select: { name: true, sku: true } } }, orderBy: { partNumber: 'asc' }, take: 25 });
+    const exactPartNumber = q ? await prisma.productSku.findMany({ where: { active: true, partNumber: { equals: q, mode: 'insensitive' } }, select: { id: true, partNumber: true, description: true, product: { select: { name: true, sku: true } } }, take: 25 }) : [];
     const batches = q ? await Promise.all([search('equals'), search('startsWith'), search('contains')]) : [await search('contains')];
-    const rows = [...new Map(batches.flat().map(row => [row.id, row])).values()];
+    const rows = [...new Map([exactPartNumber, ...batches].flat().map(row => [row.id, row])).values()];
     return NextResponse.json({ results: rankCatalogResults(rows, q).map(row => ({ id: row.id, name: `${row.partNumber} · ${row.product.name}` })) });
   }
   return NextResponse.json({ results: [] }, { status: 400 });
