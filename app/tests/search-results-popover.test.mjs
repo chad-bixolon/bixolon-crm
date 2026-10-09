@@ -20,7 +20,7 @@ const css = fs.readFileSync(path.join(root, 'app/globals.css'), 'utf8');
 
 test('shared menu is a bounded internal scroll container with compact options', () => {
   assert.match(css, /\.search-results-popover\s*\{[^}]*position: fixed;[^}]*overflow-y: auto;/);
-  assert.match(css, /\.search-results-option\s*\{[^}]*padding: \.375rem \.625rem;[^}]*font-size: \.8125rem;/);
+  assert.match(css, /\.search-results-option\s*\{[^}]*min-height: 2\.5rem;[^}]*padding: \.5rem \.625rem;[^}]*font-size: \.8125rem;/);
   assert.match(css, /\.search-results-option-single\s*\{[^}]*text-overflow: ellipsis;/);
   const source = fs.readFileSync(popoverFile, 'utf8');
   assert.match(source, /createPortal\(/);

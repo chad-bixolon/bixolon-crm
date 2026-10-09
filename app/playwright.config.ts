@@ -16,8 +16,12 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: { baseURL, screenshot: 'only-on-failure', trace: 'on-first-retry' },
   projects: [
-    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },
+    { name: 'desktop-chromium', testIgnore: '**/responsive.spec.ts', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },
     { name: 'small-chromium', testMatch: '**/picker.spec.ts', use: { ...devices['Desktop Chrome'], viewport: { width: 900, height: 700 } } },
+    { name: 'responsive-phone', testMatch: '**/responsive.spec.ts', use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
+    { name: 'responsive-tablet-portrait', testMatch: '**/responsive.spec.ts', use: { ...devices['Desktop Chrome'], viewport: { width: 768, height: 1024 }, isMobile: true, hasTouch: true } },
+    { name: 'responsive-tablet-landscape', testMatch: '**/responsive.spec.ts', use: { ...devices['Desktop Chrome'], viewport: { width: 1024, height: 768 }, isMobile: true, hasTouch: true } },
+    { name: 'responsive-desktop', testMatch: '**/responsive.spec.ts', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },
   ],
   webServer: {
     command: 'npm run dev -- --hostname 127.0.0.1 --port 3100',

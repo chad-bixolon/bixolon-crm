@@ -41,3 +41,13 @@ Use the existing classes in `app/app/globals.css` for forms and actions. Keep pa
 - Use `.inline-field-action` for a labeled control beside Save or Apply. Use `.form-action-row` for related actions and form footer buttons.
 - Existing `.panel` provides card border, background, and radius. Add responsive padding and gaps with the page's layout classes.
 - Let rows wrap at tablet widths. On narrow screens, controls stack and the main inline action can fill the row. Do not set fixed widths that cause horizontal overflow.
+
+## Responsive layouts
+
+- Check 390×844 phones, 768×1024 portrait tablets, 1024×768 landscape tablets, and 1440×900 desktop browsers. The shell uses a drawer below the 1024px desktop breakpoint and a persistent sidebar at larger widths. The drawer closes after navigation and on Escape, and its trigger exposes `aria-expanded`.
+- Keep page titles and primary actions visible. Wrap `.page-header-actions` and `.form-action-row`; on phones, let the primary action occupy a full row when needed. Keep controls at least 44px tall on phones where practical.
+- Stack field grids on phones and use two columns from the established `sm`/`md` breakpoints where space permits. Give controls `min-width: 0` and `width: 100%`; keep labels with their inputs.
+- Put dense tables in a bounded `overflow-x-auto` region with a deliberate table minimum width. Retain a visible identifier and clear row navigation. Use compact cards only where they improve scanning, such as Support Cases. Inner table scrolling must not cause document-level horizontal overflow.
+- Size dialogs within the viewport, allow internal vertical scrolling, and keep action buttons reachable. Let long names, subjects, filenames, and audit values wrap.
+- Keep entity picker inputs within their parent width. Their portal results must remain inside the visual viewport, be at most 320px tall, scroll internally, and support keyboard and touch selection.
+- Responsive browser tests should check `document.documentElement.scrollWidth <= clientWidth` while allowing an inner table region to scroll. Capture screenshots on failure; do not use screenshot diffs as the responsive gate.

@@ -11,7 +11,7 @@ input, select, button { font: inherit; }
 .field:disabled { cursor: not-allowed; border-color: #cbd5e1; background: #f1f5f9; color: #64748b; }
 .label { display: block; margin-bottom: .4rem; font-size: .875rem; font-weight: 600; color: #334155; }
 .search-results-popover { position: fixed; z-index: 1000; box-sizing: border-box; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; border: 1px solid #cbd5e1; border-radius: .375rem; background: white; box-shadow: 0 10px 15px -3px rgb(0 0 0 / .1); }
-.search-results-option { display: block; box-sizing: border-box; width: 100%; min-width: 0; padding: .375rem .625rem; text-align: left; font-size: .8125rem; line-height: 1.25rem; }
+.search-results-option { display: block; box-sizing: border-box; width: 100%; min-width: 0; min-height: 2.5rem; padding: .5rem .625rem; text-align: left; font-size: .8125rem; line-height: 1.25rem; }
 .search-results-option:focus-visible { outline: 2px solid #ea580c; outline-offset: -2px; }
 .search-results-option-single { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .btn-primary, .btn-filter-primary { display: inline-flex; box-sizing: border-box; min-height: var(--control-height); align-items: center; justify-content: center; border: 1px solid #c2410c; border-radius: var(--control-radius); background: #c2410c; padding: .5rem 1rem; color: white; font-size: var(--control-font-size); line-height: 1.25rem; font-weight: 600; text-align: center; }
@@ -73,6 +73,23 @@ select.filter-control { padding-right: 2rem; overflow: visible; }
 @media (min-width: 64rem) { .accounts-filter-field { flex-basis: 9.25rem; } }
 .account-clickable-row:hover, .account-clickable-row:focus, .account-clickable-row:focus-within { background: #fff0df; box-shadow: inset 3px 0 #ea580c; }
 .panel { border: 1px solid #e2e8f0; border-radius: .5rem; background: white; }
+main, main section, main article, main form, main .panel { min-width: 0; }
+main h1, main h2, main h3, main p, main dd, main li { overflow-wrap: anywhere; }
+main .overflow-x-auto { max-width: 100%; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+main input[type="date"], main input[type="datetime-local"], main input[type="time"] { max-width: 100%; min-width: 0; }
+@media (max-width: 39.999rem) {
+  :root { --control-height: 2.75rem; }
+  .search-results-option { min-height: 2.75rem; }
+  .page-header-actions { min-width: 0; max-width: 100%; }
+  .page-header-actions > * { max-width: 100%; }
+  .form-action-row { align-items: stretch; }
+  .form-action-row > .btn-secondary { flex: 1 1 auto; }
+  main [role="dialog"], [role="dialog"] { max-width: 100vw; }
+}
+@media (max-width: 63.999rem) {
+  [role="dialog"][aria-modal="true"] { overflow-y: auto; padding: .75rem; }
+  [role="dialog"][aria-modal="true"] > * { max-width: 100%; max-height: calc(100dvh - 1.5rem); overflow-y: auto; }
+}
 .pe-cleanup-issue-card { display: flex; min-width: 0; min-height: 4rem; align-items: center; gap: .75rem; padding: .5rem .75rem; text-align: left; transition: background-color .15s, border-color .15s, box-shadow .15s; }
 .pe-cleanup-issue-card:hover { border-color: #fdba74; background: #fff7ed; }
 .pe-cleanup-issue-card:focus-visible { outline: 2px solid #c2410c; outline-offset: 2px; }

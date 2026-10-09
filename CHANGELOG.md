@@ -6,6 +6,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Improved SalesHub responsiveness and usability across phone and tablet layouts.
+
 - Added file attachments to Support Cases using secure object storage; removal permanently deletes the binary while retaining audit metadata and timeline history.
 
 - Split Support Case history into a concise operational timeline and a separate field-level audit view, both collapsed by default.
