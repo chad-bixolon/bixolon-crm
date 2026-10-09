@@ -6,6 +6,8 @@ export const emails = {
   support: 'support@e2e.saleshub.local',
   sales: 'sales@e2e.saleshub.local',
   salesManager: 'manager@e2e.saleshub.local',
+  marketing: 'marketing@e2e.saleshub.local',
+  readOnly: 'readonly@e2e.saleshub.local',
 };
 export const names = {
   account: 'E2E Acme Customer',

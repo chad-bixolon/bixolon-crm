@@ -5,7 +5,7 @@ if (process.env.DATABASE_URL !== databaseUrl) throw new Error('E2E seed requires
 const db = new PrismaClient();
 try {
   for (const [role, email] of Object.entries(emails)) {
-    const crmRole = { admin: 'ADMIN', support: 'SUPPORT', sales: 'SALES', salesManager: 'SALES_MANAGER' }[role];
+    const crmRole = { admin: 'ADMIN', support: 'SUPPORT', sales: 'SALES', salesManager: 'SALES_MANAGER', marketing: 'MARKETING_MANAGER', readOnly: 'READ_ONLY' }[role];
     await db.user.upsert({ where: { email }, update: { active: true, archivedAt: null, role: crmRole }, create: { email, firstName: 'E2E', lastName: role, role: crmRole } });
   }
   const account = await db.account.findFirst({ where: { name: names.account } }) ?? await db.account.create({ data: { name: names.account } });

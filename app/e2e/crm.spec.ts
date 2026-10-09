@@ -1,0 +1,54 @@
+import { test, expect } from './fixtures';
+import { names } from './constants.mjs';
+import { signInAs, uniqueName, watchApplicationErrors } from './helpers';
+
+test('Account create, failed save, detail, and edit', async ({ page }) => {
+  await signInAs(page, 'admin');
+  const errors = watchApplicationErrors(page);
+  await page.goto('/accounts');
+  await expect(page.getByRole('main')).toContainText(names.account);
+  await page.goto('/accounts/new');
+  const form = page.getByRole('form', { name: 'Create account' });
+  await form.getByLabel('Account name').fill(names.account);
+  await form.getByLabel('Phone').fill('555-0101');
+  await form.getByRole('button', { name: 'Create account' }).click();
+  await expect(form.getByText('Possible duplicate Account found')).toBeVisible();
+  await expect(form.getByLabel('Account name')).toHaveValue(names.account);
+  await expect(form.getByLabel('Phone')).toHaveValue('555-0101');
+  const name = uniqueName('E2E account');
+  await form.getByLabel('Account name').fill(name);
+  await form.getByRole('button', { name: /Save anyway|Create account/ }).click();
+  await expect(page).toHaveURL(/\/accounts\/\d+$/);
+  await expect(page.getByRole('main')).toContainText(name);
+  await page.getByRole('link', { name: 'Edit account' }).click();
+  await page.getByRole('form', { name: 'Edit account' }).getByLabel('Phone').fill('555-0102');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page).toHaveURL(/\/accounts\/\d+$/);
+  await expect(page.getByRole('main')).toContainText('555-0102');
+  expect(errors).toEqual([]);
+});
+
+test('Contact create with Account, browser validation, detail, and edit', async ({ page }) => {
+  await signInAs(page, 'admin');
+  await page.goto('/contacts/new');
+  const form = page.getByRole('form', { name: 'Create contact' });
+  await form.getByLabel('Account (optional)').selectOption({ label: names.account });
+  const first = uniqueName('E2E Contact');
+  await form.getByLabel('First name').fill(first);
+  await form.getByLabel('Last name').fill('Regression');
+  await form.getByLabel('Email').fill('bad-email');
+  await form.getByRole('button', { name: 'Create contact' }).click();
+  await expect(form).toBeVisible();
+  await expect(form.getByLabel('First name')).toHaveValue(first);
+  await expect(form.getByLabel('Account (optional)')).not.toHaveValue('');
+  expect(await form.getByLabel('Email').evaluate((input: HTMLInputElement) => input.validity.typeMismatch)).toBe(true);
+  await form.getByLabel('Email').fill(`e2e-${Date.now()}@example.test`);
+  await form.getByRole('button', { name: 'Create contact' }).click();
+  await expect(page).toHaveURL(/\/contacts\/\d+$/);
+  await expect(page.getByRole('main')).toContainText(first);
+  await page.getByRole('link', { name: 'Edit contact' }).click();
+  await page.getByRole('form', { name: 'Edit contact' }).getByLabel('Title').fill('E2E Manager');
+  await page.getByRole('button', { name: 'Save contact' }).click();
+  await expect(page).toHaveURL(/\/contacts\/\d+$/);
+  await expect(page.getByRole('main')).toContainText('E2E Manager');
+});

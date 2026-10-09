@@ -19,3 +19,16 @@ export async function signInAs(page: Page, role: keyof typeof emails) {
 export function uniqueName(prefix: string) {
   return `${prefix} ${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 }
+
+export function watchApplicationErrors(page: Page) {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(`page: ${error.message}`));
+  page.on('console', message => {
+    if (message.type() !== 'error') return;
+    const value = message.text();
+    // Next's development socket can reconnect during initial compilation.
+    if (/WebSocket connection to .*_next\/webpack-hmr/.test(value)) return;
+    errors.push(`console: ${value}`);
+  });
+  return errors;
+}

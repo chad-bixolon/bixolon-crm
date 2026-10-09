@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { signInAs } from './helpers';
 
 test('Support Product popover stays in viewport, scrolls, and supports keyboard selection', async ({ page }) => {

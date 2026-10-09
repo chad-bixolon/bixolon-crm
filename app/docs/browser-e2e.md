@@ -32,13 +32,21 @@ Run a single workflow with `npm run test:e2e -- e2e/support.spec.ts`. Run a visi
 
 `npm run test:e2e:prepare` starts only the dedicated Postgres service, applies normal migrations there, and idempotently seeds four E2E users plus Accounts, Contact, Product/SKUs, category, stage, currency, and a Price Exception. Test-created records have unique names and remain in this isolated database for inspection. To discard only the E2E database and all its test records, explicitly run `npm run test:e2e:reset`; the next test run recreates it. This command does not touch the normal development database.
 
-The browser suite signs in through an Auth.js credentials provider available only when all of these hold: `NODE_ENV` is not `production`, `E2E_AUTH_ENABLED=true`, a test token is configured, and `DATABASE_URL` points to the local `saleshub_e2e` database on port 55432. The provider accepts only seeded `@e2e.saleshub.local` users and reloads the active user's role on each session read. Google OAuth and production authentication stay unchanged. The test suite covers Admin, Support, Sales, and Sales Manager sign-in. The E2E server and auth token are local test infrastructure; do not expose port 3100 publicly.
+The browser suite signs in through an Auth.js credentials provider available only when all of these hold: `NODE_ENV` is not `production`, `E2E_AUTH_ENABLED=true`, a test token is configured, and `DATABASE_URL` points to the local `saleshub_e2e` database on port 55432. The provider accepts only seeded `@e2e.saleshub.local` users and reloads the active user's role on each session read. Google OAuth and production authentication stay unchanged. The test suite covers Admin, Support, Sales, Sales Manager, Marketing Manager, and Read Only sign-in. The E2E server and auth token are local test infrastructure; do not expose port 3100 publicly.
 
 The seeded `E2E-PE-001` correction test changes its Account link. `test:e2e:prepare` restores that link before each full run. Browser tests use unique names for new cases, Opportunities, and Accounts so repeated local runs do not collide.
 
+## Regression coverage and commands
+
+The full regression is `npm run test:e2e` from `app/`. It includes an inventory smoke test for 60 direct user-facing routes, role and sidebar access checks, account/contact/project form lifecycles, dashboard and notification paths, Support report filtering and export, and the focused Support, Opportunity, SKU picker, and Price Exception tests. The route suite checks HTTP status, main content and heading, and the Next.js error dialog. The shared fixture fails every browser test on uncaught page exceptions or browser console errors. `nextjs-portal` alone is the normal development indicator; only its error dialog fails the route test. The only ignored console pattern is a Next.js development hot-reload WebSocket reconnection.
+
+The suite is representative. Seed data does not yet support Demo and Trade Show detail actions, Sales Plan quarterly allocation, Support report pagination, dashboard widget customization, or notification read/dismiss mutations. Add deterministic fixtures and focused browser tests before treating those workflows as covered.
+
+Run one module with `npm run test:e2e -- e2e/support.spec.ts` (or another `e2e/*.spec.ts` file). The picker spec also runs at 900×700. All browser mutations use the dedicated E2E database, and fixtures use unique names or an idempotent seed. Do not aim the Playwright server at a normal development or production database.
+
 ## When to run
 
-Codex and developers should run the relevant E2E spec when changing forms, pickers, dialogs, navigation, conditional UI, failed-save behavior, or Support, Opportunity, and Price Exception workflows. Backend-only changes with no browser behavior need their focused unit/server tests instead. The suite is intentionally small and does not replace the full unit suite.
+Codex and developers should run the relevant focused Playwright spec for any meaningful UI, form, picker, or dialog change, then run the full browser smoke suite before commit. Backend-only changes with no browser behavior need their focused unit/server tests instead. The suite provides representative regression coverage and does not replace the full unit suite.
 
 ## Troubleshooting and future CI
 
