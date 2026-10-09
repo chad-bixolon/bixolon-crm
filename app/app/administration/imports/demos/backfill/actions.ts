@@ -16,7 +16,8 @@ export async function saveRosaBackfill(form: FormData) {
     revalidatePath('/reports/demo-inventory');
     destination = `/demos/${request.id}`;
   } catch (error) {
-    destination = error instanceof ExistingDemoError ? `/demos/${error.id}` : `/administration/imports/demos/backfill?error=${encodeURIComponent(error instanceof Error ? error.message : 'Backfill failed.')}`;
+    if (!(error instanceof ExistingDemoError)) return { error: error instanceof Error ? error.message : 'Backfill failed.' };
+    destination = `/demos/${error.id}`;
   }
   redirect(destination);
 }

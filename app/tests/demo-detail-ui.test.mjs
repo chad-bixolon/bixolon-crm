@@ -24,6 +24,7 @@ Module._load = function(specifier, parent, isMain) {
   if (specifier === 'next/link') return function Link({ href, children, ...props }) { return React.createElement('a', { href, ...props }, children); };
   if (specifier === 'next/navigation') return { notFound: () => { throw new Error('Not found'); } };
   if (specifier === '@/components/shell') return { Content: ({ children }) => React.createElement('main', null, children), PageHeader: ({ title, action }) => React.createElement('header', null, React.createElement('h1', null, title), action) };
+  if (specifier === '@/components/recoverable-action-form') return { RecoverableActionForm: ({ children, action, ...props }) => { void action; return React.createElement('form', props, children); } };
   if (specifier === '@/lib/current-user') return { requirePermission: async () => actor };
   if (specifier === '@/lib/prisma') return { prisma: { demoRequest: { findFirst: async () => request } } };
   if (specifier === '@/lib/authorization') return { can: () => false };

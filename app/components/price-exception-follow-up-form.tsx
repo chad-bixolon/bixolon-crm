@@ -1,4 +1,5 @@
 'use client';
+import { submitPreservingForm } from '@/lib/submit-preserving-form';
 import { useActionState } from 'react';
 import { savePriceExceptionFollowUp } from '@/app/price-exceptions/[id]/actions';
 import { followUpLabels, followUpStatuses } from '@/lib/price-exception-follow-up';
@@ -6,7 +7,7 @@ import type { PriceExceptionFollowUpStatus } from '@prisma/client';
 
 export function PriceExceptionFollowUpForm({id,status,ownerId,owners,canReassign,nextDate,replacementId,replacementNumber,replacements}:{id:number;status:PriceExceptionFollowUpStatus;ownerId:number|null;owners:{id:number;firstName:string;lastName:string}[];canReassign:boolean;nextDate:string;replacementId:number|null;replacementNumber:string;replacements:{id:number;peCode:string|null}[]}) {
   const [state,action,pending]=useActionState(savePriceExceptionFollowUp.bind(null,id),{} as {error?:string;saved?:boolean});
-  return <form action={action} className="mt-4 rounded border border-slate-200 p-4 text-sm">
+  return <form action={action} onSubmit={event => submitPreservingForm(event, action)} className="mt-4 rounded border border-slate-200 p-4 text-sm">
     <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
       <label className="label">Follow-up Status<select className="field mt-1" name="status" defaultValue={status}>{followUpStatuses.map(value=><option key={value} value={value}>{followUpLabels[value]}</option>)}</select></label>
       <label className="label">Follow-up Owner{canReassign?<select className="field mt-1" name="ownerId" defaultValue={ownerId??''}><option value="">Unassigned</option>{owners.map(owner=><option key={owner.id} value={owner.id}>{owner.firstName} {owner.lastName}</option>)}</select>:<><input type="hidden" name="ownerId" value={ownerId??''}/><span className="mt-1 block font-normal">{owners.find(owner=>owner.id===ownerId)?`${owners.find(owner=>owner.id===ownerId)!.firstName} ${owners.find(owner=>owner.id===ownerId)!.lastName}`:'Unassigned'}</span></>}</label>

@@ -1,3 +1,4 @@
+import { RecoverableActionForm } from '@/components/recoverable-action-form';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -86,7 +87,7 @@ export default async function TradeShowPage({ params, searchParams }: { params: 
           <div className="filter-actions mt-3 justify-end"><button className="btn-filter-primary" type="submit">Filter</button><Link className="btn-filter-secondary" href={`/trade-shows/${id}`}>Clear</Link></div>
         </form>
       </div>
-      <form action={bulkRouteTradeShowAction.bind(null,id)}>{can(actor,'trade-shows.assign')&&can(actor,'trade-shows.route')&&<TradeShowBulkRoutingControls reps={reps.map(rep=>({id:rep.id,name:`${rep.firstName} ${rep.lastName}`}))} partners={partnerAccounts}/>} {filters.bulk&&<p role={filters.bulk.startsWith('Error:')?'alert':'status'} className={`mx-5 mb-3 rounded p-3 text-sm ${filters.bulk.startsWith('Error:')?'bg-red-50 text-red-800':'bg-emerald-50 text-emerald-800'}`}>{filters.bulk}</p>}
+      <RecoverableActionForm action={bulkRouteTradeShowAction.bind(null,id)}>{can(actor,'trade-shows.assign')&&can(actor,'trade-shows.route')&&<TradeShowBulkRoutingControls reps={reps.map(rep=>({id:rep.id,name:`${rep.firstName} ${rep.lastName}`}))} partners={partnerAccounts}/>} {filters.bulk&&<p role={filters.bulk.startsWith('Error:')?'alert':'status'} className={`mx-5 mb-3 rounded p-3 text-sm ${filters.bulk.startsWith('Error:')?'bg-red-50 text-red-800':'bg-emerald-50 text-emerald-800'}`}>{filters.bulk}</p>}
       <TableScroll label="Trade Show leads">
         <table className="w-full min-w-[960px] table-fixed text-left text-sm">
           <colgroup>{['17%','18%','19%','14%','11%','21%'].map((width,index)=><col key={index} style={{width}}/>)}</colgroup>
@@ -105,7 +106,7 @@ export default async function TradeShowPage({ params, searchParams }: { params: 
           })}</tbody>
         </table>
       </TableScroll>
-      </form>
+      </RecoverableActionForm>
       {!show.leads.length && <p className="p-8 text-center text-sm text-slate-500">No leads match these filters.</p>}
     </section>
     {viewImportHistory && <section className="panel p-5"><h2 className="text-lg font-semibold">Import History</h2>{show.imports.length ? <ul className="mt-3 divide-y">{show.imports.map(item => <li className="min-w-0 py-3 text-sm" key={item.id}><strong className="block break-all text-slate-900">{item.sourceFileName}</strong><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-slate-600"><span>{sourceFormatLabels[item.format]}</span>{item.mappingName&&<span>Mapping: {item.mappingName}</span>}<span>Sheet: {item.sourceSheet}</span><span>Uploaded by {item.uploadedBy.firstName} {item.uploadedBy.lastName}</span><span>{dateTime(item.uploadedAt)}</span></div><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-slate-500"><span>{item.rowCount} rows</span><span>{item.createdCount} new</span><span>{item.existingCount} existing</span><span>{item.skippedCount} skipped</span></div></li>)}</ul> : <p className="mt-3 text-sm text-slate-500">No confirmed imports yet.</p>}</section>}

@@ -40,6 +40,7 @@ const mocks = {
   'next/link': ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children),
   'next/navigation': { notFound: () => { throw new Error('NOT_FOUND'); } },
   '@/components/shell': Shell,
+  '@/components/recoverable-action-form': { RecoverableActionForm: ({ children, action, ...props }) => { void action; return React.createElement('form', props, children); } },
   '@/lib/current-user': { currentUser: async () => actor() },
   '@/lib/authorization': authorization,
   '@/lib/marketing-attribution': attribution,

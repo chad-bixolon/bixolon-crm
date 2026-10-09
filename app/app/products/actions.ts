@@ -29,6 +29,7 @@ function submittedProductValues(form: FormData): ProductSubmittedValues {
 export async function submitProduct(id: number | null, _state: FormState, form: FormData): Promise<FormState> {
   await requireMutation('products.write');
   const values = submittedProductValues(form);
+  if (String(form.get('odmCustomerQuery') ?? '').trim()) return { errors: { odmCustomerAccountIds: 'Select an Account from the suggestions.' }, message: 'Please correct the highlighted field.', values };
   const parsed = parseProduct(form); if (!parsed.value) return { errors: parsed.errors, message: "Please correct the highlighted fields.", values };
   let productId: number;
   try { productId = await saveProduct(prisma, parsed.value, id ?? undefined, id === null ? parseSkuMetadataForm(form, 'sku') : undefined); }
@@ -49,6 +50,7 @@ export async function changeProductState(id: number, state: "active" | "inactive
 export async function submitProductSku(productId: number, skuId: number | null, _state: FormState, form: FormData): Promise<FormState> {
   await requireMutation('products.write');
   const values = submittedProductValues(form);
+  if (String(form.get('odmCustomerQuery') ?? '').trim()) return { errors: { odmCustomerAccountIds: 'Select an Account from the suggestions.' }, message: 'Please correct the highlighted field.', values };
   let savedId: number;
   try {
     const saved = await saveSkuMetadata(prisma, { productId, skuId: skuId ?? undefined, ...parseSkuMetadataForm(form) });

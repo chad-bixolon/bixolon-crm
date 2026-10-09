@@ -1,3 +1,4 @@
+import { RecoverableActionForm } from '@/components/recoverable-action-form';
 import { NAV_CATEGORIES } from '../../../../../lib/navigation-categories';
 import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
@@ -15,7 +16,7 @@ export default async function RosaBackfillPage({ searchParams }: { searchParams:
   ]);
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Add existing Demo record" description="Use this only to add a Demo that already exists in the source system." action={<Link className="btn-secondary" href="/administration/imports/demos">Import demos</Link>}/>
     {error && <p role="alert" className="mb-4 rounded bg-red-50 p-4 text-sm text-red-800">{error}</p>}
-    <form action={saveRosaBackfill} className="panel max-w-4xl space-y-5 p-6 text-sm">
+    <RecoverableActionForm action={saveRosaBackfill} className="panel max-w-4xl space-y-5 p-6 text-sm">
       <p className="rounded bg-amber-50 p-3 text-amber-900">Enter values from the existing source record. A real Source Request ID is required and checked against imported and manually entered Demos. A matching ID opens the existing Demo for reconciliation.</p>
       <div className="grid gap-4 sm:grid-cols-2">
         <label>Source Request ID *<input className="field mt-1 w-full" name="requestId" required placeholder="UUID from source record"/></label>
@@ -40,6 +41,6 @@ export default async function RosaBackfillPage({ searchParams }: { searchParams:
       <label className="block">Source approval comments<textarea className="field mt-1 w-full" name="approvalComments" rows={2}/></label>
       <label className="block">Reason for manual entry (optional)<textarea className="field mt-1 w-full" name="reason" rows={2}/></label>
       <button className="btn-primary">Add existing Demo record</button>
-    </form>
+    </RecoverableActionForm>
   </Content>;
 }

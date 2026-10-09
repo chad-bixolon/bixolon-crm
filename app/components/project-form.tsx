@@ -17,7 +17,7 @@ export function ProjectForm({ id, initial, accounts, owners, currentOwner, prima
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(submitProject.bind(null, id ?? null), { errors: {} } as ProjectFormState);
-  const guard = useSubmitGuard(state);
+  const guard = useSubmitGuard(state, action);
   const val = (key: string, fallback: string | number = '') => String(state.values?.[key] ?? fallback);
   const [primaryId, setPrimaryId] = useState(initial?.primaryAccountId ?? preselected ?? 0);
   const [primaryRole, setPrimaryRole] = useState(initial?.primaryAccountRole ?? ProjectPartyRole.PROGRAM_OWNER);
@@ -32,7 +32,7 @@ export function ProjectForm({ id, initial, accounts, owners, currentOwner, prima
   const available = accountOptions.filter(a => a.id !== primaryId && !participants.some(p => p.accountId === a.id));
   const add = () => { const accountId = Number(selectedAccount); if (!available.some(a => a.id === accountId)) { setParticipantMessage('Choose an available Account.'); return; }
     setParticipants(old => [...old, { accountId, roles: [] }]); setSelectedAccount(''); setParticipantMessage(''); };
-  return <form key={JSON.stringify(state.values ?? {})} action={action} onSubmit={guard} className="panel max-w-5xl space-y-7 p-6" aria-label={id ? 'Edit project' : 'Create project'}>
+  return <form action={action} onSubmit={guard} className="panel max-w-5xl space-y-7 p-6" aria-label={id ? 'Edit project' : 'Create project'}>
     {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     <section className="grid gap-4 sm:grid-cols-2"><h2 className="sm:col-span-2 text-lg font-semibold">Overview</h2>
       <div className="sm:col-span-2"><label className="label" htmlFor="name">Project name *</label><input className="field" id="name" name="name" required maxLength={200} defaultValue={val('name', initial?.name ?? '')}/>{error('name')}</div>

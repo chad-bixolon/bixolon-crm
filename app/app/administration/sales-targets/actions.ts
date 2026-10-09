@@ -12,8 +12,9 @@ export async function saveTargetAction(form: FormData) {
   let error = '';
   try { await saveSalesTarget(prisma, actor, form, id); }
   catch (cause) { error = cause instanceof Error && cause.message.includes('Unique constraint') ? 'An active target already exists for this rep, quarter, and currency.' : cause instanceof Error ? cause.message : 'Target could not be saved.'; }
+  if (error) return { error };
   revalidatePath('/administration/sales-targets'); revalidatePath('/reports/forecast');
-  redirect(error ? `/administration/sales-targets?error=${encodeURIComponent(error)}` : '/administration/sales-targets');
+  redirect('/administration/sales-targets');
 }
 
 export async function archiveTargetAction(form: FormData) {

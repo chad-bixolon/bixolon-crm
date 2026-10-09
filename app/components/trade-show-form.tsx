@@ -15,13 +15,13 @@ export function TradeShowForm({ id, initial, owners, currentOwner, defaultOwnerI
   const nextLinkKey = useRef(0);
   const [resourceLinks, setResourceLinks] = useState<{ id: number | null; label: string; url: string; key: string }[]>(() => initial?.resourceLinks.map(link => ({ ...link, key: `saved-${link.id}` })) ?? []);
   const updateLink = (key: string, field: 'label' | 'url', value: string) => setResourceLinks(rows => rows.map(row => row.key === key ? { ...row, [field]: value } : row));
-  const guard = useSubmitGuard(state);
+  const guard = useSubmitGuard(state, action);
   const val = (key: string, fallback = '') => state.values?.[key] ?? fallback;
   const error = (key: string) => state.errors[key] && <p className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
   useEffect(() => { if (state.redirectTo) router.push(state.redirectTo); }, [state.redirectTo, router]);
   const selectedTimezone = val('timezone', initial?.timezone ?? '');
   const unsupportedTimezone = selectedTimezone && !isApprovedTradeShowTimezone(selectedTimezone) ? selectedTimezone : null;
-  return <form key={JSON.stringify(state.values ?? {})} action={action} onSubmit={guard} className="panel max-w-3xl space-y-4 p-5 sm:p-6" aria-label={id ? 'Edit Trade Show' : 'Create Trade Show'}>
+  return <form action={action} onSubmit={guard} className="panel max-w-3xl space-y-4 p-5 sm:p-6" aria-label={id ? 'Edit Trade Show' : 'Create Trade Show'}>
     {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     <div className="min-w-0"><label className="label" htmlFor="name">Name *</label><input className="field min-w-0" id="name" name="name" required maxLength={200} defaultValue={val('name', initial?.name ?? '')}/>{error('name')}</div>
     <div className="grid gap-4 sm:grid-cols-2">

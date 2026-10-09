@@ -55,6 +55,7 @@ const pageMocks = {
   '@/lib/opportunity-history': { opportunityHistory: async () => history, stageStartedAt: () => null },
   '@/lib/marketing-attribution': { opportunityAttribution: async () => ({ leadSource: null, influences: [] }) },
   '@/components/marketing-attribution-card': { MarketingAttributionCard: () => null },
+  '@/components/recoverable-action-form': { RecoverableActionForm: ({ children, action, ...props }) => { void action; return React.createElement('form', props, children); } },
   '@/app/demos/actions': { linkDemoFromOpportunity: () => async () => {}, updateDemoContext: () => async () => {} },
 };
 Module._load = function(specifier, parent, isMain) { return specifier in pageMocks ? pageMocks[specifier] : originalLoad.call(this, specifier, parent, isMain); };

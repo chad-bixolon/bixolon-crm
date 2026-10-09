@@ -1,5 +1,6 @@
 'use client';
-import { useActionState, useState } from 'react';
+import { submitPreservingForm, useResetOnSuccess } from '@/lib/submit-preserving-form';
+import { useActionState, useRef, useState } from 'react';
 import { submitProjectUpdate } from '@/app/project-update-actions';
 import type { UpdateContext } from '@/lib/project-updates';
 
@@ -8,9 +9,11 @@ type Option = { id: number; name: string };
 
 function UpdateForm({ context, update, options }: { context: UpdateContext; update?: Row; options: Option[] }) {
   const [state, action, pending] = useActionState(submitProjectUpdate.bind(null, context, update?.id ?? null), {});
+  const formRef = useRef<HTMLFormElement>(null);
+  useResetOnSuccess(state, state.saved && !update, formRef);
   const other = context.kind === 'project' ? 'opportunityId' : 'projectId';
   const current = update?.[other] ?? null;
-  return <form action={action} className="mt-3 space-y-3 rounded border border-slate-200 p-4">
+  return <form ref={formRef} action={action} onSubmit={event => submitPreservingForm(event, action)} className="mt-3 space-y-3 rounded border border-slate-200 p-4">
     <label className="block text-sm font-medium" htmlFor={`update-body-${context.kind}-${update?.id ?? 'new'}`}>Update</label>
     <textarea id={`update-body-${context.kind}-${update?.id ?? 'new'}`} name="body" className="field min-h-28 w-full" maxLength={5000} required defaultValue={update?.body ?? ''}/>
     <label className="block text-sm font-medium" htmlFor={`update-other-${context.kind}-${update?.id ?? 'new'}`}>{context.kind === 'project' ? 'Linked Opportunity' : 'Linked Project'} (optional)</label>

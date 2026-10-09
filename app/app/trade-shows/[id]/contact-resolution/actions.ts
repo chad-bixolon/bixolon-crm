@@ -15,8 +15,8 @@ function refresh(tradeShowId:number){revalidatePath(`/trade-shows/${tradeShowId}
 
 export async function linkContactAction(tradeShowId:number,leadId:number,returnTo:string,form:FormData){
   const actor=await currentUser(),contactId=positiveId(String(form.get('contactId')??''));
-  if(!contactId)redirect(workflowUrl(tradeShowId,'invalid-link',undefined,returnTo));
-  try{await linkTradeShowLeadContact(prisma,tradeShowId,leadId,contactId,actor);}catch(error){redirect(`${workflowUrl(tradeShowId,'link-error',undefined,returnTo)}&message=${encodeURIComponent(friendlyError(error,'Contact could not be linked.'))}`);}
+  if(!contactId)return {error:'Select a Contact.'};
+  try{await linkTradeShowLeadContact(prisma,tradeShowId,leadId,contactId,actor);}catch(error){return {error:friendlyError(error,'Contact could not be linked.')};}
   refresh(tradeShowId);redirect(workflowUrl(tradeShowId,'linked',contactId,returnTo));
 }
 
@@ -30,8 +30,7 @@ export async function createResolutionContactAction(tradeShowId:number,leadId:nu
 
 export async function bulkCreateContactsAction(tradeShowId:number,returnTo:string,form:FormData){
   const actor=await currentUser(),leadIds=form.getAll('leadIds').map(String).map(positiveId).filter((id):id is number=>id!==null);
-  try{const result=await bulkCreateTradeShowContacts(prisma,tradeShowId,leadIds,actor);refresh(tradeShowId);redirect(`${workflowUrl(tradeShowId,'bulk-created',undefined,returnTo)}&count=${result.created}`);}catch(error){
-    if(error&&typeof error==='object'&&'digest' in error)throw error;
-    redirect(`${workflowUrl(tradeShowId,'bulk-error',undefined,returnTo)}&message=${encodeURIComponent(friendlyError(error,'Contacts could not be created.'))}`);
-  }
+  let count:number;
+  try{const result=await bulkCreateTradeShowContacts(prisma,tradeShowId,leadIds,actor);count=result.created;}catch(error){return {error:friendlyError(error,'Contacts could not be created.')};}
+  refresh(tradeShowId);redirect(`${workflowUrl(tradeShowId,'bulk-created',undefined,returnTo)}&count=${count}`);
 }

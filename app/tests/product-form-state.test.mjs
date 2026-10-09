@@ -74,6 +74,15 @@ test('failed ODM Product save retains selected Base SKU and Customers', async ()
   assert.equal(redirects, 0);
 });
 
+test('typed but unselected ODM Account is rejected without losing selected customers', async () => {
+  const form = odmForm();
+  form.set('odmCustomerQuery', 'Acme');
+  const result = await submitProduct(null, { errors: {} }, form);
+  assert.equal(result.errors.odmCustomerAccountIds, 'Select an Account from the suggestions.');
+  assert.deepEqual(result.values.odmCustomerAccountIds, ['7', '8']);
+  assert.equal(form.get('odmCustomerQuery'), 'Acme');
+});
+
 test('restored ODM fields keep selected ids and labels ready for resubmission', () => {
   const html = renderToStaticMarkup(React.createElement(OdmDetailsFields, { values: expectedValues }));
   assert.match(html, /<option value="CUSTOMER_SPECIFIC" selected="">Customer-Specific<\/option>/);

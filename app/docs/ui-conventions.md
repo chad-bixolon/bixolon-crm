@@ -11,6 +11,13 @@ Use the existing classes in `app/app/globals.css` for forms and actions. Keep pa
 - Native select fields use the same font and height as inputs. Browser option menus vary by platform; do not style their internals. Custom picker results use `.search-results-popover` and `.search-results-option` for bounded scrolling and compact 13px rows.
 - Use a native select for a small, known set of options. Use the existing searchable picker when finding an Account, Product, Contact, or Project among many records requires search. Preserve its listbox roles, keyboard handling, and portal placement.
 
+## Failed Save / Validation Behavior
+
+- Preserve entered text, dates, options, and unrelated selections after a failed mutation. Show a specific error beside the field where practical and a clear form error for other failures.
+- Reset, close, refresh, or redirect a form only after a successful mutation or an explicit user action.
+- Searchable entity pickers keep the selected ID and business display label together. Typed search text without a selected suggestion is not a valid relation; preserve that text and ask the user to select a result.
+- Changing a parent relation may clear incompatible child selections. A validation failure alone must not clear valid dependent selections.
+
 ## Buttons
 
 - `.btn-primary`: orange main action, such as Save, Apply, View report, or Export.

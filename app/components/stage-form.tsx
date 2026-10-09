@@ -1,10 +1,13 @@
 "use client";
-import { useActionState } from "react";
+import { submitPreservingForm, useResetOnSuccess } from '@/lib/submit-preserving-form';
+import { useActionState, useRef } from "react";
 import { submitStage } from "@/app/administration/sales-stages/actions";
 type Stage = { id: number; name: string; probability: number; sortOrder: number; active: boolean; isClosed: boolean; isWon: boolean };
 export function StageForm({ stage }: { stage?: Stage }) {
   const [state, action, pending] = useActionState(submitStage.bind(null, stage?.id ?? null), { message: "", success: false });
-  return <form action={action} className="grid gap-3 sm:grid-cols-3 lg:grid-cols-7 lg:items-end">
+  const formRef = useRef<HTMLFormElement>(null);
+  useResetOnSuccess(state, state.success && !stage, formRef);
+  return <form ref={formRef} action={action} onSubmit={event => submitPreservingForm(event, action)} className="grid gap-3 sm:grid-cols-3 lg:grid-cols-7 lg:items-end">
     <label className="label lg:col-span-2">Name<input className="field" name="name" required maxLength={200} defaultValue={stage?.name}/></label>
     <label className="label">Probability %<input className="field" name="probability" type="number" min={0} max={100} required defaultValue={stage?.probability ?? 0}/></label>
     <label className="label">Sort order<input className="field" name="sortOrder" type="number" min={0} required defaultValue={stage?.sortOrder ?? 0}/></label>

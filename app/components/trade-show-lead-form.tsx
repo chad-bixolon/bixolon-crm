@@ -29,7 +29,7 @@ export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, currentR
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(submitTradeShowLead.bind(null, tradeShowId, leadId), { errors: {} } as TradeShowLeadFormState);
-  const guard = useSubmitGuard(state);
+  const guard = useSubmitGuard(state, action);
   const [routing,setRouting]=useState<TradeShowLeadRouting>((state.values?.routing as TradeShowLeadRouting|undefined)??initial.routing);
   const [partnerSearch,setPartnerSearch]=useState('');
   useEffect(() => { if (state.redirectTo) router.push(state.redirectTo); }, [state.redirectTo, router]);
@@ -39,7 +39,7 @@ export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, currentR
   const error = (key: string) => state.errors[key] && <p className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
   const textarea = (key: string, label: string, current: string | null, limit: number, rows = 3) => <div className="min-w-0"><label className="label" htmlFor={key}>{label}</label><textarea className="field min-h-20 resize-y" rows={rows} id={key} name={key} maxLength={limit} defaultValue={val(key, current ?? '')}/>{error(key)}</div>;
   const select = (key: string, label: string, current: number | null, options: Option[], emptyLabel: string, inactiveLabel: string) => <div className="min-w-0"><label className="label" htmlFor={key}>{label}</label><select className="field min-w-0" id={key} name={key} defaultValue={val(key, current?.toString() ?? '')}><option value="">{emptyLabel}</option>{current && !options.some(option => option.id === current) && <optgroup label="Current assignment"><option value={current}>{inactiveLabel}</option></optgroup>}{options.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select>{error(key)}</div>;
-  return <>{createdRecord&&<SaveSuccess message={`${createdRecord.name} created successfully.`} action={{href:`/${createdRecord.path}/${createdRecord.id}`,label:`Open ${createdRecord.name}`}}/>}<form key={JSON.stringify(state.values ?? {})} action={action} onSubmit={guard} className="panel max-w-5xl space-y-7 p-5 sm:p-6" aria-label="Edit Trade Show Lead">
+  return <>{createdRecord&&<SaveSuccess message={`${createdRecord.name} created successfully.`} action={{href:`/${createdRecord.path}/${createdRecord.id}`,label:`Open ${createdRecord.name}`}}/>}<form action={action} onSubmit={guard} className="panel max-w-5xl space-y-7 p-5 sm:p-6" aria-label="Edit Trade Show Lead">
     {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     <section><h2 className="mb-3 text-lg font-semibold">Status &amp; Follow-Up</h2><div className="grid min-w-0 gap-5 sm:grid-cols-2">
       <div className="min-w-0"><label className="label" htmlFor="status">Status</label><select className="field min-w-0" id="status" name="status" defaultValue={val('status', initial.status)}>{statuses.filter(status => initial.status === 'CONVERTED' ? status === 'CONVERTED' : status !== 'CONVERTED').map(status => <option key={status} value={status}>{statusLabels[status]}</option>)}</select>{error('status')}</div>

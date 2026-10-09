@@ -10,25 +10,33 @@ const value = (form: FormData, key: string, max: number) => { const text = Strin
 async function manager() { const actor = await currentUser(); if (!canManageAttribution(actor)) throw new Error('Access denied'); return actor; }
 
 export async function saveLeadSource(form: FormData) {
-  await manager(); const sourceId = id(form.get('id')), name = value(form, 'name', 120); if (!name) throw new Error('Name is required.');
-  const active = form.get('active') === 'on'; const sortOrder = Number(form.get('sortOrder'));
-  if (!Number.isSafeInteger(sortOrder) || sortOrder < 0 || sortOrder > 100000) throw new Error('Choose a valid order.');
-  if (sourceId) await prisma.leadSourceOption.update({ where: { id: sourceId }, data: { name, active, sortOrder } });
-  else await prisma.leadSourceOption.create({ data: { name, active, sortOrder } });
+  await manager();
+  try {
+    const sourceId = id(form.get('id')), name = value(form, 'name', 120); if (!name) return { error: 'Enter a Lead Source name.' };
+    const active = form.get('active') === 'on'; const sortOrder = Number(form.get('sortOrder'));
+    if (!Number.isSafeInteger(sortOrder) || sortOrder < 0 || sortOrder > 100000) return { error: 'Choose a valid sort order.' };
+    if (sourceId) await prisma.leadSourceOption.update({ where: { id: sourceId }, data: { name, active, sortOrder } });
+    else await prisma.leadSourceOption.create({ data: { name, active, sortOrder } });
+  } catch (error) { return { error: error instanceof Error && /too long/.test(error.message) ? error.message : 'Lead Source could not be saved. Check the name and try again.' }; }
   revalidatePath('/marketing/lead-sources'); redirect('/marketing/lead-sources');
 }
 
 export async function saveCampaign(form: FormData) {
-  const actor = await manager(); const campaignId = id(form.get('id')), name = value(form, 'name', 160), category = value(form, 'category', 120) || null, description = value(form, 'description', 10000) || null;
-  if (!name) throw new Error('Campaign name is required.');
-  const status = value(form, 'status', 20); if (!campaignStatuses.includes(status as never)) throw new Error('Choose a valid status.');
-  const yearText = value(form, 'year', 4), year = yearText ? Number(yearText) : null;
-  if (year !== null && (!Number.isInteger(year) || year < 1900 || year > 2200)) throw new Error('Choose a valid year.');
-  const date = (key: string) => { const text = value(form, key, 10); if (!text) return null; if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw new Error('Choose a valid date.'); const result = new Date(`${text}T00:00:00.000Z`); if (result.toISOString().slice(0, 10) !== text) throw new Error('Choose a valid date.'); return result; };
-  const startDate = date('startDate'), endDate = date('endDate'); if (startDate && endDate && endDate < startDate) throw new Error('End date precedes start date.');
-  const data = { name, category, description, status, year, startDate, endDate, updatedById: actor.id };
-  const campaign = campaignId ? await prisma.marketingCampaign.update({ where: { id: campaignId }, data }) : await prisma.marketingCampaign.create({ data: { ...data, createdById: actor.id } });
-  revalidatePath('/marketing/campaigns'); redirect(`/marketing/campaigns/${campaign.id}`);
+  const actor = await manager();
+  let savedId: number;
+  try {
+    const campaignId = id(form.get('id')), name = value(form, 'name', 160), category = value(form, 'category', 120) || null, description = value(form, 'description', 10000) || null;
+    if (!name) return { error: 'Enter a Campaign name.' };
+    const status = value(form, 'status', 20); if (!campaignStatuses.includes(status as never)) return { error: 'Choose a valid status.' };
+    const yearText = value(form, 'year', 4), year = yearText ? Number(yearText) : null;
+    if (year !== null && (!Number.isInteger(year) || year < 1900 || year > 2200)) return { error: 'Choose a valid year.' };
+    const date = (key: string) => { const text = value(form, key, 10); if (!text) return null; if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw new Error('Choose a valid date.'); const result = new Date(`${text}T00:00:00.000Z`); if (result.toISOString().slice(0, 10) !== text) throw new Error('Choose a valid date.'); return result; };
+    const startDate = date('startDate'), endDate = date('endDate'); if (startDate && endDate && endDate < startDate) return { error: 'End date precedes start date.' };
+    const data = { name, category, description, status, year, startDate, endDate, updatedById: actor.id };
+    const campaign = campaignId ? await prisma.marketingCampaign.update({ where: { id: campaignId }, data }) : await prisma.marketingCampaign.create({ data: { ...data, createdById: actor.id } });
+    savedId = campaign.id;
+  } catch (error) { return { error: error instanceof Error && (/too long|Choose a valid date/.test(error.message)) ? error.message : 'Campaign could not be saved. Check the fields and try again.' }; }
+  revalidatePath('/marketing/campaigns'); redirect(`/marketing/campaigns/${savedId}`);
 }
 
 export async function setCampaignArchive(form: FormData) {

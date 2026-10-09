@@ -1,4 +1,5 @@
 "use client";
+import { submitPreservingForm } from '@/lib/submit-preserving-form';
 import Link from "next/link";
 import { useActionState } from "react";
 import type { MarketingAudienceConfig } from "@/lib/marketing-audiences";
@@ -10,7 +11,7 @@ function Select({name,label,value,children}:{name:string;label:string;value?:str
 function Options({items}:{items:Option[]}){return <>{items.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</>}
 export function MarketingAudienceForm({audience,options}:Props){
   const [state,action,pending]=useActionState(saveAudience,{} as AudienceFormState),c=audience?.filterConfig??{preference:"OPTED_IN"};
-  return <form action={action} className="report-builder panel p-5 md:p-6" aria-label={audience?"Edit marketing audience":"Create marketing audience"}>
+  return <form action={action} onSubmit={event => submitPreservingForm(event, action)} className="report-builder panel p-5 md:p-6" aria-label={audience?"Edit marketing audience":"Create marketing audience"}>
     {audience&&<input type="hidden" name="audienceId" value={audience.id}/>} {state.message&&<p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     <section className="report-section"><h2 className="report-section-title">Audience</h2><div className="report-filter-grid"><div><label className="label" htmlFor="name">Name *</label><input className="field" id="name" name="name" required maxLength={120} defaultValue={audience?.name??""}/></div><div><label className="label" htmlFor="description">Description</label><input className="field" id="description" name="description" maxLength={1000} defaultValue={audience?.description??""}/></div><Select name="visibility" label="Visibility" value={audience?.visibility??"PERSONAL"}><option value="PERSONAL">Personal</option><option value="SHARED">Shared</option></Select></div></section>
     <section className="report-section report-primary-filters"><h2 className="report-section-title">Contact Criteria</h2><div className="report-filter-grid"><div><label className="label" htmlFor="search">Contact Name or Email</label><input className="field" id="search" name="search" placeholder="Search name or email" defaultValue={c.search??""}/></div><div><label className="label" htmlFor="title">Job Title</label><input className="field" id="title" name="title" placeholder="Contains…" defaultValue={c.title??""}/></div><Select name="preference" label="Marketing Preference" value={c.preference}><option value="UNKNOWN">Unknown / Not Confirmed</option><option value="OPTED_IN">Opted In</option><option value="OPTED_OUT">Opted Out</option></Select><Select name="emailPresence" label="Email Availability" value={c.emailPresence}><option value="PRESENT">Present</option><option value="MISSING">Missing</option></Select></div></section>

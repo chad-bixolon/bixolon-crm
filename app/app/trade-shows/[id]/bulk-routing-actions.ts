@@ -16,6 +16,6 @@ export async function bulkRouteTradeShowAction(tradeShowId:number,form:FormData)
     const notes=String(form.get('bulkReferralNotes')??'').trim();if(notes.length>20000)throw new Error('Referral notes must be 20,000 characters or fewer.');
     const count=await bulkRouteTradeShowLeads(prisma,tradeShowId,leadIds,routing,id('bulkRepId'),id('bulkPartnerAccountId'),notes||null,actor);
     revalidatePath(`/trade-shows/${tradeShowId}`);message=`${count} lead${count===1?'':'s'} routed successfully.`;
-  }catch(error){message=`Error: ${error instanceof Error?error.message:'Leads could not be routed.'}`;}
+  }catch(error){return {error:error instanceof Error?error.message:'Leads could not be routed.'};}
   redirect(`/trade-shows/${tradeShowId}?bulk=${encodeURIComponent(message)}`);
 }

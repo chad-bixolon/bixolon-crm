@@ -16,10 +16,10 @@ type Initial = Address & { name: string; status: AccountStatus; strategicAccount
 export function AccountForm({ id, initial, industries, territories, owners, currentOwner, labels, leadContext, defaultOwnerId }: { id?: number; initial?: Initial; industries: Option[]; territories: Option[]; owners: Owner[]; currentOwner?: {firstName:string;lastName:string}|null; labels?: LabelMap; leadContext?: {tradeShowId:number;leadId:number}; defaultOwnerId?: number | null }) {
   const submit = leadContext ? createAccountForTradeShowLead.bind(null,leadContext.tradeShowId,leadContext.leadId) : submitAccount.bind(null, id ?? null);
   const [state, action, pending] = useActionState(submit, { errors: {} } as FormState);
-  const guard = useSubmitGuard(state);
+  const guard = useSubmitGuard(state, action);
   const values = state.values ?? initial;
   const error = (key: string) => state.errors[key] && <p id={`${key}-error`} className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
-  return <form key={state.reviewToken ?? 'account'} action={action} onSubmit={guard} className="panel max-w-4xl p-6 lg:p-8" aria-label={id ? "Edit account" : "Create account"}>
+  return <form action={action} onSubmit={guard} className="panel max-w-4xl p-6 lg:p-8" aria-label={id ? "Edit account" : "Create account"}>
     {state.message && <p role="alert" className="mb-6 rounded-md bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     {state.matches?.length ? <section className="mb-6 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm" role="alert">
       <h2 className="font-semibold">{state.matches.length === 1 ? 'Possible duplicate Account found' : 'Possible duplicate Accounts found'}</h2>

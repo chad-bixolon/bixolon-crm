@@ -7,7 +7,7 @@ import { submitUser, type FormState } from "@/app/administration/users/actions";
 import { roleLabels } from "@/lib/role-labels";
 export function UserForm({ id, initial, created = false }: { id?: number; initial?: { firstName: string; lastName: string; email: string; role: UserRole; active: boolean }; created?: boolean }) {
   const [state, action, pending] = useActionState(submitUser.bind(null, id ?? null), { errors: {} } as FormState);
-  const guard = useSubmitGuard(state);
+  const guard = useSubmitGuard(state, action);
   const error = (key: string) => state.errors[key] && <p className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
   const value = (key: string, fallback: string) => state.values?.[key] ?? fallback;
   const valueKey = state.values ? "submitted" : "initial";

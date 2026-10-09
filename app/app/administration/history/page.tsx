@@ -1,3 +1,4 @@
+import { RecoverableActionForm } from '@/components/recoverable-action-form';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -60,12 +61,12 @@ export default async function HistoryAdministration({ searchParams }: { searchPa
         <div className="flex min-w-0 justify-between gap-3 border-b border-slate-100 py-1"><dt className="text-slate-600">Forecast period</dt><dd className="text-right font-medium">{forecastYear} {forecastQuarter}</dd></div>
         <div className="flex min-w-0 justify-between gap-3 border-b border-slate-100 py-1"><dt className="text-slate-600">Currency</dt><dd className="text-right font-medium">{forecastCurrency ?? '—'}</dd></div>
       </dl>
-      <form action={captureSnapshotAction} className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4">
+      <RecoverableActionForm action={captureSnapshotAction} className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4">
         <div className="w-24"><label className="label" htmlFor="snapshot-year">Year</label><input className="field" id="snapshot-year" type="number" name="year" min="2000" max="2100" defaultValue={forecastYear}/></div>
         <div className="w-28"><label className="label" htmlFor="snapshot-quarter">Quarter</label><select className="field" id="snapshot-quarter" name="quarter" defaultValue={forecastQuarter}>{Object.values(SalesQuarter).map(q=><option key={q}>{q}</option>)}</select></div>
         <div className="w-28"><label className="label" htmlFor="snapshot-currency">Currency</label><select className="field" id="snapshot-currency" name="currencyCode" defaultValue={forecastCurrency}>{currencies.map(currency=><option key={currency.code}>{currency.code}</option>)}</select></div>
         <button className="btn-primary self-end">Capture snapshot</button>
-      </form>
+      </RecoverableActionForm>
       <p className="mt-2 text-xs text-slate-600">Captures one snapshot per active rep for the selected period and currency. Repeating a New York calendar week preserves the first snapshot.</p>
     </section>
     <section className="panel mb-4 min-w-0 p-4 sm:p-5" aria-labelledby="recent-snapshots-heading">

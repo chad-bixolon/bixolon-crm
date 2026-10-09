@@ -45,6 +45,9 @@ export async function assignPriceExceptionSalesRep(id:number,_state:AssignPriceE
 
 export async function resolvePriceExceptionAccounts(id:number,_state:ResolvePriceExceptionState,form:FormData):Promise<ResolvePriceExceptionState>{
   const actor=await requireMutation('users.manage');
+  for(const field of ['distributorAccountId','varAccountId','endUserAccountId']){
+    if(form.get(`${field}Searching`)==='true')return {errors:{[field]:'Select an Account from the suggestions or cancel the search.'}};
+  }
   const parsed=parsePriceExceptionAccountPatch(form);
   if(Object.keys(parsed.errors).length)return {errors:parsed.errors,values:parsed.values};
   try{

@@ -10,5 +10,6 @@ export async function allocateAction(form:FormData){
   const lineId=Number(form.get('lineId'));let message='';
   const quarters=Object.fromEntries(['Q1','Q2','Q3','Q4'].map(q=>[q,{units:String(form.get(`${q}Units`)??''),revenue:String(form.get(`${q}Revenue`)??'')}])) as Record<SalesQuarter,{units:string;revenue:string}>;
   try{await saveLineAllocation(prisma,actor,{lineId,quarters});}catch(e){message=e instanceof Error?e.message:'Allocation failed.';}
-  revalidatePath('/sales-plan');redirect(`/sales-plan?${message?`error=${encodeURIComponent(message)}`:'saved=1'}`);
+  if(message)return {error:message};
+  revalidatePath('/sales-plan');redirect('/sales-plan?saved=1');
 }

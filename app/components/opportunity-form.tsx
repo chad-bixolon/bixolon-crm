@@ -29,7 +29,7 @@ export function OpportunityForm({ id, userId, accountContextId, conversion, conv
   const draftKey = opportunityDraftKey(userId, id, conversion?.leadId, accountContextId);
   const submit = conversionAction ?? submitOpportunity.bind(null, id ?? null);
   const [state, action, pending] = useActionState(submit, { errors: {} } as FormState);
-  const guard = useSubmitGuard(state);
+  const guard = useSubmitGuard(state, action);
   const original = useRef(initialDraft(initial, defaultOwnerId, accountContextId));
   const [draft, setDraft] = useState(() => initialDraft(initial, defaultOwnerId, accountContextId));
   const [hydratedKey, setHydratedKey] = useState<string | null>(null);

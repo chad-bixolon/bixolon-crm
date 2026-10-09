@@ -1,4 +1,5 @@
 'use client';
+import { submitPreservingForm } from '@/lib/submit-preserving-form';
 
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
@@ -28,7 +29,7 @@ export function DashboardEditor({initial,widgets,reports=[],action,cancelHref,su
     <label className="text-sm">Size<select className="field mt-1 min-w-28" value={item.size} onChange={event=>update(index,{...item,size:event.target.value as DashboardWidgetSize})}>{(widget?.sizes??['HALF','FULL']).map(size=><option key={size} value={size}>{size==='HALF'?'Half':'Full'}</option>)}</select></label>
     {item.kind==='SAVED_REPORT'&&<div className="grid gap-2 sm:grid-cols-2"><label className="text-sm">Display<select className="field mt-1" value={item.style} onChange={event=>update(index,{...item,style:event.target.value as SavedReportWidgetStyle})}><option value="KPI">KPI</option><option value="COMPACT_TABLE">Compact Table</option>{report?.grouped&&<option value="GROUPED_SUMMARY">Grouped Summary</option>}</select></label><label className="text-sm">Widget title<input className="field mt-1" maxLength={120} placeholder={report?.name} value={item.title??''} onChange={event=>update(index,{...item,title:event.target.value||undefined})}/></label></div>}
     <button className="text-sm font-semibold text-red-700 underline" type="button" onClick={()=>remove(index)}>Remove</button></li>;};
-  return <form action={formAction} className="space-y-5"><input type="hidden" name="configuration" value={JSON.stringify({version:1,items})}/>
+  return <form action={formAction} onSubmit={event => submitPreservingForm(event, formAction)} className="space-y-5"><input type="hidden" name="configuration" value={JSON.stringify({version:1,items})}/>
     <section className="panel overflow-hidden"><div className="border-b px-4 py-3"><h2 className="font-semibold">Dashboard Sections</h2><p className="text-sm text-slate-600">Choose which items appear, set their order, and select their size.</p></div>
       {items.length?<div>{visibleSections.map(group=><section className="border-b last:border-b-0" key={group.section}><h3 className="bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">{dashboardPresentationSectionTitles[group.section]}</h3><ol className="divide-y">{group.items.map(({item,index})=>itemRow(item,index))}</ol></section>)}</div>:<p className="p-4 text-sm text-slate-500">No widgets selected.</p>}
     </section>

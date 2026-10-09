@@ -12,7 +12,7 @@ type Props = { supportCase?: { id: number; caseNumber: string; contactName?: str
 export function WorkForm({ supportCase, kind, id, createKey, initial = {}, accounts, opportunities, projects, users, currentUser, contacts = [], linkedContactIds = [], activityTypes = [], lockAccountId, lockOpportunityId, lockProjectId, calendarAction, calendarTimeZone }: Props) {
   const handler = calendarAction ? (_id: number | null, old: WorkState, form: FormData) => calendarAction(old, form) : kind === 'task' ? submitTask : kind === 'activity' ? submitActivity : submitNote;
   const [state, action, pending] = useActionState(handler.bind(null, id ?? null), { errors: {} } as WorkState);
-  const guard = useSubmitGuard(state);
+  const guard = useSubmitGuard(state, action);
   const val = (key: string) => String(state.values?.[key] ?? initial[key] ?? '');
   const [selectedAccountId, setSelectedAccountId] = useState(Number(lockAccountId ?? initial.accountId ?? 0));
   const [selectedOpportunityId, setSelectedOpportunityId] = useState(Number(lockOpportunityId ?? initial.opportunityId ?? 0));
@@ -49,7 +49,7 @@ export function WorkForm({ supportCase, kind, id, createKey, initial = {}, accou
     setSelectedOpportunityId(kept.opportunityId); setSelectedProjectId(kept.projectId);
   }
   const activitySelect = (key: 'opportunityId'|'projectId', label: string, items: RelatedOption[], selected: number, change: (id: number) => void) => <div><label className="label" htmlFor={key}>{label}</label><select className="field" id={key} name={key} value={selected || ''} onChange={event => change(Number(event.target.value))}><option value="">None</option>{state.errors[key] && selected && !items.some(item => item.id === selected) && <option value={selected}>{label} (review relationship)</option>}{items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{state.errors[key] && <p className="text-sm text-red-700">{state.errors[key]}</p>}</div>;
-  return <>{kind==='task'&&id&&<SaveSuccessFromQuery recordName="Task"/>}<form key={JSON.stringify(state.values ?? {})} action={action} onSubmit={guard} className="panel grid gap-4 p-6 sm:grid-cols-2">
+  return <>{kind==='task'&&id&&<SaveSuccessFromQuery recordName="Task"/>}<form action={action} onSubmit={guard} className="panel grid gap-4 p-6 sm:grid-cols-2">
     {!id && kind !== "note" && <p className="sm:col-span-2 text-sm text-slate-600">{kind === "activity" ? "Record work that already happened, such as a call, meeting, or email." : "Track work that still needs to be done."}</p>}
     {supportCase && <div className="sm:col-span-2 rounded-md border border-orange-200 bg-orange-50 p-3 text-sm"><strong>Support Case:</strong> {supportCase.caseNumber}{supportCase.contactName ? ` · ${supportCase.contactName}` : ""}<input type="hidden" name="supportCaseId" value={supportCase.id}/></div>}
     {createKey && !id && <input type="hidden" name="createKey" value={createKey}/>}

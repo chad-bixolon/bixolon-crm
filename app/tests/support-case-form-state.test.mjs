@@ -25,7 +25,7 @@ Module._load = function(request, parent, isMain) {
 };
 const { saveSupportCase } = require(path.join(root, 'app/support/cases/actions.ts'));
 Module._load = originalLoad;
-const form = (overrides = {}) => { const data = new FormData(); for (const [key, value] of Object.entries({ customerNameText: 'ABC', accountId: '11', accountIdLabel: 'Customer', contactId: '12', contactIdLabel: 'Jane Smith', subject: 'Printer issue', description: 'Details', status: 'NEW', priority: 'HIGH', categoryId: '13', assignedToId: '2', productSkuId: '14', productSkuIdLabel: 'SKU-14', productSkuQuery: '', serialNumber: 'SN', purchaseSourceText: 'CDW', purchasedFromAccountId: '21', purchasedFromAccountIdLabel: 'CDW Corporation', source: 'PHONE', nextFollowUpAt: '2026-10-10T10:00', resolutionSummary: '', ...overrides })) data.set(key, value); return data; };
+const form = (overrides = {}) => { const data = new FormData(); for (const [key, value] of Object.entries({ customerNameText: 'ABC', accountId: '11', accountIdLabel: 'Customer', contactId: '12', contactIdLabel: 'Jane Smith', subject: 'Printer issue', description: 'Details', status: 'NEW', priority: 'HIGH', categoryId: '13', assignedToId: '2', productSkuId: '14', productSkuIdLabel: 'SKU-14', productSkuIdQuery: '', serialNumber: 'SN', purchaseSourceText: 'CDW', purchasedFromAccountId: '21', purchasedFromAccountIdLabel: 'CDW Corporation', source: 'PHONE', nextFollowUpAt: '2026-10-10T10:00', resolutionSummary: '', ...overrides })) data.set(key, value); return data; };
 
 test('unrelated save error retains selected Support case values for create and edit', async () => {
   for (const id of [null, 9]) {
@@ -46,15 +46,29 @@ test('unrelated save error retains selected Support case values for create and e
 });
 test('typed but unselected Product stays text and produces a field error', async () => {
   calls = [];
-  const data = form({ productSkuId: '', productSkuIdLabel: '', productSkuQuery: 'SKU-14' });
+  const data = form({ productSkuId: '', productSkuIdLabel: '', productSkuIdQuery: 'SKU-14' });
   const result = await saveSupportCase(null, {}, data);
   assert.equal(result.message, 'Select a product from the suggestions.');
   assert.equal(result.field, 'productSkuId');
-  assert.equal(data.get('productSkuQuery'), 'SKU-14');
+  assert.equal(data.get('productSkuIdQuery'), 'SKU-14');
   assert.equal(calls.length, 0);
 });
 test('customer and Account may both be blank only when rejected', async () => {
   const result = await saveSupportCase(null, {}, form({ customerNameText: '', accountId: '' }));
   assert.equal(result.field, 'customerNameText');
   assert.equal(result.message, 'Enter a customer/end user or link a CRM Account.');
+});
+
+test('typed but unselected related entities retain search text and receive field errors', async () => {
+  for (const [query, field, message] of [
+    ['accountIdQuery', 'accountId', 'Select an Account from the suggestions.'],
+    ['contactIdQuery', 'contactId', 'Select a Contact from the suggestions.'],
+    ['purchasedFromAccountIdQuery', 'purchasedFromAccountId', 'Select a Purchased From Account from the suggestions.'],
+  ]) {
+    const data = form({ [query]: 'Acme', [field]: '' });
+    const result = await saveSupportCase(null, {}, data);
+    assert.equal(result.field, field);
+    assert.equal(result.message, message);
+    assert.equal(data.get(query), 'Acme');
+  }
 });

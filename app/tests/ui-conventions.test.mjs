@@ -53,7 +53,7 @@ test('save and filter actions use primary styling while close navigation is seco
 test('System Settings keeps independent saves in compact labeled action rows', () => {
   const setting = read('components/setting-form.tsx');
   const page = read('app/administration/settings/page.tsx');
-  assert.match(setting, /<form action=\{action\} className="py-3"/);
+  assert.match(setting, /<form action=\{action\}.*className="py-3"/);
   assert.match(setting, /htmlFor=\{inputId\}/);
   assert.match(setting, /className="inline-field-action"/);
   assert.match(setting, /id=\{inputId\} className="field"/);

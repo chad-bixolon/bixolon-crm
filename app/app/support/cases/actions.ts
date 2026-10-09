@@ -24,7 +24,10 @@ async function readForm(form: FormData, actorId: number) {
   const accountId = optionalId(form, 'accountId');
   const customerNameText = String(form.get('customerNameText') ?? '').trim() || null;
   if (!customerNameText && !accountId) throw new Error('Enter a customer/end user or link a CRM Account.');
-  if (String(form.get('productSkuQuery') ?? '').trim() && !String(form.get('productSkuId') ?? '').trim()) throw new Error('Select a product from the suggestions.');
+  if (String(form.get('productSkuIdQuery') ?? '').trim() && !String(form.get('productSkuId') ?? '').trim()) throw new Error('Select a product from the suggestions.');
+  if (String(form.get('accountIdQuery') ?? '').trim() && !String(form.get('accountId') ?? '').trim()) throw new Error('Select an Account from the suggestions.');
+  if (String(form.get('contactIdQuery') ?? '').trim() && !String(form.get('contactId') ?? '').trim()) throw new Error('Select a Contact from the suggestions.');
+  if (String(form.get('purchasedFromAccountIdQuery') ?? '').trim() && !String(form.get('purchasedFromAccountId') ?? '').trim()) throw new Error('Select a Purchased From Account from the suggestions.');
   if (String(form.get('assignedToId') ?? '') && !optionalId(form, 'assignedToId')) throw new Error('Select an eligible Support Rep.');
   return { customerNameText, accountId, contactId: optionalId(form, 'contactId'), subject: String(form.get('subject') ?? '').trim(), description: String(form.get('description') ?? '').trim(), purchaseSourceText: String(form.get('purchaseSourceText') ?? '').trim() || null, purchasedFromAccountId: optionalId(form, 'purchasedFromAccountId'), status, priority, categoryId: optionalId(form, 'categoryId'), assignedToId: optionalId(form, 'assignedToId'), productSkuId: optionalId(form, 'productSkuId'), serialNumber: String(form.get('serialNumber') ?? '').trim() || null, source, nextFollowUpAt, resolutionSummary: String(form.get('resolutionSummary') ?? '').trim() || null };
 }
@@ -43,7 +46,7 @@ export async function saveSupportCase(id: number | null, _state: SupportFormStat
       await updateSupportCase(prisma, actor, id, patch); caseId = id;
     }
     else { const { status: _status, ...createInput } = input; void _status; const row = await createSupportCase(prisma, actor, createInput as SupportCaseInput); caseId = row.id; }
-  } catch (error) { const message = error instanceof Error ? error.message : 'Could not save Support Case.'; return { message, field: message.includes('customer/end user') ? 'customerNameText' : message.includes('product') || message.includes('Product') ? 'productSkuId' : message.includes('Support Rep') || message.includes('assignee') ? 'assignedToId' : message.includes('Contact') ? 'contactId' : message.includes('Account') ? 'accountId' : message.includes('source') ? 'source' : message.includes('follow-up') ? 'nextFollowUpAt' : undefined }; }
+  } catch (error) { const message = error instanceof Error ? error.message : 'Could not save Support Case.'; return { message, field: message.includes('customer/end user') ? 'customerNameText' : message.includes('product') || message.includes('Product') ? 'productSkuId' : message.includes('Support Rep') || message.includes('assignee') ? 'assignedToId' : message.includes('Contact') ? 'contactId' : message.includes('Purchased From Account') ? 'purchasedFromAccountId' : message.includes('Account') ? 'accountId' : message.includes('source') ? 'source' : message.includes('follow-up') ? 'nextFollowUpAt' : undefined }; }
   revalidatePath('/support/cases');
   revalidatePath(`/support/cases/${caseId}`);
   redirect(`/support/cases/${caseId}`);
