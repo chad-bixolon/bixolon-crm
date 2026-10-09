@@ -1,6 +1,7 @@
 import { Prisma, SupportCasePriority, SupportCaseSource, SupportCaseStatus, type PrismaClient } from '@prisma/client';
 import { assertPermission, can, type Actor } from './authorization';
 import { eligibleUserWhere } from './assignment-eligibility';
+import { notifySupportEvent, syncSupportNotifications } from './support-notifications';
 
 export const supportStatusLabels: Record<SupportCaseStatus, string> = {
   NEW: 'New', OPEN: 'Open', WAITING_ON_CUSTOMER: 'Waiting on Customer',
@@ -26,19 +27,20 @@ export function validSupportTransition(from: SupportCaseStatus, to: SupportCaseS
 export function supportCaseReadWhere(actor: Actor, includeArchived = false): Prisma.SupportCaseWhereInput {
   assertPermission(actor, 'support-cases.read');
   assertPermission(actor, 'accounts.read');
-  return includeArchived ? {} : { archivedAt: null };
+  const scope = can(actor, 'support-cases.write') ? {} : { accountId: { not: null } };
+  return includeArchived ? scope : { ...scope, archivedAt: null };
 }
 export type SupportCaseInput = {
-  accountId: number; contactId?: number | null; subject: string; description: string;
+  customerNameText?: string | null; accountId?: number | null; contactId?: number | null; subject: string; description: string;
   purchaseSourceText?: string | null; purchasedFromAccountId?: number | null;
   priority?: SupportCasePriority; categoryId?: number | null; assignedToId?: number | null;
   productSkuId?: number | null; serialNumber?: string | null; source: SupportCaseSource;
   nextFollowUpAt?: Date | null; resolutionSummary?: string | null;
 };
 export type SupportCasePatch = Partial<SupportCaseInput> & { status?: SupportCaseStatus };
-const writableFields = ['accountId', 'contactId', 'subject', 'description', 'purchaseSourceText', 'purchasedFromAccountId', 'priority', 'categoryId', 'assignedToId', 'productSkuId', 'serialNumber', 'source', 'nextFollowUpAt', 'resolutionSummary', 'status'] as const;
+const writableFields = ['customerNameText', 'accountId', 'contactId', 'subject', 'description', 'purchaseSourceText', 'purchasedFromAccountId', 'priority', 'categoryId', 'assignedToId', 'productSkuId', 'serialNumber', 'source', 'nextFollowUpAt', 'resolutionSummary', 'status'] as const;
 function cleanPatch(patch: SupportCasePatch): SupportCasePatch {
-  return Object.fromEntries(writableFields.filter(key => Object.prototype.hasOwnProperty.call(patch, key)).map(key => [key, key === 'purchaseSourceText' && patch[key] != null ? patch[key].trim() || null : patch[key]])) as SupportCasePatch;
+  return Object.fromEntries(writableFields.filter(key => Object.prototype.hasOwnProperty.call(patch, key)).map(key => [key, (key === 'purchaseSourceText' || key === 'customerNameText') && patch[key] != null ? patch[key].trim() || null : patch[key]])) as SupportCasePatch;
 }
 function id(value: number | null | undefined, field: string) {
   if (value != null && (!Number.isSafeInteger(value) || value < 1)) throw new Error(`Invalid ${field}.`);
@@ -52,10 +54,10 @@ function optionalText(value: string | null | undefined, field: string, max: numb
 function date(value: Date | null | undefined, field: string) {
   if (value != null && (!(value instanceof Date) || !Number.isFinite(value.getTime()))) throw new Error(`Invalid ${field}.`);
 }
-async function validateReferences(tx: Prisma.TransactionClient, data: SupportCasePatch, current?: { accountId: number; contactId: number | null; categoryId: number | null; assignedToId: number | null; productSkuId: number | null; purchasedFromAccountId: number | null }) {
+async function validateReferences(tx: Prisma.TransactionClient, data: SupportCasePatch, current?: { accountId: number | null; contactId: number | null; categoryId: number | null; assignedToId: number | null; productSkuId: number | null; purchasedFromAccountId: number | null }) {
   if (data.accountId !== undefined) {
     id(data.accountId, 'Account');
-    if (data.accountId !== current?.accountId && !await tx.account.findFirst({ where: { id: data.accountId, archivedAt: null, status: 'ACTIVE' }, select: { id: true } })) throw new Error('Choose an active Account.');
+    if (data.accountId != null && data.accountId !== current?.accountId && !await tx.account.findFirst({ where: { id: data.accountId, archivedAt: null, status: 'ACTIVE' }, select: { id: true } })) throw new Error('Choose an active Account.');
   }
   const accountId = data.accountId ?? current?.accountId;
   if (data.purchasedFromAccountId !== undefined) {
@@ -65,7 +67,7 @@ async function validateReferences(tx: Prisma.TransactionClient, data: SupportCas
   if (data.contactId !== undefined || data.accountId !== undefined) {
     const contactId = data.contactId !== undefined ? data.contactId : current?.contactId;
     id(contactId, 'Contact');
-    if (contactId != null && !await tx.contact.findFirst({ where: { id: contactId, accountId, archivedAt: null, active: true }, select: { id: true } })) throw new Error('Choose an active Contact on this Account.');
+    if (contactId != null && (!accountId || !await tx.contact.findFirst({ where: { id: contactId, accountId, archivedAt: null, active: true }, select: { id: true } }))) throw new Error('Choose an active Contact on this Account.');
   }
   if (data.categoryId !== undefined) {
     id(data.categoryId, 'category');
@@ -73,7 +75,7 @@ async function validateReferences(tx: Prisma.TransactionClient, data: SupportCas
   }
   if (data.assignedToId !== undefined) {
     id(data.assignedToId, 'assignee');
-    if (data.assignedToId != null && data.assignedToId !== current?.assignedToId && !await tx.user.findFirst({ where: { id: data.assignedToId, ...eligibleUserWhere('support-cases.write') }, select: { id: true } })) throw new Error('Choose an eligible Support assignee.');
+    if (data.assignedToId != null && data.assignedToId !== current?.assignedToId && !await tx.user.findFirst({ where: { id: data.assignedToId, ...eligibleUserWhere('support-cases.write') }, select: { id: true } })) throw new Error('Select an eligible Support Rep.');
   }
   if (data.productSkuId !== undefined) {
     id(data.productSkuId, 'Product/SKU');
@@ -87,6 +89,7 @@ function validateFields(data: SupportCasePatch) {
   if (data.source !== undefined && !Object.values(SupportCaseSource).includes(data.source)) throw new Error('Invalid source.');
   if (data.status !== undefined && !Object.values(SupportCaseStatus).includes(data.status)) throw new Error('Invalid status.');
   optionalText(data.serialNumber, 'serial number', 300);
+  optionalText(data.customerNameText, 'Customer / End User', 500);
   optionalText(data.purchaseSourceText, 'Purchased From', 500);
   optionalText(data.resolutionSummary, 'resolution summary', 20000);
   date(data.nextFollowUpAt, 'next follow-up date');
@@ -95,7 +98,7 @@ function auditValue(value: unknown): string | null {
   if (value == null) return null;
   return value instanceof Date ? value.toISOString() : String(value);
 }
-const auditFields = ['accountId', 'contactId', 'subject', 'description', 'status', 'priority', 'categoryId', 'assignedToId', 'productSkuId', 'serialNumber', 'source', 'purchaseSourceText', 'purchasedFromAccountId', 'nextFollowUpAt', 'resolvedAt', 'closedAt', 'resolutionSummary', 'archivedAt'] as const;
+const auditFields = ['customerNameText', 'accountId', 'contactId', 'subject', 'description', 'status', 'priority', 'categoryId', 'assignedToId', 'productSkuId', 'serialNumber', 'source', 'purchaseSourceText', 'purchasedFromAccountId', 'nextFollowUpAt', 'resolvedAt', 'closedAt', 'resolutionSummary', 'archivedAt'] as const;
 async function labels(tx: Prisma.TransactionClient, field: string, values: (number | null)[]) {
   const ids = values.filter((value): value is number => value != null);
   if (!ids.length) return [null, null] as const;
@@ -118,6 +121,8 @@ async function appendChanges(tx: Prisma.TransactionClient, caseId: number, actor
   }
   if (!before) events.unshift({ supportCaseId: caseId, field: 'CREATED', oldValue: null, newValue: null, oldLabel: null, newLabel: null, actorId, source });
   if (events.length) await tx.supportCaseLifecycleEvent.createMany({ data: events });
+  const stored = events.length ? await tx.supportCaseLifecycleEvent.findMany({ where: { supportCaseId: caseId }, orderBy: { id: 'desc' }, take: events.length, select: { id: true, field: true } }) : [];
+  return new Map(stored.map(event => [event.field, event.id]));
 }
 export async function createSupportCase(db: PrismaClient, actor: Actor, input: SupportCaseInput) {
   assertPermission(actor, 'support-cases.write');
@@ -127,7 +132,8 @@ export async function createSupportCase(db: PrismaClient, actor: Actor, input: S
   input = clean as SupportCaseInput;
   validateFields(input);
   id(input.accountId, 'Account');
-  if (!input.accountId || !input.subject || !input.description || !input.source) throw new Error('Account, subject, description, and source are required.');
+  if (!input.customerNameText && !input.accountId) throw new Error('Enter a customer/end user or link a CRM Account.');
+  if (!input.subject || !input.description || !input.source) throw new Error('Subject, description, and source are required.');
   return db.$transaction(async tx => {
     await validateReferences(tx, input);
     const openedAt = new Date();
@@ -135,7 +141,9 @@ export async function createSupportCase(db: PrismaClient, actor: Actor, input: S
     const rows = await tx.$queryRaw<{ lastNumber: number }[]>`INSERT INTO "SupportCaseNumberCounter" ("year", "lastNumber") VALUES (${year}, 1) ON CONFLICT ("year") DO UPDATE SET "lastNumber" = "SupportCaseNumberCounter"."lastNumber" + 1 RETURNING "lastNumber"`;
     const caseNumber = `BXS-${year}-${String(rows[0].lastNumber).padStart(6, '0')}`;
     const row = await tx.supportCase.create({ data: { ...input, priority: input.priority ?? 'NORMAL', caseNumber, openedAt, createdById: actor.id, updatedById: actor.id } });
-    await appendChanges(tx, row.id, actor.id, null, row as unknown as Record<string, unknown>);
+    const events = await appendChanges(tx, row.id, actor.id, null, row as unknown as Record<string, unknown>);
+    if (row.assignedToId) await notifySupportEvent(tx, row.id, row.assignedToId, events.get(row.priority === 'CRITICAL' ? 'priority' : 'assignedToId') ?? 0, row.priority === 'CRITICAL' ? 'CRITICAL' : 'ASSIGNED', row.caseNumber);
+    await syncSupportNotifications(tx, row.id, openedAt);
     return row;
   });
 }
@@ -151,6 +159,7 @@ export async function updateSupportCase(db: PrismaClient, actor: Actor, caseId: 
     const before = await tx.supportCase.findUnique({ where: { id: caseId } });
     if (!before) throw new Error('Case not found.');
     if (before.archivedAt) throw new Error('Restore the case before editing.');
+    if (!(patch.customerNameText === undefined ? before.customerNameText : patch.customerNameText) && !(patch.accountId === undefined ? before.accountId : patch.accountId)) throw new Error('Enter a customer/end user or link a CRM Account.');
     if (patch.status !== undefined && !validSupportTransition(before.status, patch.status)) throw new Error('Invalid status transition.');
     await validateReferences(tx, patch, before);
     const next = { ...patch } as SupportCasePatch & { resolvedAt?: Date | null; closedAt?: Date | null };
@@ -162,7 +171,12 @@ export async function updateSupportCase(db: PrismaClient, actor: Actor, caseId: 
     const changed = Object.entries(next).some(([key, value]) => auditValue(value) !== auditValue((before as unknown as Record<string, unknown>)[key]));
     if (!changed) return before;
     const after = await tx.supportCase.update({ where: { id: caseId }, data: { ...next, updatedById: actor.id } });
-    await appendChanges(tx, caseId, actor.id, before as unknown as Record<string, unknown>, after as unknown as Record<string, unknown>);
+    const events = await appendChanges(tx, caseId, actor.id, before as unknown as Record<string, unknown>, after as unknown as Record<string, unknown>);
+    const critical = after.priority === 'CRITICAL' && (before.priority !== 'CRITICAL' || before.assignedToId !== after.assignedToId);
+    if (critical) await notifySupportEvent(tx, caseId, after.assignedToId, events.get(before.priority !== 'CRITICAL' ? 'priority' : 'assignedToId') ?? 0, 'CRITICAL', after.caseNumber);
+    else if (after.assignedToId && before.assignedToId !== after.assignedToId) await notifySupportEvent(tx, caseId, after.assignedToId, events.get('assignedToId') ?? 0, 'ASSIGNED', after.caseNumber);
+    if (['RESOLVED','CLOSED'].includes(before.status) && ['NEW','OPEN','WAITING_ON_CUSTOMER','WAITING_ON_INTERNAL'].includes(after.status)) await notifySupportEvent(tx, caseId, after.assignedToId, events.get('status') ?? 0, 'REOPENED', after.caseNumber);
+    await syncSupportNotifications(tx, caseId);
     return after;
   });
 }
@@ -179,6 +193,7 @@ async function setArchived(db: PrismaClient, actor: Actor, caseId: number, archi
     if (Boolean(before.archivedAt) === archived) return before;
     const after = await tx.supportCase.update({ where: { id: caseId }, data: { archivedAt: archived ? new Date() : null, updatedById: actor.id } });
     await appendChanges(tx, caseId, actor.id, before as unknown as Record<string, unknown>, after as unknown as Record<string, unknown>, archived ? 'ARCHIVE' : 'RESTORE');
+    await syncSupportNotifications(tx, caseId);
     return after;
   });
 }
@@ -203,7 +218,7 @@ export function supportCaseListWhere(actor: Actor, options: SupportCaseListOptio
   if (options.openedFrom || options.openedTo) where.openedAt = { ...(options.openedFrom ? { gte: options.openedFrom } : {}), ...(options.openedTo ? { lt: options.openedTo } : {}) };
   const q = options.search?.trim().slice(0, 100);
   if (q && /^(BXS|SUP)-\d{4}-\d{6}$/i.test(q)) where.caseNumber = q.toUpperCase();
-  else if (q) { const parts = q.split(/\s+/); where.OR = [{ caseNumber: { contains: q, mode: 'insensitive' } }, { subject: { contains: q, mode: 'insensitive' } }, { serialNumber: { contains: q, mode: 'insensitive' } }, { account: { name: { contains: q, mode: 'insensitive' } } }, { contact: { OR: [{ firstName: { contains: q, mode: 'insensitive' } }, { lastName: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }, ...(parts.length > 1 ? [{ AND: [{ firstName: { contains: parts[0], mode: 'insensitive' as const } }, { lastName: { contains: parts.slice(1).join(' '), mode: 'insensitive' as const } }] }] : [])] } }]; }
+  else if (q) { const parts = q.split(/\s+/); where.OR = [{ caseNumber: { contains: q, mode: 'insensitive' } }, { subject: { contains: q, mode: 'insensitive' } }, { serialNumber: { contains: q, mode: 'insensitive' } }, { customerNameText: { contains: q, mode: 'insensitive' } }, { account: { name: { contains: q, mode: 'insensitive' } } }, { contact: { OR: [{ firstName: { contains: q, mode: 'insensitive' } }, { lastName: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }, ...(parts.length > 1 ? [{ AND: [{ firstName: { contains: parts[0], mode: 'insensitive' as const } }, { lastName: { contains: parts.slice(1).join(' '), mode: 'insensitive' as const } }] }] : [])] } }]; }
   return where;
 }
 export function supportCaseListOrder(sort: SupportCaseListOptions['sort']): Prisma.SupportCaseOrderByWithRelationInput[] {

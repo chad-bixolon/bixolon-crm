@@ -16,7 +16,7 @@ const actor = role => ({ id: role === 'ADMIN' ? 1 : 2, role, active: true, archi
 const input = { accountId: 11, subject: 'Printer stops', description: 'Error at startup', source: 'PHONE' };
 function fixture() {
   const sequenceByYear = new Map(); let nextId = 0;
-  const rows = new Map(), events = [];
+  const rows = new Map(), events = [], notifications = [];
   const tx = {
     account: { findFirst: async ({ where }) => [11, 21, 22].includes(where.id) && where.archivedAt === null && where.status === 'ACTIVE' ? { id: where.id } : null, findMany: async () => [{ id: 11, name: 'Customer' }, { id: 21, name: 'CDW Corporation' }, { id: 22, name: 'POSGuys' }] },
     contact: { findFirst: async ({ where }) => where.id === 12 && where.accountId === 11 ? { id: 12 } : null, findMany: async () => [{ id: 12, firstName: 'Jane', lastName: 'Smith' }] },
@@ -35,13 +35,14 @@ function fixture() {
       update: async ({ where, data }) => { const row = { ...rows.get(where.id), ...data }; rows.set(row.id, row); return row; },
       findFirst: async ({ where }) => {
         const row = rows.get(where.id) ?? null;
-        return where.archivedAt === null && row?.archivedAt ? null : row;
+        return where.archivedAt === null && row?.archivedAt || where.accountId?.not === null && row?.accountId == null ? null : row;
       },
       findMany: async () => [...rows.values()], count: async () => rows.size,
     },
-    supportCaseLifecycleEvent: { createMany: async ({ data }) => { events.push(...data); } },
+    supportCaseLifecycleEvent: { createMany: async ({ data }) => { for(const event of data) events.push({ ...event, id: events.length + 1 }); }, findMany: async ({ take }) => events.slice(-take).reverse() },
+    notification: { findMany: async () => [], createMany: async ({data}) => {notifications.push(...data);return { count: data.length };}, updateMany: async () => ({ count: 0 }) },
   };
-  return { db: { ...tx, $transaction: async fn => fn(tx) }, rows, events };
+  return { db: { ...tx, $transaction: async fn => fn(tx) }, rows, events, notifications };
 }
 async function withFixedDate(iso, callback) {
   const OriginalDate = globalThis.Date;
@@ -83,6 +84,16 @@ test('counter SQL assigns distinct numbers across concurrent creations', async (
   assert.match(migration, /CREATE UNIQUE INDEX "SupportCase_caseNumber_key"/);
   assert.match(migration, /support_case_immutable_number/);
   assert.match(migration, /support_case_event_append_only/);
+});
+test('Support lifecycle sends one Critical assignment notice and a reopen notice to its assignee', async () => {
+  const f = fixture();
+  const critical = await service.createSupportCase(f.db, actor('SUPPORT'), { ...input, assignedToId: 2, priority: 'CRITICAL' });
+  assert.deepEqual(f.notifications.map(n => n.type), ['SUPPORT_CRITICAL']);
+  assert.equal(f.notifications[0].userId, 2);
+  assert.match(f.notifications[0].sourceKey, new RegExp(`^SUPPORT:${critical.id}:2:CRITICAL:`));
+  await service.changeSupportCaseStatus(f.db, actor('SUPPORT'), critical.id, 'RESOLVED');
+  await service.changeSupportCaseStatus(f.db, actor('SUPPORT'), critical.id, 'OPEN');
+  assert.deepEqual(f.notifications.map(n => n.type), ['SUPPORT_CRITICAL','SUPPORT_REOPENED']);
 });
 test('counter resets each UTC year without changing prior numbers', async () => {
   const f = fixture();
@@ -147,7 +158,23 @@ test('read services gate by role and preserve Account visibility policy', async 
   await assert.rejects(service.archiveSupportCase(f.db, actor('MARKETING_MANAGER'), row.id), /Access denied/);
   await assert.rejects(service.restoreSupportCase(f.db, actor('READ_ONLY'), row.id), /Access denied/);
   await assert.rejects(service.getSupportCaseById(f.db, { ...actor('SUPPORT'), active: false }, row.id), /Access denied/);
-  assert.deepEqual(service.supportCaseReadWhere(actor('SALES')), { archivedAt: null });
+  assert.deepEqual(service.supportCaseReadWhere(actor('SALES')), { accountId: { not: null }, archivedAt: null });
+});
+test('unresolved customer can be opened and later linked without losing intake text', async () => {
+  const f = fixture();
+  await assert.rejects(service.createSupportCase(f.db, actor('SUPPORT'), { ...input, accountId: null }), /Enter a customer\/end user/);
+  const raw = await service.createSupportCase(f.db, actor('SUPPORT'), { ...input, accountId: null, customerNameText: '  ABC Restaurant Group  ' });
+  assert.equal(raw.customerNameText, 'ABC Restaurant Group');
+  assert.equal(raw.accountId, null);
+  assert.equal(raw.contactId, null);
+  assert.equal((await service.getSupportCaseById(f.db, actor('SALES'), raw.id)), null);
+  assert.equal((await service.getSupportCaseById(f.db, actor('SUPPORT'), raw.id)).id, raw.id);
+  await service.updateSupportCase(f.db, actor('SUPPORT'), raw.id, { accountId: 11 });
+  assert.equal(f.rows.get(raw.id).customerNameText, 'ABC Restaurant Group');
+  assert.equal(f.events.find(e => e.field === 'customerNameText').newValue, 'ABC Restaurant Group');
+  assert.equal(f.events.find(e => e.field === 'accountId').newLabel, 'Customer');
+  assert.equal((await service.getSupportCaseById(f.db, actor('SALES'), raw.id)).id, raw.id);
+  await assert.rejects(service.updateSupportCase(f.db, actor('SUPPORT'), raw.id, { accountId: null, customerNameText: null }), /Enter a customer\/end user/);
 });
 test('Account changes require a Contact on the new Account; status transitions are conservative', async () => {
   const f = fixture(); const row = await service.createSupportCase(f.db, actor('SUPPORT'), { ...input, contactId: 12 });

@@ -28,7 +28,7 @@ test('case list combines server filters, search, archive and database order', as
   assert.equal(where.assignedToId, 2); assert.equal(where.status, 'OPEN'); assert.equal(where.priority, 'HIGH'); assert.equal(where.categoryId, 3);
   assert.deepEqual(where.openedAt, { gte: from, lt: to });
   assert.equal(where.account.name.contains, 'Acme'); assert.equal(where.productSku.partNumber.contains, 'SRP');
-  assert.equal(where.OR.length, 5);
+  assert.equal(where.OR.length, 6);
   assert.equal(supportCaseListWhere(actor('SUPPORT'), { search: 'bxs-2026-000001' }).caseNumber, 'BXS-2026-000001');
   assert.deepEqual(supportCaseListWhere(actor('ADMIN'), { archive: 'archived' }).archivedAt, { not: null });
   assert.equal(supportCaseListWhere(actor('ADMIN'), { archive: 'all' }).archivedAt, undefined);

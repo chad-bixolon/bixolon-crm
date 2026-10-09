@@ -8,7 +8,7 @@ import { notificationBulkActionAvailability, notificationPage, notificationViews
 import type { NotificationSeverity } from '@prisma/client';
 
 const labels: Record<NotificationView, string> = { active: 'Active', unread: 'Unread', all: 'History', dismissed: 'Dismissed', resolved: 'Resolved' };
-const categories: Record<NotificationCategory, string> = { all: 'All', 'price-exceptions': 'Price Exceptions', tasks: 'Tasks', opportunities: 'Opportunities' };
+const categories: Record<NotificationCategory, string> = { all: 'All', 'price-exceptions': 'Price Exceptions', tasks: 'Tasks', opportunities: 'Opportunities', support: 'Support' };
 const emptyStates: Record<NotificationView, [string, string]> = {
   active: ['No active notifications', "You don't have anything requiring attention right now."],
   unread: ['No unread notifications', "You're caught up on unread notifications."],
@@ -32,7 +32,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
   const [emptyTitle, emptyDescription] = emptyStates[view];
 
   return <Content>
-    <PageHeader eyebrow="Notifications" title="Notification Center" description="Stay on top of tasks, opportunities, and price exceptions that need your attention." action={<div className="page-header-actions"><form action={markAllRead}><button className="btn-secondary" disabled={!bulk.canMarkAllRead}>Mark all read</button></form><form action={dismissAllRead}><button className="btn-secondary" disabled={!bulk.canDismissRead}>Dismiss read</button></form></div>}/>
+    <PageHeader eyebrow="Notifications" title="Notification Center" description="Stay on top of tasks, opportunities, price exceptions, and Support Cases that need your attention." action={<div className="page-header-actions"><form action={markAllRead}><button className="btn-secondary" disabled={!bulk.canMarkAllRead}>Mark all read</button></form><form action={dismissAllRead}><button className="btn-secondary" disabled={!bulk.canDismissRead}>Dismiss read</button></form></div>}/>
     <section className="panel filter-panel mb-4 space-y-3" aria-label="Notification filters">
       <div className="flex flex-wrap items-start gap-2 sm:gap-3"><h2 className="w-full text-xs font-semibold uppercase tracking-wide text-slate-600 sm:w-20 sm:pt-3">Status</h2><nav aria-label="Notification state" className="flex min-w-0 flex-1 flex-wrap gap-2">{notificationViews.map(option => <Link key={option} href={href(1, option)} aria-current={view === option ? 'page' : undefined} className={filterClass(view === option)}>{view === option && <span aria-hidden="true">✓</span>}{labels[option]}</Link>)}</nav></div>
       <div className="flex flex-wrap items-start gap-2 sm:gap-3"><h2 className="w-full text-xs font-semibold uppercase tracking-wide text-slate-600 sm:w-20 sm:pt-3">Category</h2><nav aria-label="Notification category" className="flex min-w-0 flex-1 flex-wrap gap-2">{notificationCategories.map(option => <Link key={option} href={href(1, view, option)} aria-current={category === option ? 'page' : undefined} className={filterClass(category === option)}>{category === option && <span aria-hidden="true">✓</span>}{categories[option]}</Link>)}</nav></div>

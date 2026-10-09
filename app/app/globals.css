@@ -10,7 +10,7 @@ input, select, button { font: inherit; }
 .field:focus-visible { outline: 2px solid var(--control-focus); outline-offset: 1px; }
 .field:disabled { cursor: not-allowed; border-color: #cbd5e1; background: #f1f5f9; color: #64748b; }
 .label { display: block; margin-bottom: .4rem; font-size: .875rem; font-weight: 600; color: #334155; }
-.search-results-popover { position: fixed; z-index: 1000; box-sizing: border-box; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: .375rem; background: white; box-shadow: 0 10px 15px -3px rgb(0 0 0 / .1); }
+.search-results-popover { position: fixed; z-index: 1000; box-sizing: border-box; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; border: 1px solid #cbd5e1; border-radius: .375rem; background: white; box-shadow: 0 10px 15px -3px rgb(0 0 0 / .1); }
 .search-results-option { display: block; box-sizing: border-box; width: 100%; min-width: 0; padding: .375rem .625rem; text-align: left; font-size: .8125rem; line-height: 1.25rem; }
 .search-results-option:focus-visible { outline: 2px solid #ea580c; outline-offset: -2px; }
 .search-results-option-single { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -2,6 +2,7 @@ import type { NotificationEntityType } from '@prisma/client';
 
 export const notificationEntityLabels: Record<NotificationEntityType, string> = {
   PRICE_EXCEPTION: 'Price Exception',
+  SUPPORT_CASE: 'Support Case',
   TASK: 'Task',
   OPPORTUNITY: 'Opportunity',
   DEMO: 'Demo',

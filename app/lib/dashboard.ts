@@ -6,19 +6,20 @@ import { engagementAccountWhere } from './engagement';
 import { dashboardOpenTaskWhere } from './work';
 import { canViewSalesLeadQueue } from './trade-show-leads';
 
-export type DashboardSection = 'forecast' | 'reps' | 'closing' | 'stage' | 'category' | 'stale' | 'tasks' | 'activities' | 'tradeShowLeads' | 'priceExceptions' | 'admin' | 'marketing';
+export type DashboardSection = 'forecast' | 'reps' | 'closing' | 'stage' | 'category' | 'stale' | 'tasks' | 'activities' | 'tradeShowLeads' | 'priceExceptions' | 'admin' | 'marketing' | 'support';
 export type DashboardView = { title: string; sections: readonly DashboardSection[] };
 
-export const dashboardWidgetKeys = ['FORECAST_SUMMARY','FORECAST_ATTENTION','FORECAST_MOVEMENT','SALES_PLAN_STATUS','PIPELINE_BY_REP','PIPELINE_BY_STAGE','PIPELINE_BY_PRODUCT_CATEGORY','CLOSING_OPPORTUNITIES','STALE_ACCOUNTS','OVERDUE_TASKS','RECENT_ACTIVITY','MY_TRADE_SHOW_LEADS','MY_DAY','EXPIRING_PRICE_EXCEPTIONS','MARKETING_SUMMARY','MARKETING_ACTIVITY','ADMIN_SHORTCUTS'] as const;
+export const dashboardWidgetKeys = ['FORECAST_SUMMARY','FORECAST_ATTENTION','FORECAST_MOVEMENT','SALES_PLAN_STATUS','PIPELINE_BY_REP','PIPELINE_BY_STAGE','PIPELINE_BY_PRODUCT_CATEGORY','CLOSING_OPPORTUNITIES','STALE_ACCOUNTS','OVERDUE_TASKS','RECENT_ACTIVITY','MY_TRADE_SHOW_LEADS','MY_DAY','EXPIRING_PRICE_EXCEPTIONS','MARKETING_SUMMARY','MARKETING_ACTIVITY','ADMIN_SHORTCUTS','SUPPORT_MY_OPEN','SUPPORT_PRIORITY','SUPPORT_OVERDUE','SUPPORT_OLDEST'] as const;
 export type DashboardWidgetKey = typeof dashboardWidgetKeys[number];
 export type DashboardWidgetSize = 'HALF'|'FULL';
 export type SavedReportWidgetStyle = 'KPI'|'COMPACT_TABLE'|'GROUPED_SUMMARY';
-export const dashboardPresentationSectionKeys = ['FORECAST','PIPELINE','ATTENTION','MARKETING','ADMINISTRATION','PINNED_REPORTS'] as const;
+export const dashboardPresentationSectionKeys = ['FORECAST','PIPELINE','ATTENTION','SUPPORT','MARKETING','ADMINISTRATION','PINNED_REPORTS'] as const;
 export type DashboardPresentationSection = typeof dashboardPresentationSectionKeys[number];
 export const dashboardPresentationSectionTitles: Record<DashboardPresentationSection,string> = {
   FORECAST:'Forecast Summary',
   PIPELINE:'Pipeline & Forecast',
   ATTENTION:'Attention & Activity',
+  SUPPORT:'Support',
   MARKETING:'Marketing',
   ADMINISTRATION:'Administration',
   PINNED_REPORTS:'Pinned Reports',
@@ -47,6 +48,10 @@ export const dashboardWidgetRegistry: Record<DashboardWidgetKey,WidgetDefinition
   MARKETING_SUMMARY:{title:'Marketing Summary',description:'Marketing-safe Account and Trade Show lead overview.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'marketing',presentationSection:'MARKETING',roles:['MARKETING_MANAGER']},
   MARKETING_ACTIVITY:{title:'Marketing Activity',description:'Campaign activity and Trade Show leads needing action.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'marketing',presentationSection:'ATTENTION',roles:['ADMIN','MARKETING_MANAGER'],drillDown:'/marketing/campaigns'},
   ADMIN_SHORTCUTS:{title:'Administration Shortcuts',description:'Quick access to common Administration areas.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'admin',presentationSection:'ADMINISTRATION',roles:['ADMIN']},
+  SUPPORT_MY_OPEN:{title:'My Open Cases',description:'Your active Support Cases by status.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN'],drillDown:'/reports/support-cases'},
+  SUPPORT_PRIORITY:{title:'High / Critical Cases',description:'High priority Support Cases needing attention.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN'],drillDown:'/reports/support-cases'},
+  SUPPORT_OVERDUE:{title:'Overdue Follow-ups',description:'Support follow-ups due before today.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN'],drillDown:'/reports/support-cases?followUp=overdue'},
+  SUPPORT_OLDEST:{title:'Oldest Open Cases',description:'Longest active Support Cases.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN'],drillDown:'/reports/support-cases?sort=oldest'},
 };
 
 export function dashboardItemPresentationSection(item:DashboardLayoutItem):DashboardPresentationSection {
@@ -56,17 +61,17 @@ export function dashboardItemPresentationSection(item:DashboardLayoutItem):Dashb
 // A role chooses the default presentation. Authorization still decides which
 // data and actions are accessible; future role-view settings must not grant access.
 const views: Record<UserRole, DashboardView> = {
-  SUPPORT: { title: 'Support overview', sections: [] },
+  SUPPORT: { title: 'Support overview', sections: ['support'] },
   SALES: { title: 'My sales dashboard', sections: ['forecast','closing','stale','tasks','activities','tradeShowLeads','priceExceptions','stage'] },
   SALES_MANAGER: { title: 'Team sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','priceExceptions','stage','category'] },
-  ADMIN: { title: 'Sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','priceExceptions','stage','category','admin','marketing'] },
+  ADMIN: { title: 'Sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','priceExceptions','stage','category','admin','marketing','support'] },
   READ_ONLY: { title: 'Sales overview', sections: ['forecast','reps','closing','stage','category','priceExceptions'] },
   MARKETING_MANAGER: { title: 'Marketing overview', sections: ['tasks','marketing'] },
 };
 
 const item=(key:DashboardWidgetKey,size?:DashboardWidgetSize):DashboardBuiltinItem=>({kind:'BUILTIN',key,size:size??dashboardWidgetRegistry[key].defaultSize});
 export const systemDashboardDefaults: Record<UserRole,DashboardLayoutConfiguration> = {
-  SUPPORT:{version:1,items:[]},
+  SUPPORT:{version:1,items:[item('SUPPORT_MY_OPEN'),item('SUPPORT_PRIORITY'),item('SUPPORT_OVERDUE'),item('SUPPORT_OLDEST')]},
   SALES:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('FORECAST_MOVEMENT'),item('SALES_PLAN_STATUS'),item('PIPELINE_BY_STAGE'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('MY_DAY'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('MY_TRADE_SHOW_LEADS'),item('EXPIRING_PRICE_EXCEPTIONS')]},
   SALES_MANAGER:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('FORECAST_MOVEMENT'),item('SALES_PLAN_STATUS'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('MY_DAY'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('EXPIRING_PRICE_EXCEPTIONS')]},
   ADMIN:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('FORECAST_MOVEMENT'),item('SALES_PLAN_STATUS'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('MY_DAY'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('ADMIN_SHORTCUTS')]},
@@ -77,6 +82,7 @@ export const systemDashboardDefaults: Record<UserRole,DashboardLayoutConfigurati
 export function canUseDashboardWidget(actor:Actor,key:DashboardWidgetKey) {
   const definition=dashboardWidgetRegistry[key];
   return definition.roles.includes(actor.role)&&canShowDashboardSection(actor,definition.section)
+    &&(definition.section!=='support'||can(actor,'support-cases.read'))
     &&(key!=='EXPIRING_PRICE_EXCEPTIONS'||(can(actor,'pricing.read')&&can(actor,'sales.read')))
     &&(key!=='SALES_PLAN_STATUS'||can(actor,'sales-plan.read'));
 }
@@ -143,6 +149,7 @@ export function canShowDashboardSection(actor: Actor, section: DashboardSection)
   if (section === 'stale') return canViewBuiltInReport(actor, 'ACCOUNT_ENGAGEMENT');
   if (section === 'tasks' || section === 'activities') return can(actor, 'tasks.read');
   if (section === 'tradeShowLeads') return canViewSalesLeadQueue(actor);
+  if (section === 'support') return can(actor, 'support-cases.read');
   if (section === 'admin') return can(actor, 'users.manage');
   return can(actor, 'marketing.read') && can(actor, 'accounts.read');
 }

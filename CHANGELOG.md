@@ -6,6 +6,10 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Support Cases now retain the reported Customer / End User without requiring a CRM Account. Optional Account linking, complete failed-save form state, and the shared scrollable Product / SKU popover improve intake.
+
+- Added Support dashboards, reporting, Excel export, and in-app case notifications.
+
 - Added Purchased From capture on Support Cases with optional CRM Account normalization for channel reporting.
 
 - Integrated Support Cases with Accounts, Contacts, Activities, Tasks, Notes, and a unified case timeline.

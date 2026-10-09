@@ -37,7 +37,7 @@ export async function openNotification(form: FormData) {
   const actor = await currentUser();
   const id = Number(form.get('id'));
   const row = await prisma.notification.findFirst({ where: { id, userId: actor.id }, select: { actionUrl: true, entityType: true, entityId: true } });
-  const prefix = row?.entityType === 'PRICE_EXCEPTION' ? '/price-exceptions' : row?.entityType === 'TASK' ? '/tasks' : row?.entityType === 'OPPORTUNITY' ? '/opportunities' : null;
+  const prefix = row?.entityType === 'PRICE_EXCEPTION' ? '/price-exceptions' : row?.entityType === 'TASK' ? '/tasks' : row?.entityType === 'OPPORTUNITY' ? '/opportunities' : row?.entityType === 'SUPPORT_CASE' ? '/support/cases' : null;
   if (!row || !prefix || row.actionUrl !== `${prefix}/${row.entityId}`) redirect('/notifications');
   const allowed = await updateNotification(prisma, actor, id, 'read');
   if (!allowed) redirect('/notifications');

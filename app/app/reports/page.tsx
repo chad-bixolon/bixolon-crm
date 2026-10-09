@@ -7,6 +7,7 @@ import { currentUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { canAccessReports, canEditReportDefinition, getCreatableReportTypes, getVisibleBuiltInReports, getVisibleReportTypes, reportRegistry, savedReportWhere, type BuiltInReportType } from '@/lib/reporting';
 import { canViewMarketingReports } from '@/lib/marketing-attribution-report';
+import { can } from '@/lib/authorization';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,7 +85,7 @@ const builtInGroups: { title: string; cards: BuiltInCard[] }[] = [
 export default async function ReportsPage({searchParams}:{searchParams:Promise<{view?:string}>}) {
   const actor = await currentUser();
   const archivedView=(await searchParams).view==='archived';
-  if (!canAccessReports(actor)) notFound();
+  if (!canAccessReports(actor) && !can(actor,'support-cases.read')) notFound();
   const builtIns = new Set(getVisibleBuiltInReports(actor));
   const visibleReportTypes = getVisibleReportTypes(actor);
   const creatableReportTypes = getCreatableReportTypes(actor);
@@ -95,6 +96,7 @@ export default async function ReportsPage({searchParams}:{searchParams:Promise<{
 
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.reports} title="Reports" description="Create, save, and review reports using current SalesHub data." action={creatableReportTypes.length ? <Link className="btn-primary" href={creatableReportTypes.includes('PIPELINE')?'/reports/new':'/reports/new?reportType=TRADE_SHOW'}>Create Report</Link> : undefined} />
+    {can(actor,'support-cases.read')&&<section className="mb-6"><Link className="panel block p-4" href="/reports/support-cases"><h2 className="text-lg font-semibold">Support Cases Report</h2><p className="text-sm text-slate-600">Review case load, aging, follow-ups, Purchased From, and resolution.</p></Link></section>}
     {marketingReports&&<section className="panel mb-6 p-5"><h2 className="text-lg font-semibold">Marketing</h2><div className="mt-3 grid gap-3 sm:grid-cols-2"><Link className="rounded-md border p-4 hover:border-orange-400" href="/reports/trade-shows"><strong>Trade Show Report</strong><p className="mt-1 text-sm text-slate-600">Review event leads and follow-up.</p></Link><Link className="rounded-md border p-4 hover:border-orange-400" href="/reports/marketing-attribution"><strong>Marketing Attribution</strong><p className="mt-1 text-sm text-slate-600">Review recorded Campaign Influence activity.</p></Link><Link className="rounded-md border p-4 hover:border-orange-400" href="/reports/lead-sources"><strong>Lead Sources</strong><p className="mt-1 text-sm text-slate-600">Count unique prospects by first-touch source.</p></Link></div></section>}
     {visibleReportTypes.includes('PIPELINE')&&<section className="-mt-1 mb-6">
       <Link className="group flex flex-col gap-3 rounded-lg border border-orange-200 bg-orange-50/70 p-4 transition-colors hover:border-orange-400 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600 sm:flex-row sm:items-center sm:justify-between" href="/reports/forecast">

@@ -28,7 +28,7 @@ Module._load = function(specifier, parent, isMain) {
   if (specifier === '@/lib/prisma') return { prisma: {} };
   if (specifier === '@/lib/notifications') return {
     notificationViews: ['active', 'unread', 'all', 'dismissed', 'resolved'],
-    notificationCategories: ['all', 'price-exceptions', 'tasks', 'opportunities'],
+    notificationCategories: ['all', 'price-exceptions', 'tasks', 'opportunities', 'support'],
     notificationBulkActionAvailability: async () => availability,
     notificationPage: async (_db, _actor, ...args) => { requested = args; return { rows: [], page: 1, pages: 1 }; },
   };
@@ -43,7 +43,7 @@ const render = async params => renderToStaticMarkup(await NotificationsPage({ se
 test('Notification Center groups server filters and uses polished wording', async () => {
   const html = await render({ view: 'active' });
   assert.match(html, /<p>Notifications<\/p><h1>Notification Center<\/h1>/);
-  assert.match(html, /Stay on top of tasks, opportunities, and price exceptions that need your attention\./);
+  assert.match(html, /Stay on top of tasks, opportunities, price exceptions, and Support Cases that need your attention\./);
   assert.match(html, /aria-label="Notification filters"/);
   assert.match(html, />Status<\/h2>.*aria-label="Notification state"/);
   assert.match(html, />Category<\/h2>.*aria-label="Notification category"/);

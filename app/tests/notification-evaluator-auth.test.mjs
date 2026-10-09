@@ -29,6 +29,7 @@ Module._load = function (name, parent, isMain) {
   if (name === '@/lib/prisma') return { prisma: {} };
   if (name === '@/lib/pe-notification-evaluator') return { evaluatePeNotifications: async () => { evaluations++; return { evaluated: 1, created: 0, resolved: 0 }; } };
   if (name === '@/lib/work-notification-evaluator') return { evaluateWorkNotifications: async () => ({ evaluated: { tasks: 0, opportunities: 0 }, created: { tasks: 0, opportunities: 0 }, resolved: { tasks: 0, opportunities: 0 } }) };
+  if (name === '@/lib/support-notifications') return { evaluateSupportNotifications: async () => ({ evaluated: 0, created: 0, resolved: 0 }) };
   return originalLoad.call(this, name, parent, isMain);
 };
 let proxy, config, POST;
@@ -87,7 +88,7 @@ test('evaluator requires its own Bearer secret, including for a browser session'
     process.env.NOTIFICATION_EVALUATOR_SECRET = secret;
     const response = await dispatch(evaluatorPath, { authorization: `Bearer ${secret}` });
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { evaluated: { priceExceptions: 1, tasks: 0, opportunities: 0 }, created: { priceExceptions: 0, tasks: 0, opportunities: 0 }, resolved: { priceExceptions: 0, tasks: 0, opportunities: 0 }, totals: { evaluated: 1, created: 0, resolved: 0 } });
+    assert.deepEqual(await response.json(), { evaluated: { priceExceptions: 1, tasks: 0, opportunities: 0, supportCases: 0 }, created: { priceExceptions: 0, tasks: 0, opportunities: 0, supportCases: 0 }, resolved: { priceExceptions: 0, tasks: 0, opportunities: 0, supportCases: 0 }, totals: { evaluated: 1, created: 0, resolved: 0 } });
     assert.equal(evaluations, 1);
   } finally {
     if (prior === undefined) delete process.env.NOTIFICATION_EVALUATOR_SECRET;

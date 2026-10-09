@@ -30,6 +30,7 @@ export function permissionForPath(path: string): Permission | null {
   if (path.startsWith('/trade-shows')) return 'trade-shows.read';
   if (path.startsWith('/reports/engagement') || path.startsWith('/reports/new')) return 'sales.write';
   if (path.startsWith('/reports/price-exceptions-expiring')) return 'pricing.read';
+  if (path.startsWith('/reports/support-cases')) return 'support-cases.read';
   if (path.startsWith('/reports')) return 'sales.read';
   if (path.startsWith('/administration')) return 'users.manage';
   if (path.startsWith('/integrations')) return 'integrations.manage';
@@ -58,7 +59,7 @@ export function routeAccess(path: string, actor: Actor | null): 'sign-in' | 'den
   // without granting access to Pipeline or other sales reports.
   if (path === '/reports' || path === '/reports/trade-shows' || /^\/reports\/\d+$/.test(path) || path === '/reports/new') {
     if (path === '/reports/new' && actor.role === 'READ_ONLY') return 'denied';
-    return can(actor, 'sales.read') || can(actor, 'trade-shows.read') ? 'allowed' : 'denied';
+    return can(actor, 'sales.read') || can(actor, 'trade-shows.read') || can(actor, 'support-cases.read') ? 'allowed' : 'denied';
   }
   const read = permissionForPath(path);
   if (read && !can(actor, read)) return 'denied';
