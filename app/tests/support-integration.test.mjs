@@ -72,7 +72,7 @@ test('Account and Contact case queries are scoped and bounded',async()=>{
 
 test('timeline merges business labeled sources in time order and caps source queries',async()=>{
   const at=day=>new Date(`2026-10-${day}T12:00:00Z`), calls=[];
-  const db={supportCaseLifecycleEvent:{findMany:async args=>(calls.push(args),[{id:1,supportCaseId:12,field:'CREATED',oldValue:null,newValue:null,oldLabel:null,newLabel:null,actorId:7,source:'CRM',createdAt:at('01'),actor:{firstName:'Sam',lastName:'Rep'}}])},activity:{findMany:async args=>(calls.push(args),[{id:2,activityDate:at('02'),subject:'Phone call',description:null,activityType:{name:'Call'},user:{firstName:'Sam',lastName:'Rep'},contacts:[]}])},task:{findMany:async args=>(calls.push(args),[{id:3,createdAt:at('03'),subject:'Send firmware',status:'COMPLETED',dueDate:at('04'),completedAt:at('04'),assignedTo:{firstName:'Sam',lastName:'Rep'}}])},note:{findMany:async args=>(calls.push(args),[{id:4,createdAt:at('05'),body:'Engineering reviewing logs',createdBy:{firstName:'Sam',lastName:'Rep'}}])}};
+  const db={supportCaseLifecycleEvent:{findMany:async args=>(calls.push(args),[{id:1,supportCaseId:12,field:'CREATED',oldValue:null,newValue:null,oldLabel:null,newLabel:null,actorId:7,source:'CRM',createdAt:at('01'),actor:{firstName:'Sam',lastName:'Rep'}}])},activity:{findMany:async args=>(calls.push(args),[{id:2,activityDate:at('02'),subject:'Phone call',description:null,activityType:{name:'Call'},user:{firstName:'Sam',lastName:'Rep'},contacts:[]}])},task:{findMany:async args=>(calls.push(args),[{id:3,createdAt:at('03'),subject:'Send firmware',status:'COMPLETED',dueDate:at('04'),completedAt:at('04'),assignedTo:{firstName:'Sam',lastName:'Rep'}}])},note:{findMany:async args=>(calls.push(args),[{id:4,createdAt:at('05'),body:'Engineering reviewing logs',createdBy:{firstName:'Sam',lastName:'Rep'}}])},supportCaseAttachment:{findMany:async args=>(calls.push(args),[])}};
   const view=await caseHistoryView(db,12,at('01'),'UTC');
   const items=view.timeline;
   assert.deepEqual(items.map(item=>item.source),['Note','Task','Task','Activity','Case']);
@@ -80,9 +80,9 @@ test('timeline merges business labeled sources in time order and caps source que
   assert.match(items[2].detail,/Due.*Assigned to/);
   assert.equal(items[3].title,'Call logged');
   assert.equal(items[4].title,'Case created');
-  assert.deepEqual(calls.map(call=>call.take),[81,40,40,40]);
+  assert.deepEqual(calls.map(call=>call.take),[81,40,40,40,40]);
   assert.ok(calls.every(call=>call.where.supportCaseId===12));
-  assert.ok(calls.slice(1).every(call=>call.where.archivedAt===null));
+  assert.ok(calls.slice(1,4).every(call=>call.where.archivedAt===null));
   assert.doesNotMatch(JSON.stringify(items),/supportCaseId|contactId/);
 });
 
@@ -134,7 +134,7 @@ test('older cases keep one creation entry while audit history stays bounded',asy
   ];
   const recent=Array.from({length:81},(_,index)=>({...base,id:200-index,field:'description',oldValue:'Before',newValue:'After',newLabel:null,createdAt:new Date(`2026-10-08T${String(23-Math.floor(index/60)).padStart(2,'0')}:${String(59-index%60).padStart(2,'0')}:00Z`)}));
   const calls=[];
-  const db={supportCaseLifecycleEvent:{findMany:async args=>(calls.push(args),args.orderBy[0].createdAt==='asc'?initial:recent)},activity:{findMany:async()=>[]},task:{findMany:async()=>[]},note:{findMany:async()=>[]}};
+  const db={supportCaseLifecycleEvent:{findMany:async args=>(calls.push(args),args.orderBy[0].createdAt==='asc'?initial:recent)},activity:{findMany:async()=>[]},task:{findMany:async()=>[]},note:{findMany:async()=>[]},supportCaseAttachment:{findMany:async()=>[]}};
   const view=await caseHistoryView(db,12,createdAt,'UTC');
   assert.equal(view.auditEvents.length,80);
   assert.equal(view.auditTruncated,true);

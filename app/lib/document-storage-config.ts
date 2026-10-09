@@ -42,7 +42,12 @@ export function createDocumentStorageKey(prefix: string, id = randomUUID()) {
   return `${normalized}/documents/${id.toLowerCase()}`;
 }
 
+export function createSupportAttachmentKey(prefix: string, id = randomUUID()) {
+  const key = createDocumentStorageKey(prefix, id);
+  return key.replace('/documents/', '/support-cases/');
+}
+
 export function assertStorageKeyInPrefix(storageKey: string, prefix: string) {
-  const root = `${normalizeStoragePrefix(prefix)}/documents/`;
-  if (!storageKey.startsWith(root) || storageKey.slice(root.length).includes('/')) throw new Error('Document storage key is outside the configured prefix.');
+  const roots = ['documents', 'support-cases'].map(kind => `${normalizeStoragePrefix(prefix)}/${kind}/`);
+  if (!roots.some(root => storageKey.startsWith(root) && !storageKey.slice(root.length).includes('/'))) throw new Error('Document storage key is outside the configured prefix.');
 }

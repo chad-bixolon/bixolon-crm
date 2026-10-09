@@ -266,6 +266,8 @@ model User {
   createdSupportCases SupportCase[] @relation("SupportCaseCreator")
   updatedSupportCases SupportCase[] @relation("SupportCaseUpdater")
   supportCaseEvents SupportCaseLifecycleEvent[] @relation("SupportCaseEventActor")
+  uploadedSupportAttachments SupportCaseAttachment[] @relation("SupportAttachmentUploader")
+  removedSupportAttachments SupportCaseAttachment[] @relation("SupportAttachmentRemover")
   notifications Notification[]
   createdCampaigns MarketingCampaign[] @relation("CampaignCreator")
   updatedCampaigns MarketingCampaign[] @relation("CampaignEditor")
@@ -1264,6 +1266,7 @@ model SupportCase {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   events SupportCaseLifecycleEvent[]
+  attachments SupportCaseAttachment[]
   activities Activity[]
   tasks Task[]
   notes Note[]
@@ -1293,6 +1296,25 @@ model SupportCaseLifecycleEvent {
   createdAt DateTime @default(now())
 
   @@index([supportCaseId, createdAt, id])
+}
+
+model SupportCaseAttachment {
+  id Int @id @default(autoincrement())
+  supportCaseId Int
+  supportCase SupportCase @relation(fields: [supportCaseId], references: [id], onDelete: Restrict)
+  originalFileName String
+  storageKey String @unique
+  contentType String
+  fileSizeBytes Int
+  uploadedByUserId Int
+  uploadedBy User @relation("SupportAttachmentUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  deletedAt DateTime?
+  deletedByUserId Int?
+  deletedBy User? @relation("SupportAttachmentRemover", fields: [deletedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([supportCaseId, createdAt])
+  @@index([supportCaseId, deletedAt, createdAt])
 }
 
 model DemoRequest {

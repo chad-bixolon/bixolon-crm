@@ -6,6 +6,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added file attachments to Support Cases using secure object storage.
+
 - Split Support Case history into a concise operational timeline and a separate field-level audit view, both collapsed by default.
 
 - Added a local Chromium Playwright E2E suite for failed-save forms, pickers, Opportunity intake, and Price Exception correction.

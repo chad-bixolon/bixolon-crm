@@ -1,5 +1,7 @@
 # Document attachments V1
 
+Support Case diagnostic attachments reuse the storage client and signing behavior with a separate metadata table and `support-cases` object prefix. See [Support Cases](support-cases.md) for their file types and lifecycle rules.
+
 SalesHub stores attachment metadata and its Account, Project, or Opportunity foreign key in PostgreSQL. File contents are stored only in the private DigitalOcean Space. Object keys use `<SPACES_PREFIX>/documents/<UUID>` and never include the original filename or CRM/customer names. Signed download URLs expire after five minutes and are never persisted.
 
 ## Configuration

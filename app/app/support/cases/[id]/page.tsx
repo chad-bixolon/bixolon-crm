@@ -5,6 +5,7 @@ import { Content, PageHeader } from '@/components/shell';
 import { SupportArchiveControl } from '@/components/support-archive-control';
 import { SupportCaseTimeline } from '@/components/support-case-timeline';
 import { SupportCaseHistory } from '@/components/support-case-history';
+import { SupportAttachments } from '@/components/support-attachments';
 import { can } from '@/lib/authorization';
 import { requirePermission } from '@/lib/current-user';
 import { formatDateTimeForUser } from '@/lib/display-format';
@@ -21,6 +22,7 @@ export default async function SupportCaseDetailPage({ params }: { params: Promis
   const [row, zone] = await Promise.all([getSupportCaseById(prisma, actor, id, true), supportUserZone(actor)]);
   if (!row) notFound();
   const history = await caseHistoryView(prisma, id, row.createdAt, zone);
+  const attachments = await prisma.supportCaseAttachment.findMany({ where: { supportCaseId: id, deletedAt: null }, include: { uploadedBy: { select: { firstName: true, lastName: true } } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
   if (!can(actor, 'tasks.write')) for (const item of history.timeline) if (item.source === 'Activity') item.href = undefined;
   const allowNewWork = !row.archivedAt && row.status !== 'CLOSED' && canCreateCaseWork(actor);
   const date = (value: Date | null) => value ? formatDateTimeForUser(value, zone) : '—';
@@ -34,6 +36,7 @@ export default async function SupportCaseDetailPage({ params }: { params: Promis
     <section className="panel mb-5 p-5"><h2 className="mb-4 text-lg font-semibold">Case summary</h2><dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{fields.map(([label, value]) => <div key={label}><dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt><dd className={`mt-1 break-words text-sm ${label === 'Priority' && row.priority === 'CRITICAL' ? 'font-semibold text-red-800' : ''}`}>{label === 'Linked CRM Account' && row.accountId ? <Link className="text-orange-800 hover:underline" href={`/accounts/${row.accountId}`}>{value}</Link> : label === 'Linked Purchased-From Account' && row.purchasedFromAccountId ? <Link className="text-orange-800 hover:underline" href={`/accounts/${row.purchasedFromAccountId}`}>{value}</Link> : label === 'Contact' && row.contactId ? <Link className="text-orange-800 hover:underline" href={`/contacts/${row.contactId}`}>{value}</Link> : label === 'Product / SKU' && row.productSku ? <Link className="text-orange-800 hover:underline" href={`/products/${row.productSku.productId}`}>{value}</Link> : label === 'Next Follow-up' && overdue ? <>{value} <strong className="text-red-800">· Overdue</strong></> : value}</dd></div>)}</dl></section>
     <section className="panel mb-5 p-5"><h2 className="mb-3 text-lg font-semibold">Description</h2><p className="whitespace-pre-wrap break-words text-sm leading-6">{row.description}</p></section>
     {(row.resolutionSummary || ['RESOLVED','CLOSED'].includes(row.status)) && <section className="panel mb-5 p-5"><h2 className="mb-3 text-lg font-semibold">Resolution Summary</h2><p className="whitespace-pre-wrap break-words text-sm">{row.resolutionSummary || 'No summary recorded.'}</p></section>}
+    <SupportAttachments caseId={id} items={attachments} canWrite={can(actor, 'support-cases.write') && !row.archivedAt && row.status !== 'CLOSED'} zone={zone}/>
     <SupportCaseTimeline items={history.timeline} zone={zone} caseId={id}/>
     <SupportCaseHistory events={history.auditEvents} caseCreatedAt={row.createdAt} viewerId={actor.id} zone={zone} caseId={id} truncated={history.auditTruncated}/>
   </Content>;

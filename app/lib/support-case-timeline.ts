@@ -2,7 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import { supportEventFields, supportEventValue, supportHistoryItems, type SupportHistoryEvent } from './support-case-display';
 
 export type CaseTimelineItem = {
-  key: string; at: Date; source: 'Case' | 'Activity' | 'Task' | 'Note';
+  key: string; at: Date; source: 'Case' | 'Activity' | 'Task' | 'Note' | 'Attachment';
   title: string; detail?: string; summary?: { label: string; value: string }[];
   actor?: string; href?: string;
 };
@@ -74,11 +74,12 @@ export function classifySupportLifecycle(events: readonly SupportHistoryEvent[],
 }
 
 export async function caseHistoryView(db: PrismaClient, caseId: number, createdAt: Date, zone: string): Promise<CaseHistoryView> {
-  const [recent, activities, tasks, notes] = await Promise.all([
+  const [recent, activities, tasks, notes, attachments] = await Promise.all([
     db.supportCaseLifecycleEvent.findMany({ where: { supportCaseId: caseId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: LIMIT_AUDIT + 1, include: { actor: { select: { firstName: true, lastName: true } } } }),
     db.activity.findMany({ where: { supportCaseId: caseId, archivedAt: null }, orderBy: [{ activityDate: 'desc' }, { id: 'desc' }], take: LIMIT_PER_WORK_SOURCE, include: { activityType: { select: { name: true } }, user: { select: { firstName: true, lastName: true } }, contacts: { include: { contact: { select: { firstName: true, lastName: true } } } } } }),
     db.task.findMany({ where: { supportCaseId: caseId, archivedAt: null }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: LIMIT_PER_WORK_SOURCE, include: { assignedTo: { select: { firstName: true, lastName: true } } } }),
     db.note.findMany({ where: { supportCaseId: caseId, archivedAt: null }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: LIMIT_PER_WORK_SOURCE, include: { createdBy: { select: { firstName: true, lastName: true } } } }),
+    db.supportCaseAttachment.findMany({ where: { supportCaseId: caseId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: LIMIT_PER_WORK_SOURCE, include: { uploadedBy: { select: { firstName: true, lastName: true } }, deletedBy: { select: { firstName: true, lastName: true } } } }),
   ]);
   const auditEvents = recent.slice(0, LIMIT_AUDIT) as SupportHistoryEvent[];
   const initial = auditEvents.some(event => event.field === 'CREATED') ? [] : await db.supportCaseLifecycleEvent.findMany({ where: { supportCaseId: caseId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: LIMIT_INITIAL, include: { actor: { select: { firstName: true, lastName: true } } } });
@@ -90,7 +91,11 @@ export async function caseHistoryView(db: PrismaClient, caseId: number, createdA
     return [{ key: `task-created-${row.id}`, at: row.createdAt, source: 'Task', title: 'Task created', detail, href: `/tasks/${row.id}` }, ...(row.completedAt ? [{ key: `task-completed-${row.id}`, at: row.completedAt, source: 'Task' as const, title: 'Task completed', detail: row.subject, href: `/tasks/${row.id}` }] : [])];
   });
   const noteItems: CaseTimelineItem[] = notes.map(row => ({ key: `note-${row.id}`, at: row.createdAt, source: 'Note', title: 'Note added', detail: preview(row.body, 240), actor: row.createdBy ? `${row.createdBy.firstName} ${row.createdBy.lastName}` : undefined }));
+  const attachmentItems: CaseTimelineItem[] = attachments.flatMap(row => [
+    { key: `attachment-added-${row.id}`, at: row.createdAt, source: 'Attachment' as const, title: 'Attachment added', detail: row.originalFileName, actor: `${row.uploadedBy.firstName} ${row.uploadedBy.lastName}` },
+    ...(row.deletedAt && row.deletedBy ? [{ key: `attachment-removed-${row.id}`, at: row.deletedAt, source: 'Attachment' as const, title: 'Attachment removed', detail: row.originalFileName, actor: `${row.deletedBy.firstName} ${row.deletedBy.lastName}` }] : []),
+  ]);
   const created = operational.find(item => item.title === 'Case created');
-  const sorted = [...operational.filter(item => item !== created), ...activityItems, ...taskItems, ...noteItems].sort((a, b) => b.at.getTime() - a.at.getTime() || b.key.localeCompare(a.key));
+  const sorted = [...operational.filter(item => item !== created), ...activityItems, ...taskItems, ...noteItems, ...attachmentItems].sort((a, b) => b.at.getTime() - a.at.getTime() || b.key.localeCompare(a.key));
   return { timeline: [...sorted.slice(0, LIMIT_TIMELINE - (created ? 1 : 0)), ...(created ? [created] : [])], auditEvents, auditTruncated: recent.length > LIMIT_AUDIT };
 }

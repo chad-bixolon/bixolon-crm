@@ -31,6 +31,7 @@ export default defineConfig({
       AUTH_GOOGLE_ID: 'unused-e2e-google-id',
       AUTH_GOOGLE_SECRET: 'unused-e2e-google-secret',
       E2E_AUTH_ENABLED: 'true',
+      E2E_STORAGE_ENABLED: 'true',
       E2E_AUTH_TOKEN: authToken,
       NEXT_TELEMETRY_DISABLED: '1',
     },
