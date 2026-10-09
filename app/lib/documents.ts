@@ -65,7 +65,7 @@ export async function uploadDocument(
       fileSize: file.fileSize, documentType: metadata.documentType, description: metadata.description, uploadedByUserId: actor.id,
     } });
   } catch (error) {
-    try { await storage.deleteObjectForFailedUpload(storageKey); } catch (cleanupError) {
+    try { await storage.deleteDocumentObject(storageKey); } catch (cleanupError) {
       console.error('Document storage compensation failed.', { operation: 'upload-compensation', parentType: parent.type, parentId: parent.id, errorClass: cleanupError instanceof Error ? cleanupError.name : 'UnknownError' });
     }
     throw error;

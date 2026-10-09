@@ -1,4 +1,6 @@
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { test, expect } from './fixtures';
 import { names } from './constants.mjs';
 import { signInAs, uniqueName } from './helpers';
@@ -34,6 +36,12 @@ test('case attachments upload, download, validate, remove, and follow permission
   expect(first.headers().location).toContain('/api/e2e/objects?');
   const file = await page.request.get(first.headers().location);
   expect(file.ok()).toBeTruthy(); expect(await file.text()).toContain('Test label');
+  const signedUrl = first.headers().location;
+  const storageKey = new URL(signedUrl).searchParams.get('key');
+  expect(storageKey).toMatch(/^e2e\/support-cases\/[0-9a-f-]{36}$/);
+  const localObject = resolve('/tmp/saleshub-e2e-storage', createHash('sha256').update(storageKey!).digest('hex'));
+  expect(existsSync(localObject)).toBeTruthy();
+  const downloadPath = await link.getAttribute('href');
 
   await attachments.getByRole('button', { name: 'Add Attachment' }).click();
   await attachments.getByLabel('File').setInputFiles({ name: 'oversized.log', mimeType: 'text/plain', buffer: Buffer.alloc(25 * 1024 * 1024 + 1, 65) });
@@ -60,10 +68,18 @@ test('case attachments upload, download, validate, remove, and follow permission
   await attachments.getByRole('button', { name: 'Remove' }).click();
   expect((await removal).status()).toBe(200);
   await expect(attachments).toContainText('No attachments have been added');
+  await expect(attachments.getByRole('link', { name: 'Download' })).toHaveCount(0);
   const timeline = page.getByRole('region', { name: 'Case Timeline' });
   await timeline.getByRole('button', { name: 'Show timeline' }).click();
   await expect(timeline.getByRole('heading', { name: 'Attachment added' })).toBeVisible();
   await expect(timeline.getByRole('heading', { name: 'Attachment removed' })).toBeVisible();
+  await expect(timeline).toContainText('sample.prn');
+  await expect(timeline.getByRole('heading', { name: 'Attachment removed' })).toHaveCount(1);
+  expect((await page.request.get(downloadPath!, { maxRedirects: 0 })).status()).toBe(404);
+  expect((await page.request.get(signedUrl)).status()).toBe(404);
+  expect(existsSync(localObject)).toBeFalsy();
+  expect((await page.request.delete(downloadPath!.replace('/download', ''))).status()).toBe(200);
+  await expect(timeline.getByRole('heading', { name: 'Attachment removed' })).toHaveCount(1);
 
   await attachments.getByRole('button', { name: 'Add Attachment' }).click();
   await attachments.getByLabel('File').setInputFiles(fixture('sample.txt'));

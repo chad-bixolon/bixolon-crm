@@ -65,7 +65,7 @@ function storage() {
     createKey: () => 'dev/documents/123e4567-e89b-42d3-a456-426614174000',
     uploadDocumentObject: async input => calls.push(['upload', input]),
     createSignedDocumentUrl: async input => { calls.push(['sign', input]); return 'https://signed.invalid/temporary'; },
-    deleteObjectForFailedUpload: async key => calls.push(['delete', key]),
+    deleteDocumentObject: async key => calls.push(['delete', key]),
   };
 }
 const file = { originalFileName: 'Contract.pdf', mimeType: 'application/pdf', fileSize: 128, body: new Uint8Array([1]) };

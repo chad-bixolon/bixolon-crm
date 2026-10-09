@@ -13,7 +13,7 @@ export interface DocumentStorage {
   createSupportKey(): string;
   uploadDocumentObject(input: DocumentObjectUpload): Promise<void>;
   createSignedDocumentUrl(input: DocumentSignedUrlInput): Promise<string>;
-  deleteObjectForFailedUpload(storageKey: string): Promise<void>;
+  deleteDocumentObject(storageKey: string): Promise<void>;
 }
 
 const localRoot = '/tmp/saleshub-e2e-storage';
@@ -66,8 +66,13 @@ export const documentStorage: DocumentStorage = {
       ResponseContentDisposition: contentDisposition(input.fileName, input.mimeType === 'application/pdf'),
     }), { expiresIn: 300 });
   },
-  async deleteObjectForFailedUpload(storageKey) {
-    if (localEnabled()) { assertStorageKeyInPrefix(storageKey, 'e2e'); await unlink(localPath(storageKey)); return; }
+  async deleteDocumentObject(storageKey) {
+    if (localEnabled()) {
+      assertStorageKeyInPrefix(storageKey, 'e2e');
+      try { await unlink(localPath(storageKey)); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+      return;
+    }
     const { config, s3 } = client();
     assertStorageKeyInPrefix(storageKey, config.prefix);
     await s3.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: storageKey }));

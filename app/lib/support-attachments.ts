@@ -22,19 +22,38 @@ export async function uploadSupportAttachment(db: PrismaClient, storage: Documen
       contentType: file.mimeType, fileSizeBytes: file.fileSize, uploadedByUserId: actor.id,
     } });
   } catch (error) {
-    try { await storage.deleteObjectForFailedUpload(storageKey); }
+    try { await storage.deleteDocumentObject(storageKey); }
     catch (cleanupError) { console.error('Support attachment cleanup failed.', { caseId, error: cleanupError }); }
     throw error;
   }
 }
 
-export async function removeSupportAttachment(db: PrismaClient, actor: Actor, id: number) {
-  const attachment = await db.supportCaseAttachment.findUnique({ where: { id }, select: { supportCaseId: true, deletedAt: true } });
+export class SupportAttachmentMetadataError extends Error {
+  constructor() { super('The file was deleted, but its case record could not be updated. Contact an administrator.'); }
+}
+
+export async function removeSupportAttachment(db: PrismaClient, storage: DocumentStorage, actor: Actor, id: number) {
+  const attachment = await db.supportCaseAttachment.findUnique({ where: { id }, select: { supportCaseId: true, deletedAt: true, storageKey: true } });
   if (!attachment) throw new Error('Attachment not found.');
   await assertSupportAttachmentAccess(db, actor, attachment.supportCaseId, true);
-  if (attachment.deletedAt) throw new Error('Attachment not found.');
-  const result = await db.supportCaseAttachment.updateMany({ where: { id, deletedAt: null }, data: { deletedAt: new Date(), deletedByUserId: actor.id } });
-  if (!result.count) throw new Error('Attachment not found.');
+  if (attachment.deletedAt) return;
+  try { await storage.deleteDocumentObject(attachment.storageKey); }
+  catch (error) {
+    console.error('Support attachment object deletion failed.', { id, caseId: attachment.supportCaseId, storageKey: attachment.storageKey, error });
+    throw new Error('Attachment could not be removed. Please try again.');
+  }
+  // A single conditional update records actor and time atomically. A retry can reconcile
+  // an object deleted by a prior request whose database update failed.
+  try {
+    const result = await db.supportCaseAttachment.updateMany({ where: { id, deletedAt: null }, data: { deletedAt: new Date(), deletedByUserId: actor.id } });
+    if (!result.count) {
+      const current = await db.supportCaseAttachment.findUnique({ where: { id }, select: { deletedAt: true } });
+      if (!current?.deletedAt) throw new Error('Attachment metadata disappeared after object deletion.');
+    }
+  } catch (error) {
+    console.error('Support attachment object deleted but metadata update failed; retry removal to reconcile.', { id, caseId: attachment.supportCaseId, storageKey: attachment.storageKey, actorId: actor.id, error });
+    throw new SupportAttachmentMetadataError();
+  }
 }
 
 export async function supportAttachmentDownloadUrl(db: PrismaClient, storage: DocumentStorage, actor: Actor, id: number) {

@@ -33,13 +33,16 @@ export function SupportAttachments({ caseId, items, canWrite, zone }: { caseId: 
     finally { setBusy(false); }
   }
   async function remove(id: number) {
-    if (!window.confirm('Remove this attachment from the case?')) return;
+    if (!window.confirm('Remove this attachment? The file will be permanently deleted.')) return;
     setRemoving(id); setError(null); setSuccess(null);
     try {
       const response = await fetch(`/api/support/attachments/${id}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Attachment could not be removed.');
+      if (!response.ok) {
+        const result = await response.json() as { error?: string };
+        throw new Error(result.error || 'Attachment could not be removed.');
+      }
       setSuccess('Attachment removed.'); router.refresh();
-    } catch { setError('Attachment could not be removed.'); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Attachment could not be removed.'); }
     finally { setRemoving(null); }
   }
   return <section className="panel mb-5 min-w-0 p-4 sm:p-5" aria-label="Attachments">
