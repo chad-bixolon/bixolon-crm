@@ -7,6 +7,9 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/display-format";
 import { currentUser } from "@/lib/current-user";
 import { can } from "@/lib/authorization";
+import { ReportEntityFilter } from '@/components/report-entity-filter';
+import { OptionalProjectFilter } from '@/components/optional-project-filter';
+import { projectReadWhere } from '@/lib/projects';
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +17,8 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   const filters = await searchParams;
   const actor = await currentUser();
   const [{ opportunities, count, page, pages }, options] = await Promise.all([listOpportunities(prisma, filters, actor), opportunityOptions(prisma)]);
+  const selectedProjectId = Number(filters.projectId);
+  const selectedProject = Number.isSafeInteger(selectedProjectId) && selectedProjectId > 0 ? await prisma.project.findFirst({ where: { AND: [{ id: selectedProjectId }, projectReadWhere(actor)] }, select: { id: true, name: true } }) : null;
   const search = filters.q?.trim().slice(0, 100) ?? "";
   const mixedCurrencies = new Set(opportunities.map(o => o.currencyCode)).size > 1;
   const linkFor = (target: number) => {
@@ -34,8 +39,8 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
       <div><label className="label" htmlFor="forecastCategory">Forecast</label><select className={control} id="forecastCategory" name="forecastCategory" defaultValue={filters.forecastCategory ?? ""}><option value="">All categories</option>{Object.entries(forecastLabels).map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></div>
       <div><label className="label" htmlFor="closeFrom">Close Date From</label><input className={control} type="date" id="closeFrom" name="closeFrom" defaultValue={filters.closeFrom ?? ""}/></div>
       <div><label className="label" htmlFor="closeTo">Close Date Through</label><input className={control} type="date" id="closeTo" name="closeTo" defaultValue={filters.closeTo ?? ""}/></div>
-      <div><label className="label" htmlFor="accountId">Participating Account</label><select className={control} id="accountId" name="accountId" defaultValue={filters.accountId ?? ""}><option value="">All accounts</option>{options.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-      <div><label className="label" htmlFor="projectId">Project</label><select className={control} id="projectId" name="projectId" defaultValue={filters.projectId ?? ""}><option value="">All Projects</option><option value="none">No Project</option>{options.projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+      <ReportEntityFilter type="account" name="accountId" label="Participating Account" selected={filters.accountId ?? ''} actor={actor}/>
+      <OptionalProjectFilter initial={selectedProject ? { ...selectedProject, context: null } : null} none={filters.projectId === 'none'}/>
       <div><label className="label" htmlFor="archived">Visibility</label><select className={control} id="archived" name="archived" defaultValue={filters.archived ?? ""}><option value="">Active</option><option value="yes">Archived</option><option value="all">All</option></select></div>
       <div className="filter-actions opportunity-filter-actions"><button className="btn-filter-primary">Apply</button><Link className="btn-filter-secondary" href="/opportunities">Clear</Link></div>
     </form>

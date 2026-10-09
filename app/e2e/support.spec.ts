@@ -39,7 +39,7 @@ test('resolved intake preserves a complete form on server error, then creates on
   await expect(page.getByLabel('Status')).toHaveValue('RESOLVED');
   await expect(page.getByLabel('Priority')).toHaveValue('HIGH');
   await expect(page.getByLabel('Next Follow-up')).toHaveValue('2026-10-20T10:30');
-  await expect(page.getByText(names.account, { exact: true })).toBeVisible();
+  await expect(page.getByText(names.account, { exact: true }).first()).toBeVisible();
   await expect(page.getByText(names.contact, { exact: true })).toBeVisible();
   await expect(page.getByText(new RegExp(names.sku))).toBeVisible();
   await expect(page.getByText(names.purchasedFrom, { exact: true })).toBeVisible();

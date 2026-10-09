@@ -1,14 +1,13 @@
-import { operationalOpportunityWhere, operationalProjectWhere, operationalContactWhere, operationalAccountWhere } from './operational-where';
 import { prisma } from './prisma';
 import { eligibleUserWhere } from './assignment-eligibility';
 export async function workOptions(current?: { accountId?: number | null; opportunityId?: number | null; projectId?: number | null; userId?: number | null; contactIds?: number[]; supportCaseId?: number | null }) {
   const [accounts, opportunities, users, activityTypes, projects, contacts] = await Promise.all([
-    prisma.account.findMany({ where: { OR: [operationalAccountWhere, ...(current?.accountId ? [{ id: current.accountId }] : [])] }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
-    prisma.opportunity.findMany({ where: { OR: [operationalOpportunityWhere, ...(current?.opportunityId ? [{ id: current.opportunityId }] : [])] }, select: { id: true, name: true, participants: { select: { accountId: true } }, projects: { select: { projectId: true } } }, orderBy: { name: 'asc' } }),
+    prisma.account.findMany({ where: { id: { in: current?.accountId ? [current.accountId] : [] } }, select: { id: true, name: true } }),
+    prisma.opportunity.findMany({ where: { id: { in: current?.opportunityId ? [current.opportunityId] : [] } }, select: { id: true, name: true, participants: { select: { accountId: true } }, projects: { select: { projectId: true } } } }),
     prisma.user.findMany({ where: eligibleUserWhere(current?.supportCaseId ? 'support-work.write' : 'tasks.write'), select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }),
     prisma.activityType.findMany({ where: { active: true }, select: { code: true, name: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
-    prisma.project.findMany({ where: { OR: [operationalProjectWhere, ...(current?.projectId ? [{ id: current.projectId }] : [])] }, select: { id: true, name: true, primaryAccountId: true, participants: { select: { accountId: true } }, opportunities: { select: { opportunityId: true } } }, orderBy: { name: 'asc' } }),
-    prisma.contact.findMany({ where: { OR: [operationalContactWhere, ...(current?.contactIds?.length ? [{ id: { in: current.contactIds } }] : [])] }, select: { id: true, accountId: true, account: { select: { name: true } }, firstName: true, lastName: true, email: true, active: true, archivedAt: true }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
+    prisma.project.findMany({ where: { id: { in: current?.projectId ? [current.projectId] : [] } }, select: { id: true, name: true, primaryAccountId: true, participants: { select: { accountId: true } }, opportunities: { select: { opportunityId: true } } } }),
+    prisma.contact.findMany({ where: { id: { in: current?.contactIds ?? [] } }, select: { id: true, accountId: true, account: { select: { name: true } }, firstName: true, lastName: true, email: true, active: true, archivedAt: true } }),
   ]);
   const currentUser = current?.userId && !users.some(user => user.id === current.userId)
     ? await prisma.user.findUnique({ where: { id: current.userId }, select: { id: true, firstName: true, lastName: true } }) : null;

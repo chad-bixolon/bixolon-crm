@@ -12,7 +12,7 @@ export default async function Page({searchParams}: {searchParams: Promise<{accou
   if (p.supportCaseId && (!Number.isSafeInteger(caseId)||caseId<1)) notFound();
   if (actor.role==='SUPPORT' && !p.supportCaseId) notFound();
   const supportCase=p.supportCaseId ? await caseWorkContext(prisma,actor,caseId) : null;
-  const options=await workOptions({supportCaseId:supportCase?.id});
+  const options=await workOptions({accountId:supportCase?.accountId ?? (Number(p.accountId)||undefined),opportunityId:supportCase?undefined:(Number(p.opportunityId)||undefined),projectId:supportCase?undefined:(Number(p.projectId)||undefined),supportCaseId:supportCase?.id});
   if (actor.role==='SUPPORT') { options.opportunities=[]; options.projects=[]; }
   return <Content><PageHeader title="New note" eyebrow={supportCase?NAV_CATEGORIES.support:NAV_CATEGORIES.sales}/><WorkForm kind="note" {...options} supportCase={supportCase?{id:supportCase.id,caseNumber:supportCase.caseNumber,contactName:supportCase.contact?`${supportCase.contact.firstName} ${supportCase.contact.lastName}`:null}:undefined} lockAccountId={supportCase?.accountId ?? undefined} initial={{accountId:supportCase?.accountId??p.accountId??'',opportunityId:supportCase?'':p.opportunityId??'',projectId:supportCase?'':p.projectId??''}}/></Content>;
 }

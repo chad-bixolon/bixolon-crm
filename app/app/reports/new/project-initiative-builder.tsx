@@ -1,27 +1,24 @@
 import { RecoverableActionForm } from '@/components/recoverable-action-form';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
-import { operationalProjectWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import type {Actor} from '@/lib/authorization';
 import {Content,PageHeader} from '@/components/shell';
 import {ReportResults} from '@/components/report-results';
 import { ReportSalesRepFilter } from '@/components/report-sales-rep-filter';
+import { ReportEntityFilter } from '@/components/report-entity-filter';
 import {prisma} from '@/lib/prisma';
 import {projectInitiativeConfigFromParams,filterValue} from '@/lib/report-builder';
 import {canShareReport,executeProjectInitiativeReport,reportRegistry} from '@/lib/reporting';
 import {projectStatusLabels} from '@/lib/project-labels';
-import {projectReadWhere} from '@/lib/projects';
 import {saveReportAction} from '../actions';
 
 type Params=Record<string,string|string[]|undefined>;
 type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|'SHARED';configuration:unknown}|null;
 export async function ProjectInitiativeBuilder({params,actor,saved}:{params:Params;actor:Actor;saved:Saved}){
   const config=projectInitiativeConfigFromParams(params,saved?.configuration),definition=reportRegistry.PROJECT_INITIATIVE;
-  const [result,owners,projects,accounts,stages,categories,currencies,competitors]=await Promise.all([
+  const [result,owners,stages,categories,currencies,competitors]=await Promise.all([
     executeProjectInitiativeReport(prisma,actor,config),
     prisma.user.findMany({where:{active:true,archivedAt:null},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
-    prisma.project.findMany({where:{AND:[operationalProjectWhere,projectReadWhere(actor)]},select:{id:true,name:true},orderBy:{name:'asc'}}),
-    prisma.account.findMany({where:{archivedAt:null},select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.salesStage.findMany({orderBy:[{sortOrder:'asc'},{id:'asc'}]}),
     prisma.productCategory.findMany({where:{active:true},orderBy:{name:'asc'}}),
     prisma.currency.findMany({where:{active:true},orderBy:{code:'asc'}}),
@@ -36,11 +33,11 @@ export async function ProjectInitiativeBuilder({params,actor,saved}:{params:Para
       <fieldset className="report-section report-primary-filters"><legend className="report-section-title">Primary filters</legend><div className="report-filter-grid">
         {select('projectOwnerId','Project Owner',owners.map(x=>({value:x.id,label:`${x.firstName} ${x.lastName}`})))}
         {select('projectStatus','Project Status',Object.entries(projectStatusLabels).map(([value,label])=>({value,label})))}
-        {select('projectId','Project',projects.map(x=>({value:x.id,label:x.name})))}
-        {select('primaryAccountId','Primary Account',accounts.map(x=>({value:x.id,label:x.name})))}
+        <ReportEntityFilter type="project" name="projectId" label="Project" selected={selected('projectId')} actor={actor}/>
+        <ReportEntityFilter type="account" name="primaryAccountId" label="Primary Account" selected={selected('primaryAccountId')} actor={actor}/>
       </div></fieldset>
       <fieldset className="report-section"><legend className="report-section-title">More filters</legend><div className="report-filter-grid">
-        {select('participantAccountId','Participant Account',accounts.map(x=>({value:x.id,label:x.name})))}
+        <ReportEntityFilter type="account" name="participantAccountId" label="Participant Account" selected={selected('participantAccountId')} actor={actor}/>
         {select('hasAccount','Account relationship',[{value:'true',label:'Has Account'},{value:'false',label:'No Account'}])}
         {select('hasOpportunities','Opportunities',[{value:'true',label:'Has Opportunities'},{value:'false',label:'No Opportunities'}])}
         <ReportSalesRepFilter actor={actor} reps={owners.filter(x=>actor.role!=='SALES'||x.id===actor.id)} selected={selected('ownerId')} label="Sales Rep"/>

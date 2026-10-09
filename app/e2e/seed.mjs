@@ -22,6 +22,19 @@ try {
   await db.supportCaseCategory.upsert({ where: { name: names.category }, update: { active: true }, create: { name: names.category } });
   await db.salesStage.upsert({ where: { name: 'E2E Qualification' }, update: { active: true }, create: { name: 'E2E Qualification', sortOrder: 10, probability: 20 } });
   await db.currency.upsert({ where: { code: 'USD' }, update: { active: true }, create: { code: 'USD', name: 'US Dollar' } });
+  const manager = await db.user.findUniqueOrThrow({ where: { email: emails.salesManager } });
+  const stage = await db.salesStage.findUniqueOrThrow({ where: { name: 'E2E Qualification' } });
+  for (let index = 0; index < 55; index++) {
+    const suffix = index ? ` ${String(index).padStart(2, '0')}` : '';
+    const name = `E2E Picker Account${suffix}`;
+    const customer = await db.account.findFirst({ where: { name } }) ?? await db.account.create({ data: { name, status: 'ACTIVE', city: 'Philadelphia', stateProvince: 'PA' } });
+    const email = `e2e-picker-${String(index).padStart(2, '0')}@example.test`;
+    if (!await db.contact.findFirst({ where: { email } })) await db.contact.create({ data: { accountId: customer.id, firstName: 'E2E', lastName: `Picker Contact${suffix}`, email } });
+    const opportunityName = `E2E Picker Opportunity${suffix}`;
+    if (!await db.opportunity.findFirst({ where: { name: opportunityName } })) await db.opportunity.create({ data: { name: opportunityName, stageId: stage.id, ownerId: manager.id, currencyCode: 'USD', participants: { create: { accountId: customer.id } } } });
+    const projectName = `E2E Picker Project${suffix}`;
+    if (!await db.project.findFirst({ where: { name: projectName } })) await db.project.create({ data: { name: projectName, primaryAccountId: customer.id, primaryAccountRole: 'END_CUSTOMER', createdById: manager.id } });
+  }
   await db.priceException.upsert({ where: { sourceType_sourceKey: { sourceType: 'EXTERNAL_EXPORT', sourceKey: 'e2e-pe-001' } }, update: { status: 'ACTIVE', archivedAt: null, distributorAccountId: account.id }, create: { peCode: names.pe, sourceType: 'EXTERNAL_EXPORT', sourceKey: 'e2e-pe-001', status: 'ACTIVE', distributorSourceName: names.account, distributorAccountId: account.id } });
   console.log('E2E fixtures ready in dedicated saleshub_e2e database.');
 } finally {

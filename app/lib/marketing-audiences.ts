@@ -90,6 +90,7 @@ export async function audienceSummary(client:PrismaClient,ids:number[],matchedCo
 }
 
 export function parseAudienceForm(form:FormData){
+  for (const key of ['accountId', 'referralPartnerId']) if (String(form.get(`${key}Query`) ?? '').trim() && !String(form.get(key) ?? '').trim()) throw new Error('Select an Account from the suggestions.');
   const number=(name:string)=>{const value=Number(form.get(name));return Number.isSafeInteger(value)&&value>0?value:undefined;};
   const text=(name:string)=>String(form.get(name)??"").trim()||undefined;
   const bool=(name:string)=>form.get(name)==="true"?true:form.get(name)==="false"?false:undefined;
@@ -103,13 +104,13 @@ export function contactsCsv(rows:Prisma.ContactGetPayload<{include:typeof audien
   return [header,...lines].map(row=>row.map(csvCell).join(",")).join("\r\n")+"\r\n";
 }
 
-export async function audienceBuilderOptions(client:PrismaClient){
+export async function audienceBuilderOptions(client:PrismaClient, selected: { accountId?: number; referralPartnerId?: number } = {}){
   const [accounts,industries,territories,users,partners,tradeShows,competitors]=await Promise.all([
-    client.account.findMany({where:{archivedAt:null},orderBy:{name:"asc"},select:{id:true,name:true}}),
+    client.account.findMany({where:{id:selected.accountId ?? -1},select:{id:true,name:true}}),
     client.industry.findMany({where:{active:true},orderBy:[{sortOrder:"asc"},{name:"asc"}],select:{code:true,name:true}}),
     client.territory.findMany({where:{active:true},orderBy:[{sortOrder:"asc"},{name:"asc"}],select:{code:true,name:true}}),
     client.user.findMany({where:{active:true,archivedAt:null},orderBy:[{lastName:"asc"},{firstName:"asc"}],select:{id:true,firstName:true,lastName:true}}),
-    client.account.findMany({where:{archivedAt:null,businessRoles:{some:{role:{in:["DISTRIBUTOR","VAR","ISV","OEM","PARTNER"]}}}},orderBy:{name:"asc"},select:{id:true,name:true}}),
+    client.account.findMany({where:{id:selected.referralPartnerId ?? -1},select:{id:true,name:true}}),
     client.tradeShow.findMany({where:{archivedAt:null},orderBy:[{startDate:"desc"},{name:"asc"}],select:{id:true,name:true,startDate:true}}),
     client.competitorOption.findMany({where:{active:true},orderBy:[{sortOrder:"asc"},{name:"asc"}],select:{id:true,name:true}}),
   ]);

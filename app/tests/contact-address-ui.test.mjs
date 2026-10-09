@@ -18,6 +18,7 @@ Module._load = function(request, parent, isMain) {
   if (request === '@/app/contacts/actions') return { submitContact: async () => ({ errors: {} }) };
   if (request === '@/app/trade-shows/[id]/leads/[leadId]/resolve/actions') return { createContactForTradeShowLead: async () => ({ errors: {} }) };
   if (request === '@/app/trade-shows/[id]/contact-resolution/actions') return { createResolutionContactAction: async () => ({ errors: {} }) };
+  if (request === '@/components/entity-picker') return { EntityPicker: () => null };
   if (request === '@/components/address-fields') return require(path.join(root, 'components/address-fields.tsx'));
   if (request === '@/lib/address') return require(path.join(root, 'lib/address.ts'));
   return originalLoad.call(this, request, parent, isMain);

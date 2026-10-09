@@ -7,7 +7,8 @@ import { Content, PageHeader } from '@/components/shell';
 import { requirePermission } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { can } from '@/lib/authorization';
-import { demoContextChoices, demoLabel, demoReadWhere } from '@/lib/demos';
+import { demoLabel, demoReadWhere } from '@/lib/demos';
+import { EntityPicker } from '@/components/entity-picker';
 import { demoDatedBy, demoDisplayDate, demoDuration, demoStatusLabel } from '@/lib/demo-display';
 import { dateOnly, demoSummary, opportunityResult } from '@/lib/demo-operations';
 import { deployDemoUnits, recordDemoReturn, updateDemoContext, updateDemoExpectedReturn, updateDemoNotes } from '../actions';
@@ -39,9 +40,6 @@ export default async function DemoPage({ params }: { params: Promise<{ id: strin
   const units = request.items.flatMap(item => item.units);
   const activeUnits = request.items.filter(item => !item.retiredAt).flatMap(item => item.units);
   const editable = can(actor, 'sales.write') && (actor.role !== 'SALES' || request.requestedById === actor.id);
-  const choices = editable ? await demoContextChoices(prisma, actor, request.accountId) : { projects: [], opportunities: [] };
-  const projects = request.project && !choices.projects.some(item => item.id === request.project!.id) ? [{ ...request.project }, ...choices.projects] : choices.projects;
-  const opportunities = request.opportunity && !choices.opportunities.some(item => item.id === request.opportunity!.id) ? [{ ...request.opportunity }, ...choices.opportunities] : choices.opportunities;
   const result = request.opportunity ? opportunityResult(request.opportunity) : null;
 
   return <Content>
@@ -113,8 +111,8 @@ export default async function DemoPage({ params }: { params: Promise<{ id: strin
     {editable && <RecoverableActionForm className="panel mt-5 space-y-3 p-5" action={updateDemoContext.bind(null, request.id)}>
       <h2 className="font-semibold">Business context</h2>
       <p className="text-sm text-slate-600">Link this demo to a Project or Opportunity when applicable.</p>
-      <label className="block">Project<select className="field mt-1 w-full" name="projectId" defaultValue={request.projectId ?? ''}><option value="">Not linked</option>{projects.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-      <label className="block">Opportunity<select className="field mt-1 w-full" name="opportunityId" defaultValue={request.opportunityId ?? ''}><option value="">Not linked</option>{opportunities.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
+      <EntityPicker type="project" label="Project" name="projectId" initial={request.project ? { id: request.project.id, name: request.project.name, context: null } : null} filters={{ accountId: request.accountId, editableOnly: true }}/>
+      <EntityPicker type="opportunity" label="Opportunity" name="opportunityId" initial={request.opportunity ? { id: request.opportunity.id, name: request.opportunity.name, context: null } : null} filters={{ accountId: request.accountId }}/>
       <button className="btn-secondary">Update links</button>
     </RecoverableActionForm>}
     {editable ? <RecoverableActionForm className="panel mt-5 p-4" action={updateDemoNotes.bind(null, request.id)}><h2 className="font-semibold">Notes</h2><label className="sr-only" htmlFor="demo-notes">Notes</label><textarea className="field mt-2 w-full font-normal leading-5" id="demo-notes" name="notes" rows={5} defaultValue={request.notes ?? ''}/><button className="btn-secondary mt-3">Save notes</button></RecoverableActionForm> : <section className="panel mt-5 p-4"><h2 className="font-semibold">Notes</h2><p className="mt-2 whitespace-pre-wrap break-words text-sm font-normal leading-5 text-slate-700">{request.notes ?? '—'}</p></section>}

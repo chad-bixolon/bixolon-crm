@@ -8,6 +8,7 @@ import { currentUser } from '@/lib/current-user';
 import { can } from '@/lib/authorization';
 import { projectReadWhere, projectRoleLabels, projectStatusLabels } from '@/lib/projects';
 import { positiveId } from '@/lib/crm-validation';
+import { ReportEntityFilter } from '@/components/report-entity-filter';
 export const dynamic = 'force-dynamic';
 type Filters = { q?: string; status?: string; ownerId?: string; accountId?: string; archived?: string };
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<Filters> }) {
@@ -19,16 +20,15 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
       ...(filters.q?.trim() ? { name: { contains: filters.q.trim().slice(0, 100), mode: 'insensitive' } } : {}),
       ...(status ? { status } : {}), ...(ownerId ? { ownerId } : {}),
       ...(accountId ? { OR: [{ primaryAccountId: accountId }, { participants: { some: { accountId } } }] } : {}) } ] };
-  const [projects, accounts, owners] = await Promise.all([
+  const [projects, owners] = await Promise.all([
     prisma.project.findMany({ where, include: { primaryAccount: true, owner: true, _count: { select: { participants: true, opportunities: { where: { opportunity: operationalOpportunityWhere } } } } }, orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }] }),
-    prisma.account.findMany({ where: { archivedAt: null, status: 'ACTIVE' }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
     prisma.user.findMany({ where: { active: true, archivedAt: null }, select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }),
   ]);
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.programs} title="Projects" description="Programs and initiatives with optional Account relationships." action={can(actor, 'projects.write') ? <Link className="btn-primary" href="/projects/new">New Project</Link> : undefined}/>
     <form method="get" className="panel filter-panel filter-grid filter-grid-five mb-5" aria-label="Filter projects">
       <label className="label">Search<input className="field filter-control" name="q" defaultValue={filters.q ?? ''} placeholder="Project name"/></label>
       <label className="label">Status<select className="field filter-control" name="status" defaultValue={filters.status ?? ''}><option value="">All statuses</option>{Object.entries(projectStatusLabels).map(([code,label]) => <option key={code} value={code}>{label}</option>)}</select></label>
-      <label className="label">Account<select className="field filter-control" name="accountId" defaultValue={filters.accountId ?? ''}><option value="">All Accounts</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+      <ReportEntityFilter type="account" name="accountId" label="Account" selected={filters.accountId ?? ''} actor={actor}/>
       <label className="label">Owner<select className="field filter-control" name="ownerId" defaultValue={filters.ownerId ?? ''}><option value="">All owners</option>{owners.map(o => <option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select></label>
       <label className="label">Visibility<select className="field filter-control" name="archived" defaultValue={filters.archived ?? ''}><option value="">Current</option><option value="yes">Archived</option><option value="all">All</option></select></label>
       <div className="filter-actions"><button className="btn-filter-primary">Apply</button><Link className="btn-filter-secondary" href="/projects">Clear</Link></div>

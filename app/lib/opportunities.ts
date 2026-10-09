@@ -1,4 +1,4 @@
-import { operationalAccountWhere, operationalContactWhere, operationalProjectWhere, operationalOpportunityWhere } from './operational-where';
+import { operationalProjectWhere, operationalOpportunityWhere } from './operational-where';
 import { ForecastCategory, OpportunityPartyRole, OpportunityProductPriceSource, Prisma, ProductPriceTier, type PrismaClient } from "@prisma/client";
 import { field, optional, pageNumber, positiveId, required, type Errors } from "./crm-validation";
 import { archivedWhere, recordVisibility } from "./record-visibility";
@@ -99,18 +99,15 @@ export function lineTotal(line: { quantity: number; estimatedUnitPrice: Prisma.D
 export function opportunityTotal(lines: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number; archivedAt?: Date | null }[]) { return lines.reduce((sum, line) => line.archivedAt ? sum : sum.add(lineTotal(line)), new Prisma.Decimal(0)); }
 export function weightedValue(total: Prisma.Decimal, probability: number) { return total.mul(probability).div(100); }
 export async function opportunityOptions(client: PrismaClient) {
-  const [accounts, contacts, owners, stages, currencies, productCount, projects, productCategories, competitors] = await Promise.all([
-    client.account.findMany({ where: operationalAccountWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    client.contact ? client.contact.findMany({ where: operationalContactWhere, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true, email: true, accountId: true } }) : Promise.resolve([]),
+  const [owners, stages, currencies, productCount, productCategories, competitors] = await Promise.all([
     client.user.findMany({ where: eligibleUserWhere('sales.write'), orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
     client.salesStage.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { id: true, name: true, probability: true, isClosed: true, isWon: true } }),
     client.currency.findMany({ where: { active: true }, orderBy: { code: "asc" }, select: { code: true, name: true } }),
     client.product.count({ where: { active: true, archivedAt: null } }),
-    client.project.findMany({ where: operationalProjectWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     client.productCategory.findMany({ where: { OR: [{ active: true }, { products: { some: {} } }] }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
     client.competitorOption.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true, active: true } }),
   ]);
-  return { accounts, contacts, owners, stages, currencies, productCount, projects, productCategories, competitors };
+  return { accounts: [] as { id: number; name: string }[], contacts: [] as { id: number; firstName: string; lastName: string; email: string | null; accountId: number | null }[], owners, stages, currencies, productCount, projects: [] as { id: number; name: string }[], productCategories, competitors };
 }
 export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number, actor?: Actor) {
   input = { ...input, contacts: input.contacts ?? [], lines: input.lines.map(line => ({ ...line, priceSource: line.priceSource ?? "MANUAL", catalogPriceTier: line.catalogPriceTier ?? null, priceExceptionLineId: line.priceExceptionLineId ?? null, odmCustomerPriceId: line.odmCustomerPriceId ?? null, odmCustomerAccountId: line.odmCustomerAccountId ?? null })) };

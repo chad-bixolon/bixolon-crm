@@ -42,6 +42,7 @@ export function parseTradeShowLeadUpdate(form: FormData) {
   const reference = (key: string) => {
     const raw = field(form, key), id = raw ? positiveId(raw) : null;
     if (raw && !id) errors[key] = 'Choose a valid record.';
+    if (!id && field(form, `${key}Query`)) errors[key] = 'Select a result from the suggestions.';
     return id;
   };
   const assignedSalesRepUserId = reference('assignedSalesRepUserId');

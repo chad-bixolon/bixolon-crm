@@ -25,6 +25,7 @@ export default async function ConvertTradeShowLeadPage({params}:{params:Promise<
   if(lead.tradeShow.archivedAt) redirect(`/trade-shows/${tradeShowId}/leads/${leadId}`);
   if(lead.convertedOpportunityId) redirect(`/trade-shows/${tradeShowId}/leads/${leadId}`);
   if(!lead.accountId||!lead.account) redirect(`/trade-shows/${tradeShowId}/leads/${leadId}/edit`);
+  options.accounts.push({ id: lead.accountId, name: lead.account.name });
   const owners=actor.role==='SALES'?options.owners.filter(owner=>owner.id===actor.id):options.owners;
   const ownerId=defaultEligibleUserId(owners,actor.id,actor.role==='SALES'?null:lead.assignedSalesRepUserId);
   const initial={name:`${lead.account.name} - ${lead.tradeShow.name}`,description:null,competitorId:lead.competitorId,currentProductBeingUsed:lead.currentProductBeingUsed,competitivePricing:null,customerPainPoints:lead.customerPainPoints,ownerId,projectIds:[],stageId:0,expectedCloseDate:null,probability:null,forecastCategory:null,currencyCode:'USD',participants:[{accountId:lead.accountId,roles:[]}],contacts:lead.contactId?[{contactId:lead.contactId,isPrimary:true}]:[],lines:[]};

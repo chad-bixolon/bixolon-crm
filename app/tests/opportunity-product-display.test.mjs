@@ -30,7 +30,7 @@ function harness(filename, props, overrides = {}) {
         const base = path.resolve(path.dirname(file), name);
         return load(fs.existsSync(`${base}.tsx`) ? `${base}.tsx` : `${base}.ts`);
       }
-      if (name.startsWith('@/')) return load(path.join(root, `${name.slice(2)}.ts`));
+      if (name.startsWith('@/')) { const base = path.join(root, name.slice(2)); return load(fs.existsSync(`${base}.tsx`) ? `${base}.tsx` : `${base}.ts`); }
       return require(name);
     }, mod, mod.exports);
     cache.set(file, mod.exports);

@@ -35,6 +35,6 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     </Content>;
   }
 
-  const options = await workOptions({ userId: row.assignedToId, supportCaseId: row.supportCaseId, contactIds: row.contactId ? [row.contactId] : [] });
+  const options = await workOptions({ accountId: row.accountId, opportunityId: row.opportunityId, projectId: row.projectId, userId: row.assignedToId, supportCaseId: row.supportCaseId, contactIds: row.contactId ? [row.contactId] : [] });
   return <Content><PageHeader title={`Edit task: ${row.subject}`} eyebrow={NAV_CATEGORIES.sales}/><WorkForm kind="task" id={id} {...options} supportCase={row.supportCase ? { id: row.supportCase.id, caseNumber: row.supportCase.caseNumber } : undefined} initial={{ subject: row.subject, description: row.description, accountId: row.accountId, opportunityId: row.opportunityId, projectId: row.projectId, assignedToId: row.assignedToId, contactId: row.contactId, status: row.status, priority: row.priority, dueDate: row.dueDate?.toISOString().slice(0, 10) ?? '' }}/></Content>;
 }

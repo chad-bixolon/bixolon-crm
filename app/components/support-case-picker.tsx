@@ -1,9 +1,13 @@
 'use client';
 import { useEffect, useId, useRef, useState } from 'react';
 import { SearchResultsPopover } from './search-results-popover';
+import { EntityPicker } from './entity-picker';
 
 type Option = { id: number; name: string };
 export function SupportCasePicker({ kind, label, name, initial, accountId, onPick, error }: { kind: 'account' | 'contact' | 'sku'; label: string; name: string; initial?: Option | null; accountId?: number | null; onPick?: (id: number | null) => void; error?: string }) {
+  return kind === 'sku' ? <SkuPicker kind={kind} label={label} name={name} initial={initial} accountId={accountId} onPick={onPick} error={error}/> : <EntityPicker key={`${kind}-${accountId ?? 'none'}`} type={kind} label={label} name={name} initial={initial ? { ...initial, context: null } : null} filters={kind === 'contact' ? { accountId } : undefined} disabled={kind === 'contact' && !accountId} placeholder={kind === 'contact' && !accountId ? 'Choose a linked CRM Account first' : undefined} onChange={item => onPick?.(item?.id ?? null)} error={error}/>;
+}
+function SkuPicker({ kind, label, name, initial, accountId, onPick, error }: { kind: 'account' | 'contact' | 'sku'; label: string; name: string; initial?: Option | null; accountId?: number | null; onPick?: (id: number | null) => void; error?: string }) {
   const uid = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<Option | null>(initial ?? null);

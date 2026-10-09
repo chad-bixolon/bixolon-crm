@@ -23,9 +23,9 @@ test('Account Opportunities card offers create only with sales write on an eligi
 
 test('new route checks Account context against eligible server options and uses the shared form', () => {
   const page = source('app/opportunities/new/page.tsx');
-  assert.match(page, /!options\.accounts\.some\(account => account\.id === accountContextId\)\)\) notFound\(\)/);
+  assert.match(page, /if \(!options\.accounts\.length\) notFound\(\)/);
   assert.match(page, /<OpportunityForm[^>]+accountContextId=\{accountContextId\}/);
-  assert.match(source('lib/opportunities.ts'), /client\.account\.findMany\(\{ where: operationalAccountWhere/);
+  assert.match(page, /id: accountContextId, status: 'ACTIVE', archivedAt: null/);
   assert.match(source('lib/operational-where.ts'), /operationalAccountWhere: Prisma\.AccountWhereInput = \{ archivedAt: null, status: 'ACTIVE' \}/);
 });
 

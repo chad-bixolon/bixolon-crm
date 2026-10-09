@@ -3,6 +3,7 @@ import { submitPreservingForm, useResetOnSuccess } from '@/lib/submit-preserving
 import { useActionState, useRef, useState } from 'react';
 import { submitProjectUpdate } from '@/app/project-update-actions';
 import type { UpdateContext } from '@/lib/project-updates';
+import { EntityPicker } from './entity-picker';
 
 type Row = { id: number; body: string; projectId: number | null; opportunityId: number | null; createdAt: Date; updatedAt: Date; createdBy: { firstName: string; lastName: string } };
 type Option = { id: number; name: string };
@@ -16,12 +17,8 @@ function UpdateForm({ context, update, options }: { context: UpdateContext; upda
   return <form ref={formRef} action={action} onSubmit={event => submitPreservingForm(event, action)} className="mt-3 space-y-3 rounded border border-slate-200 p-4">
     <label className="block text-sm font-medium" htmlFor={`update-body-${context.kind}-${update?.id ?? 'new'}`}>Update</label>
     <textarea id={`update-body-${context.kind}-${update?.id ?? 'new'}`} name="body" className="field min-h-28 w-full" maxLength={5000} required defaultValue={update?.body ?? ''}/>
-    <label className="block text-sm font-medium" htmlFor={`update-other-${context.kind}-${update?.id ?? 'new'}`}>{context.kind === 'project' ? 'Linked Opportunity' : 'Linked Project'} (optional)</label>
-    <select id={`update-other-${context.kind}-${update?.id ?? 'new'}`} name={other} className="field w-full" defaultValue={current ?? ''}>
-      <option value="">None</option>
-      {options.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
-      {current && !options.some(option => option.id === current) && <option value={current}>Linked {context.kind === 'project' ? 'Opportunity' : 'Project'}</option>}
-    </select>
+    <EntityPicker type={context.kind === 'project' ? 'opportunity' : 'project'} label={`${context.kind === 'project' ? 'Linked Opportunity' : 'Linked Project'} (optional)`} name={other} initial={current ? { id: current, name: options.find(option => option.id === current)?.name ?? 'Linked record', context: null } : null} filters={context.kind === 'project' ? { projectId: context.id } : { opportunityId: context.id, editableOnly: true }}/>
+
     <div className="flex items-center gap-3"><button className="btn-primary" disabled={pending}>{pending ? 'Saving…' : update ? 'Save update' : 'Add update'}</button>{state.message && <span role={state.saved ? 'status' : 'alert'} className="text-sm">{state.message}</span>}</div>
   </form>;
 }

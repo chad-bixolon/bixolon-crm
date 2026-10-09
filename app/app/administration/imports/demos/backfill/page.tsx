@@ -5,13 +5,13 @@ import { Content, PageHeader } from '@/components/shell';
 import { requirePermission } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { saveRosaBackfill } from './actions';
+import { EntityPicker } from '@/components/entity-picker';
 
 export default async function RosaBackfillPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const actor = await requirePermission('users.manage');
   if (actor.role !== 'ADMIN') return <Content><p>Administrator access required.</p></Content>;
-  const [{ error }, accounts, skus] = await Promise.all([
+  const [{ error }, skus] = await Promise.all([
     searchParams,
-    prisma.account.findMany({ where: { status: 'ACTIVE', archivedAt: null }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
     prisma.productSku.findMany({ where: { active: true, product: { active: true, archivedAt: null } }, select: { id: true, partNumber: true }, orderBy: { partNumber: 'asc' } }),
   ]);
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Add existing Demo record" description="Use this only to add a Demo that already exists in the source system." action={<Link className="btn-secondary" href="/administration/imports/demos">Import demos</Link>}/>
@@ -22,7 +22,7 @@ export default async function RosaBackfillPage({ searchParams }: { searchParams:
         <label>Source Request ID *<input className="field mt-1 w-full" name="requestId" required placeholder="UUID from source record"/></label>
         <label>Demo Number (if assigned)<input className="field mt-1 w-full" name="demoNumber"/></label>
         <label>Source status *<select className="field mt-1 w-full" name="status" required><option value="">Choose status</option><option value="PENDING">Requested</option><option value="APPROVED">Approved</option><option value="SHIPPED">Shipped</option><option value="CANCELLED">Cancelled</option></select></label>
-        <label>CRM Account *<select className="field mt-1 w-full" name="accountId" required><option value="">Choose Account</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
+        <EntityPicker type="account" label="CRM Account" name="accountId" required/>
         <label>Source customer name (VAR column) *<input className="field mt-1 w-full" name="sourceAccount" required/></label>
         <label>Requested date *<input className="field mt-1 w-full" name="requestedAt" type="date" required/></label>
         <label>Source requester *<input className="field mt-1 w-full" name="requestedBy" required/></label>

@@ -8,6 +8,7 @@ import { createResolutionContactAction } from "@/app/trade-shows/[id]/contact-re
 import { AddressFields } from "@/components/address-fields";
 import { hasAddress, type Address } from "@/lib/address";
 import type { MarketingPreference } from "@prisma/client";
+import { EntityPicker, type PickerResult } from '@/components/entity-picker';
 type Initial = Address & { accountId: number | null; useAccountAddress?: boolean | null; firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null; mobile: string | null; active: boolean; isPrimary: boolean; marketingPreference?: MarketingPreference };
 type AccountOption = Address & { id: number; name: string };
 export function ContactForm({ id, initial, accounts, accountId, leadContext, resolutionContext }: { id?: number; initial?: Initial; accounts: AccountOption[]; accountId?: number; leadContext?: {tradeShowId:number;leadId:number}; resolutionContext?:{tradeShowId:number;leadId:number;returnTo?:string} }) {
@@ -16,22 +17,27 @@ export function ContactForm({ id, initial, accounts, accountId, leadContext, res
   const [state, action, pending] = useActionState(submit, { errors: {} } as FormState);
   const guard = useSubmitGuard(state, action);
   const retained=(key:string,fallback:string|number|boolean|null|undefined="")=>state.values?.[key]??String(fallback??"");
-  const [selectedAccountId, setSelectedAccountId] = useState(retained("accountId",initial?.accountId ?? accountId));
+  const [selectedAccount, setSelectedAccount] = useState<PickerResult | null>(() => {
+    const id = Number(retained('accountId', initial?.accountId ?? accountId));
+    const row = accounts.find(item => item.id === id);
+    return row ? { id: row.id, name: row.name, context: [row.city, row.stateProvince].filter(Boolean).join(', ') || null, address: row } : null;
+  });
+  const selectedAccountId = selectedAccount ? String(selectedAccount.id) : '';
   const [addressMode, setAddressMode] = useState<"account" | "different">(() => state.values?.addressMode === "account" ? "account" : state.values?.addressMode === "different" || (initial && (initial.useAccountAddress === false || initial.useAccountAddress === null && hasAddress(initial))) ? "different" : "account");
-  const selectedAccount = accounts.find(account => String(account.id) === selectedAccountId);
+  const accountAddress = selectedAccount?.address;
   const effectiveMode = selectedAccountId ? addressMode : "different";
-  const accountAddressLines = selectedAccount && hasAddress(selectedAccount) ? [
-    selectedAccount.addressLine1,
-    selectedAccount.addressLine2,
-    [selectedAccount.city, [selectedAccount.stateProvince, selectedAccount.postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", "),
-    selectedAccount.country,
+  const accountAddressLines = accountAddress && hasAddress(accountAddress) ? [
+    accountAddress.addressLine1,
+    accountAddress.addressLine2,
+    [accountAddress.city, [accountAddress.stateProvince, accountAddress.postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+    accountAddress.country,
   ].filter(Boolean) : [];
   const error = (key: string) => state.errors[key] && <p className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
   return <form action={action} onSubmit={guard} className="panel max-w-4xl p-6" aria-label={id ? "Edit contact" : "Create contact"}>
     {state.message && <p role="alert" className="mb-5 rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     {!!state.matches?.length && <section className="mb-5 rounded border border-amber-300 bg-amber-50 p-4 text-sm" role="alert"><h2 className="font-semibold">Possible duplicate Contact found</h2><p className="mt-1">We found an existing Contact that may be the same person. Please review it before creating or saving this Contact.</p>{state.matches.some(match => match.reason === 'email') && <p className="mt-2 font-medium">A Contact with this email already exists.</p>}{state.matches.some(match => match.archived) && <p className="mt-2">An archived Contact may be available to restore. Review it before creating a new record.</p>}<ul className="mt-3 space-y-3">{state.matches.map(match => <li key={match.id} className="rounded border border-amber-200 bg-white p-3"><p className="font-medium">{match.name}{match.archived ? ' — Archived' : match.inactive ? ' — Inactive' : ''}</p><p className="text-slate-700">{match.email ?? 'No email'} · {match.accountName ?? 'No Account'}{match.title ? ` · ${match.title}` : ''}</p><p className="mt-1 text-slate-600">{match.reason === 'email' ? 'Same email address' : match.reason === 'same-account-name' ? 'Same name and Account' : 'Same name; at least one Contact has no Account'}</p><Link className="mt-2 inline-block font-medium text-orange-800 underline" href={`/contacts/${match.id}`} target="_blank" rel="noopener noreferrer">Open existing Contact</Link></li>)}</ul><p className="mt-3">If these are different people, you can continue after reviewing them.</p></section>}
     <div className="grid gap-5 sm:grid-cols-2">
-      <div className="sm:col-span-2"><label className="label" htmlFor="accountId">Account (optional)</label><select className="field" name="accountId" id="accountId" value={selectedAccountId} onChange={event => setSelectedAccountId(event.target.value)} disabled={!!accountId && !id}><option value="">No account</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}{initial?.accountId && !accounts.some((a) => a.id === initial.accountId) && <option value={initial.accountId}>Current account (inactive)</option>}</select>{!!accountId && !id && <input type="hidden" name="accountId" value={accountId}/>}{error("accountId")}</div>
+      <div className="sm:col-span-2"><EntityPicker type="account" label="Account (optional)" name="accountId" value={selectedAccount} onChange={setSelectedAccount} disabled={!!accountId && !id} error={state.errors.accountId}/></div>
       {([ ["firstName", "First name"], ["lastName", "Last name"], ["title", "Title"], ["email", "Email"], ["phone", "Office phone"], ["mobile", "Mobile phone"] ] as const).map(([key, label]) => <div key={key}><label className="label" htmlFor={key}>{label}{key === "firstName" || key === "lastName" ? " *" : ""}</label><input className="field" id={key} name={key} type={key === "email" ? "email" : key === "phone" || key === "mobile" ? "tel" : "text"} required={key === "firstName" || key === "lastName"} maxLength={key === "email" ? 254 : key === "title" ? 200 : key === "phone" || key === "mobile" ? 50 : 100} defaultValue={retained(key,initial?.[key])}/>{error(key)}</div>)}
       <div><label className="label" htmlFor="active">Status</label><select className="field" id="active" name="active" defaultValue={retained("active",initial?.active === false ? "false" : "true")}><option value="true">Active</option><option value="false">Inactive</option></select></div>
       {!sourceContext && <div><label className="label" htmlFor="marketingPreference">Marketing communications</label><select className="field" id="marketingPreference" name="marketingPreference" defaultValue={retained("marketingPreference",initial?.marketingPreference ?? "UNKNOWN")}><option value="UNKNOWN">Not specified</option><option value="OPTED_IN">Opted in</option><option value="OPTED_OUT">Opted out</option></select><p className="mt-1 text-xs text-slate-600">Record the Contact&apos;s preference for receiving marketing communications.</p><p className="mt-1 text-xs text-slate-600">Opted out: Do not include this Contact in marketing audience exports.</p></div>}

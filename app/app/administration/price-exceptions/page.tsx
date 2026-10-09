@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 export default async function PriceExceptionCleanupPage() {
   const actor = await requirePermission('users.manage');
   if (actor.role !== 'ADMIN') return <Content><p>Administrator access required.</p></Content>;
-  const [records, salesReps, accounts, skus, options] = await Promise.all([
+  const [records, salesReps, skus, options] = await Promise.all([
     prisma.priceException.findMany({
       orderBy: { id: 'desc' },
       include: {
@@ -23,7 +23,6 @@ export default async function PriceExceptionCleanupPage() {
       },
     }),
     prisma.user.findMany({ where: { active:true, archivedAt:null,role:{in:['SALES','SALES_MANAGER']} }, select:{id:true,firstName:true,lastName:true},orderBy:[{lastName:'asc'},{firstName:'asc'}] }),
-    prisma.account.findMany({ where: { status:'ACTIVE',archivedAt:null }, select:{id:true,name:true},orderBy:{name:'asc'} }),
     prisma.productSku.findMany({where:{active:true,product:{active:true,archivedAt:null}},select:{id:true,partNumber:true,product:{select:{name:true}}},orderBy:{partNumber:'asc'}}),
     accountOptions(prisma),
   ]);
@@ -57,5 +56,5 @@ export default async function PriceExceptionCleanupPage() {
         archive: !record.archivedAt && record.status !== 'ARCHIVED' } };
   });
   const counts = Object.fromEntries(cleanupIssueKeys.map(key => [key, rows.filter(row => row.issues.includes(key)).length]));
-  return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="PE Cleanup" description="Review and correct imported Price Exceptions, account mappings, owners, statuses, and other data issues." action={<Link className="btn-secondary" href="/price-exceptions">Price Exceptions</Link>}/><CleanupWorkflow rows={rows} counts={counts} salesReps={salesReps} accounts={accounts} skus={skus.map(sku=>({id:sku.id,name:`${sku.partNumber} · ${sku.product.name}`}))} accountOptions={{industries:options.industries.map(x=>({code:x.code,name:x.name})),territories:options.territories.map(x=>({code:x.code,name:x.name}))}}/></Content>;
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="PE Cleanup" description="Review and correct imported Price Exceptions, account mappings, owners, statuses, and other data issues." action={<Link className="btn-secondary" href="/price-exceptions">Price Exceptions</Link>}/><CleanupWorkflow rows={rows} counts={counts} salesReps={salesReps} accounts={[]} skus={skus.map(sku=>({id:sku.id,name:`${sku.partNumber} · ${sku.product.name}`}))} accountOptions={{industries:options.industries.map(x=>({code:x.code,name:x.name})),territories:options.territories.map(x=>({code:x.code,name:x.name}))}}/></Content>;
 }

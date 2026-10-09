@@ -1,11 +1,11 @@
 import { RecoverableActionForm } from '@/components/recoverable-action-form';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
-import { operationalProjectWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import type {Actor} from '@/lib/authorization';
 import {Content,PageHeader} from '@/components/shell';
 import {ReportResults} from '@/components/report-results';
 import { ReportSalesRepFilter } from '@/components/report-sales-rep-filter';
+import { ReportEntityFilter } from '@/components/report-entity-filter';
 import {ReportCloseDateFields} from '@/components/report-close-date-fields';
 import {prisma} from '@/lib/prisma';
 import {channelPartnerConfigFromParams,filterValue} from '@/lib/report-builder';
@@ -17,12 +17,11 @@ type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|
 const roles=[['DISTRIBUTOR','Distributor'],['VAR_RESELLER','VAR / Reseller'],['ISV_PARTNER','ISV'],['OEM','OEM'],['MEDIA_PARTNER','Media Partner'],['SERVICE_PARTNER','Service Partner'],['END_USER','End User'],['OTHER','Other']] as const;
 export async function ChannelPartnerBuilder({params,actor,saved}:{params:Params;actor:Actor;saved:Saved}){
   const config=channelPartnerConfigFromParams(params,saved?.configuration),definition=reportRegistry.CHANNEL_PARTNER;
-  const [result,owners,accounts,stages,industries,territories,categories,projects,currencies]=await Promise.all([
+  const [result,owners,stages,industries,territories,categories,currencies]=await Promise.all([
     executeChannelPartnerReport(prisma,actor,config),
     prisma.user.findMany({where:{active:true,archivedAt:null,...(actor.role==='SALES'?{id:actor.id}:{})},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
-    prisma.account.findMany({where:{archivedAt:null,status:'ACTIVE'},select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.salesStage.findMany({orderBy:[{sortOrder:'asc'},{id:'asc'}]}),prisma.industry.findMany({orderBy:{name:'asc'}}),prisma.territory.findMany({orderBy:{name:'asc'}}),
-    prisma.productCategory.findMany({orderBy:{name:'asc'}}),prisma.project.findMany({where:operationalProjectWhere,select:{id:true,name:true},orderBy:{name:'asc'}}),
+    prisma.productCategory.findMany({orderBy:{name:'asc'}}),
     prisma.currency.findMany({where:{active:true},orderBy:{code:'asc'}}),
   ]);
   const selected=(field:string)=>String(filterValue(config,field)??'');
@@ -34,7 +33,7 @@ export async function ChannelPartnerBuilder({params,actor,saved}:{params:Params;
     <form method="get" className="panel report-builder p-3 md:p-4"><input type="hidden" name="configured" value="1"/><input type="hidden" name="reportType" value="CHANNEL_PARTNER"/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}
       <fieldset className="report-section report-primary-filters"><legend className="report-section-title">Primary filters</legend><div className="report-filter-grid">
         <ReportSalesRepFilter actor={actor} reps={owners} selected={selected('ownerId')} label="Sales Rep"/>
-        {select('accountId','Partner Account',accounts.map(x=>({value:x.id,label:x.name})))}
+        <ReportEntityFilter type="account" name="accountId" label="Partner Account" selected={selected('accountId')} actor={actor}/>
         {select('participantRole','Participant Role',roles.map(([value,label])=>({value,label})),'All partner roles')}
         {select('status','Status',[{value:'OPEN',label:'Open'},{value:'WON',label:'Closed Won'},{value:'LOST',label:'Closed Lost'}],'Any')}
       </div></fieldset>
@@ -45,7 +44,7 @@ export async function ChannelPartnerBuilder({params,actor,saved}:{params:Params;
         {select('territory','Territory',territories.map(x=>({value:x.code,label:x.name})))}
         {select('strategicAccount','Strategic Account',[{value:'true',label:'Yes'},{value:'false',label:'No'}])}
         {select('productCategoryId','Product Category',categories.map(x=>({value:x.id,label:x.name})))}
-        {select('projectId','Project',projects.map(x=>({value:x.id,label:x.name})))}
+        <ReportEntityFilter type="project" name="projectId" label="Project" selected={selected('projectId')} actor={actor}/>
         {select('currency','Currency',currencies.map(x=>({value:x.code,label:x.code})),'All currencies')}
         <ReportCloseDateFields initialChoice={between?'CUSTOM':preset||'ANY'} initialFrom={between?.from} initialTo={between?.to}/>
       </div></fieldset>

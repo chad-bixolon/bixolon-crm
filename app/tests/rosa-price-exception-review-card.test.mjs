@@ -28,7 +28,7 @@ function render(manual){
 test('review card shows source values beside searchable CRM resolution controls and source conflict choices',()=>{
   const html=render();
   assert.match(html,/Source: Sonda in Chile/);
-  assert.match(html,/Search CRM VAR/);
+  assert.match(html,/<label[^>]*>CRM VAR<\/label><input[^>]*role="combobox"/);
   assert.match(html,/\+ Create Account/);
   assert.match(html,/w-full min-w-0/);
   assert.match(html,/Source: ABC123/);

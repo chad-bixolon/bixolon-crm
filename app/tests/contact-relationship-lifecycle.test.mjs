@@ -72,7 +72,7 @@ test('Contact history exception does not change Opportunity owner permissions', 
   assert.deepEqual([...db.links], [20]);
 });
 
-test('Opportunity picker offers only active Contacts while its edit and detail views label historical links', async () => {
+test('Opportunity form does not preload Contacts while its edit and detail views label historical links', async () => {
   let where;
   const client = {
     account: { findMany: async () => [] }, contact: { findMany: async args => { where = args.where; return []; } },
@@ -80,8 +80,7 @@ test('Opportunity picker offers only active Contacts while its edit and detail v
     product: { count: async () => 0 }, project: { findMany: async () => [] }, productCategory: { findMany: async () => [] }, competitorOption: { findMany: async () => [] },
   };
   await opportunityOptions(client);
-  assert.equal(where.active, true);
-  assert.equal(where.archivedAt, null);
+  assert.equal(where, undefined);
   const edit = fs.readFileSync(path.join(root, 'app/opportunities/[id]/edit/page.tsx'), 'utf8');
   const form = fs.readFileSync(path.join(root, 'components/opportunity-form.tsx'), 'utf8');
   const detail = fs.readFileSync(path.join(root, 'app/opportunities/[id]/page.tsx'), 'utf8');

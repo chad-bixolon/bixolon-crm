@@ -12,16 +12,14 @@ async function openCorrection(page: import('@playwright/test').Page) {
 test('PE Account search clears a stale selected ID before correction', async ({ page }) => {
   await openCorrection(page);
   const account = page.getByRole('combobox', { name: 'active Account' });
-  await account.selectOption({ label: names.account });
-  await expect(page.getByText(`Selected: ${names.account}`)).toBeVisible();
-  await page.getByRole('textbox', { name: 'Search active Account' }).fill(names.otherAccount);
-  await expect(account).toHaveValue('');
-  await expect(page.getByRole('alert').filter({ hasText: 'Select an active Account from the results.' })).toBeVisible();
+  await account.fill(names.account);
+  await page.getByRole('option', { name: new RegExp(names.account) }).first().click();
+  await expect(page.getByText(names.account, { exact: true }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Change' }).click();
+  await account.fill(names.otherAccount);
   await expect(page.getByRole('button', { name: 'Save correction' })).toBeDisabled();
-  await account.selectOption({ label: names.otherAccount });
-  await expect(page.getByRole('alert').filter({ hasText: 'Select an active Account from the results.' })).toBeHidden();
+  await page.getByRole('option', { name: new RegExp(names.otherAccount) }).first().click();
   await page.getByRole('button', { name: 'Save correction' }).click();
-  await expect(page.getByText(`Selected: ${names.otherAccount}`)).toBeHidden();
   await expect(page.getByText(names.otherAccount).first()).toBeVisible();
 });
 

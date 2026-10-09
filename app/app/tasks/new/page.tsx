@@ -14,9 +14,9 @@ export default async function Page({searchParams}: {searchParams: Promise<{accou
   if (p.supportCaseId && (!Number.isSafeInteger(caseId)||caseId<1)) notFound();
   if (actor.role==='SUPPORT' && !p.supportCaseId) notFound();
   const supportCase=p.supportCaseId ? await caseWorkContext(prisma,actor,caseId) : null;
-  const options=await workOptions({supportCaseId:supportCase?.id,contactIds:supportCase?.contactId?[supportCase.contactId]:[]});
-  if (actor.role==='SUPPORT') { options.opportunities=[]; options.projects=[]; }
   const activityId=Number(p.activityId);
   const activity=!supportCase && Number.isSafeInteger(activityId)&&activityId>0 ? await prisma.activity.findFirst({where:{id:activityId,archivedAt:null}}) : null;
+  const options=await workOptions({accountId:supportCase?.accountId ?? activity?.accountId ?? (Number(p.accountId) || undefined),opportunityId:activity?.opportunityId ?? (Number(p.opportunityId) || undefined),projectId:activity?.projectId ?? (Number(p.projectId) || undefined),supportCaseId:supportCase?.id,contactIds:supportCase?.contactId?[supportCase.contactId]:[]});
+  if (actor.role==='SUPPORT') { options.opportunities=[]; options.projects=[]; }
   return <Content><PageHeader title="New task" eyebrow={supportCase?NAV_CATEGORIES.support:NAV_CATEGORIES.sales} description={activity?'Review the prefilled follow-up and save to create the Task.':undefined}/><WorkForm kind="task" createKey={randomUUID()} {...options} supportCase={supportCase?{id:supportCase.id,caseNumber:supportCase.caseNumber,contactName:supportCase.contact?`${supportCase.contact.firstName} ${supportCase.contact.lastName}`:null}:undefined} lockAccountId={supportCase?.accountId ?? undefined} initial={{accountId:supportCase?.accountId??activity?.accountId??p.accountId??'',opportunityId:supportCase?'':activity?.opportunityId??p.opportunityId??'',projectId:supportCase?'':activity?.projectId??p.projectId??'',contactId:supportCase?.contactId??'',subject:supportCase?`Follow up on ${supportCase.caseNumber}`:activity?.nextStep??'',description:activity?`Follow-up from Activity: ${activity.subject}`:'',dueDate:activity?.followUpDate?.toISOString().slice(0,10)??'',assignedToId:defaultEligibleUserId(options.users,actor.id,activity?.userId),status:'OPEN',priority:'NORMAL'}}/></Content>;
 }

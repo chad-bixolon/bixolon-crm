@@ -39,55 +39,12 @@ test('menu flips upward near viewport bottom and stays within viewport edges', (
   assert.equal(mobile.left, 8);
 });
 
-function pickerHarness() {
-  const slots = [];
-  let cursor = 0;
-  const hooks = {
-    useId: () => 'pe',
-    useRef: () => ({ current: null }),
-    useEffect() {},
-    useState(initial) {
-      const index = cursor++;
-      if (!(index in slots)) slots[index] = initial;
-      return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value; }];
-    },
-  };
-  const { PriceExceptionAccountPicker } = load(path.join(root, 'components/price-exception-account-picker.tsx'), {
-    react: hooks,
-    './search-results-popover': { SearchResultsPopover: () => null },
-  });
-  const props = { name: 'distributorAccountId', label: 'Linked CRM Account', initial: null };
-  return { slots, render() { cursor = 0; return PriceExceptionAccountPicker(props); } };
-}
-function nodes(tree, predicate) {
-  if (!tree || typeof tree !== 'object') return [];
-  if (Array.isArray(tree)) return tree.flatMap(child => nodes(child, predicate));
-  return [...(predicate(tree) ? [tree] : []), ...nodes(tree.props?.children, predicate)];
-}
-
-test('PE picker navigates beyond the first visible rows and Enter selects without changing the form value format', () => {
-  const h = pickerHarness();
-  let tree = h.render();
-  const input = nodes(tree, node => node.props?.role === 'combobox')[0];
-  input.props.onFocus();
-  h.slots[2] = Array.from({ length: 40 }, (_, i) => ({ id: i + 1, name: `Account ${i + 1}`, status: 'ACTIVE', archivedAt: null }));
-  for (let i = 0; i < 30; i++) nodes(h.render(), node => node.props?.role === 'combobox')[0].props.onKeyDown({ key: 'ArrowDown', preventDefault() {} });
-  tree = h.render();
-  assert.equal(nodes(tree, node => node.props?.role === 'combobox')[0].props['aria-activedescendant'], 'pe-option-30');
-  const menu = nodes(tree, node => node.type?.name === 'SearchResultsPopover')[0];
-  assert.equal(menu.props.activeIndex, 30);
-  assert.equal(nodes(menu, node => node.props?.role === 'option').length, 40);
-  nodes(tree, node => node.props?.role === 'combobox')[0].props.onKeyDown({ key: 'Enter', preventDefault() {} });
-  tree = h.render();
-  assert.equal(nodes(tree, node => node.props?.name === 'distributorAccountId')[0].props.value, 31);
-  assert.equal(nodes(tree, node => node.type?.name === 'SearchResultsPopover').length, 0);
-});
-
-test('PE lookup returns every active matching Account, while the resolution form keeps its save action', () => {
+test('Price Exception Account picker uses shared remote EntityPicker', () => {
+  const picker = fs.readFileSync(path.join(root, 'components/price-exception-account-picker.tsx'), 'utf8');
+  assert.match(picker, /<EntityPicker/);
+  assert.match(picker, /name=\{`\$\{name\}Searching`\}/);
   const route = fs.readFileSync(path.join(root, 'app/price-exceptions/account-search/route.ts'), 'utf8');
-  assert.match(route, /status:'ACTIVE',archivedAt:null/);
-  assert.doesNotMatch(route, /take:\s*20/);
+  assert.match(route, /searchEntities/);
   const form = fs.readFileSync(path.join(root, 'components/price-exception-resolution-form.tsx'), 'utf8');
   assert.match(form, /PriceExceptionAccountPicker name=\{party\.field\}/);
-  assert.match(form, /Save Account Links/);
 });

@@ -32,6 +32,7 @@ Module._load = function(specifier, parent, isMain) {
   if (specifier === '@/lib/price-exception-cleanup-shared') return require(path.join(root, 'lib/price-exception-cleanup-shared.ts'));
   if (specifier === './actions') return { confirmCleanup() {}, previewCleanup() {} };
   if (specifier === './editor') return { CleanupEditor() {} };
+  if (specifier === '@/components/remote-import-account-picker') return { RemoteImportAccountPicker() {} };
   return originalLoad.call(this, specifier, parent, isMain);
 };
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
@@ -124,7 +125,7 @@ test('bulk fields and preview state follow action and eligible selection', () =>
   assert.match(text(tree), /1 selected records are ineligible for this action\. They will be skipped after preview\./);
   control(tree, 'Action').props.onChange({ target: { value: 'linkDistributor' } });
   tree = render();
-  assert.ok(control(tree, 'Active Account'));
+  assert.equal(all(tree, item => item.type?.name === 'RemoteImportAccountPicker' && item.props.label === 'Active Account').length, 1);
   assert.equal(control(tree, 'Salesperson'), undefined);
   assert.equal(button(tree, 'Preview updates').props.disabled, true);
 });

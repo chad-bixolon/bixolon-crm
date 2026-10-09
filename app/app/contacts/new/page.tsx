@@ -8,9 +8,9 @@ import { positiveId } from "@/lib/crm-validation";
 export const dynamic = "force-dynamic";
 export default async function NewContactPage({ searchParams }: { searchParams: Promise<{ accountId?: string }> }) {
   await requirePermission("contacts.write");
-  const accounts = await prisma.account.findMany({ where: { status: "ACTIVE", archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true, addressLine1: true, addressLine2: true, city: true, stateProvince: true, postalCode: true, country: true } });
   const rawAccountId = (await searchParams).accountId;
   const accountId = rawAccountId ? positiveId(rawAccountId) : null;
-  if (rawAccountId && (!accountId || !accounts.some(account => account.id === accountId))) notFound();
+  const accounts = accountId ? await prisma.account.findMany({ where: { id: accountId, status: "ACTIVE", archivedAt: null }, select: { id: true, name: true, addressLine1: true, addressLine2: true, city: true, stateProvince: true, postalCode: true, country: true } }) : [];
+  if (rawAccountId && (!accountId || !accounts.length)) notFound();
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.crm} title="New contact"/><ContactForm accounts={accounts} accountId={accountId ?? undefined}/></Content>;
 }

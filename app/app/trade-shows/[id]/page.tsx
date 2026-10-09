@@ -13,7 +13,6 @@ import { can } from '@/lib/authorization';
 import { canViewTradeShowImportHistory, tradeShowKpis, tradeShowLeadReadWhere, tradeShowReadWhere } from '@/lib/trade-shows';
 import { tradeShowTimezoneLabel } from '@/lib/trade-show-timezones';
 import { defaultReportConfiguration, executeTradeShowReport } from '@/lib/reporting';
-import { eligiblePartnerAccountWhere } from '@/lib/trade-show-routing';
 import { bulkRouteTradeShowAction } from './bulk-routing-actions';
 import { TradeShowBulkRoutingControls } from '@/components/trade-show-bulk-routing-controls';
 import { TradeShowResources } from '@/components/trade-show-resources';
@@ -41,7 +40,7 @@ export default async function TradeShowPage({ params, searchParams }: { params: 
   const repId=Number(filters.rep); const statuses=['NEW','CONTACTED','QUALIFIED','CONVERTED','DISQUALIFIED'];
   const routings=['UNREVIEWED','BIXOLON_SALES','REFERRED_TO_PARTNER','MARKETING_FOLLOW_UP'];
   const leadFilter={AND:[tradeShowLeadReadWhere(actor),...(filters.q?[{OR:[{firstName:{contains:filters.q,mode:'insensitive' as const}},{lastName:{contains:filters.q,mode:'insensitive' as const}},{sourceCompany:{contains:filters.q,mode:'insensitive' as const}},{email:{contains:filters.q,mode:'insensitive' as const}}]}]:[]),...(Number.isSafeInteger(repId)&&repId>0?[{assignedSalesRepUserId:repId}]:[]),...(filters.status&&statuses.includes(filters.status)?[{status:filters.status as 'NEW'|'CONTACTED'|'QUALIFIED'|'CONVERTED'|'DISQUALIFIED'}]:[]),...(filters.routing&&routings.includes(filters.routing)?[{routing:filters.routing as TradeShowLeadRouting}]:[]),...(filters.account==='unresolved'?[{accountId:null}]:[]),...(filters.contact==='unresolved'?[{contactId:null}]:filters.contact==='linked'?[{contactId:{not:null}}]:[]),...(filters.followUp==='overdue'?[{routing:'BIXOLON_SALES' as const,followUpAt:{lt:new Date()}}]:filters.followUp==='scheduled'?[{routing:'BIXOLON_SALES' as const,followUpAt:{not:null}}]:filters.followUp==='none'?[{routing:'BIXOLON_SALES' as const,followUpAt:null}]:[])]};
-  const [show,reps,partnerAccounts] = await Promise.all([prisma.tradeShow.findFirst({
+  const [show,reps] = await Promise.all([prisma.tradeShow.findFirst({
     where: { AND: [{ id }, tradeShowReadWhere(actor)] },
     include: {
       marketingOwner: { select: { firstName: true, lastName: true } },
@@ -49,7 +48,7 @@ export default async function TradeShowPage({ params, searchParams }: { params: 
       leads: { where: leadFilter, select: { id: true, firstName: true, lastName: true, title: true, sourceCompany: true, email: true, phone: true, followUpAt: true, assignedSalesRepUserId: true, status: true,routing:true,routedPartnerAccount:{select:{name:true}}, assignedSalesRep: { select: { firstName: true, lastName: true } }, account:{select:{name:true}},contact:{select:{firstName:true,lastName:true}},convertedOpportunity:{select:{id:true}} }, orderBy: { id: 'desc' }, take: 100 },
       imports: { where: viewImportHistory ? {} : { id: -1 }, select: { id: true, format:true, mappingName:true, sourceFileName: true, sourceSheet: true, fileSha256:true, uploadedAt: true, rowCount: true, createdCount: true, existingCount: true, skippedCount: true,uploadedBy:{select:{firstName:true,lastName:true}} }, orderBy: { uploadedAt: 'desc' }, take: 20 },
     },
-  }),prisma.user.findMany({where:{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true,firstName:true,lastName:true},orderBy:{firstName:'asc'}}),prisma.account.findMany({where:eligiblePartnerAccountWhere,select:{id:true,name:true},orderBy:{name:'asc'}})]);
+  }),prisma.user.findMany({where:{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true,firstName:true,lastName:true},orderBy:{firstName:'asc'}})]);
   if (!show) notFound();
   const [kpiRows,report] = await Promise.all([prisma.tradeShowLead.findMany({ where: { AND: [{ tradeShowId: id }, tradeShowLeadReadWhere(actor)] }, select: { assignedSalesRepUserId: true, status: true,routing:true,contactId:true } }),executeTradeShowReport(prisma,actor,{...defaultReportConfiguration('TRADE_SHOW'),filters:[{field:'tradeShowId',operator:'eq',value:id}]})]);
   const kpi = tradeShowKpis(kpiRows);
@@ -87,7 +86,7 @@ export default async function TradeShowPage({ params, searchParams }: { params: 
           <div className="filter-actions mt-3 justify-end"><button className="btn-filter-primary" type="submit">Filter</button><Link className="btn-filter-secondary" href={`/trade-shows/${id}`}>Clear</Link></div>
         </form>
       </div>
-      <RecoverableActionForm action={bulkRouteTradeShowAction.bind(null,id)}>{can(actor,'trade-shows.assign')&&can(actor,'trade-shows.route')&&<TradeShowBulkRoutingControls reps={reps.map(rep=>({id:rep.id,name:`${rep.firstName} ${rep.lastName}`}))} partners={partnerAccounts}/>} {filters.bulk&&<p role={filters.bulk.startsWith('Error:')?'alert':'status'} className={`mx-5 mb-3 rounded p-3 text-sm ${filters.bulk.startsWith('Error:')?'bg-red-50 text-red-800':'bg-emerald-50 text-emerald-800'}`}>{filters.bulk}</p>}
+      <RecoverableActionForm action={bulkRouteTradeShowAction.bind(null,id)}>{can(actor,'trade-shows.assign')&&can(actor,'trade-shows.route')&&<TradeShowBulkRoutingControls reps={reps.map(rep=>({id:rep.id,name:`${rep.firstName} ${rep.lastName}`}))}/>} {filters.bulk&&<p role={filters.bulk.startsWith('Error:')?'alert':'status'} className={`mx-5 mb-3 rounded p-3 text-sm ${filters.bulk.startsWith('Error:')?'bg-red-50 text-red-800':'bg-emerald-50 text-emerald-800'}`}>{filters.bulk}</p>}
       <TableScroll label="Trade Show leads">
         <table className="w-full min-w-[960px] table-fixed text-left text-sm">
           <colgroup>{['17%','18%','19%','14%','11%','21%'].map((width,index)=><col key={index} style={{width}}/>)}</colgroup>

@@ -19,11 +19,11 @@ export default async function ReviewCalendarMatch({ params }: { params: Promise<
   const event = await prisma.googleCalendarEvent.findFirst({ where: { id, userId: real.id, connection: { userId: real.id } }, include: { attendees: true, review: true, connection: { select: { googleEmail: true } } } }); if (!event) notFound();
   const match = await evaluateCalendarEvent(prisma, id, actor, event.connection.googleEmail);
   const review = await prisma.googleCalendarEventReview.findUniqueOrThrow({ where: { eventId: id } });
-  const options = await workOptions(); const zone = await prisma.user.findUnique({ where: { id: real.id }, select: { timeZone: true } });
   const accountId = review.selectionsConfirmed ? review.selectedAccountId : review.suggestedAccountId;
   const contactIds = review.selectionsConfirmed ? review.selectedContactIds : review.suggestedContactIds;
   const opportunityId = review.selectionsConfirmed ? review.selectedOpportunityId : review.suggestedOpportunityId;
   const projectId = review.selectionsConfirmed ? review.selectedProjectId : review.suggestedProjectId;
+  const options = await workOptions({ accountId, opportunityId, projectId, contactIds }); const zone = await prisma.user.findUnique({ where: { id: real.id }, select: { timeZone: true } });
   const complete = (event.endAt ?? (event.endDate ? new Date(`${event.endDate}T00:00:00Z`) : null))! <= new Date();
   const loggable = complete && !event.cancelledAt && event.status !== 'CANCELLED' && !review.activityId && !review.ignoredAt && !!accountId && (review.matchStatus === "MATCHED" || review.selectionsConfirmed) && can(actor, 'tasks.write');
   return <Content><PageHeader title={event.summary || 'Calendar event'} eyebrow={NAV_CATEGORIES.sales} description={event.allDay ? `${event.startDate} · All day` : event.startAt ? formatDateTimeForUser(event.startAt, zone?.timeZone ?? 'America/New_York') : 'Time unavailable'} action={<Link className="btn-secondary" href="/calendar-matches">Back to queue</Link>}/>

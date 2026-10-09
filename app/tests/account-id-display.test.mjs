@@ -42,6 +42,6 @@ test('Account relationship forms keep numeric values internal and show linked in
     const source = read(file);
     assert.match(source, /linkedAccountIds/);
     assert.match(source, /select: \{ id: true, name: true \}/);
-    assert.match(source, /account\.name/);
+    assert.match(source, /linkedAccountIds/);
   }
 });

@@ -10,19 +10,15 @@ export const dynamic = 'force-dynamic';
 export default async function EditProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser(), id = Number((await params).id);
   if (!Number.isSafeInteger(id) || id < 1) notFound();
-  const [project, accounts, owners] = await Promise.all([
+  const [project, owners] = await Promise.all([
     prisma.project.findUnique({ where: { id }, include: { owner: { select: { firstName: true, lastName: true } }, primaryAccount: { select: { ownerId: true } }, participants: { include: { roles: true } } } }),
-    prisma.account.findMany({ where: { status: 'ACTIVE', archivedAt: null }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
     prisma.user.findMany({ where: eligibleUserWhere('projects.write'), select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }),
   ]);
   if (!project) notFound();
   if (!canEditProject(actor, project)) redirect('/access-denied');
   const linkedAccountIds = [project.primaryAccountId, ...project.participants.map(participant => participant.accountId)]
-    .filter((accountId): accountId is number => accountId !== null && !accounts.some(account => account.id === accountId));
-  if (linkedAccountIds.length) {
-    const linkedAccounts = await prisma.account.findMany({ where: { id: { in: linkedAccountIds } }, select: { id: true, name: true } });
-    accounts.push(...linkedAccounts.map(account => ({ ...account, name: `${account.name} (inactive)` })));
-  }
+    .filter((accountId): accountId is number => accountId !== null);
+  const accounts = linkedAccountIds.length ? await prisma.account.findMany({ where: { id: { in: linkedAccountIds } }, select: { id: true, name: true } }) : [];
   const initial = { ...project, participants: project.participants.map(p => ({ accountId: p.accountId, roles: p.roles.map(r => r.role) })) };
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.programs} title={`Edit ${project.name}`}/>{project.archivedAt ? <div className="panel p-6">Reactivate this Project before editing it.</div> : <ProjectForm id={id} initial={initial} accounts={accounts} owners={owners} currentOwner={project.owner}/>}</Content>;
 }

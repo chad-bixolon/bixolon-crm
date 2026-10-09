@@ -1,5 +1,8 @@
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
-import { operationalOpportunityWhere, operationalProjectWhere } from '@/lib/operational-where';
+import { operationalOpportunityWhere } from '@/lib/operational-where';
+import { currentUser } from '@/lib/current-user';
+import { OptionalProjectFilter } from '@/components/optional-project-filter';
+import { projectReadWhere } from '@/lib/projects';
 import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
 import { prisma } from '@/lib/prisma';
@@ -17,12 +20,14 @@ export default async function Page({searchParams}:{searchParams:Promise<Filters>
   const ownerId=positiveId(f.ownerId??''),stageId=positiveId(f.stageId??'');
   const date=(v?:string)=>v&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v))?new Date(`${v}T00:00:00Z`):null;
   const from=date(f.closeFrom),to=date(f.closeTo);
-  const [rows,owners,stages,territories,projects]=await Promise.all([
+  const actor = await currentUser();
+  const selectedProjectId = positiveId(f.projectId ?? '');
+  const selectedProject = selectedProjectId ? await prisma.project.findFirst({ where: { AND: [{ id: selectedProjectId }, projectReadWhere(actor)] }, select: { id: true, name: true } }) : null;
+  const [rows,owners,stages,territories]=await Promise.all([
     prisma.opportunity.findMany({where:{AND:[operationalOpportunityWhere],stage:{isClosed:false},...(ownerId?{ownerId}:{}),...(stageId?{stageId}:{}),...pipelineProjectFilter(f.projectId),...(f.territory?{participants:{some:{account:{territory:f.territory}}}}:{}),...(from||to?{expectedCloseDate:{...(from?{gte:from}:{}),...(to?{lt:new Date(to.getTime()+86400000)}:{})}}:{})},include:{stage:true,products:{where:{archivedAt:null}}}}),
     prisma.user.findMany({where:{active:true,archivedAt:null},orderBy:{lastName:'asc'}}),
     prisma.salesStage.findMany({orderBy:{sortOrder:'asc'}}),
     prisma.territory.findMany({orderBy:{name:'asc'}}),
-    prisma.project.findMany({where:operationalProjectWhere,select:{id:true,name:true},orderBy:{name:'asc'}}),
   ]);
   const currencies=[...new Set(rows.map(r=>r.currencyCode))].sort();
   type Row=Pick<Opportunity,'id'|'currencyCode'|'probability'|'expectedCloseDate'|'forecastCategory'> & {stage:Pick<SalesStage,'id'|'name'|'probability'>;products:Pick<OpportunityProduct,'quantity'|'estimatedUnitPrice'|'archivedAt'>[]};
@@ -34,7 +39,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Filters>
     <form method="get" className="panel filter-panel filter-grid mb-5" aria-label="Filter pipeline">
       <label className="label">Owner<select className={control} name="ownerId" defaultValue={f.ownerId??''}><option value="">All</option>{owners.map(o=><option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select></label>
       <label className="label">Stage<select className={control} name="stageId" defaultValue={f.stageId??''}><option value="">All</option>{stages.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-      <label className="label">Project<select className={control} name="projectId" defaultValue={f.projectId??''}><option value="">All Projects</option><option value="none">No Project</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+      <OptionalProjectFilter initial={selectedProject ? { ...selectedProject, context: null } : null} none={f.projectId === 'none'}/>
       <label className="label">Territory<select className={control} name="territory" defaultValue={f.territory??''}><option value="">All</option>{territories.map(t=><option key={t.code} value={t.code}>{t.name}</option>)}</select></label>
       <label className="label">Close Date From<input className={control} type="date" name="closeFrom" defaultValue={f.closeFrom??''}/></label>
       <label className="label">Close Date Through<input className={control} type="date" name="closeTo" defaultValue={f.closeTo??''}/></label>

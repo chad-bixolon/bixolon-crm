@@ -32,7 +32,8 @@ test('Contact create with Account, browser validation, detail, and edit', async 
   await signInAs(page, 'admin');
   await page.goto('/contacts/new');
   const form = page.getByRole('form', { name: 'Create contact' });
-  await form.getByLabel('Account (optional)').selectOption({ label: names.account });
+  await form.getByLabel('Account (optional)').fill(names.account);
+  await page.getByRole('option', { name: new RegExp(names.account) }).first().click();
   const first = uniqueName('E2E Contact');
   await form.getByLabel('First name').fill(first);
   await form.getByLabel('Last name').fill('Regression');
@@ -40,7 +41,7 @@ test('Contact create with Account, browser validation, detail, and edit', async 
   await form.getByRole('button', { name: 'Create contact' }).click();
   await expect(form).toBeVisible();
   await expect(form.getByLabel('First name')).toHaveValue(first);
-  await expect(form.getByLabel('Account (optional)')).not.toHaveValue('');
+  await expect(form.getByText(names.account, { exact: true })).toBeVisible();
   expect(await form.getByLabel('Email').evaluate((input: HTMLInputElement) => input.validity.typeMismatch)).toBe(true);
   await form.getByLabel('Email').fill(`e2e-${Date.now()}@example.test`);
   await form.getByRole('button', { name: 'Create contact' }).click();

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ImportSearchPicker } from '@/components/import-search-picker';
+import { RemoteImportAccountPicker } from '@/components/remote-import-account-picker';
 import { formatEasternDateTime } from '@/lib/display-format';
 import { displayPriceExceptionParty } from '@/lib/price-exception-party';
 import type { RosaManualGroupChoice, RosaPlan, RosaResolution } from '@/lib/rosa-price-exception-import';
@@ -21,7 +22,7 @@ function ResolutionPicker({label,source,resolved,value,items,disabled,onChange,o
     <p className="font-semibold text-slate-800">{label}</p>
     <p className="mt-1 break-words text-slate-600">Source: {source||'(blank)'}</p>
     {value!==null&&!editing?<p className="mt-1 break-words text-sm text-slate-800">Resolved to: <strong>{resolved}</strong> <button type="button" className="ml-2 font-semibold text-orange-800 underline" disabled={disabled} onClick={()=>setEditing(true)}>Change</button></p>:
-      <div className="mt-2 w-full min-w-0"><ImportSearchPicker label={`CRM ${label}`} items={items} value={value} disabled={disabled} emptyLabel={`Select ${label.startsWith('SKU')?'SKU':label.includes('By')?'user':'CRM Account'}...`} onChange={id=>{onChange(id);setEditing(false)}}/><div className="mt-2 flex flex-wrap gap-3">{onCreate&&source.trim()&&<button type="button" className="font-semibold text-orange-800 underline" disabled={disabled} onClick={onCreate}>+ Create Account</button>}{editing&&<button type="button" className="text-slate-600 underline" onClick={()=>setEditing(false)}>Cancel</button>}</div></div>}
+      <div className="mt-2 w-full min-w-0">{label.startsWith('SKU') || label.includes('By') ? <ImportSearchPicker label={`CRM ${label}`} items={items} value={value} disabled={disabled} emptyLabel={`Select ${label.startsWith('SKU')?'SKU':'user'}...`} onChange={id=>{onChange(id);setEditing(false)}}/> : <RemoteImportAccountPicker label={`CRM ${label}`} items={items} value={value} disabled={disabled} onChange={id=>{onChange(id);setEditing(false)}}/>}<div className="mt-2 flex flex-wrap gap-3">{onCreate&&source.trim()&&<button type="button" className="font-semibold text-orange-800 underline" disabled={disabled} onClick={onCreate}>+ Create Account</button>}{editing&&<button type="button" className="text-slate-600 underline" onClick={()=>setEditing(false)}>Cancel</button>}</div></div>}
   </div>;
 }
 

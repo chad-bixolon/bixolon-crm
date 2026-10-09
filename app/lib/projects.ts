@@ -17,6 +17,7 @@ export function parseProject(form: FormData) {
   const rawPrimaryAccountId = field(form, 'primaryAccountId');
   const primaryAccountId = rawPrimaryAccountId ? positiveId(rawPrimaryAccountId) : null;
   if (rawPrimaryAccountId && !primaryAccountId) errors.primaryAccountId = 'Choose a valid Primary Account.';
+  if (!primaryAccountId && field(form, 'primaryAccountIdQuery')) errors.primaryAccountId = 'Select a Primary Account from the suggestions.';
   const rawRole = field(form, 'primaryAccountRole');
   const selectedRole = Object.values(ProjectPartyRole).includes(rawRole as ProjectPartyRole) ? rawRole as ProjectPartyRole : null;
   if (primaryAccountId && !selectedRole) errors.primaryAccountRole = 'Choose a Primary Account Role.';

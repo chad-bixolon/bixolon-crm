@@ -12,7 +12,8 @@ test('Opportunity preserves Account, product, date, stage, and forecast after se
   await form.getByLabel('Sales stage *').selectOption({ label: 'E2E Qualification · 20%' });
   await form.getByLabel('Expected close date').fill('2026-11-15');
   await form.getByLabel('Forecast category').selectOption('BEST_CASE');
-  await form.getByLabel('Existing account').selectOption({ label: names.account });
+  await form.getByLabel('Existing account').fill(names.account);
+  await page.getByRole('option', { name: new RegExp(names.account) }).first().click();
   await form.getByRole('button', { name: 'Add account' }).click();
   await form.getByRole('button', { name: 'Add product' }).click();
   await form.getByRole('combobox', { name: 'Catalog item 1' }).fill(names.sku);

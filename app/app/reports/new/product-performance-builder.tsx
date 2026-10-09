@@ -1,11 +1,11 @@
 import { RecoverableActionForm } from '@/components/recoverable-action-form';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
-import { operationalProjectWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import type { Actor } from '@/lib/authorization';
 import { Content,PageHeader } from '@/components/shell';
 import { ReportResults } from '@/components/report-results';
 import { ReportSalesRepFilter } from '@/components/report-sales-rep-filter';
+import { ReportEntityFilter } from '@/components/report-entity-filter';
 import { ReportCloseDateFields } from '@/components/report-close-date-fields';
 import { prisma } from '@/lib/prisma';
 import { catalogSourceLabels } from '@/lib/products';
@@ -17,16 +17,14 @@ type Params=Record<string,string|string[]|undefined>;
 type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|'SHARED';configuration:unknown}|null;
 export async function ProductPerformanceBuilder({params,actor,saved}:{params:Params;actor:Actor;saved:Saved}){
   const config=productPerformanceConfigFromParams(params,saved?.configuration);
-  const [result,owners,stages,accounts,industries,territories,categories,products,skus,projects,currencies]=await Promise.all([
+  const [result,owners,stages,industries,territories,categories,products,skus,currencies]=await Promise.all([
     executeProductPerformanceReport(prisma,actor,config),
     prisma.user.findMany({where:{active:true,archivedAt:null,...(actor.role==='SALES'?{id:actor.id}:{})},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
     prisma.salesStage.findMany({orderBy:[{sortOrder:'asc'},{id:'asc'}]}),
-    prisma.account.findMany({where:{archivedAt:null,status:'ACTIVE',...(actor.role==='SALES'?{ownerId:actor.id}:{})},select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.industry.findMany({orderBy:{name:'asc'}}),prisma.territory.findMany({orderBy:{name:'asc'}}),
     prisma.productCategory.findMany({orderBy:{name:'asc'}}),
     prisma.product.findMany({where:{archivedAt:null},select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.productSku.findMany({where:{active:true,product:{active:true,archivedAt:null}},select:{id:true,partNumber:true},orderBy:{partNumber:'asc'}}),
-    prisma.project.findMany({where:operationalProjectWhere,select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.currency.findMany({where:{active:true},orderBy:{code:'asc'}}),
   ]);
   const selected=(field:string)=>String(filterValue(config,field)??'');
@@ -43,17 +41,17 @@ export async function ProductPerformanceBuilder({params,actor,saved}:{params:Par
         {select('productId','Product / Model',products.map(x=>({value:x.id,label:x.name})))}
         {select('skuId','SKU / Part Number',skus.map(x=>({value:x.id,label:x.partNumber})))}
         {select('catalogSource','Catalog Source',Object.entries(catalogSourceLabels).filter(([value])=>value!=='SPECIAL_SKU_LIST').map(([value,label])=>({value,label})))}
-        {select('odmCustomerAccountId','ODM Customer',accounts.map(x=>({value:x.id,label:x.name})))}
+        <ReportEntityFilter type="account" name="odmCustomerAccountId" label="ODM Customer" selected={selected('odmCustomerAccountId')} actor={actor}/>
       </div></fieldset>
       <fieldset className="report-section"><legend className="report-section-title">Opportunity and commercial filters</legend><div className="report-filter-grid">
         {select('status','Status',[{value:'OPEN',label:'Open'},{value:'WON',label:'Closed Won'},{value:'LOST',label:'Closed Lost'}],'Any')}
         {select('stageId','Stage',stages.map(x=>({value:x.id,label:x.name})))}
         {select('forecastCategory','Forecast Category',['PIPELINE','BEST_CASE','COMMIT','OMITTED','CLOSED'].map(x=>({value:x,label:x.replaceAll('_',' ')})))}
-        {select('accountId','Account',accounts.map(x=>({value:x.id,label:x.name})))}
+        <ReportEntityFilter type="account" name="accountId" label="Account" selected={selected('accountId')} actor={actor}/>
         {select('industry','Industry',industries.map(x=>({value:x.code,label:x.name})))}
         {select('territory','Territory',territories.map(x=>({value:x.code,label:x.name})))}
         {select('strategicAccount','Strategic Account',[{value:'true',label:'Yes'},{value:'false',label:'No'}])}
-        {select('projectId','Project',projects.map(x=>({value:x.id,label:x.name})))}
+        <ReportEntityFilter type="project" name="projectId" label="Project" selected={selected('projectId')} actor={actor}/>
         {select('priceSource','Pricing Source',[{value:'MANUAL',label:'Manual price'},{value:'CATALOG',label:'Price List'},{value:'PRICE_EXCEPTION',label:'Price Exception'},{value:'ODM_CUSTOMER',label:'Customer Pricing'}])}
         {select('currency','Currency',currencies.map(x=>({value:x.code,label:x.code})),'All currencies')}
         <ReportCloseDateFields initialChoice={between?'CUSTOM':preset||'ANY'} initialFrom={between?.from} initialTo={between?.to}/>

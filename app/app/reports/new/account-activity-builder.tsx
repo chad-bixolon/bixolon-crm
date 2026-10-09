@@ -5,6 +5,7 @@ import type { Actor } from '@/lib/authorization';
 import { Content,PageHeader } from '@/components/shell';
 import { ReportResults } from '@/components/report-results';
 import { ReportSalesRepFilter } from '@/components/report-sales-rep-filter';
+import { ReportEntityFilter } from '@/components/report-entity-filter';
 import { prisma } from '@/lib/prisma';
 import { accountActivityConfigFromParams,filterValue } from '@/lib/report-builder';
 import { canShareReport,executeAccountActivityReport,reportRegistry } from '@/lib/reporting';
@@ -14,10 +15,9 @@ type Params=Record<string,string|string[]|undefined>;
 type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|'SHARED';configuration:unknown}|null;
 export async function AccountActivityBuilder({params,actor,saved}:{params:Params;actor:Actor;saved:Saved}) {
  const config=accountActivityConfigFromParams(params,saved?.configuration);
- const [result,owners,accounts,industries,territories,types]=await Promise.all([
+ const [result,owners,industries,territories,types]=await Promise.all([
   executeAccountActivityReport(prisma,actor,config),
   prisma.user.findMany({where:{active:true,archivedAt:null,...(actor.role==='SALES'?{id:actor.id}:{})},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
-  prisma.account.findMany({where:{archivedAt:null,status:'ACTIVE',...(actor.role==='SALES'?{ownerId:actor.id}:{})},select:{id:true,name:true},orderBy:{name:'asc'}}),
   prisma.industry.findMany({orderBy:{name:'asc'}}),prisma.territory.findMany({orderBy:{name:'asc'}}),
   prisma.activityType.findMany({orderBy:[{sortOrder:'asc'},{name:'asc'}]})
  ]);
@@ -27,7 +27,7 @@ export async function AccountActivityBuilder({params,actor,saved}:{params:Params
  <div className="mb-2 flex flex-wrap gap-2"><Link className="btn-secondary" href="/reports/new?reportType=PIPELINE">Pipeline</Link><Link className="btn-secondary" href="/reports/new?reportType=ACCOUNT_ACTIVITY">Account Activity</Link><Link className="btn-secondary" href="/reports/new?reportType=PRODUCT_PERFORMANCE">Product Performance</Link><Link className="btn-secondary" href="/reports/new?reportType=CHANNEL_PARTNER">Channel / Partner</Link><Link className="btn-secondary" href="/reports/new?reportType=PROJECT_INITIATIVE">Project Performance</Link></div><form method="get" className="panel report-builder p-3 md:p-4"><input type="hidden" name="configured" value="1"/><input type="hidden" name="reportType" value="ACCOUNT_ACTIVITY"/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}
  <fieldset className="report-section report-primary-filters"><legend className="report-section-title">Account filters</legend><div className="report-filter-grid">
  <ReportSalesRepFilter actor={actor} reps={owners} selected={selected('ownerId')}/>
- <label className="label">Account<select className="field" name="accountId" defaultValue={selected('accountId')}><option value="">All</option>{accounts.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+ <ReportEntityFilter type="account" name="accountId" label="Account" selected={selected('accountId')} actor={actor}/>
  <label className="label">Industry<select className="field" name="industry" defaultValue={selected('industry')}><option value="">All</option>{industries.map(x=><option key={x.code} value={x.code}>{x.name}</option>)}</select></label>
  <label className="label">Territory<select className="field" name="territory" defaultValue={selected('territory')}><option value="">All</option>{territories.map(x=><option key={x.code} value={x.code}>{x.name}</option>)}</select></label>
  <label className="label">Business Role<select className="field" name="businessRole" defaultValue={selected('businessRole')}><option value="">All</option>{['END_USER','DISTRIBUTOR','VAR','ISV','OEM','PARTNER','MEDIA_PARTNER'].map(x=><option key={x} value={x}>{x.replaceAll('_',' ')}</option>)}</select></label>

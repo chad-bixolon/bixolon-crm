@@ -25,6 +25,7 @@ Module._load=function(request,parent,isMain){
   if(request==='@/components/shell')return {Content:({children})=>React.createElement('main',null,children),PageHeader:({title,action})=>React.createElement('header',null,React.createElement('h1',null,title),action)};
   if(request==='@/lib/current-user')return {currentUser:async()=>({id:1,role:'ADMIN'})};
   if(request==='@/lib/prisma')return {prisma};
+  if(request==='@/components/report-entity-filter')return {ReportEntityFilter:({name})=>React.createElement('input',{type:'hidden',name,value:''})};
   if(request==='@/lib/assignment-eligibility')return {activeSalesRepWhere:()=>({})};
   if(request==='@/lib/sales-plan')return {annualTargetFromRows:()=>({}),allocationSummary:()=>({status:''}),planForecast:async()=>[]};
   if(request==='@/lib/display-format')return {formatPlanCurrency:String,formatPlanNumber:String,formatPlanPercent:String};

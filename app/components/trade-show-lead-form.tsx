@@ -6,6 +6,7 @@ import { submitTradeShowLead, type TradeShowLeadFormState } from '@/app/trade-sh
 import { useSubmitGuard } from '@/lib/submit-guard';
 import type { TradeShowLeadRouting, TradeShowLeadStatus } from '@prisma/client';
 import { SaveSuccess, useQueryValue } from '@/components/save-success';
+import { EntityPicker, type PickerResult } from './entity-picker';
 
 type Option = { id: number; name: string };
 type Lead = {
@@ -24,14 +25,16 @@ const statusLabels: Record<TradeShowLeadStatus, string> = {
   DISQUALIFIED: 'Disqualified',
 };
 const tradeShowRoutingLabels:Record<TradeShowLeadRouting,string>={UNREVIEWED:'Unreviewed',BIXOLON_SALES:'BIXOLON Sales',REFERRED_TO_PARTNER:'Referred to Partner',MARKETING_FOLLOW_UP:'Marketing Follow-Up'};
-export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, currentRep, currentContact, partnerAccounts, accounts, contacts, competitors, canAssign, canResolve, canRoute }: {
-  tradeShowId: number; leadId: number; initial: Lead; reps: Option[]; currentRep?: string|null; currentContact?: string|null; partnerAccounts:Option[]; accounts: Option[]; contacts: Option[]; competitors: Option[]; canAssign: boolean; canResolve: boolean; canRoute:boolean;
+export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, currentRep, partnerAccounts, accounts, contacts, competitors, canAssign, canResolve, canRoute }: {
+  tradeShowId: number; leadId: number; initial: Lead; reps: Option[]; currentRep?: string|null; partnerAccounts:Option[]; accounts: Option[]; contacts: (Option & { accountId: number | null; context: string })[]; competitors: Option[]; canAssign: boolean; canResolve: boolean; canRoute:boolean;
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(submitTradeShowLead.bind(null, tradeShowId, leadId), { errors: {} } as TradeShowLeadFormState);
   const guard = useSubmitGuard(state, action);
   const [routing,setRouting]=useState<TradeShowLeadRouting>((state.values?.routing as TradeShowLeadRouting|undefined)??initial.routing);
-  const [partnerSearch,setPartnerSearch]=useState('');
+  const [account, setAccount] = useState<PickerResult | null>(() => accounts.find(item => item.id === initial.accountId) ? { ...accounts.find(item => item.id === initial.accountId)!, context: null } : null);
+  const [contact, setContact] = useState<PickerResult | null>(() => contacts.find(item => item.id === initial.contactId) ?? null);
+  const [partner, setPartner] = useState<PickerResult | null>(() => partnerAccounts.find(item => item.id === initial.routedPartnerAccountId) ? { ...partnerAccounts.find(item => item.id === initial.routedPartnerAccountId)!, context: null } : null);
   useEffect(() => { if (state.redirectTo) router.push(state.redirectTo); }, [state.redirectTo, router]);
   const saved=useQueryValue('saved'),savedId=Number(useQueryValue('savedId'));
   const createdRecord=Number.isSafeInteger(savedId)&&savedId>0&&saved==='account'?{name:'Account',path:'accounts',id:savedId}:Number.isSafeInteger(savedId)&&savedId>0&&saved==='contact'?{name:'Contact',path:'contacts',id:savedId}:null;
@@ -50,7 +53,7 @@ export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, currentR
     {canRoute && <section className="rounded-md border border-orange-200 bg-orange-50/40 p-4"><h2 className="mb-1 text-lg font-semibold">Lead Routing</h2><p className="mb-4 text-sm text-slate-600">Routing identifies who handles the lead; it does not change lifecycle status.</p><div className="grid min-w-0 gap-5 sm:grid-cols-2">
       <div><label className="label" htmlFor="routing">Routing</label><select className="field" id="routing" name="routing" value={routing} onChange={event=>setRouting(event.target.value as TradeShowLeadRouting)}>{(Object.keys(tradeShowRoutingLabels) as TradeShowLeadRouting[]).map(value=><option value={value} key={value}>{tradeShowRoutingLabels[value]}</option>)}</select>{error('routing')}</div>
       {canAssign&&select('assignedSalesRepUserId',routing==='BIXOLON_SALES'?'Assigned Sales Rep (required)':'Assigned Sales Rep (optional)',initial.assignedSalesRepUserId,reps,'Unassigned',`${currentRep ?? 'User'} (no longer eligible)`)}
-      <div className="min-w-0"><label className="label" htmlFor="partner-search">Partner Account {routing==='REFERRED_TO_PARTNER'?'(required)':'(historical / optional)'}</label><input className="field mb-1" id="partner-search" type="search" placeholder="Search eligible partner Accounts" value={partnerSearch} onChange={event=>setPartnerSearch(event.target.value)}/><select className="field" name="routedPartnerAccountId" defaultValue={val('routedPartnerAccountId',initial.routedPartnerAccountId?.toString()??'')}><option value="">No partner selected</option>{partnerAccounts.filter(item=>!partnerSearch||item.name.toLowerCase().includes(partnerSearch.toLowerCase())).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select>{error('routedPartnerAccountId')}</div>
+      <div className="min-w-0"><EntityPicker type="account" label={`Partner Account ${routing==='REFERRED_TO_PARTNER'?'(required)':'(historical / optional)'}`} name="routedPartnerAccountId" value={partner} onChange={setPartner} filters={{ partnerOnly: true }} error={state.errors.routedPartnerAccountId}/></div>
       <div className="min-w-0">{textarea('referralNotes','Referral Notes',initial.referralNotes,20000,3)}</div>
     </div></section>}
     <section><h2 className="mb-3 text-lg font-semibold">Customer Context</h2><div className="grid min-w-0 gap-5 sm:grid-cols-2">
@@ -60,7 +63,7 @@ export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, currentR
       <div className="min-w-0 sm:col-span-2"><label className="label" htmlFor="currentProductBeingUsed">Current Product Being Used</label><input className="field min-w-0" id="currentProductBeingUsed" name="currentProductBeingUsed" maxLength={500} defaultValue={val('currentProductBeingUsed', initial.currentProductBeingUsed ?? '')}/>{error('currentProductBeingUsed')}</div>
       <div className="min-w-0 sm:col-span-2">{textarea('customerPainPoints', 'Customer Pain Points', initial.customerPainPoints, 20000)}</div>
     </div></section>
-    {canResolve && <section><h2 className="mb-1 text-lg font-semibold">CRM Resolution</h2><p className="mb-4 text-sm text-slate-600">Link this lead to existing CRM records or create reviewed records from the source data.</p><div className="grid min-w-0 gap-5 sm:grid-cols-2"><div className="min-w-0">{select('accountId', 'Account', initial.accountId, accounts, 'Not linked', 'Current account (inactive)')}<Link className="mt-2 inline-flex text-sm font-medium text-orange-800 underline" href={`/trade-shows/${tradeShowId}/leads/${leadId}/account/new`}>Create Account</Link></div><div className="min-w-0">{select('contactId', 'Contact', initial.contactId, contacts, 'Not linked', currentContact ?? 'Current Contact (unavailable)')}<Link className="mt-2 inline-flex text-sm font-medium text-orange-800 underline" href={`/trade-shows/${tradeShowId}/leads/${leadId}/contact/new`}>Create Contact</Link></div><p className="text-xs text-slate-600 sm:col-span-2">A Contact assigned to another Account cannot be linked here. This workflow never reassigns a Contact automatically.</p></div></section>}
+    {canResolve && <section><h2 className="mb-1 text-lg font-semibold">CRM Resolution</h2><p className="mb-4 text-sm text-slate-600">Link this lead to existing CRM records or create reviewed records from the source data.</p><div className="grid min-w-0 gap-5 sm:grid-cols-2"><div className="min-w-0"><EntityPicker type="account" label="Account" name="accountId" value={account} onChange={item => { setAccount(item); if (contact && item && contact.accountId && contact.accountId !== item.id) setContact(null); }} error={state.errors.accountId}/><Link className="mt-2 inline-flex text-sm font-medium text-orange-800 underline" href={`/trade-shows/${tradeShowId}/leads/${leadId}/account/new`}>Create Account</Link></div><div className="min-w-0"><EntityPicker type="contact" label="Contact" name="contactId" value={contact} onChange={setContact} filters={account ? { accountId: account.id, includeUnassigned: true } : undefined} error={state.errors.contactId}/><Link className="mt-2 inline-flex text-sm font-medium text-orange-800 underline" href={`/trade-shows/${tradeShowId}/leads/${leadId}/contact/new`}>Create Contact</Link></div><p className="text-xs text-slate-600 sm:col-span-2">A Contact assigned to another Account cannot be linked here. This workflow never reassigns a Contact automatically.</p></div></section>}
     <div className="flex flex-wrap justify-end gap-2"><Link className="btn-secondary" href={`/trade-shows/${tradeShowId}/leads/${leadId}`}>Cancel</Link><button className="btn-primary" type="submit" disabled={pending}>{pending ? 'Saving…' : 'Save Lead'}</button></div>
   </form></>;
 }

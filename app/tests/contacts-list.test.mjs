@@ -114,7 +114,7 @@ test('list controls retain query state, reset pages on filter and sort changes, 
   assert.match(page,/No contacts match these filters\./);
   assert.match(page,/Clear filters/);
   assert.match(route,/requirePermission\("contacts\.read"\)/);
-  assert.match(route,/take: 20/);
+  assert.match(route,/searchEntities\(prisma, actor, 'account', q, \{\}, 20\)/);
 });
 test('Sales Rep filters Contacts through Account ownership without matching unassigned Contacts',async()=>{
   const filters={salesRepId:'7',q:'Ada',active:'active',page:'2',pageSize:'25'};

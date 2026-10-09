@@ -14,9 +14,9 @@ export default async function Page({searchParams}: {searchParams: Promise<{accou
   if (p.supportCaseId && (!Number.isSafeInteger(caseId)||caseId<1)) notFound();
   if (actor.role==='SUPPORT' && !p.supportCaseId) notFound();
   const supportCase=p.supportCaseId ? await caseWorkContext(prisma,actor,caseId) : null;
-  const options=await workOptions({supportCaseId:supportCase?.id,contactIds:supportCase?.contactId?[supportCase.contactId]:[]});
-  if (actor.role==='SUPPORT') { options.opportunities=[]; options.projects=[]; }
   const contactId=Number(p.contactId);
   const linkedContactIds=supportCase?.contactId?[supportCase.contactId]:Number.isSafeInteger(contactId)&&contactId>0?[contactId]:[];
+  const options=await workOptions({accountId:supportCase?.accountId ?? (Number(p.accountId)||undefined),opportunityId:supportCase?undefined:(Number(p.opportunityId)||undefined),projectId:supportCase?undefined:(Number(p.projectId)||undefined),supportCaseId:supportCase?.id,contactIds:linkedContactIds});
+  if (actor.role==='SUPPORT') { options.opportunities=[]; options.projects=[]; }
   return <Content><PageHeader title="New activity" eyebrow={supportCase?NAV_CATEGORIES.support:NAV_CATEGORIES.sales}/><WorkForm kind="activity" createKey={randomUUID()} {...options} supportCase={supportCase?{id:supportCase.id,caseNumber:supportCase.caseNumber,contactName:supportCase.contact?`${supportCase.contact.firstName} ${supportCase.contact.lastName}`:null}:undefined} lockAccountId={supportCase?.accountId ?? undefined} linkedContactIds={linkedContactIds} initial={{accountId:supportCase?.accountId??p.accountId??'',opportunityId:supportCase?'':p.opportunityId??'',projectId:supportCase?'':p.projectId??'',userId:defaultEligibleUserId(options.users,actor.id),activityDate:new Date().toISOString().slice(0,16),direction:'NA'}}/></Content>;
 }

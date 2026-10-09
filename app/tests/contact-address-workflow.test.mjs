@@ -71,7 +71,7 @@ test('Account launch keeps one form, validates context, returns to Contacts tab,
   const newPage = read('app/contacts/new/page.tsx');
   const action = read('app/contacts/actions.ts');
   const ui = read('components/contact-form.tsx');
-  assert.match(newPage, /accounts\.some\(account => account\.id === accountId\)/);
+  assert.match(newPage, /!accounts\.length/);
   assert.match(action, /parsed\.value\.accountId !== originatingAccountId/);
   assert.match(action, /\/accounts\/\$\{originatingAccountId\}\?tab=contacts/);
   assert.match(action, /\/contacts\/\$\{contactId\}/);

@@ -1,11 +1,11 @@
 import { RecoverableActionForm } from '@/components/recoverable-action-form';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
-import { operationalOpportunityWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import type { Actor } from '@/lib/authorization';
 import { Content,PageHeader } from '@/components/shell';
 import { ReportResults } from '@/components/report-results';
 import { ReportSalesRepFilter } from '@/components/report-sales-rep-filter';
+import { ReportEntityFilter } from '@/components/report-entity-filter';
 import { ReportCloseDateFields } from '@/components/report-close-date-fields';
 import { prisma } from '@/lib/prisma';
 import { filterValue,priceExceptionUsageConfigFromParams } from '@/lib/report-builder';
@@ -16,15 +16,13 @@ type Params=Record<string,string|string[]|undefined>;
 type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|'SHARED';configuration:unknown}|null;
 export async function PriceExceptionUsageBuilder({params,actor,saved}:{params:Params;actor:Actor;saved:Saved}){
   const config=priceExceptionUsageConfigFromParams(params,saved?.configuration);
-  const [result,owners,stages,accounts,categories,products,skus,opportunities,priceExceptions,peSalespeople,currencies,competitors]=await Promise.all([
+  const [result,owners,stages,categories,products,skus,priceExceptions,peSalespeople,currencies,competitors]=await Promise.all([
     executePriceExceptionUsageReport(prisma,actor,config),
     prisma.user.findMany({where:{active:true,archivedAt:null,...(actor.role==='SALES'?{id:actor.id}:{})},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
     prisma.salesStage.findMany({orderBy:[{sortOrder:'asc'},{id:'asc'}]}),
-    prisma.account.findMany({where:{archivedAt:null,status:'ACTIVE',...(actor.role==='SALES'?{opportunityMemberships:{some:{opportunity:{ownerId:actor.id,archivedAt:null}}}}:{})},select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.productCategory.findMany({orderBy:{name:'asc'}}),
     prisma.product.findMany({where:{archivedAt:null},select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.productSku.findMany({where:{active:true,product:{active:true,archivedAt:null}},select:{id:true,partNumber:true},orderBy:{partNumber:'asc'}}),
-    prisma.opportunity.findMany({where:{AND:[operationalOpportunityWhere],...(actor.role==='SALES'?{ownerId:actor.id}:{})},select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.priceException.findMany({where:{lines:{some:{opportunityProducts:{some:{archivedAt:null,opportunity:{archivedAt:null,...(actor.role==='SALES'?{ownerId:actor.id}:{})}}}}}},select:{id:true,peCode:true},orderBy:{peCode:'asc'}}),
     prisma.user.findMany({where:{assignedPriceExceptions:{some:{lines:{some:{opportunityProducts:{some:{archivedAt:null,opportunity:{archivedAt:null,...(actor.role==='SALES'?{ownerId:actor.id}:{})}}}}}}}},select:{id:true,firstName:true,lastName:true},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
     prisma.currency.findMany({where:{active:true},orderBy:{code:'asc'}}),
@@ -49,8 +47,8 @@ export async function PriceExceptionUsageBuilder({params,actor,saved}:{params:Pa
         {select('stageId','Stage',stages.map(x=>({value:x.id,label:x.name})))}
         {select('competitorId','Competitor',competitors.map(x=>({value:x.id,label:x.name+(x.active?'':' (Inactive)')})))}
         {select('forecastCategory','Forecast Category',['PIPELINE','BEST_CASE','COMMIT','OMITTED','CLOSED'].map(x=>({value:x,label:x.replaceAll('_',' ')})))}
-        {select('accountId','Account',accounts.map(x=>({value:x.id,label:x.name})))}
-        {select('opportunityId','Opportunity',opportunities.map(x=>({value:x.id,label:x.name})))}
+        <ReportEntityFilter type="account" name="accountId" label="Account" selected={selected('accountId')} actor={actor}/>
+        <ReportEntityFilter type="opportunity" name="opportunityId" label="Opportunity" selected={selected('opportunityId')} actor={actor}/>
         {select('priceExceptionId','Price Exception',priceExceptions.map(x=>({value:x.id,label:x.peCode??'Price Exception'})))}
         {select('peSalespersonId','Price Exception Sales Rep',peSalespeople.map(x=>({value:x.id,label:`${x.firstName} ${x.lastName}`})))}
         {select('moqStatus','MOQ Status',[{value:'MET',label:'MOQ Met'},{value:'NOT_MET',label:'MOQ Not Met'},{value:'UNKNOWN',label:'Unknown'}])}

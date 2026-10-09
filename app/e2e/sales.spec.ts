@@ -7,7 +7,8 @@ test('Task retains relationships and due date, then completes', async ({ page })
   await page.goto('/tasks/new');
   const subject = uniqueName('E2E task');
   await page.getByLabel('Subject').fill(subject);
-  await page.getByLabel('Account', { exact: true }).selectOption({ label: names.account });
+  await page.getByLabel('Account', { exact: true }).fill(names.account);
+  await page.getByRole('option', { name: new RegExp(names.account) }).first().click();
   await page.getByLabel('Due date').fill('2026-11-20');
   await page.getByRole('button', { name: 'Create task' }).click();
   await expect(page).toHaveURL(/\/tasks\/\d+$/);

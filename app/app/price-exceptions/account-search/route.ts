@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
+import { searchEntities } from '@/lib/entity-search';
 
 export async function GET(request:NextRequest){
-  await requirePermission('users.manage');
+  const actor = await requirePermission('users.manage');
   const q=(request.nextUrl.searchParams.get('q')??'').trim().slice(0,100);
-  const accounts=await prisma.account.findMany({where:{status:'ACTIVE',archivedAt:null,...(q?{name:{contains:q,mode:'insensitive' as const}}:{})},select:{id:true,name:true,status:true,archivedAt:true},orderBy:[{name:'asc'},{id:'asc'}]});
+  const accounts=(await searchEntities(prisma,actor,'account',q)).map(account=>({id:account.id,name:account.name,status:'ACTIVE',archivedAt:null}));
   return NextResponse.json({accounts});
 }

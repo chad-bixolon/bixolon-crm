@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { Content, PageHeader } from '@/components/shell';
 import { currentUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
+import { ReportEntityFilter } from '@/components/report-entity-filter';
 import { activeSalesRepWhere } from '@/lib/assignment-eligibility';
 import { formatPlanCurrency, formatPlanNumber, formatPlanPercent } from '@/lib/display-format';
 import { allocationPercent, rollupAccess, salesPlanSkuRollup, skuContributions } from '@/lib/sales-plan-sku-rollup';
@@ -19,12 +20,11 @@ export default async function Page({searchParams}:{searchParams:Promise<Params>}
   const currencyCode=/^[A-Z]{3}$/.test(raw.currencyCode??'')?raw.currencyCode!:'USD';
   const selection={year,currencyCode,userId:id(raw.userId),productId:id(raw.productId),skuId:id(raw.skuId),accountId:id(raw.accountId),search:(raw.search??'').slice(0,100)};
   const planWhere={planYear:year,currencyCode,status:'ACTIVE' as const,owner:activeSalesRepWhere()};
-  const [report,reps,currencies,skus,accounts]=await Promise.all([
+  const [report,reps,currencies,skus]=await Promise.all([
     salesPlanSkuRollup(prisma,actor,selection),
     prisma.user.findMany({where:activeSalesRepWhere(),select:{id:true,firstName:true,lastName:true},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
     prisma.currency.findMany({where:{active:true},select:{code:true},orderBy:{code:'asc'}}),
     prisma.productSku.findMany({where:{salesPlanLines:{some:{plan:planWhere}}},select:{id:true,partNumber:true,productId:true,product:{select:{name:true}}},orderBy:{partNumber:'asc'}}),
-    prisma.account.findMany({where:{salesPlanLines:{some:{plan:planWhere}}},select:{id:true,name:true},orderBy:{name:'asc'}}),
   ]);
   const {rows,lines,unresolved,summary}=report;
   const detailId=id(raw.detailSkuId),selected=rows.find(r=>r.skuId===detailId);
@@ -40,7 +40,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Params>}
       <label className="label">Sales Rep<select className="field filter-control" name="userId" defaultValue={selection.userId??''}><option value="">All planned reps</option>{reps.map(r=><option key={r.id} value={r.id}>{r.firstName} {r.lastName}</option>)}</select></label>
       <label className="label">Product / Model<select className="field filter-control" name="productId" defaultValue={selection.productId??''}><option value="">All products</option>{[...new Map(skus.map(s=>[s.productId,s.product])).entries()].sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([id,p])=><option key={id} value={id}>{p.name}</option>)}</select></label>
       <label className="label">Exact SKU<select className="field filter-control" name="skuId" defaultValue={selection.skuId??''}><option value="">All SKUs</option>{skus.map(s=><option key={s.id} value={s.id}>{s.partNumber}</option>)}</select></label>
-      <label className="label">Account<select className="field filter-control" name="accountId" defaultValue={selection.accountId??''}><option value="">All Accounts</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+      <ReportEntityFilter type="account" name="accountId" label="Account" selected={raw.accountId??''} actor={actor}/>
       <label className="label">Search<input className="field filter-control" name="search" maxLength={100} defaultValue={selection.search} placeholder="SKU, Account, Plan Item"/></label>
       <div className="filter-actions"><button className="btn-primary w-full sm:w-auto">View report</button></div>
     </form>

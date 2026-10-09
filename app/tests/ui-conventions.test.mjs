@@ -39,7 +39,8 @@ test('integration, cleanup, and report controls use shared layout classes', () =
 
 test('picker styling shares field typography while popover behavior remains covered separately', () => {
   assert.match(read('components/product-picker.tsx'), /role="combobox"/);
-  assert.match(read('components/price-exception-account-picker.tsx'), /className="field min-w-0" role="combobox"/);
+  assert.match(read('components/price-exception-account-picker.tsx'), /<EntityPicker/);
+  assert.match(read('components/entity-picker.tsx'), /className="field min-w-0" role="combobox"/);
   assert.match(css, /\.search-results-option\s*\{[^}]*font-size: \.8125rem/);
   assert.match(read('components/search-results-popover.tsx'), /createPortal\(/);
 });

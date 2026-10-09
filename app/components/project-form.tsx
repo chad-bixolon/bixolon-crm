@@ -6,6 +6,7 @@ import { ProjectPartyRole, ProjectStatus } from '@prisma/client';
 import { submitProject, changeProjectArchive, type ProjectFormState } from '@/app/projects/actions';
 import { projectRoleLabels, projectStatusLabels } from '@/lib/project-labels';
 import { useSubmitGuard } from '@/lib/submit-guard';
+import { EntityPicker, type PickerResult } from './entity-picker';
 
 type AccountOption = { id: number; name: string };
 type OwnerOption = { id: number; firstName: string; lastName: string };
@@ -22,16 +23,17 @@ export function ProjectForm({ id, initial, accounts, owners, currentOwner, prima
   const [primaryId, setPrimaryId] = useState(initial?.primaryAccountId ?? preselected ?? 0);
   const [primaryRole, setPrimaryRole] = useState(initial?.primaryAccountRole ?? ProjectPartyRole.PROGRAM_OWNER);
   const [participants, setParticipants] = useState(initial?.participants ?? []);
-  const [selectedAccount, setSelectedAccount] = useState('');
+  const [selectedAccount, setSelectedAccount] = useState<PickerResult | null>(null);
+  const [knownAccounts, setKnownAccounts] = useState<AccountOption[]>(accounts);
   const [participantMessage, setParticipantMessage] = useState('');
   useEffect(() => { if (state.redirectTo) router.push(state.redirectTo); }, [state.redirectTo, router]);
   const error = (key: string) => state.errors[key] && <p className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
-  const accountOptions = [...accounts];
+  const accountOptions = [...knownAccounts];
   for (const p of initial?.participants ?? []) if (!accountOptions.some(a => a.id === p.accountId)) accountOptions.push({ id: p.accountId, name: "Inactive Account" });
   if (initial?.primaryAccountId && !accountOptions.some(a => a.id === initial.primaryAccountId)) accountOptions.push({ id: initial.primaryAccountId, name: "Inactive Account" });
-  const available = accountOptions.filter(a => a.id !== primaryId && !participants.some(p => p.accountId === a.id));
-  const add = () => { const accountId = Number(selectedAccount); if (!available.some(a => a.id === accountId)) { setParticipantMessage('Choose an available Account.'); return; }
-    setParticipants(old => [...old, { accountId, roles: [] }]); setSelectedAccount(''); setParticipantMessage(''); };
+  const remember = (account: PickerResult | null) => { if (account) setKnownAccounts(old => old.some(row => row.id === account.id) ? old : [...old, { id: account.id, name: account.name }]); };
+  const add = () => { const accountId = selectedAccount?.id; if (!accountId || accountId === primaryId || participants.some(p => p.accountId === accountId)) { setParticipantMessage('Choose an available Account.'); return; }
+    setParticipants(old => [...old, { accountId, roles: [] }]); setSelectedAccount(null); setParticipantMessage(''); };
   return <form action={action} onSubmit={guard} className="panel max-w-5xl space-y-7 p-6" aria-label={id ? 'Edit project' : 'Create project'}>
     {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     <section className="grid gap-4 sm:grid-cols-2"><h2 className="sm:col-span-2 text-lg font-semibold">Overview</h2>
@@ -43,11 +45,11 @@ export function ProjectForm({ id, initial, accounts, owners, currentOwner, prima
       <div className="sm:col-span-2"><label className="label" htmlFor="description">Description</label><textarea className="field min-h-28" id="description" name="description" maxLength={5000} defaultValue={val('description', initial?.description ?? '')}/>{error('description')}</div>
     </section>
     <section className="grid gap-4 rounded border border-orange-200 bg-orange-50/40 p-4 sm:grid-cols-2"><div className="sm:col-span-2"><h2 className="text-lg font-semibold">Primary Account <span className="text-sm font-normal text-slate-500">(optional)</span></h2><p className="text-sm text-slate-600">Choose one company when it is primarily responsible for this Project. Participant Accounts can be added independently below.</p></div>
-      <div><label className="label" htmlFor="primaryAccountId">Primary Account (optional)</label><select className="field" id="primaryAccountId" name="primaryAccountId" value={primaryId || ''} onChange={e => { const value = Number(e.target.value); setPrimaryId(value); setParticipants(old => old.filter(p => p.accountId !== value)); }}><option value="">No primary account</option>{accountOptions.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>{error('primaryAccountId')}</div>
+      <div><EntityPicker type="account" label="Primary Account (optional)" name="primaryAccountId" value={primaryId ? { id: primaryId, name: accountOptions.find(a => a.id === primaryId)?.name ?? 'Current Account', context: null } : null} onChange={item => { remember(item); setPrimaryId(item?.id ?? 0); if (item) setParticipants(old => old.filter(p => p.accountId !== item.id)); }} error={state.errors.primaryAccountId}/></div>
       {primaryId ? <div><label className="label" htmlFor="primaryAccountRole">Primary Account Role *</label><select className="field" id="primaryAccountRole" name="primaryAccountRole" required value={primaryRole} onChange={e => setPrimaryRole(e.target.value as ProjectPartyRole)}><option value="">Choose role</option>{Object.entries(projectRoleLabels).map(([code,label]) => <option key={code} value={code}>{label}</option>)}</select>{error('primaryAccountRole')}</div> : <input type="hidden" name="primaryAccountRole" value={primaryRole}/>}
     </section>
     <section><h2 className="text-lg font-semibold">Additional Participants</h2><p className="mb-4 text-sm text-slate-600">Optional participating Accounts. Give each one or more roles specific to this Project.</p>{error('participants')}
-      <div className="mb-4 flex flex-wrap items-end gap-2"><div className="min-w-60 flex-1"><label className="label" htmlFor="addAccount">Account</label><select className="field" id="addAccount" value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}><option value="">Choose Account</option>{available.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div><button type="button" className="btn-secondary" onClick={add}>Add Account</button></div>
+      <div className="mb-4 flex flex-wrap items-end gap-2"><div className="min-w-60 flex-1"><EntityPicker type="account" label="Account" value={selectedAccount} onChange={item => { remember(item); setSelectedAccount(item); }}/></div><button type="button" className="btn-secondary" onClick={add}>Add Account</button></div>
       {participantMessage && <p role="alert" className="mb-3 text-sm text-red-700">{participantMessage}</p>}
       <div className="space-y-4">{participants.map(p => <div key={p.accountId} className="rounded border p-4"><div className="flex items-center justify-between gap-2"><strong>{accountOptions.find(a => a.id === p.accountId)?.name ?? "Account unavailable"}</strong><button type="button" className="btn-secondary" onClick={() => setParticipants(old => old.filter(item => item.accountId !== p.accountId))}>Remove</button></div><input type="hidden" name="accountId" value={p.accountId}/><input type="hidden" name="participantRoles" value={p.roles.join(',')}/><p className="mt-2 text-sm text-slate-600">Roles: {p.roles.map(role => projectRoleLabels[role]).join(', ') || 'Choose at least one'}</p><div className="mt-3 flex flex-wrap gap-3">{Object.entries(projectRoleLabels).map(([role,label]) => <label key={role} className="flex items-center gap-1 text-sm"><input type="checkbox" checked={p.roles.includes(role as ProjectPartyRole)} onChange={e => setParticipants(old => old.map(item => item.accountId === p.accountId ? { ...item, roles: e.target.checked ? [...item.roles, role as ProjectPartyRole] : item.roles.filter(r => r !== role) } : item))}/>{label}</label>)}</div></div>)}</div>
     </section>

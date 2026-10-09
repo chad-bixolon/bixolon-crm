@@ -16,7 +16,7 @@ export function dateField(raw: string, key: string, errors: Errors) {
   if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== raw) { errors[key] = 'Choose a valid date.'; return null; }
   return date;
 }
-function relation(form: FormData, key: string, errors: Errors) { const raw = field(form, key); const id = raw ? positiveId(raw) : null; if (raw && !id) errors[key] = 'Choose a valid record.'; return id; }
+function relation(form: FormData, key: string, errors: Errors) { const raw = field(form, key); const id = raw ? positiveId(raw) : null; if (raw && !id) errors[key] = 'Choose a valid record.'; if (!id && field(form, `${key}Query`)) errors[key] = 'Select a result from the suggestions.'; return id; }
 export function parseTask(form: FormData) {
   const errors: Errors = {}; const subject = required(form, 'subject', 'Subject', 200, errors);
   const description = optional(form, 'description', 5000, errors);

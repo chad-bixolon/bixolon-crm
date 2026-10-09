@@ -11,6 +11,7 @@ export function parseContact(form: FormData) {
   const rawAccountId = field(form, "accountId");
   const accountId = rawAccountId ? positiveId(rawAccountId) : null;
   if (rawAccountId && !accountId) errors.accountId = "Choose a valid account.";
+  if (!accountId && field(form, 'accountIdQuery')) errors.accountId = 'Select an Account from the suggestions.';
   const firstName = required(form, "firstName", "First name", 100, errors);
   const lastName = required(form, "lastName", "Last name", 100, errors);
   const title = optional(form, "title", 200, errors);

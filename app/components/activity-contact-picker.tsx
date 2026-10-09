@@ -2,55 +2,18 @@
 
 import { useState } from 'react';
 import type { ContactOption } from '@/lib/activity-relations';
-import { activityContactLabel, searchActivityContacts } from '@/lib/activity-contact-picker';
+import { EntityPicker, type PickerResult } from './entity-picker';
 
-type Props = {
-  contacts: ContactOption[];
-  selectedIds: number[];
-  onChange: (ids: number[]) => void;
-  accountSelected: boolean;
-  error?: string;
-};
+type Props = { contacts: ContactOption[]; selectedIds: number[]; onChange: (ids: number[]) => void; onFound?: (contact: ContactOption) => void; accountId: number; error?: string };
 
-export function ActivityContactPicker({ contacts, selectedIds, onChange, accountSelected, error }: Props) {
-  const [query, setQuery] = useState('');
-  const [contactToAdd, setContactToAdd] = useState('');
-  const searchActive = query.trim().length > 0;
-  const matches = searchActivityContacts(contacts, query, selectedIds);
-  const available = matches.slice(0, 50);
-  const selected = selectedIds.map(id => ({ id, contact: contacts.find(contact => contact.id === id) }));
-
-  function addContact() {
-    const id = Number(contactToAdd);
-    if (!available.some(contact => contact.id === id)) return;
-    onChange([...selectedIds, id]);
-    setContactToAdd('');
-    setQuery('');
-  }
-
+export function ActivityContactPicker({ contacts, selectedIds, onChange, onFound, accountId, error }: Props) {
+  const [known, setKnown] = useState(contacts);
+  const [toAdd, setToAdd] = useState<PickerResult | null>(null);
+  const selected = selectedIds.map(id => ({ id, contact: known.find(contact => contact.id === id) }));
   return <div className="sm:col-span-2">
-    <label className="label" htmlFor="activityContactSearch">Contacts involved in this activity</label>
-    <p id="activityContactHelp" className="mb-2 text-xs text-slate-500">Select the people involved in this activity. Contacts from the selected Account are shown, along with Contacts that are not yet assigned to an Account.</p>
-    <div className="flex flex-wrap items-end gap-2">
-      <div className="min-w-60 flex-1">
-        <div className="mb-2 flex items-center gap-2">
-          <input className="field" id="activityContactSearch" type="search" value={query} onChange={event => { setQuery(event.target.value); setContactToAdd(''); }} placeholder="Search name, email, or company" aria-describedby={searchActive ? 'activityContactHelp activityContactMatchCount' : 'activityContactHelp'} disabled={!accountSelected}/>
-          {query && <button type="button" className="btn-secondary shrink-0" onClick={() => { setQuery(''); setContactToAdd(''); }}>Clear search</button>}
-        </div>
-        {accountSelected && searchActive && <p id="activityContactMatchCount" className="mb-2 text-xs text-slate-600" aria-live="polite">{matches.length === 0 ? 'No contacts match' : `${matches.length} ${matches.length === 1 ? 'contact matches' : 'contacts match'}`}</p>}
-        <select className="field" aria-label="Contact search results" value={contactToAdd} onChange={event => setContactToAdd(event.target.value)} disabled={!accountSelected}>
-          <option value="">{accountSelected ? searchActive ? 'Choose from filtered contacts' : 'Choose Contact' : 'Choose an Account first'}</option>
-          {available.map(contact => <option key={contact.id} value={contact.id}>{activityContactLabel(contact)}</option>)}
-        </select>
-      </div>
-      <button type="button" className="btn-secondary" disabled={!contactToAdd} onClick={addContact}>Add Contact</button>
-    </div>
-    {accountSelected && !searchActive && available.length === 0 && <p className="mt-2 text-sm text-slate-500">No matching Contacts.</p>}
-    {selected.length ? <div className="mt-3 space-y-2" aria-label="Selected Contacts">{selected.map(({ id, contact }) => <div key={id} className="flex flex-wrap items-center gap-3 rounded border border-slate-200 p-3 text-sm">
-      <input type="hidden" name="contactIds" value={id}/>
-      <span className="min-w-0 flex-1 break-words">{contact ? activityContactLabel(contact) : 'Contact (review relationship)'}{contact?.archivedAt ? <span className="ml-2 text-xs text-slate-500">Archived</span> : contact && !contact.active ? <span className="ml-2 text-xs text-slate-500">Inactive</span> : null}</span>
-      <button type="button" className="btn-secondary" aria-label={`Remove ${contact?.name ?? 'Contact'}`} onClick={() => onChange(selectedIds.filter(selectedId => selectedId !== id))}>Remove</button>
-    </div>)}</div> : <p className="mt-3 text-sm text-slate-500">No Contacts selected.</p>}
+    <p className="mb-2 text-xs text-slate-600">Contacts from the selected Account and Contacts without an Account are available.</p>
+    <div className="flex flex-wrap items-end gap-2"><div className="min-w-60 flex-1"><EntityPicker type="contact" label="Contacts involved in this activity" value={toAdd} onChange={setToAdd} filters={{ accountId, includeUnassigned: true }} disabled={!accountId} placeholder={accountId ? 'Search Contacts...' : 'Choose an Account first'}/></div><button type="button" className="btn-secondary" disabled={!toAdd || selectedIds.includes(toAdd.id)} onClick={() => { if (!toAdd || selectedIds.includes(toAdd.id)) return; const contact = toAdd; const row = { id: contact.id, name: contact.name, accountId: contact.accountId ?? null, accountName: contact.context, email: contact.email, active: true }; setKnown(old => old.some(item => item.id === row.id) ? old : [...old, row]); onFound?.(row); onChange([...selectedIds, contact.id]); setToAdd(null); }}>Add Contact</button></div>
+    {selected.length ? <div className="mt-3 space-y-2" aria-label="Selected Contacts">{selected.map(({ id, contact }) => <div key={id} className="flex flex-wrap items-center gap-3 rounded border border-slate-200 p-3 text-sm"><input type="hidden" name="contactIds" value={id}/><span className="min-w-0 flex-1 break-words">{contact ? `${contact.name}${contact.email ? ` · ${contact.email}` : ''}${contact.accountName ? ` · ${contact.accountName}` : ''}` : 'Contact (review relationship)'}{contact?.archivedAt ? <span className="ml-2 text-xs text-slate-500">Archived</span> : contact && !contact.active ? <span className="ml-2 text-xs text-slate-500">Inactive</span> : null}</span><button type="button" className="btn-secondary" aria-label={`Remove ${contact?.name ?? 'Contact'}`} onClick={() => onChange(selectedIds.filter(selectedId => selectedId !== id))}>Remove</button></div>)}</div> : <p className="mt-3 text-sm text-slate-500">No Contacts selected.</p>}
     {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
   </div>;
 }
