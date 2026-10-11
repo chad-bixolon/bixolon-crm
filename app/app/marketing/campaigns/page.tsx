@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../../../components/filter-disclosure';
+import { countActiveFilters } from '../../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -18,9 +20,10 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
   const manage = canManageAttribution(actor);
   const hasCampaigns = campaigns.length > 0 || await prisma.marketingCampaign.count() > 0;
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.marketing} title="Campaigns" description="Marketing initiatives and their recorded influences." action={<div className="page-header-actions">{manage && <Link className="btn-primary" href="/marketing/campaigns/new">New Campaign</Link>}{manage && <Link className="btn-secondary" href="/marketing/lead-sources">Lead Sources</Link>}</div>}/>
-    <form className="panel mb-4 p-3 sm:p-4" method="get" aria-label="Filter Campaigns">
+    <form className="responsive-filter-form panel mb-4 p-3 sm:p-4" method="get" aria-label="Filter Campaigns">
       <div className="filter-grid campaign-filter-grid">
-        <div><label className="label" htmlFor="campaign-search">Search Campaigns</label><input className="field filter-control" id="campaign-search" name="q" defaultValue={q} placeholder="Search Campaigns"/></div>
+        <div className="filter-primary-search"><label className="label" htmlFor="campaign-search">Search Campaigns</label><input className="field filter-control" id="campaign-search" name="q" defaultValue={q} placeholder="Search Campaigns"/></div>
+        <button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(filters, {})} defaults={{}} clearHref="/marketing/campaigns"/>
         <div><label className="label" htmlFor="campaign-status">Status</label><select className="field filter-control" id="campaign-status" name="status" defaultValue={filters.status ?? ''}><option value="">All statuses</option>{campaignStatuses.map(status => <option key={status} value={status}>{campaignStatusLabel(status)}</option>)}</select></div>
         <div><label className="label" htmlFor="campaign-year">Year</label><input className="field filter-control" id="campaign-year" name="year" type="number" placeholder="Year" defaultValue={filters.year ?? ''}/></div>
         <label className="campaign-filter-archived flex items-center gap-2 text-sm"><input name="archived" value="true" type="checkbox" defaultChecked={filters.archived === 'true'}/>Archived</label>

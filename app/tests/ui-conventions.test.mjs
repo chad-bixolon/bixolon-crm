@@ -76,7 +76,7 @@ test('multi-action detail headers use the wrapping shared action group', () => {
 
 test('product filters and mobile action groups use shared responsive structure', () => {
   const products = read('app/products/page.tsx');
-  assert.match(products, /className="panel filter-panel filter-grid filter-row mb-4"/);
+  assert.match(products, /className="responsive-filter-form panel filter-panel filter-grid filter-row mb-4"/);
   assert.match(products, /className="field filter-control"/);
   assert.match(products, /className="filter-actions"/);
   assert.match(css, /\.page-header-actions \{ width: 100%; \}/);

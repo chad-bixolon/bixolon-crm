@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../../components/filter-disclosure';
+import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from "next/link";
 import { Content, PageHeader } from "@/components/shell";
@@ -23,10 +25,11 @@ export default async function ContactsPage({searchParams}:{searchParams:Promise<
   };
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.crm} title="Contacts" description="Manage customer, partner, and prospect contacts." action={can(actor, 'contacts.write') && <Link className="btn-primary" href="/contacts/new">New contact</Link>}/>
-    <form method="get" className="panel filter-panel filter-grid filter-grid-five mb-5" aria-label="Filter contacts">
+    <form method="get" className="responsive-filter-form panel filter-panel filter-grid filter-grid-five mb-5" aria-label="Filter contacts">
       <input type="hidden" name="sort" value={filters.sort??""}/><input type="hidden" name="dir" value={filters.dir??""}/><input type="hidden" name="pageSize" value={pageSize}/>
-      <div><label className="label" htmlFor="q">Search</label><input className="field filter-control" id="q" name="q" defaultValue={filters.q??""} placeholder="Name, email, or title"/></div>
-      <div><label className="label" htmlFor="active">Status</label><select className="field filter-control" id="active" name="active" defaultValue={filters.active??""}><option value="">Not Archived</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="archived">Archived</option><option value="all">All</option></select></div>
+      <div className="filter-primary-search"><label className="label" htmlFor="q">Search</label><input className="field filter-control" id="q" name="q" defaultValue={filters.q??""} placeholder="Name, email, or title"/></div>
+            <button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(filters, {})} defaults={{}} clearHref="/contacts"/>
+<div><label className="label" htmlFor="active">Status</label><select className="field filter-control" id="active" name="active" defaultValue={filters.active??""}><option value="">Not Archived</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="archived">Archived</option><option value="all">All</option></select></div>
       <div><label className="label" htmlFor="salesRepId">Sales Rep</label><select className="field filter-control" id="salesRepId" name="salesRepId" defaultValue={filters.salesRepId??""}><option value="">All Sales Reps</option>{salesReps.map(rep=><option key={rep.id} value={rep.id}>{rep.firstName} {rep.lastName}</option>)}</select></div>
       <ContactAccountFilter key={filters.accountId??""} initial={initialAccount} unassigned={filters.accountId==="unassigned"}/>
       <div><label className="label" htmlFor="marketingPreference">Marketing communications</label><select className="field filter-control" id="marketingPreference" name="marketingPreference" defaultValue={filters.marketingPreference??""}><option value="">All preferences</option><option value="UNKNOWN">Not specified</option><option value="OPTED_IN">Opted in</option><option value="OPTED_OUT">Opted out</option></select></div>

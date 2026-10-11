@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../../components/filter-disclosure';
+import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
@@ -22,8 +24,9 @@ export default async function Page({searchParams}:{searchParams:Promise<TaskFilt
 
   return <Content>
     <PageHeader title="Tasks" eyebrow={NAV_CATEGORIES.sales} action={<Link className="btn-primary" href="/tasks/new">New task</Link>}/>
-    <form method="get" className="panel filter-panel filter-grid mb-5" aria-label="Filter tasks">
-      <label className="label">Search<input className="field filter-control" name="q" defaultValue={f.q??''} placeholder="Subject or description"/></label>
+    <form method="get" className="responsive-filter-form panel filter-panel filter-grid mb-5" aria-label="Filter tasks">
+      <label className="filter-primary-search label">Search<input className="field filter-control" name="q" defaultValue={f.q??''} placeholder="Subject or description"/></label>
+      <button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(f, {visibility: 'active'})} defaults={{visibility: 'active'}} clearHref="/tasks"/>
       <label className="label">Visibility<select className="field filter-control" name="visibility" defaultValue={recordVisibility(f.visibility)}><option value="active">Active</option><option value="archived">Archived</option><option value="all">All</option></select></label>
       {select('status','Status',taskStatuses.map(x=>({value:x,label:x.replace('_',' ')})))}
       {select('priority','Priority',taskPriorities.map(x=>({value:x,label:x})))}

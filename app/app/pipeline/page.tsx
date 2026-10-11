@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../../components/filter-disclosure';
+import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import { operationalOpportunityWhere } from '@/lib/operational-where';
 import { currentUser } from '@/lib/current-user';
@@ -36,7 +38,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Filters>
 
   return <Content>
     <PageHeader title="Pipeline" eyebrow={NAV_CATEGORIES.sales} description="Open opportunities valued from active product line items."/>
-    <form method="get" className="panel filter-panel filter-grid mb-5" aria-label="Filter pipeline">
+    <form method="get" className="responsive-filter-form panel filter-panel filter-grid mb-5" aria-label="Filter pipeline"><FilterDisclosure initialCount={countActiveFilters(f, {})} defaults={{}} clearHref="/pipeline"/>
       <label className="label">Owner<select className={control} name="ownerId" defaultValue={f.ownerId??''}><option value="">All</option>{owners.map(o=><option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select></label>
       <label className="label">Stage<select className={control} name="stageId" defaultValue={f.stageId??''}><option value="">All</option>{stages.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
       <OptionalProjectFilter initial={selectedProject ? { ...selectedProject, context: null } : null} none={f.projectId === 'none'}/>

@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../../../components/filter-disclosure';
+import { countActiveFilters } from '../../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import { followUpLabels, followUpStatuses } from '@/lib/price-exception-follow-up';
 import Link from 'next/link';
@@ -18,7 +20,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Expiring
   const query=new URLSearchParams(Object.entries(filters).filter(([key,value])=>key!=='page'&&!!value) as [string,string][]);
   const href=(page:number)=>{const next=new URLSearchParams(query);next.set('page',String(page));return `/reports/price-exceptions-expiring?${next}`};
   return <Content><PageHeader eyebrow={`${NAV_CATEGORIES.reports} / Price Exceptions`} title="Expiring Price Exceptions" description="Follow up on expired and upcoming Price Exceptions. Stored status and expiration state are shown separately." action={<Link className="btn-primary" href={`/reports/price-exceptions-expiring/export?${query}`}>Export Excel</Link>}/>
-    <form method="get" className="panel filter-panel filter-grid mb-5" aria-label="Filter Expiring Price Exceptions">
+    <form method="get" className="responsive-filter-form panel filter-panel filter-grid mb-5" aria-label="Filter Expiring Price Exceptions">
       <label className="label">Expiration window<select className="field filter-control" name="expiration" defaultValue={window}>{windows.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
       <label className="label">Stored Status<select className="field filter-control" name="status" defaultValue={filters.status??(window==='follow-up'||window==='activeExpired'?'ACTIVE':'ALL')}><option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="EXPIRED">Expired status</option><option value="ARCHIVED">Archived</option></select></label>
       {actor.role!=='SALES'&&<label className="label">Sales Rep<select className="field filter-control" name="salesRep" defaultValue={filters.salesRep??''}><option value="">All Sales Reps</option>{reps.map(rep=><option value={rep.id} key={rep.id}>{rep.firstName} {rep.lastName}</option>)}</select></label>}
@@ -28,7 +30,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Expiring
       <label className="label">Overdue Follow-up<select className="field filter-control" name="overdueFollowUp" defaultValue={filters.overdueFollowUp??''}><option value="">All</option><option value="1">Overdue only</option></select></label>
       <label className="label">Account<input className="field filter-control" name="account" defaultValue={filters.account??''}/></label>
       <label className="label">SKU / Product<input className="field filter-control" name="sku" defaultValue={filters.sku??''}/></label>
-      <label className="label">Search<input className="field filter-control" name="q" defaultValue={filters.q??''} placeholder="PE number or SKU"/></label>
+      <label className="filter-primary-search label">Search<input className="field filter-control" name="q" defaultValue={filters.q??''} placeholder="PE number or SKU"/></label><button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(filters, { expiration: 'follow-up', status: 'ACTIVE' })} defaults={{ expiration: 'follow-up', status: 'ACTIVE' }} clearHref="/reports/price-exceptions-expiring"/>
       <div className="filter-actions"><button className="btn-filter-primary">View report</button></div>
     </form>
     <div className="mb-3 flex flex-wrap gap-2 text-sm">{windows.slice(0,6).map(([value,label])=><Link key={value} className="btn-secondary" href={`/reports/price-exceptions-expiring?expiration=${value}${value==='follow-up'?'':'&status=ALL'}`}>{label}</Link>)}</div>

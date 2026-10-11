@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../../../components/filter-disclosure';
+import { countActiveFilters } from '../../../lib/filter-count';
 import Link from 'next/link';
 import { NAV_CATEGORIES } from '@/lib/navigation-categories';
 import { SupportCasePriority, SupportCaseStatus } from '@prisma/client';
@@ -23,8 +25,9 @@ export default async function SupportCasesPage({ searchParams }: { searchParams:
   const filtered = Object.entries(selected).some(([key, value]) => key !== 'page' && value && value !== 'active' && value !== 'current');
   const zone = choices.zone;
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.support} title="Support Cases" description="Track and resolve customer issues." action={can(actor, 'support-cases.write') ? <Link className="btn-primary" href="/support/cases/new">New case</Link> : undefined}/>
-    <form method="get" className="filter-panel filter-grid filter-row mb-4" aria-label="Filter Support Cases">
-      <label className="label">Search<input className="field filter-control" name="q" defaultValue={selected.q} placeholder="Case, contact, subject, serial"/></label>
+    <form method="get" className="responsive-filter-form filter-panel filter-grid filter-row mb-4" aria-label="Filter Support Cases">
+      <label className="filter-primary-search label">Search<input className="field filter-control" name="q" defaultValue={selected.q} placeholder="Case, contact, subject, serial"/></label>
+      <button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(selected, {archive: 'active', sort: 'current'})} defaults={{archive: 'active', sort: 'current'}} clearHref="/support/cases"/>
       <label className="label">Support Rep<select className="field filter-control" name="assignedToId" defaultValue={selected.assignedToId}><option value="">All reps</option>{choices.assignees.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
       <label className="label">Status<select className="field filter-control" name="status" defaultValue={selected.status}><option value="">All statuses</option>{Object.entries(supportStatusLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       <label className="label">Priority<select className="field filter-control" name="priority" defaultValue={selected.priority}><option value="">All priorities</option>{Object.entries(supportPriorityLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>

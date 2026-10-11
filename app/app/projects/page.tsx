@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../../components/filter-disclosure';
+import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import { operationalProjectWhere, operationalOpportunityWhere } from '@/lib/operational-where';
 import Link from 'next/link';
@@ -25,8 +27,9 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     prisma.user.findMany({ where: { active: true, archivedAt: null }, select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }),
   ]);
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.programs} title="Projects" description="Programs and initiatives with optional Account relationships." action={can(actor, 'projects.write') ? <Link className="btn-primary" href="/projects/new">New Project</Link> : undefined}/>
-    <form method="get" className="panel filter-panel filter-grid filter-grid-five mb-5" aria-label="Filter projects">
-      <label className="label">Search<input className="field filter-control" name="q" defaultValue={filters.q ?? ''} placeholder="Project name"/></label>
+    <form method="get" className="responsive-filter-form panel filter-panel filter-grid filter-grid-five mb-5" aria-label="Filter projects">
+      <label className="filter-primary-search label">Search<input className="field filter-control" name="q" defaultValue={filters.q ?? ''} placeholder="Project name"/></label>
+      <button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(filters, {})} defaults={{}} clearHref="/projects"/>
       <label className="label">Status<select className="field filter-control" name="status" defaultValue={filters.status ?? ''}><option value="">All statuses</option>{Object.entries(projectStatusLabels).map(([code,label]) => <option key={code} value={code}>{label}</option>)}</select></label>
       <ReportEntityFilter type="account" name="accountId" label="Account" selected={filters.accountId ?? ''} actor={actor}/>
       <label className="label">Owner<select className="field filter-control" name="ownerId" defaultValue={filters.ownerId ?? ''}><option value="">All owners</option>{owners.map(o => <option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select></label>

@@ -152,3 +152,27 @@ select.pe-cleanup-control { padding-right: 2rem; }
 .report-scroll-range::-webkit-slider-thumb { width: var(--report-thumb-width); height: .5rem; margin-top: 0; border: 0; border-radius: 999px; appearance: none; background: #c2410c; }
 .report-scroll-range::-moz-range-thumb { width: var(--report-thumb-width); height: .5rem; border: 0; border-radius: 999px; background: #c2410c; }
 .report-scroll-range:focus-visible { outline: 2px solid #ea580c; outline-offset: 2px; border-radius: .25rem; }
+
+/* The disclosure only changes presentation; controls stay mounted and submit normally. */
+.filter-disclosure { display: none; }
+@media (max-width: 63.999rem) {
+  .responsive-filter-form { min-width: 0; }
+  .responsive-filter-form .filter-disclosure { display: flex; min-width: 0; align-items: center; gap: .75rem; grid-column: 1 / -1; flex: 1 1 100%; }
+  .filter-disclosure-button { display: flex; min-height: 2.75rem; min-width: 0; flex: 1; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid #cbd5e1; border-radius: .375rem; background: white; padding: .5rem .75rem; color: #334155; font-size: .875rem; font-weight: 600; text-align: left; }
+  .filter-disclosure-button:hover { border-color: #f97316; }
+  .filter-disclosure-button:focus-visible, .filter-disclosure-clear:focus-visible { outline: 2px solid #ea580c; outline-offset: 2px; }
+  .filter-disclosure-clear { flex: none; color: #9a3412; font-size: .875rem; text-decoration: underline; }
+  .responsive-filter-form:not(:has(.filter-disclosure-button[aria-expanded="true"])) > :not(.filter-primary-search):not(.filter-disclosure):not(.filter-mobile-search-submit):not(.campaign-filter-grid),
+  .responsive-filter-form:not(:has(.filter-disclosure-button[aria-expanded="true"])) > .campaign-filter-grid > :not(.filter-primary-search):not(.filter-disclosure):not(.filter-mobile-search-submit) { display: none; }
+  .responsive-filter-form:not(:has(.filter-disclosure-button[aria-expanded="true"])) > .campaign-filter-grid { display: contents; }
+  .responsive-filter-form:not(:has(.filter-disclosure-button[aria-expanded="true"])) { padding: .5rem; gap: .5rem; }
+  .responsive-filter-form:not(:has(.filter-disclosure-button[aria-expanded="true"])) > .filter-primary-search { min-width: 0; width: 100%; grid-column: 1 / -1; }
+  .responsive-filter-form:not(:has(.filter-disclosure-button[aria-expanded="true"])) > .campaign-filter-grid > .filter-primary-search { min-width: 0; width: 100%; }
+}
+.filter-mobile-search-submit { display: none; }
+@media (max-width: 63.999rem) {
+  .responsive-filter-form .filter-mobile-search-submit { display: none; min-height: 2.75rem; align-items: center; justify-content: center; border-radius: .375rem; background: #c2410c; padding: .5rem 1rem; color: white; font-size: .875rem; font-weight: 600; }
+  .responsive-filter-form .filter-mobile-search-submit:focus-visible { outline: 2px solid #ea580c; outline-offset: 2px; }
+  .responsive-filter-form:not(:has(.filter-disclosure-button[aria-expanded="true"])) > .filter-mobile-search-submit { display: inline-flex; grid-column: 1 / -1; width: 100%; }
+  .responsive-filter-form:not(:has(.filter-disclosure-button[aria-expanded="true"])) > .campaign-filter-grid > .filter-mobile-search-submit { display: inline-flex; width: 100%; }
+}

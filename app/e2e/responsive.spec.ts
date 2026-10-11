@@ -203,3 +203,126 @@ test('Support intake, history, and attachment work on a phone', async ({ page },
   await attachments.getByRole('button', { name: 'Remove' }).click();
   await expect(attachments).toContainText('No attachments have been added');
 });
+
+test('list and report filters stay compact without losing state', async ({ page }) => {
+  test.setTimeout(180_000);
+  await signInAs(page, 'admin');
+  const narrow = page.viewportSize()!.width < 1024;
+  for (const route of ['/contacts', '/opportunities', '/support/cases', '/price-exceptions', '/reports/support-cases']) {
+    await page.goto(route);
+    const form = page.locator('main form.responsive-filter-form').first();
+    const toggle = form.getByRole('button', { name: /^Show filters/ });
+    const search = form.locator('input[name="q"]');
+    await expect(search, route).toBeVisible();
+    const secondary = form.locator('select').first();
+    if (!narrow) {
+      await expect(toggle, route).toBeHidden();
+      await expect(secondary, route).toBeVisible();
+      continue;
+    }
+    await expect(toggle, route).toHaveAttribute('aria-expanded', 'false');
+    await expect(secondary, route).toBeHidden();
+    await expect(form.getByRole('button', { name: 'Search', exact: true }), route).toBeVisible();
+    const initialUrl = page.url();
+    await toggle.click();
+    await expect(form.getByRole('button', { name: /^Hide filters/ })).toHaveAttribute('aria-expanded', 'true');
+    await expect(secondary, route).toBeVisible();
+    expect(page.url(), route).toBe(initialUrl);
+    const option = secondary.locator('option').last();
+    const value = await option.getAttribute('value');
+    if (value) {
+      await secondary.selectOption(value);
+      await expect(form.getByRole('button', { name: /1 active/ })).toBeVisible();
+      await form.getByRole('button', { name: /^Hide filters/ }).click();
+      await expect(secondary).toBeHidden();
+      await form.getByRole('button', { name: /^Show filters/ }).click();
+      await expect(secondary).toHaveValue(value);
+    }
+    await expectNoPageOverflow(page, route);
+  }
+});
+
+test('Contacts and Support Cases expose results promptly and clear applied filters', async ({ page }) => {
+  test.skip(page.viewportSize()!.width >= 1024);
+  await signInAs(page, 'admin');
+  for (const [route, field] of [['/contacts', 'active'], ['/support/cases', 'status']] as const) {
+    await page.goto(route);
+    const form = page.locator('main form.responsive-filter-form').first();
+    const results = page.locator(route === '/contacts' ? 'main .panel.overflow-x-auto' : 'main .grid.lg\\:hidden').first();
+    const box = await results.boundingBox();
+    expect(box, `${route} results`).not.toBeNull();
+    expect(box!.y, `${route} results start`).toBeLessThan(page.viewportSize()!.height);
+    await form.getByRole('button', { name: /^Show filters/ }).click();
+    const select = form.locator(`select[name="${field}"]`);
+    const nonDefault = await select.locator('option').nth(1).getAttribute('value');
+    expect(nonDefault).toBeTruthy();
+    await select.selectOption(nonDefault!);
+    await form.getByRole('button', { name: 'Apply' }).click();
+    await expect(page).toHaveURL(new RegExp(`${field}=`));
+    await expect(form.getByRole('button', { name: /1 active/ })).toBeVisible();
+    await form.getByRole('link', { name: 'Clear', exact: true }).first().click();
+    await expect(page).toHaveURL(route);
+    await expect(form.getByRole('button', { name: /^Show filters/ })).toBeVisible();
+  }
+});
+
+test('expanded Opportunity filter picker remains inside the viewport', async ({ page }) => {
+  test.skip(page.viewportSize()!.width >= 1024);
+  await signInAs(page, 'admin');
+  await page.goto('/opportunities');
+  const form = page.locator('main form.responsive-filter-form').first();
+  await form.getByRole('button', { name: /^Show filters/ }).click();
+  const picker = form.getByRole('combobox', { name: 'Participating Account' });
+  await picker.fill(names.account);
+  const menu = page.getByRole('listbox');
+  await expect(menu.getByRole('option').first()).toBeVisible();
+  const bounds = await menu.boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
+  await menu.getByRole('option').first().click();
+  await expect(form.locator('input[name="accountId"]')).not.toHaveValue('');
+  await form.getByRole('button', { name: /^Hide filters/ }).click();
+  await form.getByRole('button', { name: /^Show filters/ }).click();
+  await expect(form.locator('input[name="accountId"]')).not.toHaveValue('');
+  await expectNoPageOverflow(page, '/opportunities expanded filter picker');
+});
+
+test('Search text and displayed Contact results survive disclosure toggles', async ({ page }) => {
+  test.skip(page.viewportSize()!.width >= 1024);
+  await signInAs(page, 'admin');
+  await page.goto('/contacts');
+  const form = page.locator('main form.responsive-filter-form').first();
+  const search = form.locator('input[name="q"]');
+  const firstResult = page.locator('main .panel.overflow-x-auto tbody tr').first();
+  const before = await firstResult.textContent();
+  await search.fill('Ada');
+  await expect(form.getByRole('button', { name: 'Show filters, 1 active' })).toBeVisible();
+  const url = page.url();
+  await form.getByRole('button', { name: /^Show filters/ }).click();
+  await form.getByRole('button', { name: /^Hide filters/ }).click();
+  await expect(search).toHaveValue('Ada');
+  expect(await firstResult.textContent()).toBe(before);
+  expect(page.url()).toBe(url);
+});
+
+test('filter groups without Search collapse as a whole', async ({ page }) => {
+  await signInAs(page, 'admin');
+  for (const route of ['/pipeline', '/trade-shows/my-leads']) {
+    await page.goto(route);
+    const form = page.locator('main form.responsive-filter-form').first();
+    const secondary = form.locator('select').first();
+    const toggle = form.getByRole('button', { name: /^Show filters/ });
+    if (page.viewportSize()!.width >= 1024) {
+      await expect(toggle).toBeHidden();
+      await expect(secondary).toBeVisible();
+      continue;
+    }
+    await expect(toggle).toBeVisible();
+    await expect(secondary).toBeHidden();
+    await toggle.click();
+    await expect(secondary).toBeVisible();
+    await expectNoPageOverflow(page, route);
+  }
+});

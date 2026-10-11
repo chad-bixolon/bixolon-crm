@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../../../components/filter-disclosure';
+import { countActiveFilters } from '../../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -23,7 +25,7 @@ export default async function LeadSourcesPage({ searchParams }: { searchParams: 
   const metrics = [['Unique Prospects', report.summary.uniqueProspects], ['Resolved Contacts', report.summary.resolvedContacts], ['Contact-only Prospects', report.summary.contactOnly], ['Unresolved Leads', report.summary.unresolvedLeads], ['Prospects with Opportunities', report.summary.withOpportunities], ['Source Conflicts', report.summary.sourceConflicts]] as const;
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.reports} title="Lead Sources" description="Unique people by their current first-touch Lead Source, with linked Trade Show leads counted through their Contact." />
-    <form className="panel filter-panel filter-grid filter-row mb-5" method="get" aria-label="Filter Lead Sources">
+    <form className="responsive-filter-form panel filter-panel filter-grid filter-row mb-5" method="get" aria-label="Filter Lead Sources">
       <label className="text-sm">From<input className="field mt-1 block w-full" type="date" name="from" defaultValue={params.from} /></label>
       <label className="text-sm">To<input className="field mt-1 block w-full" type="date" name="to" defaultValue={params.to} /></label>
       <label className="text-sm">Lead Source<select className="field mt-1 block w-full" name="leadSourceId" defaultValue={params.leadSourceId ?? ''}><option value="">All sources</option><option value="none">Unspecified</option>{sources.map(source => <option value={source.id} key={source.id}>{source.name}{source.active ? '' : ' (inactive)'}</option>)}</select></label>
@@ -31,7 +33,7 @@ export default async function LeadSourcesPage({ searchParams }: { searchParams: 
       <label className="text-sm">Prospect state<select className="field mt-1 block w-full" name="state" defaultValue={params.state ?? ''}><option value="">All prospects</option><option value="CONTACT">Contact</option><option value="UNRESOLVED_LEAD">Unresolved Lead</option></select></label>
       <label className="text-sm">Opportunity association<select className="field mt-1 block w-full" name="opportunity" defaultValue={params.opportunity ?? ''}><option value="">All prospects</option><option value="YES">With Opportunities</option><option value="NO">Without Opportunities</option></select></label>
       <label className="text-sm">Assigned Sales Rep<select className="field mt-1 block w-full" name="ownerId" defaultValue={params.ownerId ?? ''}><option value="">All reps</option>{reps.map(rep => <option value={rep.id} key={rep.id}>{rep.firstName} {rep.lastName}</option>)}</select></label>
-      <label className="text-sm">Search<input className="field mt-1 block w-full" name="q" maxLength={100} defaultValue={params.q ?? ''} placeholder="Prospect or company" /></label>
+      <label className="filter-primary-search text-sm">Search<input className="field mt-1 block w-full" name="q" maxLength={100} defaultValue={params.q ?? ''} placeholder="Prospect or company" /></label><button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(params, {})} defaults={{}} clearHref="/reports/lead-sources"/>
       <div className="flex items-end gap-2"><button className="btn-primary">Filter</button><Link className="btn-secondary" href="/reports/lead-sources">Clear</Link></div>
     </form>
     <p className="mb-4 text-sm text-slate-600">Date range uses matching linked lead capture when available, otherwise Contact creation; unresolved leads use capture or import date. A Contact source takes precedence. Conflicts need Marketing review.</p>

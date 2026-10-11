@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../../components/filter-disclosure';
+import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from "next/link";
 import { Content, PageHeader } from "@/components/shell";
@@ -31,9 +33,10 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
 
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.sales} title="Opportunities" description="Sales opportunities and participating accounts." action={can(actor, 'sales.write') && <Link className="btn-primary" href="/opportunities/new">New opportunity</Link>}/>
-    <form method="get" className="panel filter-panel filter-grid opportunity-filter-grid mb-5" aria-label="Filter opportunities">
-      <div className="opportunity-filter-search"><label className="label" htmlFor="q">Search</label><input className={control} id="q" name="q" defaultValue={filters.q ?? ""} placeholder="Search opportunity, competitor, or model"/></div>
-      <div><label className="label" htmlFor="stageId">Stage</label><select className={control} id="stageId" name="stageId" defaultValue={filters.stageId ?? ""}><option value="">All stages</option>{options.stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+    <form method="get" className="responsive-filter-form panel filter-panel filter-grid opportunity-filter-grid mb-5" aria-label="Filter opportunities">
+      <div className="filter-primary-search opportunity-filter-search"><label className="label" htmlFor="q">Search</label><input className={control} id="q" name="q" defaultValue={filters.q ?? ""} placeholder="Search opportunity, competitor, or model"/></div>
+            <button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(filters, {})} defaults={{}} clearHref="/opportunities"/>
+<div><label className="label" htmlFor="stageId">Stage</label><select className={control} id="stageId" name="stageId" defaultValue={filters.stageId ?? ""}><option value="">All stages</option>{options.stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
       <div><label className="label" htmlFor="competitorId">Competitor</label><select className={control} id="competitorId" name="competitorId" defaultValue={filters.competitorId ?? ""}><option value="">All competitors</option>{options.competitors.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}{filters.competitorId && !options.competitors.some(option => String(option.id) === filters.competitorId) && <option value={filters.competitorId}>Selected inactive competitor</option>}</select></div>
       <div><label className="label" htmlFor="ownerId">Owner</label><select className={control} id="ownerId" name="ownerId" defaultValue={filters.ownerId ?? ""}><option value="">All owners</option>{options.owners.map(o => <option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select></div>
       <div><label className="label" htmlFor="forecastCategory">Forecast</label><select className={control} id="forecastCategory" name="forecastCategory" defaultValue={filters.forecastCategory ?? ""}><option value="">All categories</option>{Object.entries(forecastLabels).map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></div>

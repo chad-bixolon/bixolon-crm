@@ -51,3 +51,9 @@ Use the existing classes in `app/app/globals.css` for forms and actions. Keep pa
 - Size dialogs within the viewport, allow internal vertical scrolling, and keep action buttons reachable. Let long names, subjects, filenames, and audit values wrap.
 - Keep entity picker inputs within their parent width. Their portal results must remain inside the visual viewport, be at most 320px tall, scroll internally, and support keyboard and touch selection.
 - Responsive browser tests should check `document.documentElement.scrollWidth <= clientWidth` while allowing an inner table region to scroll. Capture screenshots on failure; do not use screenshot diffs as the responsive gate.
+
+## Responsive list and report filters
+
+- Keep the primary Search field and its submit action visible on phones and portrait tablets when a page has Search. Collapse secondary filters by default below 1024px. When there is no Search, collapse the whole filter group. At 1024px and wider, keep the existing expanded layout.
+- Use the shared `FilterDisclosure` inside GET filter forms with `.responsive-filter-form`; mark the primary search wrapper `.filter-primary-search` and use `.filter-mobile-search-submit` for a visible mobile Search action. The disclosure button must expose `aria-expanded`, show the count of non-default filters, and offer Clear when filters are active.
+- Count only business filters. Ignore pagination, view tabs, sort metadata, empty Search, and each page's normal default, including Not Archived or Current. Keep the form controls mounted while collapsed so typed values, selected entities, dates, and query behavior survive opening and closing.

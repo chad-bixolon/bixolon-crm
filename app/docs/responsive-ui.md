@@ -78,3 +78,7 @@ Viewport classes: phone 390×844, tablet portrait 768×1024, tablet landscape 10
 ## Follow-up scope
 
 - Full import mapping and administration reconciliation interactions on a 390px phone were not exercised end to end. Their route-level layout is bounded; desktop and tablet workflows remain the priority for those dense tools.
+
+## Filter density
+
+List and built-in report filter groups collapse below 1024px. Primary Search and a Search submit button remain visible where present; all secondary controls stay available through the Filters disclosure. The header shows the active non-default count and Clear action. Desktop filter forms remain expanded.

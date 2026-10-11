@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../../components/filter-disclosure';
+import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
@@ -32,8 +34,9 @@ export default async function DemosPage({ searchParams }: { searchParams: Promis
 
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.sales} title="Demo Requests" description="Track imported demo requests, shipment status, and deployed units." action={<Link className="btn-secondary" href="/administration/imports/demos">Import demos</Link>}/>
-    <form className="panel filter-panel filter-grid filter-row mb-5" method="get">
-      <label className="min-w-64 flex-1"><span className="sr-only">Search demos</span><input className="field w-full" name="q" placeholder="Search demo #, customer, requester, or SKU" defaultValue={q}/></label>
+    <form className="responsive-filter-form panel filter-panel filter-grid filter-row mb-5" method="get">
+      <label className="filter-primary-search min-w-64 flex-1"><span className="sr-only">Search demos</span><input className="field w-full" name="q" placeholder="Search demo #, customer, requester, or SKU" defaultValue={q}/></label>
+      <button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters({ q, status }, {})} defaults={{}} clearHref="/demos"/>
       <label className="w-44 max-w-full"><span className="label">Status</span><select className="field w-full" name="status" defaultValue={status ?? ''}><option value="">All statuses</option><option value="PENDING">Requested</option><option value="APPROVED">Approved</option><option value="SHIPPED">Shipped</option><option value="CANCELLED">Cancelled</option></select></label>
       <button className="btn-secondary h-11">Search</button>
     </form>

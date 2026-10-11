@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../../components/filter-disclosure';
+import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from "next/link";
 import { Content, PageHeader } from "@/components/shell";
@@ -22,8 +24,9 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
 
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.catalogPricing} title="Products" description="Products available for opportunity estimates." action={canManageProducts ? <Link className="btn-primary" href="/products/new">New product</Link> : undefined}/>
-    <form method="get" className="panel filter-panel filter-grid filter-row mb-4" aria-label="Filter products">
-      <label className="label">Search<input className="field filter-control" name="q" id="q" placeholder="SKU or name" defaultValue={filters.q ?? ""}/></label>
+    <form method="get" className="responsive-filter-form panel filter-panel filter-grid filter-row mb-4" aria-label="Filter products">
+      <label className="filter-primary-search label">Search<input className="field filter-control" name="q" id="q" placeholder="SKU or name" defaultValue={filters.q ?? ""}/></label>
+      <button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(filters, {})} defaults={{}} clearHref="/products"/>
       <label className="label">Status<select className="field filter-control" name="active" id="active" defaultValue={filters.active ?? ""}><option value="">Current</option><option value="all">All</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="archived">Archived</option></select></label>
       <label className="label">Product Category<select className="field filter-control" name="category" id="category" defaultValue={filters.category ?? ""}><option value="">All</option>{categories.map(category=><option key={category.id} value={category.code}>{category.name}{category.active ? "" : " (inactive)"}</option>)}</select></label>
       <label className="label">Catalog Source<select className="field filter-control" name="catalogSource" id="catalogSource" defaultValue={filters.catalogSource ?? ""}><option value="">All</option>{Object.entries(catalogSourceLabels).filter(([value])=>value!=='SPECIAL_SKU_LIST').map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>

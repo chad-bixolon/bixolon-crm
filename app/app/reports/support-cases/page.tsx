@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../../../components/filter-disclosure';
+import { countActiveFilters } from '../../../lib/filter-count';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Content,PageHeader } from '@/components/shell';
@@ -19,8 +21,8 @@ export default async function Page({searchParams}:{searchParams:Promise<SupportR
   const href=(page:number)=>{const next=new URLSearchParams(query);next.set('page',String(page));return `/reports/support-cases?${next}`};
   const fields:[string,string,string][]=[['account','Account','Account name'],['contact','Contact','Contact name'],['product','Product / SKU','Part number'],['purchasedFrom','Purchased From Account','Linked Account name']];
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.reports} title="Support Cases Report" description="Review case load, aging, follow-ups, and resolution." action={<Link className="btn-primary" href={`/reports/support-cases/export?${query}`}>Export Excel</Link>}/>
-    <form method="get" className="filter-panel filter-grid filter-row mb-5" aria-label="Filter Support Cases report">
-      <label className="label">Search<input className="field filter-control" name="q" defaultValue={filters.q??''} placeholder="Case, Account, Contact, subject, serial, Purchased From"/></label>
+    <form method="get" className="responsive-filter-form filter-panel filter-grid filter-row mb-5" aria-label="Filter Support Cases report">
+      <label className="filter-primary-search label">Search<input className="field filter-control" name="q" defaultValue={filters.q??''} placeholder="Case, Account, Contact, subject, serial, Purchased From"/></label><button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(filters, {archive: 'active', sort: 'newest'})} defaults={{archive: 'active', sort: 'newest'}} clearHref="/reports/support-cases"/>
       <label className="label">Support Rep<select className="field filter-control" name="rep" defaultValue={filters.rep??''}><option value="">All reps</option>{choices.assignees.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
       <label className="label">Status<select className="field filter-control" name="status" defaultValue={filters.status??''}><option value="">All statuses</option>{Object.entries(supportStatusLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
       <label className="label">Priority<select className="field filter-control" name="priority" defaultValue={filters.priority??''}><option value="">All priorities</option>{Object.entries(supportPriorityLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>

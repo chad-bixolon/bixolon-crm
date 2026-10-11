@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../../../components/filter-disclosure';
+import { countActiveFilters } from '../../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -22,7 +24,7 @@ export default async function MarketingAttributionPage({ searchParams }: { searc
   const query = (page: number) => { const next = new URLSearchParams(); for (const [key, value] of Object.entries(params)) if (key !== 'page' && typeof value === 'string') next.set(key, value); next.set('page', String(page)); return `/reports/marketing-attribution?${next}`; };
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.reports} title="Marketing Attribution" description="Recorded Campaign Influence activity. Each touch appears once; voided touches remain visible for review." />
-    <form className="panel filter-panel filter-grid filter-row mb-5" method="get" aria-label="Filter Marketing Attribution">
+    <form className="responsive-filter-form panel filter-panel filter-grid filter-row mb-5" method="get" aria-label="Filter Marketing Attribution">
       <label className="text-sm">From<input className="field mt-1 block w-full" name="from" type="date" defaultValue={params.from}/></label>
       <label className="text-sm">To<input className="field mt-1 block w-full" name="to" type="date" defaultValue={params.to}/></label>
       <label className="text-sm">Lead Source<select className="field mt-1 block w-full" name="leadSourceId" defaultValue={params.leadSourceId ?? ''}><option value="">All sources</option>{sources.map(source => <option value={source.id} key={source.id}>{source.name}{source.active ? '' : ' (inactive)'}</option>)}</select></label>
@@ -30,7 +32,7 @@ export default async function MarketingAttributionPage({ searchParams }: { searc
       <label className="text-sm">Campaign status<select className="field mt-1 block w-full" name="campaignStatus" defaultValue={params.campaignStatus ?? ''}><option value="">All statuses</option>{['PLANNED', 'ACTIVE', 'COMPLETED'].map(status => <option value={status} key={status}>{campaignStatusLabel(status)}</option>)}</select></label>
       <label className="text-sm">Record type<select className="field mt-1 block w-full" name="recordType" defaultValue={params.recordType ?? ''}><option value="">All types</option><option value="TRADE_SHOW_LEAD">Trade Show Lead</option><option value="CONTACT">Contact</option><option value="OPPORTUNITY">Opportunity</option></select></label>
       <label className="text-sm">Sales Rep / Owner<select className="field mt-1 block w-full" name="ownerId" defaultValue={params.ownerId ?? ''}><option value="">All owners</option>{reps.map(rep => <option value={rep.id} key={rep.id}>{name(rep)}</option>)}</select></label>
-      <label className="text-sm">Search<input className="field mt-1 block w-full" name="q" maxLength={100} defaultValue={params.q ?? ''} placeholder="Campaign or record name"/></label>
+      <label className="filter-primary-search text-sm">Search<input className="field mt-1 block w-full" name="q" maxLength={100} defaultValue={params.q ?? ''} placeholder="Campaign or record name"/></label><button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(params, {})} defaults={{}} clearHref="/reports/marketing-attribution"/>
       <div className="flex items-end gap-2"><button className="btn-primary">Filter</button><Link className="btn-secondary" href="/reports/marketing-attribution">Clear</Link></div>
     </form>
     <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{[['Active Campaigns',report.activeCampaigns],['Campaign Influences in period',report.summary.influences],['Influenced Contacts',report.summary.contacts],['Influenced Opportunities',report.summary.opportunities],['Trade Show Leads influenced',report.summary.leads]].map(([label,value])=><div className="panel p-4" key={label}><p className="text-sm text-slate-600">{label}</p><p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p></div>)}</div>

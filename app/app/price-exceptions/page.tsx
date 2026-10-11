@@ -1,3 +1,5 @@
+import { FilterDisclosure } from '../../components/filter-disclosure';
+import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
@@ -17,8 +19,9 @@ export default async function PriceExceptionsPage({searchParams}:{searchParams:P
   const control='field filter-control';
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.catalogPricing} title="Price Exceptions" description="Finalized Price Exception records imported from BIXOLON operational sources." action={<Link className="btn-primary" href="/price-exceptions/lookup">Find a valid PE</Link>}/>
-    <form className="panel filter-panel filter-grid mb-5" method="get" aria-label="Filter Price Exceptions">
-      <label className="label">Search<input className={control} name="q" defaultValue={filters.q??''} placeholder="PE # or SKU"/></label>
+    <form className="responsive-filter-form panel filter-panel filter-grid mb-5" method="get" aria-label="Filter Price Exceptions">
+      <label className="filter-primary-search label">Search<input className={control} name="q" defaultValue={filters.q??''} placeholder="PE # or SKU"/></label>
+      <button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(filters, {expiration: 'all'})} defaults={{expiration: 'all'}} clearHref="/price-exceptions"/>
       <label className="label">Status<select className={control} name="status" defaultValue={filters.status??''}><option value="">Current</option><option value="ALL">All</option><option>ACTIVE</option><option>EXPIRED</option><option>ARCHIVED</option></select></label>
       <label className="label">Distributor / OEM<input className={control} name="distributor" defaultValue={filters.distributor??''}/></label>
       <label className="label">VAR / ISV<input className={control} name="varName" defaultValue={filters.varName??''}/></label>
