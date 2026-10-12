@@ -14,7 +14,7 @@ const originalLoad = Module._load;
 Module._load = function(request, parent, isMain) {
   if (request === 'next/link') return function MockLink({ href, children, ...props }) { return React.createElement('a', { href, ...props }, children); };
   if (request === 'next/image') return function MockImage({ src, alt, width, height, className }) { return React.createElement('img', { src, alt, width, height, className }); };
-  if (request === 'next/navigation') return { usePathname: () => pathname };
+  if (request === 'next/navigation') return { usePathname: () => pathname, useRouter: () => ({ push: () => {} }) };
   if (request === '@/app/sign-out-action') return { signOutAction: async () => {} };
   if (request === '@/app/dev/impersonation/actions') return { endImpersonation: async () => {} };
   if (request === '@/lib/role-labels') return require(path.join(root, 'lib/role-labels.ts'));

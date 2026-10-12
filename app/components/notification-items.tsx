@@ -1,15 +1,17 @@
-import { dismissNotification, markNotificationRead, openNotification } from '@/app/notifications/actions';
+import { dismissNotification, markNotificationRead, openNotification, snoozeNotification } from '@/app/notifications/actions';
 import type { NotificationItem } from '@/lib/notifications';
 import { notificationDisplayMessage, notificationEntityLabels } from '@/lib/notification-presentation';
 
 const severityStyle = { INFO: 'bg-sky-50 text-sky-800', WARNING: 'bg-amber-50 text-amber-900', CRITICAL: 'bg-red-50 text-red-800' };
 const severityLabels = { INFO: 'Info', WARNING: 'Warning', CRITICAL: 'Critical' };
 function friendlyNotificationTime(date: Date) { const days = Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 86400000)); return days === 0 ? 'Today' : days === 1 ? 'Yesterday' : `${days} days ago`; }
-export function NotificationItems({ rows, compact = false }: { rows: NotificationItem[]; compact?: boolean }) {
+export function NotificationItems({ rows, compact = false, timeZone = 'America/New_York' }: { rows: NotificationItem[]; compact?: boolean; timeZone?: string }) {
   return <div className="divide-y divide-slate-100">{rows.map(row => <article key={row.id} className={`min-w-0 px-4 py-3 ${row.readAt ? '' : 'bg-orange-50/40'}`}>
     <div className="flex items-start justify-between gap-2"><span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${severityStyle[row.severity]}`}>{severityLabels[row.severity]}</span><time className="shrink-0 text-xs text-slate-500" dateTime={row.createdAt.toISOString()}>{friendlyNotificationTime(row.createdAt)}</time></div>
     <form action={openNotification} className="mt-2"><input type="hidden" name="id" value={row.id}/><button className="inline-flex min-h-11 items-center text-left text-sm font-semibold text-slate-900 hover:text-orange-800 hover:underline">{row.title}</button></form>
     <p className="mt-1 break-words text-xs leading-5 text-slate-600">{notificationDisplayMessage(row)}</p>
+    {row.snoozedUntil && row.snoozedUntil > new Date() && <p className="mt-1 text-xs text-slate-600">Snoozed until {row.snoozedUntil.toLocaleString('en-US', { timeZone, dateStyle: 'medium', timeStyle: 'short' })}</p>}
     <div className="mt-2 flex flex-wrap items-center gap-3 text-xs"><span className="text-slate-500">{notificationEntityLabels[row.entityType]}</span>{!row.readAt&&<form action={markNotificationRead}><input type="hidden" name="id" value={row.id}/><button className="inline-flex min-h-11 items-center text-orange-800 hover:underline">Mark read</button></form>}{!row.dismissedAt&&!row.resolvedAt&&<form action={dismissNotification}><input type="hidden" name="id" value={row.id}/><button className="inline-flex min-h-11 items-center text-slate-600 hover:underline">Dismiss</button></form>}{!compact&&<form action={openNotification}><input type="hidden" name="id" value={row.id}/><button className="inline-flex min-h-11 items-center text-orange-800 hover:underline">Open {notificationEntityLabels[row.entityType]}</button></form>}</div>
+    {!row.dismissedAt&&!row.resolvedAt&&!(row.snoozedUntil && row.snoozedUntil > new Date())&&<form action={snoozeNotification} className="mt-2 flex flex-wrap items-center gap-2 text-xs"><input type="hidden" name="id" value={row.id}/><label>Snooze <select name="choice" className="field ml-1 max-w-40" defaultValue="tomorrow"><option value="later-today">Later today</option><option value="tomorrow">Tomorrow</option><option value="three-days">3 days</option><option value="one-week">1 week</option><option value="custom">Custom time</option></select></label><label>Custom time ({timeZone}) <input name="custom" type="datetime-local" className="field ml-1 max-w-52"/></label><button type="submit" className="btn-secondary">Snooze</button></form>}
   </article>)}</div>;
 }

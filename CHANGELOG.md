@@ -6,6 +6,12 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added a permission-aware global search palette for core CRM records, with keyboard and mobile access.
+
+- Added Admin system health checks and recorded notification/Calendar job runs with conservative stale and failed status.
+
+- Added personal in-app notification category preferences and time-zone-aware snooze; Critical alerts remain mandatory.
+
 - Improved SalesHub responsiveness and usability across phone and tablet layouts.
 
 - Added file attachments to Support Cases using secure object storage; removal permanently deletes the binary while retaining audit metadata and timeline history.

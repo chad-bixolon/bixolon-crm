@@ -3,7 +3,8 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
-import { dismissAllReadNotifications, markAllNotificationsRead, updateNotification } from '@/lib/notifications';
+import { dismissAllReadNotifications, markAllNotificationsRead, snoozeUntil, snoozeUserNotification, updateNotification } from '@/lib/notifications';
+import { preferenceCategories } from '@/lib/notification-preferences';
 
 export async function markNotificationRead(form: FormData) {
   const actor = await currentUser();
@@ -29,6 +30,27 @@ export async function markAllRead() {
 export async function dismissAllRead() {
   const actor = await currentUser();
   await dismissAllReadNotifications(prisma, actor);
+  revalidatePath('/notifications');
+  revalidatePath('/', 'layout');
+}
+
+export async function saveNotificationPreference(form: FormData) {
+  const actor = await currentUser();
+  const category = String(form.get('category') ?? '');
+  if (!preferenceCategories.includes(category as typeof preferenceCategories[number])) throw new Error('Invalid notification category.');
+  const enabled = form.get('enabled') === 'on';
+  await prisma.notificationPreference.upsert({ where: { userId_category: { userId: actor.id, category: category as typeof preferenceCategories[number] } }, create: { userId: actor.id, category: category as typeof preferenceCategories[number], enabled }, update: { enabled } });
+  revalidatePath('/notifications/preferences');
+  revalidatePath('/notifications');
+  revalidatePath('/', 'layout');
+}
+
+export async function snoozeNotification(form: FormData) {
+  const actor = await currentUser();
+  const user = await prisma.user.findUnique({ where: { id: actor.id }, select: { timeZone: true } });
+  const until = snoozeUntil(String(form.get('choice') ?? ''), new Date(), user?.timeZone ?? 'America/New_York', String(form.get('custom') ?? ''));
+  if (!until) throw new Error('Choose a future snooze time.');
+  await snoozeUserNotification(prisma, actor, Number(form.get('id')), until);
   revalidatePath('/notifications');
   revalidatePath('/', 'layout');
 }

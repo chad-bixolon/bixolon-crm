@@ -4,10 +4,16 @@ The Dashboard and reports show broader business and management truth. The Notifi
 
 ## States and access
 
-- Unread means `readAt` is empty. Active means both `dismissedAt` and `resolvedAt` are empty. The badge counts active unread rows.
+- Unread means `readAt` is empty. Active means both `dismissedAt` and `resolvedAt` are empty and any snooze has expired. The badge counts active unread rows.
 - Dismissed rows stay in history. Resolved rows stay in history. There is no user-facing delete action.
 - Reads and mutations use the effective user, including local development impersonation. Admins see only their own notifications. Entity visibility is checked on lists, updates, and normal detail routes. Stale inaccessible notifications are hidden from lists and cannot be opened through the notification action.
-- The full page combines state (Active, Unread, All / History, Dismissed, Resolved), category (All, Price Exceptions, Tasks, Opportunities), and severity filters with server-side pagination. The bell remains a seven-item active preview.
+- The full page combines state (Active, Unread, All / History, Dismissed, Resolved), category (All, Price Exceptions, Tasks, Opportunities, Support), and severity filters with server-side pagination. The bell remains a seven-item active preview.
+
+## Personal preferences and snooze
+
+`/notifications/preferences` stores one optional enabled flag per user and category: Tasks, Opportunities, Price Exceptions, and Support. Missing rows mean enabled, preserving existing behavior. Info and Warning creation honors the flag in immediate assignment/event paths and evaluator paths. Critical alerts always remain enabled. Turning a category off hides that user's noncritical rows from Active, Unread, and the bell without changing their `dismissedAt`, `resolvedAt`, or snooze time. They remain in History. Turning it back on surfaces still-unresolved, undismissed rows again when their snooze has expired. Explicitly dismissed and resolved rows remain historical. Evaluators continue resolving conditions while a category is off. Source keys remain unique, so reruns cannot create duplicates or revive an explicitly dismissed row; an unresolved condition with no existing source key can create a row after re-enabling.
+
+Active notices can be snoozed until later today (23:59 local), tomorrow (09:00 local), three days (09:00 local), one week (09:00 local), or a custom local time. The user's configured time zone determines the preset and display. Snoozed rows stay in History, disappear from Active and the bell, and return automatically when due if still unresolved and undismissed. No duplicate row is created. The evaluator continues to resolve a condition that ends during a snooze, so it does not revive. Event notices remain historical after a snooze.
 
 ## PE sources
 
@@ -17,7 +23,7 @@ The 60-day notice resolves when the PE enters the 30-day window. The 30-day noti
 
 The recipient is the follow-up owner, or the assigned Sales Rep when there is no follow-up record yet. An existing follow-up record with no owner remains unassigned, matching the PE report. There is no team-wide manager or admin broadcast. A Sales user is skipped if existing PE visibility would deny that PE. Manager/admin reassignment creates an immediate Info notice for the new owner, keyed by the follow-up audit event ID. Assigning to oneself does not create an assignment notice.
 
-All source keys include PE ID, recipient ID, and condition, with the follow-up date or assignment audit ID when needed. The database unique constraint and `createMany(..., skipDuplicates: true)` make reruns idempotent. Types, severity, and entity type are general so Tasks, Opportunities, Demos, Projects, Trade Shows, and Campaigns can be added later. No user preference UI exists in v1.
+All source keys include PE ID, recipient ID, and condition, with the follow-up date or assignment audit ID when needed. The database unique constraint and `createMany(..., skipDuplicates: true)` make reruns idempotent. Types, severity, and entity type are general so Tasks, Opportunities, Demos, Projects, Trade Shows, and Campaigns can be added later.
 
 ## Task and Opportunity sources
 

@@ -25,7 +25,7 @@ Module._load = function(specifier, parent, isMain) {
   if (specifier === '@/components/notification-items') return { NotificationItems: ({ rows }) => React.createElement('div', null, `${rows.length} notifications`) };
   if (specifier === './actions') return { markAllRead: async () => {}, dismissAllRead: async () => {} };
   if (specifier === '@/lib/current-user') return { currentUser: async () => actor };
-  if (specifier === '@/lib/prisma') return { prisma: {} };
+  if (specifier === '@/lib/prisma') return { prisma: { user: { findUnique: async () => ({ timeZone: 'America/New_York' }) } } };
   if (specifier === '@/lib/notifications') return {
     notificationViews: ['active', 'unread', 'all', 'dismissed', 'resolved'],
     notificationCategories: ['all', 'price-exceptions', 'tasks', 'opportunities', 'support'],

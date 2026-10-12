@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient, type PriceExceptionFollowUpStatus } from '@prisma/client';
 import { businessToday, daysUntilExpiration } from './price-exception-expiration';
 import { followUpOverdue } from './price-exception-follow-up';
+import { notificationEnabled } from './notification-preferences';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Pe = { id: number; peCode: string | null; status: 'ACTIVE' | 'EXPIRED' | 'ARCHIVED'; archivedAt: Date | null; expirationDate: Date | null; assignedSalesRepUserId: number | null; followUp: { ownerId: number | null; status: PriceExceptionFollowUpStatus; nextFollowUpAt: Date | null } | null };
@@ -34,6 +35,7 @@ async function evaluateOne(db: Db, pe: Pe, users: Map<number, { role: string }>,
   if (obsolete.length) await db.notification.updateMany({ where: { id: { in: obsolete } }, data: { resolvedAt: new Date() } });
   let created = 0;
   for (const candidate of candidates) {
+    if (!await notificationEnabled(db, recipient!, 'PRICE_EXCEPTION', candidate.severity)) continue;
     created += (await db.notification.createMany({ data: [{ userId: recipient!, type: candidate.type, severity: candidate.severity, title: candidate.title, message: candidate.message, entityType: 'PRICE_EXCEPTION', entityId: pe.id, actionUrl: `/price-exceptions/${pe.id}`, sourceKey: candidate.sourceKey }], skipDuplicates: true })).count;
     // Keep the actionable expired message in sync when follow-up starts.
     if (candidate.type === 'PE_EXPIRED') await db.notification.updateMany({ where: { sourceKey: candidate.sourceKey, resolvedAt: null }, data: { message: candidate.message } });
@@ -68,5 +70,6 @@ export async function notifyPeFollowUpAssignment(db: Prisma.TransactionClient, p
   const pe = await db.priceException.findUnique({ where: { id: peId }, select: { peCode: true, assignedSalesRepUserId: true } });
   const user = await db.user.findUnique({ where: { id: userId }, select: { active: true, archivedAt: true, role: true } });
   if (!pe || !user?.active || user.archivedAt || (user.role === 'SALES' && pe.assignedSalesRepUserId !== userId)) return;
+  if (!await notificationEnabled(db, userId, 'PRICE_EXCEPTION', 'INFO')) return;
   await db.notification.createMany({ data: [{ userId, type: 'PE_FOLLOW_UP_ASSIGNED', severity: 'INFO', title: 'Price Exception follow-up assigned to you', message: `${pe.peCode ?? 'Price Exception'} follow-up was assigned to you.`, entityType: 'PRICE_EXCEPTION', entityId: peId, actionUrl: `/price-exceptions/${peId}`, sourceKey: `PE:${peId}:${userId}:FOLLOW_UP_ASSIGNED:${eventId}`, createdAt: now }], skipDuplicates: true });
 }

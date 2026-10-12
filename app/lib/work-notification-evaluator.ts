@@ -4,6 +4,7 @@ import { attentionPredicates } from './forecast-attention';
 import { getSettings } from './configuration';
 import { operationalOpportunityWhere, operationalTaskWhere } from './operational-where';
 import { eligibleUserWhere } from './assignment-eligibility';
+import { notificationEnabled } from './notification-preferences';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Candidate = { type: string; title: string; message: string; sourceKey: string };
@@ -33,7 +34,7 @@ async function reconcile(db: Db, entityType: 'TASK' | 'OPPORTUNITY', entityId: n
   const obsolete = current.filter(row => !keys.has(row.sourceKey)).map(row => row.id);
   const resolved = obsolete.length ? (await db.notification.updateMany({ where: { id: { in: obsolete } }, data: { resolvedAt: now } })).count : 0;
   let created = 0;
-  for (const candidate of candidates) created += (await db.notification.createMany({ data: [{ userId: userId!, type: candidate.type, severity: 'WARNING', title: candidate.title, message: candidate.message, entityType, entityId, actionUrl: entityType === 'TASK' ? `/tasks/${entityId}` : `/opportunities/${entityId}`, sourceKey: candidate.sourceKey }], skipDuplicates: true })).count;
+  for (const candidate of candidates) if (await notificationEnabled(db, userId!, entityType, 'WARNING')) created += (await db.notification.createMany({ data: [{ userId: userId!, type: candidate.type, severity: 'WARNING', title: candidate.title, message: candidate.message, entityType, entityId, actionUrl: entityType === 'TASK' ? `/tasks/${entityId}` : `/opportunities/${entityId}`, sourceKey: candidate.sourceKey }], skipDuplicates: true })).count;
   return { created, resolved };
 }
 
@@ -58,12 +59,14 @@ export async function syncOpportunityNotifications(db: Db, opportunityId: number
 export async function notifyTaskAssignment(db: Db, taskId: number, userId: number, eventId: number) {
   const user = await db.user.findFirst({ where: { id: userId, ...eligibleUserWhere('tasks.write') }, select: { id: true } });
   if (!user) return;
+  if (!await notificationEnabled(db, userId, 'TASK', 'INFO')) return;
   await db.notification.createMany({ data: [{ userId, type: 'TASK_ASSIGNED', severity: 'INFO', title: 'Task assigned to you', message: 'A Task was assigned to you.', entityType: 'TASK', entityId: taskId, actionUrl: `/tasks/${taskId}`, sourceKey: `TASK:${taskId}:${userId}:ASSIGNED:${eventId}` }], skipDuplicates: true });
 }
 
 export async function notifyOpportunityAssignment(db: Db, opportunityId: number, userId: number, eventId: number) {
   const user = await db.user.findFirst({ where: { id: userId, ...eligibleUserWhere('sales.write') }, select: { id: true } });
   if (!user) return;
+  if (!await notificationEnabled(db, userId, 'OPPORTUNITY', 'INFO')) return;
   await db.notification.createMany({ data: [{ userId, type: 'OPP_ASSIGNED', severity: 'INFO', title: 'Opportunity assigned to you', message: 'An Opportunity was assigned to you.', entityType: 'OPPORTUNITY', entityId: opportunityId, actionUrl: `/opportunities/${opportunityId}`, sourceKey: `OPP:${opportunityId}:${userId}:ASSIGNED:${eventId}` }], skipDuplicates: true });
 }
 

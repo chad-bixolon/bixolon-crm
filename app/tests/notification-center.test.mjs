@@ -9,7 +9,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
 const require = Module.createRequire(fileURLToPath(import.meta.url));
 const { peNotificationCandidates, peNotificationRecipient, evaluatePeNotifications, notifyPeFollowUpAssignment } = require(path.join(root, 'lib/pe-notification-evaluator.ts'));
-const { notificationWhere, notificationSummary, notificationPage, notificationBulkActionAvailability, updateNotification } = require(path.join(root, 'lib/notifications.ts'));
+const { notificationWhere, notificationSummary, notificationPage, notificationBulkActionAvailability, updateNotification, markAllNotificationsRead, dismissAllReadNotifications } = require(path.join(root, 'lib/notifications.ts'));
 const { notificationDisplayMessage, notificationEntityLabels } = require(path.join(root, 'lib/notification-presentation.ts'));
 const today = new Date('2026-10-05T00:00:00Z');
 const add = days => new Date(today.getTime() + days * 86400000);
@@ -44,8 +44,10 @@ test('unnumbered PE notifications use a business label in new messages', async (
 });
 
 test('notification states are per-user and active excludes dismissed and resolved', () => {
-  assert.deepEqual(notificationWhere(7, 'active'), { userId: 7, dismissedAt: null, resolvedAt: null });
-  assert.deepEqual(notificationWhere(7, 'unread'), { userId: 7, readAt: null, dismissedAt: null, resolvedAt: null });
+  const now = new Date('2026-10-05T00:00:00Z');
+  const awake = { OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }] };
+  assert.deepEqual(notificationWhere(7, 'active', now), { userId: 7, dismissedAt: null, resolvedAt: null, ...awake });
+  assert.deepEqual(notificationWhere(7, 'unread', now), { userId: 7, readAt: null, dismissedAt: null, resolvedAt: null, ...awake });
   assert.deepEqual(notificationWhere(7, 'dismissed'), { userId: 7, dismissedAt: { not: null } });
   assert.deepEqual(notificationWhere(7, 'resolved'), { userId: 7, resolvedAt: { not: null } });
 });
@@ -95,6 +97,34 @@ test('bell is bounded and notification mutations use effective-user identity and
   assert.equal(await updateNotification(db, { ...actor, id: 8 }, 4, 'read'), false);
 });
 
+test('disabled categories are suppressed only in surfaced queries and bulk actions', async () => {
+  const actor = { id: 7, role: 'SUPPORT', active: true, archivedAt: null };
+  const queries = [];
+  const db = {
+    notificationPreference: { findMany: async ({ where }) => { assert.deepEqual(where, { userId: 7, enabled: false }); return [{ category: 'SUPPORT_CASE' }]; } },
+    notification: {
+      findMany: async args => { queries.push(args); return args.distinct ? [{ entityId: 44 }] : []; },
+      count: async args => { queries.push(args); return 0; },
+      updateMany: async args => { queries.push(args); return { count: 0 }; },
+    },
+    supportCase: { findMany: async () => [{ id: 44 }] },
+  };
+  await notificationPage(db, actor, 'active');
+  await notificationPage(db, actor, 'unread');
+  await notificationSummary(db, actor);
+  await notificationBulkActionAvailability(db, actor);
+  await markAllNotificationsRead(db, actor);
+  await dismissAllReadNotifications(db, actor);
+  const surfaced = queries.filter(item => item.where?.dismissedAt === null && !item.distinct);
+  assert.ok(surfaced.length >= 8);
+  for (const item of surfaced) assert.deepEqual(item.where.AND[1], { NOT: { entityType: { in: ['SUPPORT_CASE'] }, severity: { in: ['INFO', 'WARNING'] } } });
+  queries.length = 0;
+  await notificationPage(db, actor, 'all');
+  await notificationPage(db, actor, 'dismissed');
+  await notificationPage(db, actor, 'resolved');
+  assert.ok(queries.filter(item => item.where?.AND).every(item => Object.keys(item.where.AND[1]).length === 0));
+});
+
 test('New York thresholds and overdue follow-up use one source key per condition', () => {
   assert.equal(peNotificationCandidates(pe, 7, today)[0].sourceKey, 'PE:12:7:EXPIRING_60');
   assert.equal(peNotificationCandidates({ ...pe, expirationDate: add(30) }, 7, today)[0].severity, 'WARNING');
@@ -116,12 +146,14 @@ test('recipient follows PE ownership without team-wide broadcasts or inaccessibl
 test('evaluator dedupes reruns, supersedes thresholds, and resolves overdue when date moves forward', async () => {
   const row = { ...pe };
   const notifications = [];
+  let enabled = true;
   const db = {
+    notificationPreference: { findUnique: async () => ({ enabled }) },
     user: { findMany: async () => [{ id: 7, role: 'SALES', active: true, archivedAt: null }] },
     priceException: { findMany: async ({ where }) => where.id.gt < row.id ? [row] : [] },
     notification: {
       findMany: async () => notifications.filter(n => !n.resolvedAt && n.type !== 'PE_FOLLOW_UP_ASSIGNED').map(n => ({ id: n.id, sourceKey: n.sourceKey })),
-      createMany: async ({ data }) => { for (const item of data) if (!notifications.some(n => n.sourceKey === item.sourceKey)) notifications.push({ ...item, id: notifications.length + 1, resolvedAt: null }); return { count: 1 }; },
+      createMany: async ({ data }) => { let count = 0; for (const item of data) if (!notifications.some(n => n.sourceKey === item.sourceKey)) { notifications.push({ ...item, id: notifications.length + 1, resolvedAt: null, dismissedAt: null }); count++; } return { count }; },
       updateMany: async ({ where, data }) => { for (const n of notifications) if (where.id?.in?.includes(n.id) || where.sourceKey === n.sourceKey) Object.assign(n, data); return { count: 1 }; },
     },
   };
@@ -129,10 +161,23 @@ test('evaluator dedupes reruns, supersedes thresholds, and resolves overdue when
   await evaluatePeNotifications(db, now);
   await evaluatePeNotifications(db, now);
   assert.equal(notifications.length, 1);
+  enabled = false;
+  await evaluatePeNotifications(db, now);
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0].dismissedAt, null);
+  enabled = true;
+  await evaluatePeNotifications(db, now);
+  assert.equal(notifications.length, 1);
+  notifications[0].snoozedUntil = add(5);
+  enabled = false;
   row.expirationDate = add(30);
   await evaluatePeNotifications(db, now);
-  assert.equal(notifications.length, 2);
+  assert.equal(notifications.length, 1);
   assert.ok(notifications[0].resolvedAt);
+  assert.ok(notifications[0].snoozedUntil);
+  enabled = true;
+  await evaluatePeNotifications(db, now);
+  assert.equal(notifications.length, 2);
   row.expirationDate = add(-1);
   row.followUp = { ownerId: 7, status: 'NOT_STARTED', nextFollowUpAt: add(-2) };
   await evaluatePeNotifications(db, now);

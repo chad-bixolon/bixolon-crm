@@ -269,6 +269,7 @@ model User {
   uploadedSupportAttachments SupportCaseAttachment[] @relation("SupportAttachmentUploader")
   removedSupportAttachments SupportCaseAttachment[] @relation("SupportAttachmentRemover")
   notifications Notification[]
+  notificationPreferences NotificationPreference[]
   createdCampaigns MarketingCampaign[] @relation("CampaignCreator")
   updatedCampaigns MarketingCampaign[] @relation("CampaignEditor")
   capturedInfluences CampaignInfluence[] @relation("InfluenceCapture")
@@ -379,11 +380,39 @@ model Notification {
   readAt DateTime?
   dismissedAt DateTime?
   resolvedAt DateTime?
+  snoozedUntil DateTime?
 
   @@index([userId, dismissedAt, resolvedAt, createdAt])
   @@index([userId, readAt, dismissedAt, resolvedAt])
   @@index([userId, createdAt])
+  @@index([userId, snoozedUntil])
   @@index([entityType, entityId])
+}
+
+model NotificationPreference {
+  userId Int
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category NotificationEntityType
+  enabled Boolean @default(true)
+  updatedAt DateTime @updatedAt
+
+  @@id([userId, category])
+}
+
+model ScheduledJobRun {
+  id Int @id @default(autoincrement())
+  jobType String
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+  status String
+  processedCount Int?
+  createdCount Int?
+  resolvedCount Int?
+  resultSummary String?
+  errorSummary String?
+  createdAt DateTime @default(now())
+
+  @@index([jobType, startedAt(sort: Desc)])
 }
 
 /// A saved, validated query against a curated BIXOLON report type. Results are never persisted.

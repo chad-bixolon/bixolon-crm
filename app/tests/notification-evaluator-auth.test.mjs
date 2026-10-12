@@ -27,6 +27,7 @@ Module._load = function (name, parent, isMain) {
     resolveUserContext: async () => ({ real: null, effective: null, clearCookie: false }),
   };
   if (name === '@/lib/prisma') return { prisma: {} };
+  if (name === '@/lib/scheduled-job-runs') return { beginJobRun: async () => null, recordJobResult: () => {} };
   if (name === '@/lib/pe-notification-evaluator') return { evaluatePeNotifications: async () => { evaluations++; return { evaluated: 1, created: 0, resolved: 0 }; } };
   if (name === '@/lib/work-notification-evaluator') return { evaluateWorkNotifications: async () => ({ evaluated: { tasks: 0, opportunities: 0 }, created: { tasks: 0, opportunities: 0 }, resolved: { tasks: 0, opportunities: 0 } }) };
   if (name === '@/lib/support-notifications') return { evaluateSupportNotifications: async () => ({ evaluated: 0, created: 0, resolved: 0 }) };

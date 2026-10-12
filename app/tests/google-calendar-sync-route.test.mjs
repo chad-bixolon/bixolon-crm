@@ -18,6 +18,7 @@ Module._load = function (name, parent, isMain) {
   if (name === '@/lib/authorization') return { routeAccess: () => 'sign-in' };
   if (name === '@/lib/dev-impersonation') return { DEV_IMPERSONATION_COOKIE: 'dev-impersonation', impersonationAdminAllowed: () => false, resolveUserContext: async () => ({ real: null, effective: null, clearCookie: false }) };
   if (name === '@/lib/prisma') return { prisma: {} };
+  if (name === '@/lib/scheduled-job-runs') return { beginJobRun: async () => null, recordJobResult: () => {} };
   if (name === '@/lib/google-calendar-sync') return { syncAllGoogleCalendarConnections: async () => { runs++; return [{ success: true, processed: 3 }]; } };
   return originalLoad.call(this, name, parent, isMain);
 };

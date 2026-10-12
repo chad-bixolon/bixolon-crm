@@ -9,6 +9,7 @@ import { signOutAction } from "@/app/sign-out-action";
 import { endImpersonation } from "@/app/dev/impersonation/actions";
 import type { LabelMap } from "@/lib/configuration";
 import { NotificationBell } from './notification-bell';
+import { GlobalSearchPalette } from './global-search-palette';
 import type { NotificationItem } from '@/lib/notifications';
 import { NAV_CATEGORIES } from '../lib/navigation-categories';
 
@@ -90,6 +91,7 @@ export function Shell({ children, user, labels, notifications, developmentAdmin 
         <button ref={menuButton} type="button" aria-label="Open menu" aria-expanded={menuOpen} aria-controls="primary-navigation-drawer" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-2xl text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-orange-600 lg:hidden" onClick={() => setMenuOpen(true)}>☰</button>
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 lg:hidden">{currentTitle}</span>
         {user && <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+          <GlobalSearchPalette/>
           {notifications && <NotificationBell {...notifications} />}
           <Link href="/my-integrations" className="hidden text-sm font-medium text-orange-800 hover:underline sm:block">My integrations</Link>
           {developmentAdmin && <Link href="/dev/impersonation" className="btn-secondary hidden sm:inline-flex">Test as user</Link>}
