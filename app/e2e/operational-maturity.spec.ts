@@ -98,10 +98,12 @@ test('preferences suppress without dismissing; snooze and explicit states surviv
   const notice = page.locator('article').filter({ hasText: `${key} attention` });
   await expect(notice).toBeVisible();
   await page.goto('/notifications/preferences');
-  const supportRow = page.locator('form').filter({ has: page.getByText('Support', { exact: true }) }).last();
-  await expect(supportRow.getByRole('checkbox')).toBeChecked();
-  await supportRow.getByRole('checkbox').uncheck();
-  await supportRow.getByRole('button', { name: 'Save' }).click();
+  const supportCheckbox = page.getByRole('checkbox', { name: 'Support' });
+  await expect(page.getByRole('button', { name: 'Save preferences' })).toHaveCount(1);
+  await expect(supportCheckbox).toBeChecked();
+  await supportCheckbox.uncheck();
+  await page.getByRole('button', { name: 'Save preferences' }).click();
+  await expect(page.getByRole('status')).toHaveText('Preferences updated.');
   await expect.poll(async () => (await db.notificationPreference.findUnique({ where: { userId_category: { userId: supportId, category: 'SUPPORT_CASE' } } }))?.enabled).toBe(false);
   expect((await db.notification.findUniqueOrThrow({ where: { id: noticeId } })).dismissedAt).toBeNull();
   await page.goto('/notifications');
@@ -111,9 +113,10 @@ test('preferences suppress without dismissing; snooze and explicit states surviv
   await expect(notice).toBeVisible();
   await page.goto('/notifications/preferences');
   await page.reload();
-  await expect(supportRow.getByRole('checkbox')).not.toBeChecked();
-  await supportRow.getByRole('checkbox').check();
-  await supportRow.getByRole('button', { name: 'Save' }).click();
+  await expect(supportCheckbox).not.toBeChecked();
+  await supportCheckbox.check();
+  await page.getByRole('button', { name: 'Save preferences' }).click();
+  await expect(page.getByRole('status')).toHaveText('Preferences updated.');
   await expect.poll(async () => (await db.notificationPreference.findUnique({ where: { userId_category: { userId: supportId, category: 'SUPPORT_CASE' } } }))?.enabled).toBe(true);
   await page.goto('/notifications');
   await expect(notice).toBeVisible();
@@ -135,6 +138,33 @@ test('preferences suppress without dismissing; snooze and explicit states surviv
   await db.notification.update({ where: { id: noticeId }, data: { snoozedUntil: new Date(Date.now() - 1000) } });
   await page.goto('/notifications');
   await expect(page.locator('article').filter({ hasText: `${key} attention` })).toBeVisible();
+});
+
+test('preferences save multiple category changes together', async ({ page }) => {
+  const categories = ['TASK', 'OPPORTUNITY'] as const;
+  const original = await db.notificationPreference.findMany({ where: { userId: supportId, category: { in: [...categories] } } });
+  try {
+    await signInAs(page, 'support');
+    await page.goto('/notifications/preferences');
+    const tasks = page.getByRole('checkbox', { name: 'Tasks' });
+    const opportunities = page.getByRole('checkbox', { name: 'Opportunities' });
+    const nextTasks = !(await tasks.isChecked());
+    const nextOpportunities = !(await opportunities.isChecked());
+    await tasks.setChecked(nextTasks);
+    await opportunities.setChecked(nextOpportunities);
+    await expect(page.getByRole('button', { name: 'Save preferences' })).toHaveCount(1);
+    await page.getByRole('button', { name: 'Save preferences' }).click();
+    await expect(page.getByRole('status')).toHaveText('Preferences updated.');
+    await page.reload();
+    await expect(tasks).toBeChecked({ checked: nextTasks });
+    await expect(opportunities).toBeChecked({ checked: nextOpportunities });
+    const saved = await db.notificationPreference.findMany({ where: { userId: supportId, category: { in: [...categories] } } });
+    expect(saved.find(row => row.category === 'TASK')?.enabled).toBe(nextTasks);
+    expect(saved.find(row => row.category === 'OPPORTUNITY')?.enabled).toBe(nextOpportunities);
+  } finally {
+    await db.notificationPreference.deleteMany({ where: { userId: supportId, category: { in: [...categories] } } });
+    for (const row of original) await db.notificationPreference.create({ data: { userId: row.userId, category: row.category, enabled: row.enabled } });
+  }
 });
 
 test('new pages and palette have no document overflow at phone, tablet, or desktop widths', async ({ page }) => {

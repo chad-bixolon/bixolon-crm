@@ -53,4 +53,4 @@ Codex and developers should run the relevant focused Playwright spec for any mea
 - If port 3100 or 55432 is occupied, stop the conflicting local process; the E2E runner intentionally refuses to attach to an arbitrary existing app.
 - If Chromium reports a missing `.so` library, use `npx playwright install-deps chromium` or the restricted Debian cache instructions above. Check `ldd .playwright-browsers/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell` for remaining missing libraries.
 - If the database is unreachable, ensure Docker is available and run `npm run test:e2e:prepare`. Database setup fails closed if it cannot use the dedicated URL.
-- CI will need Node 20+, Docker with Compose, Chromium plus Linux libraries (or the Playwright image), and permission to start the dedicated E2E Postgres service. No CI pipeline was added here.
+- CI needs the Node 22 version in `app/.nvmrc`, Docker with Compose, Chromium plus Linux libraries (or the Playwright image), and permission to start the dedicated E2E Postgres service. No CI pipeline was added here.

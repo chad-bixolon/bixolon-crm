@@ -3,15 +3,15 @@ import { Content, PageHeader } from '@/components/shell';
 import { currentUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { preferenceCategories } from '@/lib/notification-preferences';
-import { saveNotificationPreference } from '../actions';
+import { NotificationPreferencesForm } from './preferences-form';
 
-const labels = { TASK: 'Tasks', OPPORTUNITY: 'Opportunities', PRICE_EXCEPTION: 'Price Exceptions', SUPPORT_CASE: 'Support' };
 export default async function NotificationPreferencesPage() {
   const actor = await currentUser();
   const rows = await prisma.notificationPreference.findMany({ where: { userId: actor.id }, select: { category: true, enabled: true } });
   const choices = new Map(rows.map(row => [row.category, row.enabled]));
-  return <Content><PageHeader eyebrow="Notifications" title="Notification preferences" description="Choose the in-app categories you want in your attention queue." action={<Link className="btn-secondary" href="/notifications">Back to notifications</Link>}/>
-    <div className="panel max-w-2xl divide-y divide-slate-100">{preferenceCategories.map(category => <form key={category} action={saveNotificationPreference} className="flex flex-wrap items-center justify-between gap-3 p-4"><input type="hidden" name="category" value={category}/><label className="flex items-center gap-3 text-sm font-medium"><input type="checkbox" name="enabled" defaultChecked={choices.get(category) ?? true} className="h-5 w-5 accent-orange-700"/>{labels[category]}</label><button className="btn-secondary" type="submit">Save</button></form>)}</div>
-    <p className="mt-4 max-w-2xl text-sm text-slate-600">Existing categories stay enabled until you turn them off. Critical operational alerts remain on. Turning a category off hides its Info and Warning notices from Active and the bell. Still-relevant notices return when you turn it back on.</p>
+  const initial = Object.fromEntries(preferenceCategories.map(category => [category, choices.get(category) ?? true])) as Record<typeof preferenceCategories[number], boolean>;
+  return <Content><PageHeader eyebrow="Notifications" title="Notification preferences" description="Choose which notifications you want SalesHub to surface." action={<Link className="btn-secondary" href="/notifications">Back to notifications</Link>}/>
+    <NotificationPreferencesForm initial={initial}/>
+    <p className="mt-4 max-w-2xl text-sm text-slate-600">Turning a category off hides its Info and Warning notifications. Critical alerts always remain enabled. Re-enabling a category restores any unresolved notifications.</p>
   </Content>;
 }

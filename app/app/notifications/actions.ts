@@ -34,15 +34,20 @@ export async function dismissAllRead() {
   revalidatePath('/', 'layout');
 }
 
-export async function saveNotificationPreference(form: FormData) {
+export async function saveNotificationPreferences(_previous: { status: string }, form: FormData): Promise<{ status: string }> {
   const actor = await currentUser();
-  const category = String(form.get('category') ?? '');
-  if (!preferenceCategories.includes(category as typeof preferenceCategories[number])) throw new Error('Invalid notification category.');
-  const enabled = form.get('enabled') === 'on';
-  await prisma.notificationPreference.upsert({ where: { userId_category: { userId: actor.id, category: category as typeof preferenceCategories[number] } }, create: { userId: actor.id, category: category as typeof preferenceCategories[number], enabled }, update: { enabled } });
+  try {
+    await prisma.$transaction(preferenceCategories.map(category => {
+      const enabled = form.get(category) === 'on';
+      return prisma.notificationPreference.upsert({ where: { userId_category: { userId: actor.id, category } }, create: { userId: actor.id, category, enabled }, update: { enabled } });
+    }));
+  } catch {
+    return { status: 'error' };
+  }
   revalidatePath('/notifications/preferences');
   revalidatePath('/notifications');
   revalidatePath('/', 'layout');
+  return { status: 'success' };
 }
 
 export async function snoozeNotification(form: FormData) {

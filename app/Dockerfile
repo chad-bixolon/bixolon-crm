@@ -1,4 +1,4 @@
-FROM node:20-alpine AS development
+FROM node:22.23.3-alpine AS development
 
 WORKDIR /app
 
@@ -22,7 +22,7 @@ CMD ["npm", "run", "dev"]
 
 # Build and runtime dependencies use the same OS and OpenSSL libraries, so
 # Prisma's native engine matches the runtime environment.
-FROM node:22-bookworm-slim AS production-base
+FROM node:22.23.3-bookworm-slim AS production-base
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
