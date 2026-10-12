@@ -71,6 +71,8 @@ test('History administration presents dates, statuses, and empty states clearly'
   assert.match(admin, /formatEasternDateTime\(batch\.archivedAt\)/);
   assert.match(admin, /\{eligible \? <form action=\{archiveHistoryAction\}/);
   for (const action of ['captureSnapshotAction', 'archiveHistoryAction', 'restoreHistoryAction']) assert.match(admin, new RegExp(`action=\\{${action}\\}`));
+  assert.match(admin, /refreshOnSuccess/);
+  assert.doesNotMatch(admin, /feedback\.capture/);
   assert.doesNotMatch(admin, /Captured \(UTC\)|Storage|snapshot\(s\)| UTC · Batch/);
   assert.equal(formatCalendarDate(new Date('2026-09-28T00:00:00Z')), 'Sep 28, 2026');
   assert.equal(formatEasternDateTime(new Date('2026-10-03T14:06:00Z')), 'Oct 3, 2026 at 10:06 AM');

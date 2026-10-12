@@ -5,15 +5,23 @@ import { SalesQuarter } from '@prisma/client';
 import { requireMutation } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { archiveHistoryBatch, captureForecastWeek, previewHistoryArchive, restoreHistoryBatch } from '@/lib/opportunity-history';
+import { formatCalendarDate } from '@/lib/display-format';
+import { captureFeedback, existingCaptureFeedback } from '@/lib/history-admin-display';
 
 export async function captureSnapshotAction(form: FormData) {
   const actor = await requireMutation('users.manage');
   if (actor.role !== 'ADMIN') throw new Error('Access denied');
   const year = Number(form.get('year')), quarter = String(form.get('quarter')) as SalesQuarter, currencyCode = String(form.get('currencyCode'));
-  const result = await captureForecastWeek(prisma, actor, { year, quarter, currencyCode });
-  revalidatePath('/administration/history');
-  revalidatePath('/reports/forecast-movement');
-  redirect(`/administration/history?capture=${result.created ? 'created' : 'existing'}&count=${result.created}&week=${result.snapshotWeek.toISOString().slice(0,10)}`);
+  let result;
+  try {
+    result = await captureForecastWeek(prisma, actor, { year, quarter, currencyCode });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    return { error: message === 'Choose a valid year and quarter.' || message === 'Invalid currency' || message === 'Choose a currency.'
+      ? message : 'Could not capture snapshot. Try again.' };
+  }
+  const week = formatCalendarDate(result.snapshotWeek);
+  return { success: result.created ? captureFeedback(result.created, week) : existingCaptureFeedback(week) };
 }
 
 export async function restoreHistoryAction(form: FormData) {
