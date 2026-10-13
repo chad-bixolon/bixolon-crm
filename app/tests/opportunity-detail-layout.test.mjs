@@ -22,6 +22,7 @@ let demos = [];
 let demoOptions = [];
 let history = { rows: [], total: 0 };
 const pageMocks = {
+  '@/components/recent-view': { RecentView: () => null },
   'next/link': Link,
   'next/navigation': { notFound: () => { throw new Error('Not found'); } },
   '@/components/shell': { Content: ({ children }) => React.createElement('main', null, children), PageHeader: ({ title }) => React.createElement('header', null, title) },

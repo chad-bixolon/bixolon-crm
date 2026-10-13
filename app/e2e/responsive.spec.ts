@@ -326,3 +326,26 @@ test('filter groups without Search collapse as a whole', async ({ page }) => {
     await expectNoPageOverflow(page, route);
   }
 });
+
+test('Recent Items stays within the viewport and supports touch dismissal', async ({ page, isMobile }, testInfo) => {
+  await signInAs(page, 'admin');
+  // Compile the local development endpoint before interaction timing assertions.
+  expect((await page.request.get('/api/recent-items')).ok()).toBe(true);
+  const trigger = page.getByRole('button', { name: 'Recent Items', exact: true });
+  if (isMobile) await trigger.tap(); else await trigger.click();
+  const popover = page.getByRole('region', { name: 'Recent Items' });
+  await expect(popover).toBeVisible();
+  await expect(popover.getByRole('status')).toHaveCount(0);
+  const box = await popover.boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
+  await expectNoPageOverflow(page, 'Recent Items');
+  await page.screenshot({ path: testInfo.outputPath('recent-items.png') });
+  if (isMobile) await page.touchscreen.tap(8, viewport.height - 8); else await page.mouse.click(8, viewport.height - 8);
+  await expect(popover).toHaveCount(0);
+  if (isMobile) await trigger.tap(); else await trigger.click();
+  await page.keyboard.press('Escape');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+});

@@ -10,6 +10,7 @@ import { endImpersonation } from "@/app/dev/impersonation/actions";
 import type { LabelMap } from "@/lib/configuration";
 import { NotificationBell } from './notification-bell';
 import { GlobalSearchPalette } from './global-search-palette';
+import { RecentItems } from './recent-items';
 import type { NotificationItem } from '@/lib/notifications';
 import { NAV_CATEGORIES } from '../lib/navigation-categories';
 import { useDismissOnOutside } from './use-dismiss-on-outside';
@@ -26,7 +27,7 @@ const navSections = [
 ] as const;
 const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Support Cases" ? "/support/cases" : item === "Sales Plan" ? "/sales-plan" : item === "Calendar Matches" ? "/calendar-matches" : item === "Price Exceptions" ? "/price-exceptions" : item === "Trade Shows" ? "/trade-shows" : item === "Campaigns" ? "/marketing/campaigns" : item === "Marketing Audiences" ? "/marketing/audiences" : `/${item.toLowerCase()}`;
 const navLabelKeys: Partial<Record<string, keyof LabelMap>> = { Accounts: "ACCOUNT", Contacts: "CONTACT", Projects: "PROJECT", Opportunities: "OPPORTUNITY", Tasks: "TASK" };
-type ShellUser = { name: string; role: UserRole; canManageUsers: boolean; canViewReports: boolean; canViewMarketing:boolean; canViewSales:boolean; canViewOpportunities:boolean; canViewSupport:boolean; canCreateAccount:boolean; canCreateContact:boolean; canCreateOpportunity:boolean; canCreateTask:boolean };
+type ShellUser = { id: number; name: string; role: UserRole; canManageUsers: boolean; canViewReports: boolean; canViewMarketing:boolean; canViewSales:boolean; canViewOpportunities:boolean; canViewSupport:boolean; canCreateAccount:boolean; canCreateContact:boolean; canCreateOpportunity:boolean; canCreateTask:boolean };
 type NavItem = (typeof navSections)[number]["items"][number];
 function canSeeNavItem(item: NavItem, user: ShellUser | null) {
   if (!user) return false;
@@ -99,6 +100,7 @@ export function Shell({ children, user, labels, notifications, developmentAdmin 
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 lg:hidden">{currentTitle}</span>
         {user && <div className="flex min-w-0 items-center gap-2 sm:gap-4">
           <GlobalSearchPalette/>
+          <RecentItems key={`${user.id}:${user.role}`}/>
           {(user.canCreateAccount || user.canCreateContact || user.canCreateOpportunity || user.canCreateTask) && <details ref={quickCreate} className="relative shrink-0 group"><summary className="btn-secondary min-h-11 cursor-pointer list-none" aria-label="New record">+ <span className="hidden sm:inline">New</span></summary><nav aria-label="Quick Create" className="absolute right-0 z-30 mt-2 w-48 max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white p-2 shadow-lg group-open:block">{[
             user.canCreateAccount && ['New Account', '/accounts/new'],
             user.canCreateContact && ['New Contact', '/contacts/new'],
@@ -110,7 +112,7 @@ export function Shell({ children, user, labels, notifications, developmentAdmin 
           <Link href="/my-integrations" className="hidden text-sm font-medium text-orange-800 hover:underline sm:block">My integrations</Link>
           {developmentAdmin && <Link href="/dev/impersonation" className="btn-secondary hidden sm:inline-flex">Test as user</Link>}
           <div className="hidden text-right sm:block"><div className="text-sm font-semibold text-slate-900">{user.name}</div><div className="text-xs text-slate-500">{roleLabels[user.role]}</div></div>
-          <form action={signOutAction}><button type="submit" className="btn-secondary">Sign out</button></form>
+          <form action={signOutAction}><button type="submit" aria-label="Sign out" className="btn-secondary min-h-11 shrink-0"><svg aria-hidden="true" className="h-5 w-5 sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 4H4v16h5M14 7l5 5-5 5M8 12h11"/></svg><span className="hidden sm:inline">Sign out</span></button></form>
         </div>}
       </header>
       {children}

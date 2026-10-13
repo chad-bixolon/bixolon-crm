@@ -1,3 +1,4 @@
+import { RecentView } from '@/components/recent-view';
 import { contactDisplayName, contactDisplayContext } from '@/lib/entity-display';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from "next/link";
@@ -29,7 +30,7 @@ export default async function ContactPage({ params, searchParams }: { params: Pr
   const saveMessage = saveFeedbackMessage((await searchParams).saved, 'Contact');
   const address = effectiveContactAddress(c);
   const accountAddress = usesAccountAddress(c);
-  return <Content><PageHeader eyebrow={NAV_CATEGORIES.crm} title={contactDisplayName(c)} description={contactDisplayContext(c)} action={<div className="page-header-actions"><Link className="btn-secondary" href="/contacts">All contacts</Link>{can(actor, 'contacts.write') && !c.archivedAt && <Link className="btn-primary" href={`/contacts/${id}/edit`}>Edit contact</Link>}</div>}/>
+  return <Content><RecentView entityType="CONTACT" recordId={id}/><PageHeader eyebrow={NAV_CATEGORIES.crm} title={contactDisplayName(c)} description={contactDisplayContext(c)} action={<div className="page-header-actions"><Link className="btn-secondary" href="/contacts">All contacts</Link>{can(actor, 'contacts.write') && !c.archivedAt && <Link className="btn-primary" href={`/contacts/${id}/edit`}>Edit contact</Link>}</div>}/>
     {saveMessage && <SaveSuccess message={saveMessage}/>}
     <QuickActions actions={!c.archivedAt && c.active ? [
       ...(can(actor, 'tasks.write') ? [

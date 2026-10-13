@@ -21,6 +21,13 @@ Use the existing classes in `app/app/globals.css` for forms and actions. Keep pa
 - Use the shared `SearchResultsPopover` for results. It stays within the viewport, opens upward when needed, scrolls internally, and caps its height at 320px. Show the two-character prompt initially, `Searching...` while waiting, and a clear no-results message.
 - Keep selected ID and selected label separate from search text. Changing text must clear the prior selected ID. A required relationship needs a selected result; a typed but unselected value is a field error. Preserve selected IDs and labels on failed saves. A changed parent only clears a dependent selection when that selection is no longer eligible.
 
+## Recent Items
+
+- Use the authenticated header's compact history button and popover; do not add a sidebar module or duplicate dashboard card. Show at most eight current, accessible records, each with its entity type, business name/title, direct detail link and subtle formatted viewed time in Eastern time.
+- Record only actual mounted detail/edit access through RecentView; lists, search results and prefetch do not count. Use server-side per-user history, bounded at 50 records, with current permission and operational visibility checks on both writes and reads.
+- Reuse useDismissOnOutside for outside click and Escape. Keep native Tab/Enter navigation, visible focus, and restore trigger focus when dismissing from inside the popover. Follow the Notifications popover sizing and scrolling conventions, and clamp placement to the viewport on open, resize and scroll. Include loading, retryable failure and new-user empty states.
+- See [Recent Items architecture](recent-items.md) for supported types, Activity detail behavior, filtering, concurrency and deployment.
+
 ## Quick Actions
 
 - Detail pages use the shared `QuickActions` row for a few common actions. The authenticated header has one compact Quick Create menu. Filter both by the same permissions as the destination route.

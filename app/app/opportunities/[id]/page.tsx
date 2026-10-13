@@ -1,3 +1,4 @@
+import { RecentView } from '@/components/recent-view';
 import { RecoverableActionForm } from '@/components/recoverable-action-form';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from "next/link";
@@ -78,7 +79,7 @@ export default async function OpportunityPage({ params, searchParams }: { params
     }
   };
   const saveMessage = saveFeedbackMessage(workViews.saved, 'Opportunity');
-  return <Content><PageHeader eyebrow={NAV_CATEGORIES.sales} title={o.name} description={o.participants.map(participant => participant.account.name).join(' · ') || undefined} action={<div className="page-header-actions"><Link className="btn-secondary" href="/opportunities">All opportunities</Link>{can(actor, "sales.write") && !o.archivedAt && (actor.role !== "SALES" || o.ownerId === actor.id) && <Link className="btn-primary" href={`/opportunities/${id}/edit`}>Edit opportunity</Link>}</div>}/>
+  return <Content><RecentView entityType="OPPORTUNITY" recordId={id}/><PageHeader eyebrow={NAV_CATEGORIES.sales} title={o.name} description={o.participants.map(participant => participant.account.name).join(' · ') || undefined} action={<div className="page-header-actions"><Link className="btn-secondary" href="/opportunities">All opportunities</Link>{can(actor, "sales.write") && !o.archivedAt && (actor.role !== "SALES" || o.ownerId === actor.id) && <Link className="btn-primary" href={`/opportunities/${id}/edit`}>Edit opportunity</Link>}</div>}/>
     {saveMessage && <SaveSuccess message={saveMessage}/>}
     <QuickActions actions={!o.archivedAt && can(actor, 'tasks.write') && can(actor, 'sales.write') ? [
       { label: 'Log Activity', href: `/activities/new?opportunityId=${id}${o.participants.length === 1 && o.participants[0].account.status === 'ACTIVE' && !o.participants[0].account.archivedAt ? `&accountId=${o.participants[0].accountId}` : ''}` },

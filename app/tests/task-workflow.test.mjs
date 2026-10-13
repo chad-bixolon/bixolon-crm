@@ -18,6 +18,7 @@ let row={id:7,subject:'Follow up',archivedAt:null,accountId:null,opportunityId:n
 const prisma={task:{findUnique:async()=>row,update:async({data})=>(row={...row,...data})}};
 const originalLoad=Module._load;
 Module._load=function(name,parent,isMain){
+ if(name==='@/components/recent-view') return {RecentView:()=>null};
  if(name==='next/cache') return {revalidatePath:()=>{}};
  if(name==='next/navigation') return {redirect:(destination)=>{throw Object.assign(new Error('redirect'),{destination});},notFound:()=>{throw new Error('not found');}};
  if(name==='next/link') return {__esModule:true,default:({href,children,...props})=>React.createElement('a',{href,...props},children)};

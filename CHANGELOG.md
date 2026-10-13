@@ -1,5 +1,11 @@
 # SalesHub Changelog
 
+## 2026-10-13 — Recent Items v1
+
+- Added a compact authenticated header history popover with current business labels, entity types, viewed timestamps, direct links and empty/loading/failure states. Keyboard focus, outside click and Escape follow shell conventions across phone, tablet and desktop.
+- Added per-user PostgreSQL history for Accounts, Contacts, Opportunities, Projects, Support Cases, Price Exceptions, Tasks and Activities. Actual record access updates one entry, persists across sessions/devices, and retains at most 50 records under concurrent visits. Reads recheck permissions and operational visibility and batch only the needed display fields.
+- Added a read-only Activity detail destination, documented deferred dashboard duplication and stale-reference eviction, and added unit/browser/database regression coverage. Forward-only migration: `20261013120000_recent_items`.
+
 This changelog summarizes committed, user-facing SalesHub work. Versions below are
 retrospective release groupings, not historical Git tags or verified deployment
 boundaries. Dates are the dates of the last commits in each group.

@@ -262,6 +262,7 @@ enum TradeShowImportFormat {
 }
 
 model User {
+  recentItems RecentItem[]
   savedViews SavedView[]
   assignedSupportCases SupportCase[] @relation("SupportCaseAssignee")
   createdSupportCases SupportCase[] @relation("SupportCaseCreator")
@@ -362,6 +363,29 @@ model User {
   archivedDocuments       Document[]         @relation("DocumentArchivedBy")
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
+}
+
+enum RecentEntityType {
+  ACCOUNT
+  CONTACT
+  OPPORTUNITY
+  PROJECT
+  SUPPORT_CASE
+  PRICE_EXCEPTION
+  TASK
+  ACTIVITY
+}
+
+model RecentItem {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entityType RecentEntityType
+  recordId Int
+  lastViewedAt DateTime @default(now())
+
+  @@unique([userId, entityType, recordId])
+  @@index([userId, lastViewedAt(sort: Desc), id(sort: Desc)])
 }
 
 model SavedView {

@@ -1,3 +1,4 @@
+import { RecentView } from '@/components/recent-view';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -27,7 +28,7 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
     ['Assignee', task.assignedTo ? `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : 'Unassigned'],
     ['Due date', task.dueDate?.toISOString().slice(0, 10) ?? 'None'],
   ];
-  return <Content>
+  return <Content><RecentView entityType="TASK" recordId={id}/>
     <PageHeader eyebrow={task.supportCaseId && actor.role === 'SUPPORT' ? NAV_CATEGORIES.support : NAV_CATEGORIES.sales} title={task.subject} action={<div className="page-header-actions"><Link className="btn-secondary" href={task.supportCaseId && actor.role === 'SUPPORT' ? `/support/cases/${task.supportCaseId}` : '/tasks'}>{task.supportCaseId && actor.role === 'SUPPORT' ? 'Back to case' : 'All tasks'}</Link>{can(actor, 'tasks.write') && <Link className="btn-primary" href={`/tasks/${id}/edit`}>Edit task</Link>}</div>}/>
     {saveFeedbackMessage(query.saved, 'Task') && <SaveSuccess message={saveFeedbackMessage(query.saved, 'Task')!}/>}
     <section className="panel space-y-5 p-6">

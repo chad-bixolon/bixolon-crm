@@ -1,3 +1,4 @@
+import { RecentView } from '@/components/recent-view';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import { operationalOpportunityWhere, operationalTaskWhere, operationalActivityWhere } from '@/lib/operational-where';
 import Link from "next/link";
@@ -45,7 +46,7 @@ export default async function AccountPage({ params, searchParams }: { params: Pr
   const details = [["Status", account.status], ["Business roles", account.businessRoles.map((r) => labels[r.role]).join(", ") || "—"], ["Owner", account.owner ? `${account.owner.firstName} ${account.owner.lastName}` : "Unassigned"], [labels.STRATEGIC_ACCOUNT, account.strategicAccount ? "Yes" : "No"], ["Territory", account.territoryCategory?.name ?? account.territory ?? "—"], ["Industry", account.industryCategory?.name ?? account.industry ?? "—"], ["Website", account.website ?? "—"], ["Phone", account.phone ?? "—"]];
   const address = [["Address line 1", account.addressLine1], ["Address line 2", account.addressLine2], ["City", account.city], ["State / Province", account.stateProvince], ["Postal code", account.postalCode], ["Country", account.country]];
   const saveMessage = saveFeedbackMessage(workViews.saved, 'Account');
-  return <Content><PageHeader eyebrow={NAV_CATEGORIES.crm} title={account.name} action={<div className="page-header-actions"><Link className="btn-secondary" href="/accounts">All accounts</Link>{can(actor, 'accounts.write') && account.status !== "ARCHIVED" && <Link className="btn-primary" href={`/accounts/${id}/edit`}>Edit account</Link>}</div>}/>
+  return <Content><RecentView entityType="ACCOUNT" recordId={id}/><PageHeader eyebrow={NAV_CATEGORIES.crm} title={account.name} action={<div className="page-header-actions"><Link className="btn-secondary" href="/accounts">All accounts</Link>{can(actor, 'accounts.write') && account.status !== "ARCHIVED" && <Link className="btn-primary" href={`/accounts/${id}/edit`}>Edit account</Link>}</div>}/>
     {saveMessage && <SaveSuccess message={saveMessage}/>}
     <QuickActions actions={account.status === 'ACTIVE' && !account.archivedAt ? [
       ...(can(actor, 'tasks.write') ? [{ label: 'Log Activity', href: `/activities/new?accountId=${id}` }, { label: 'Create Task', href: `/tasks/new?accountId=${id}` }] : []),
