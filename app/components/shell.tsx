@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { UserRole } from "@prisma/client";
 import { roleLabels } from "@/lib/role-labels";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { signOutAction } from "@/app/sign-out-action";
+import { UserAccountMenu } from "./user-account-menu";
 import { endImpersonation } from "@/app/dev/impersonation/actions";
 import type { LabelMap } from "@/lib/configuration";
 import { NotificationBell } from './notification-bell';
@@ -91,14 +91,14 @@ export function Shell({ children, user, labels, notifications, developmentAdmin 
           const title = labels && key ? key === "OPPORTUNITY" && labels[key] === "Opportunity" ? "Opportunities" : `${labels[key]}s` : item;
           return <Link key={item} href={href} aria-current={active ? "page" : undefined} onClick={() => setMenuOpen(false)} className={`block min-h-11 rounded-md px-3 py-3 text-sm font-medium transition-colors ${active ? "bg-orange-50 text-orange-800 border-l-2 border-orange-600" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}>{title}</Link>; })}</div> : null; })}
       </nav>
-      {user && <div className="border-t border-slate-100 px-3 py-3 lg:hidden"><p className="px-3 py-2 text-xs text-slate-500">{user.name} · {roleLabels[user.role]}</p><Link href="/my-integrations" onClick={() => setMenuOpen(false)} className="flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">My integrations</Link>{developmentAdmin && <Link href="/dev/impersonation" onClick={() => setMenuOpen(false)} className="flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">Test as user</Link>}</div>}
+      {user && <div className="border-t border-slate-100 px-3 py-3 lg:hidden"><p className="px-3 py-2 text-xs text-slate-500">{user.name} · {roleLabels[user.role]}</p>{developmentAdmin && <Link href="/dev/impersonation" onClick={() => setMenuOpen(false)} className="flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">Test as user</Link>}</div>}
     </aside>
     <div className="min-w-0 flex-1 lg:h-full lg:min-h-0 lg:overflow-y-auto">
       {impersonating && <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-400 bg-amber-100 px-5 py-3 text-sm text-amber-950 lg:px-8"><div><strong>Development mode — Testing as {impersonating.effectiveName} · {roleLabels[impersonating.role]}</strong><span className="ml-3 text-xs">Signed in as {impersonating.realName}</span></div><form action={endImpersonation}><button type="submit" className="rounded-md bg-amber-900 px-3 py-1.5 font-semibold text-white">Return to Admin</button></form></div>}
-      <header className="flex min-h-16 min-w-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2 sm:px-5 lg:justify-end lg:px-8">
+      <header className="flex min-h-16 min-w-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2 max-[360px]:gap-1 max-[360px]:px-3 sm:px-5 lg:justify-end lg:px-8">
         <button ref={menuButton} type="button" aria-label="Open menu" aria-expanded={menuOpen} aria-controls="primary-navigation-drawer" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-2xl text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-orange-600 lg:hidden" onClick={() => setMenuOpen(true)}>☰</button>
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 lg:hidden">{currentTitle}</span>
-        {user && <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+        {user && <div className="flex min-w-0 items-center gap-2 max-[360px]:gap-1 sm:gap-4">
           <GlobalSearchPalette/>
           <RecentItems key={`${user.id}:${user.role}`}/>
           {(user.canCreateAccount || user.canCreateContact || user.canCreateOpportunity || user.canCreateTask) && <details ref={quickCreate} className="relative shrink-0 group"><summary className="btn-secondary min-h-11 cursor-pointer list-none" aria-label="New record">+ <span className="hidden sm:inline">New</span></summary><nav aria-label="Quick Create" className="absolute right-0 z-30 mt-2 w-48 max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white p-2 shadow-lg group-open:block">{[
@@ -109,10 +109,8 @@ export function Shell({ children, user, labels, notifications, developmentAdmin 
             user.canCreateTask && ['Log Activity', '/activities/new'],
           ].filter((item): item is string[] => !!item).map(([label, href]) => <Link key={href} className="block min-h-11 rounded px-3 py-3 text-sm hover:bg-orange-50" href={href} onClick={closeQuickCreate}>{label}</Link>)}</nav></details>}
           {notifications && <NotificationBell {...notifications} />}
-          <Link href="/my-integrations" className="hidden text-sm font-medium text-orange-800 hover:underline sm:block">My integrations</Link>
-          {developmentAdmin && <Link href="/dev/impersonation" className="btn-secondary hidden sm:inline-flex">Test as user</Link>}
-          <div className="hidden text-right sm:block"><div className="text-sm font-semibold text-slate-900">{user.name}</div><div className="text-xs text-slate-500">{roleLabels[user.role]}</div></div>
-          <form action={signOutAction}><button type="submit" aria-label="Sign out" className="btn-secondary min-h-11 shrink-0"><svg aria-hidden="true" className="h-5 w-5 sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 4H4v16h5M14 7l5 5-5 5M8 12h11"/></svg><span className="hidden sm:inline">Sign out</span></button></form>
+          {developmentAdmin && <Link href="/dev/impersonation" className="btn-secondary hidden! shrink-0 sm:inline-flex!">Test as user</Link>}
+          <UserAccountMenu key={`account:${user.id}:${user.role}`} name={user.name} role={user.role}/>
         </div>}
       </header>
       {children}

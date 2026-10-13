@@ -349,3 +349,27 @@ test('Recent Items stays within the viewport and supports touch dismissal', asyn
   await page.keyboard.press('Escape');
   await expect(trigger).toHaveAttribute('aria-expanded', 'false');
 });
+
+test('User account menu fits the responsive header and supports touch dismissal', async ({ page, isMobile }) => {
+  await signInAs(page, 'admin');
+  const header = page.locator('header');
+  const trigger = header.getByRole('button', { name: /^User account:/ });
+  const menu = page.getByRole('navigation', { name: 'User account', exact: true });
+  await expect(trigger).toBeVisible();
+  await expectNoPageOverflow(page, 'User account header');
+  await (isMobile ? trigger.tap() : trigger.click());
+  await expect(menu).toBeVisible();
+  const box = (await menu.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  await (isMobile ? page.getByRole('main').tap({ position: { x: 20, y: 20 } }) : page.getByRole('main').click({ position: { x: 20, y: 20 } }));
+  await expect(menu).toHaveCount(0);
+  await (isMobile ? trigger.tap() : trigger.click());
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await (isMobile ? trigger.tap() : trigger.click());
+  const integrations = menu.getByRole('link', { name: 'My integrations' });
+  await (isMobile ? integrations.tap() : integrations.click());
+  await expect(page).toHaveURL('/my-integrations');
+  await expect(menu).toHaveCount(0);
+});

@@ -93,22 +93,24 @@ test('development switcher is Admin-only and impersonation banner keeps return c
 });
 
 test('authenticated shell shows only the logo in its brand area and keeps user controls', () => {
-  const roles = { ADMIN: 'Administrator', SALES_MANAGER: 'Sales Manager', SALES: 'Sales', MARKETING_MANAGER: 'Marketing Manager', READ_ONLY: 'Read Only' };
+  const roles = { ADMIN: 'Administrator', SALES_MANAGER: 'Sales Manager', SALES: 'Sales', MARKETING_MANAGER: 'Marketing Manager', READ_ONLY: 'Read Only', SUPPORT: 'Support' };
   for (const [role, label] of Object.entries(roles)) {
     const html = render({ name: 'Chad Guenther', role, canManageUsers: role === 'ADMIN' });
     assert.match(html, /Chad Guenther/);
     assert.match(html, /src="\/brand\/bixolon-logo\.png" alt="BIXOLON"/);
     assert.match(html, /<nav[^>]*>.*>CRM<\/p>/);
     assert.doesNotMatch(html, /BIXOLON America CRM|bg-orange-600/);
-    assert.ok(html.includes(`>${label}</div>`));
-    assert.match(html, /Sign out/);
+    assert.ok(html.includes(`>${label}</span>`));
+    assert.match(html, /aria-label="User account: Chad Guenther,/);
+    assert.match(html, /aria-expanded="false" aria-controls="user-account-menu"/);
+    assert.doesNotMatch(html, /My integrations|Sign out/);
     assert.equal(html.includes('href="/administration"'), role === 'ADMIN');
   }
 });
 
 test('sign-in page does not show authenticated shell controls', () => {
   const html = render({ name: 'Chad Guenther', role: 'ADMIN', canManageUsers: true }, '/sign-in');
-  assert.doesNotMatch(html, /Chad Guenther|Administrator|Sign out|href="\/administration"/);
+  assert.doesNotMatch(html, /User account|Chad Guenther|Administrator|Sign out|href="\/administration"/);
   assert.match(html, /Page content/);
 });
 
