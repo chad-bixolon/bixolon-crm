@@ -24,9 +24,9 @@ test('system defaults are role-specific and Marketing remains sales-pipeline saf
   assert.ok(dashboard.systemDashboardDefaults.SALES.items.some(item=>item.key==='FORECAST_SUMMARY'));
   assert.ok(dashboard.systemDashboardDefaults.SALES.items.some(item=>item.key==='MY_TRADE_SHOW_LEADS'));
   assert.ok(dashboard.systemDashboardDefaults.SALES_MANAGER.items.some(item=>item.key==='PIPELINE_BY_REP'));
-  assert.deepEqual(dashboard.systemDashboardDefaults.MARKETING_MANAGER.items.map(item=>item.key),['OVERDUE_TASKS','MARKETING_ACTIVITY','MARKETING_SUMMARY']);
-  for(const role of ['SALES','SALES_MANAGER'])for(const key of ['FORECAST_MOVEMENT','SALES_PLAN_STATUS'])assert.ok(dashboard.systemDashboardDefaults[role].items.some(item=>item.key===key));
-  assert.ok(dashboard.systemDashboardDefaults.ADMIN.items.some(item=>item.key==='FORECAST_MOVEMENT'));
+  assert.deepEqual(dashboard.systemDashboardDefaults.MARKETING_MANAGER.items.map(item=>item.key),['MARKETING_ACTIVITY','MARKETING_SUMMARY','OVERDUE_TASKS']);
+  assert.ok(dashboard.systemDashboardDefaults.SALES_MANAGER.items.some(item=>item.key==='FORECAST_MOVEMENT'));
+  assert.ok(dashboard.systemDashboardDefaults.ADMIN.items.some(item=>item.key==='ADMIN_DATA_QUALITY'));
   assert.ok(!dashboard.systemDashboardDefaults.ADMIN.items.some(item=>item.key==='MARKETING_ACTIVITY'));
   assert.equal(dashboard.canUseDashboardWidget(actor('ADMIN'),'MARKETING_ACTIVITY'),true);
   assert.equal(dashboard.canUseDashboardWidget(actor('SALES'),'MARKETING_ACTIVITY'),false);
@@ -58,11 +58,11 @@ test('canonical widget names and presentation sections are shared across Dashboa
     PIPELINE_BY_PRODUCT_CATEGORY:['Pipeline by Product Category','PIPELINE'],
     CLOSING_OPPORTUNITIES:['Opportunities Closing This Quarter','PIPELINE'],
     STALE_ACCOUNTS:['Accounts with No Activity 90+ Days','ATTENTION'],
-    OVERDUE_TASKS:['Overdue Tasks','ATTENTION'],
+    OVERDUE_TASKS:['Tasks Needing Attention','TODAY'],
     RECENT_ACTIVITY:['Recent Activity','ATTENTION'],
     MY_TRADE_SHOW_LEADS:['My Trade Show Leads','ATTENTION'],
     MARKETING_SUMMARY:['Marketing Summary','MARKETING'],
-    MARKETING_ACTIVITY:['Marketing Activity','ATTENTION'],
+    MARKETING_ACTIVITY:['Marketing Activity','MARKETING'],
     ADMIN_SHORTCUTS:['Administration Shortcuts','ADMINISTRATION'],
   };
   for(const [key,[title,section]] of Object.entries(expected)){
@@ -78,7 +78,7 @@ test('canonical widget names and presentation sections are shared across Dashboa
 test('presentation sections expose only permitted widgets and omit empty unauthorized groups',()=>{
   const marketing=dashboard.availableDashboardWidgets(actor('MARKETING_MANAGER'));
   assert.deepEqual(marketing.map(widget=>widget.key),['OVERDUE_TASKS','MARKETING_SUMMARY','MARKETING_ACTIVITY']);
-  assert.deepEqual(new Set(marketing.map(widget=>widget.presentationSection)),new Set(['MARKETING','ATTENTION']));
+  assert.deepEqual(new Set(marketing.map(widget=>widget.presentationSection)),new Set(['MARKETING','TODAY']));
   assert.equal(marketing.some(widget=>widget.presentationSection==='PIPELINE'||widget.presentationSection==='ADMINISTRATION'),false);
   const sales=dashboard.availableDashboardWidgets(actor('SALES'));
   assert.equal(sales.some(widget=>widget.presentationSection==='MARKETING'||widget.presentationSection==='ADMINISTRATION'),false);
@@ -105,15 +105,15 @@ test('personal override wins, reset inheritance remains implicit, and a role cha
   result=await dashboard.getEffectiveDashboardLayout(client({personal:null,roleLayout}),actor('SALES'));
   assert.equal(result.personalized,false);assert.equal(result.configuration.items[0].key,'PIPELINE_BY_STAGE');
   result=await dashboard.getEffectiveDashboardLayout(client({personal,roleLayout:null}),actor('MARKETING_MANAGER'));
-  assert.equal(result.personalized,false);assert.deepEqual(result.configuration.items.map(item=>item.key),['OVERDUE_TASKS','MARKETING_ACTIVITY','MARKETING_SUMMARY']);
+  assert.equal(result.personalized,false);assert.deepEqual(result.configuration.items.map(item=>item.key),['MARKETING_ACTIVITY','MARKETING_SUMMARY','OVERDUE_TASKS']);
 });
 
 test('Marketing default is balanced and unavailable personal report pins are removed',async()=>{
   const defaults=dashboard.systemDashboardDefaults.MARKETING_MANAGER.items;
-  assert.deepEqual(defaults.map(item=>[item.key,item.size]),[['OVERDUE_TASKS','HALF'],['MARKETING_ACTIVITY','HALF'],['MARKETING_SUMMARY','FULL']]);
-  assert.equal(dashboard.dashboardItemPresentationSection(defaults[0]),'ATTENTION');
-  assert.equal(dashboard.dashboardItemPresentationSection(defaults[1]),'ATTENTION');
-  assert.equal(dashboard.dashboardItemPresentationSection(defaults[2]),'MARKETING');
+  assert.deepEqual(defaults.map(item=>[item.key,item.size]),[['MARKETING_ACTIVITY','FULL'],['MARKETING_SUMMARY','FULL'],['OVERDUE_TASKS','HALF']]);
+  assert.equal(dashboard.dashboardItemPresentationSection(defaults[0]),'MARKETING');
+  assert.equal(dashboard.dashboardItemPresentationSection(defaults[1]),'MARKETING');
+  assert.equal(dashboard.dashboardItemPresentationSection(defaults[2]),'TODAY');
   const personal={role:'MARKETING_MANAGER',configuration:{version:1,items:[...defaults,{kind:'SAVED_REPORT',reportId:999,size:'HALF',style:'KPI'}]}};
   const result=await dashboard.getEffectiveDashboardLayout(client({personal}),actor('MARKETING_MANAGER'));
   assert.equal(result.personalized,true);
@@ -123,20 +123,52 @@ test('Marketing default is balanced and unavailable personal report pins are rem
 test('Dashboard UI exposes responsive spans and keyboard reorder controls',()=>{
   const page=fs.readFileSync(path.join(root,'app/page.tsx'),'utf8'),editor=fs.readFileSync(path.join(root,'components/dashboard-editor.tsx'),'utf8'),admin=fs.readFileSync(path.join(root,'app/administration/dashboard-views/page.tsx'),'utf8');
   assert.match(page,/lg:grid-cols-2/);assert.match(page,/lg:col-span-2/);
-  assert.match(page,/sm:grid-cols-2 xl:grid-cols-4/);
+  assert.match(page,/grid-cols-2 gap-3 xl:grid-cols-4/);
   assert.match(page,/dashboardWidgetRegistry\[item\.key\]\.title/);
   assert.match(page,/dashboardPresentationSectionTitles\[group\.section\]/);
-  assert.match(page,/filter\(group=>group\.items\.length\)/);
+  assert.match(page,/composeDashboardSections\(visibleItems\)/);
   assert.match(editor,/Move .* up/);assert.match(editor,/Move .* down/);assert.match(editor,/Save Dashboard|submitLabel/);
   assert.match(editor,/Half/);assert.match(editor,/Full/);
   assert.match(editor,/Dashboard Sections/);
   assert.match(editor,/Choose which items appear, set their order, and select their size\./);
   assert.match(editor,/No additional widgets are available for this role\./);
   assert.match(editor,/dashboardPresentationSectionTitles\[group\.section\]/);
-  assert.match(editor,/filter\(group=>group\.items\.length\)/);
+  assert.match(editor,/composeDashboardSections\(items\)/);
   assert.match(admin,/widgets=\{availableDashboardWidgets\(target\)\}/);
   for(const inconsistent of ['Pipeline by Sales Rep','Sales rep forecast','Closing Opportunities','Stale Accounts','Recent Activities']){
     assert.equal(page.includes(inconsistent),false);
     assert.equal(editor.includes(inconsistent),false);
   }
+});
+
+
+test('all six audiences use permitted shared compositions with primary work first',async()=>{
+  const expected={
+    SALES:['MY_DAY','OVERDUE_TASKS','CLOSING_OPPORTUNITIES','FORECAST_SUMMARY','PIPELINE_BY_STAGE','FORECAST_ATTENTION','MY_TRADE_SHOW_LEADS','RECENT_ACTIVITY'],
+    SALES_MANAGER:['FORECAST_SUMMARY','PIPELINE_BY_REP','PIPELINE_BY_STAGE','CLOSING_OPPORTUNITIES','FORECAST_ATTENTION','RECENT_ACTIVITY','FORECAST_MOVEMENT','OVERDUE_TASKS','MY_DAY'],
+    SUPPORT:['SUPPORT_MY_OPEN','SUPPORT_INTAKE','SUPPORT_PRIORITY','SUPPORT_OVERDUE','SUPPORT_TASKS','SUPPORT_OLDEST','SUPPORT_ACTIVITY'],
+    ADMIN:['ADMIN_DATA_QUALITY','ADMIN_HEALTH','ADMIN_SHORTCUTS'],
+    MARKETING_MANAGER:['MARKETING_ACTIVITY','MARKETING_SUMMARY','OVERDUE_TASKS'],
+    READ_ONLY:['FORECAST_SUMMARY','PIPELINE_BY_STAGE'],
+  };
+  for(const [role,keys] of Object.entries(expected)){
+    const layout=(await dashboard.getEffectiveDashboardLayout(client(),actor(role))).configuration;
+    assert.deepEqual(layout.items.map(item=>item.key),keys);
+    assert.deepEqual(await dashboard.validateDashboardLayout(client(),actor(role),layout),layout);
+    assert.deepEqual(dashboard.composeDashboardSections(layout.items).flatMap(group=>group.items),layout.items);
+  }
+  assert.equal(dashboard.availableDashboardWidgets(actor('SUPPORT')).some(widget=>widget.section==='forecast'||widget.key==='MY_DAY'),false);
+  for(const role of ['SUPPORT','MARKETING_MANAGER','READ_ONLY']){
+    assert.equal(dashboard.canUseDashboardWidget(actor(role),'ADMIN_HEALTH'),false);
+    assert.equal(dashboard.canUseDashboardWidget(actor(role),'ADMIN_DATA_QUALITY'),false);
+  }
+  assert.equal(dashboard.canUseDashboardWidget({...actor('ADMIN'),active:false},'ADMIN_HEALTH'),false);
+});
+
+test('composition preserves cross-section moves, reports, and empty layouts',()=>{
+  const items=[dashboard.systemDashboardDefaults.SALES.items[0],dashboard.systemDashboardDefaults.SALES.items[3],dashboard.systemDashboardDefaults.SALES.items[1],{kind:'SAVED_REPORT',reportId:10,size:'HALF',style:'KPI'}];
+  const groups=dashboard.composeDashboardSections(items);
+  assert.deepEqual(groups.map(group=>group.section),['TODAY','FORECAST','TODAY','PINNED_REPORTS']);
+  assert.deepEqual(groups.flatMap(group=>group.items),items);
+  assert.deepEqual(dashboard.composeDashboardSections([]),[]);
 });

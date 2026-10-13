@@ -34,6 +34,8 @@ test('dashboard Account, Task, and Activity queries preserve personal scope', ()
   const today = new Date('2026-09-21T00:00:00Z');
   const own = dashboard.dashboardTaskWhere(actor('SALES'), today, [7, 8]);
   assert.equal(own.assignedToId, 7);
+  assert.equal(own.dueDate.lt.toISOString(),'2026-09-29T00:00:00.000Z');
+  assert.equal(dashboard.dashboardTaskWhere(actor('MARKETING_MANAGER'),today,[8]).assignedToId,7);
   assert.deepEqual(own.status.in, ['OPEN','IN_PROGRESS']);
   assert.deepEqual(dashboard.dashboardTaskWhere(actor('SALES_MANAGER'), today, [7,8]).assignedToId, { in: [7,8] });
   assert.equal(dashboard.dashboardActivityWhere(actor('SALES'), [7,8]).userId, 7);

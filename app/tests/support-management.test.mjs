@@ -31,7 +31,7 @@ test('Support report filters retain case permissions, search, dates, and DB sort
   assert.equal(routeAccess('/reports/support-cases',actor('SUPPORT',7)),'allowed');
 });
 test('Support Dashboard defaults and bounded aggregate queries',async()=>{
-  assert.deepEqual(systemDashboardDefaults.SUPPORT.items.map(x=>x.key),['SUPPORT_MY_OPEN','SUPPORT_PRIORITY','SUPPORT_OVERDUE','SUPPORT_OLDEST']);
+  assert.deepEqual(systemDashboardDefaults.SUPPORT.items.map(x=>x.key),['SUPPORT_MY_OPEN','SUPPORT_INTAKE','SUPPORT_PRIORITY','SUPPORT_OVERDUE','SUPPORT_TASKS','SUPPORT_OLDEST','SUPPORT_ACTIVITY']);
   assert.equal(systemDashboardDefaults.SALES.items.some(x=>x.key.startsWith('SUPPORT_')),false);
   assert.equal(canUseDashboardWidget(actor('ADMIN'),'SUPPORT_OLDEST'),true);
   assert.equal(canUseDashboardWidget(actor('MARKETING_MANAGER'),'SUPPORT_OLDEST'),false);

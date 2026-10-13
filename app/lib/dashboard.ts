@@ -10,13 +10,14 @@ import { businessQuarter } from './business-quarter';
 export type DashboardSection = 'forecast' | 'reps' | 'closing' | 'stage' | 'category' | 'stale' | 'tasks' | 'activities' | 'tradeShowLeads' | 'priceExceptions' | 'admin' | 'marketing' | 'support';
 export type DashboardView = { title: string; sections: readonly DashboardSection[] };
 
-export const dashboardWidgetKeys = ['FORECAST_SUMMARY','FORECAST_ATTENTION','FORECAST_MOVEMENT','SALES_PLAN_STATUS','PIPELINE_BY_REP','PIPELINE_BY_STAGE','PIPELINE_BY_PRODUCT_CATEGORY','CLOSING_OPPORTUNITIES','STALE_ACCOUNTS','OVERDUE_TASKS','RECENT_ACTIVITY','MY_TRADE_SHOW_LEADS','MY_DAY','EXPIRING_PRICE_EXCEPTIONS','MARKETING_SUMMARY','MARKETING_ACTIVITY','ADMIN_SHORTCUTS','SUPPORT_MY_OPEN','SUPPORT_PRIORITY','SUPPORT_OVERDUE','SUPPORT_OLDEST'] as const;
+export const dashboardWidgetKeys = ['FORECAST_SUMMARY','FORECAST_ATTENTION','FORECAST_MOVEMENT','SALES_PLAN_STATUS','PIPELINE_BY_REP','PIPELINE_BY_STAGE','PIPELINE_BY_PRODUCT_CATEGORY','CLOSING_OPPORTUNITIES','STALE_ACCOUNTS','OVERDUE_TASKS','RECENT_ACTIVITY','MY_TRADE_SHOW_LEADS','MY_DAY','EXPIRING_PRICE_EXCEPTIONS','MARKETING_SUMMARY','MARKETING_ACTIVITY','ADMIN_SHORTCUTS','ADMIN_DATA_QUALITY','ADMIN_HEALTH','SUPPORT_MY_OPEN','SUPPORT_INTAKE','SUPPORT_PRIORITY','SUPPORT_OVERDUE','SUPPORT_OLDEST','SUPPORT_TASKS','SUPPORT_ACTIVITY'] as const;
 export type DashboardWidgetKey = typeof dashboardWidgetKeys[number];
 export type DashboardWidgetSize = 'HALF'|'FULL';
 export type SavedReportWidgetStyle = 'KPI'|'COMPACT_TABLE'|'GROUPED_SUMMARY';
-export const dashboardPresentationSectionKeys = ['FORECAST','PIPELINE','ATTENTION','SUPPORT','MARKETING','ADMINISTRATION','PINNED_REPORTS'] as const;
+export const dashboardPresentationSectionKeys = ['TODAY','FORECAST','PIPELINE','ATTENTION','SUPPORT','MARKETING','ADMINISTRATION','PINNED_REPORTS'] as const;
 export type DashboardPresentationSection = typeof dashboardPresentationSectionKeys[number];
 export const dashboardPresentationSectionTitles: Record<DashboardPresentationSection,string> = {
+  TODAY:'My Work',
   FORECAST:'Forecast Summary',
   PIPELINE:'Pipeline & Forecast',
   ATTENTION:'Attention & Activity',
@@ -41,15 +42,20 @@ export const dashboardWidgetRegistry: Record<DashboardWidgetKey,WidgetDefinition
   PIPELINE_BY_PRODUCT_CATEGORY:{title:'Pipeline by Product Category',description:'Current-quarter pipeline grouped by Product Category.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'category',presentationSection:'PIPELINE',roles:['ADMIN','SALES_MANAGER','READ_ONLY']},
   CLOSING_OPPORTUNITIES:{title:'Opportunities Closing This Quarter',description:'Open Opportunities expected to close this quarter.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'closing',presentationSection:'PIPELINE',roles:['ADMIN','SALES_MANAGER','SALES','READ_ONLY']},
   STALE_ACCOUNTS:{title:'Accounts with No Activity 90+ Days',description:'Active Accounts needing engagement.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'stale',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES']},
-  OVERDUE_TASKS:{title:'Overdue Tasks',description:'Open Tasks past their due date.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'tasks',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES','MARKETING_MANAGER']},
+  OVERDUE_TASKS:{title:'Tasks Needing Attention',description:'Overdue and next-seven-day Tasks in your permitted scope.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'tasks',presentationSection:'TODAY',roles:['ADMIN','SALES_MANAGER','SALES','MARKETING_MANAGER']},
   RECENT_ACTIVITY:{title:'Recent Activity',description:'Latest CRM activity in your permitted scope.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'activities',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES']},
-  MY_DAY:{title:'My Day',description:'Your Calendar meetings, Activities, and Tasks today.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'tasks',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES'],drillDown:'/my-day'},
+  MY_DAY:{title:'My Day',description:'Your Calendar meetings, Activities, and Tasks today.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'tasks',presentationSection:'TODAY',roles:['ADMIN','SALES_MANAGER','SALES'],drillDown:'/my-day'},
   MY_TRADE_SHOW_LEADS:{title:'My Trade Show Leads',description:'Actionable internal Sales leads assigned to you.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'tradeShowLeads',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES'],drillDown:'/trade-shows/my-leads'},
   EXPIRING_PRICE_EXCEPTIONS:{title:'Expiring Price Exceptions',description:'Expired and upcoming active Price Exceptions.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'priceExceptions',presentationSection:'ATTENTION',roles:['ADMIN','SALES_MANAGER','SALES','READ_ONLY'],drillDown:'/reports/price-exceptions-expiring'},
   MARKETING_SUMMARY:{title:'Marketing Summary',description:'Marketing-safe Account and Trade Show lead overview.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'marketing',presentationSection:'MARKETING',roles:['MARKETING_MANAGER']},
-  MARKETING_ACTIVITY:{title:'Marketing Activity',description:'Campaign activity and Trade Show leads needing action.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'marketing',presentationSection:'ATTENTION',roles:['ADMIN','MARKETING_MANAGER'],drillDown:'/marketing/campaigns'},
+  MARKETING_ACTIVITY:{title:'Marketing Activity',description:'Campaign activity and Trade Show leads needing action.',sizes:['HALF','FULL'],defaultSize:'FULL',hideable:true,section:'marketing',presentationSection:'MARKETING',roles:['ADMIN','MARKETING_MANAGER'],drillDown:'/marketing/campaigns'},
   ADMIN_SHORTCUTS:{title:'Administration Shortcuts',description:'Quick access to common Administration areas.',sizes:['FULL'],defaultSize:'FULL',hideable:true,section:'admin',presentationSection:'ADMINISTRATION',roles:['ADMIN']},
+  ADMIN_DATA_QUALITY:{title:'Data Quality / Cleanup',description:'Current operational review signals and cleanup links.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'admin',presentationSection:'ADMINISTRATION',roles:['ADMIN'],drillDown:'/administration/data-quality'},
+  ADMIN_HEALTH:{title:'System Health',description:'Recorded notification and Calendar job health.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'admin',presentationSection:'ADMINISTRATION',roles:['ADMIN'],drillDown:'/administration/system-health'},
   SUPPORT_MY_OPEN:{title:'My Open Cases',description:'Your active Support Cases by status.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN'],drillDown:'/reports/support-cases'},
+  SUPPORT_INTAKE:{title:'New / Unassigned Cases',description:'Active new or unassigned cases in your permitted scope.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN'],drillDown:'/support/cases'},
+  SUPPORT_TASKS:{title:'My Support Tasks',description:'Your overdue and next-seven-day case-linked Tasks.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN']},
+  SUPPORT_ACTIVITY:{title:'Recent Support Activity',description:'Latest activity on permitted Support Cases.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN']},
   SUPPORT_PRIORITY:{title:'High / Critical Cases',description:'High priority Support Cases needing attention.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN'],drillDown:'/reports/support-cases'},
   SUPPORT_OVERDUE:{title:'Overdue Follow-ups',description:'Support follow-ups due before today.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN'],drillDown:'/reports/support-cases?followUp=overdue'},
   SUPPORT_OLDEST:{title:'Oldest Open Cases',description:'Longest active Support Cases.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN'],drillDown:'/reports/support-cases?sort=oldest'},
@@ -59,25 +65,45 @@ export function dashboardItemPresentationSection(item:DashboardLayoutItem):Dashb
   return item.kind==='SAVED_REPORT'?'PINNED_REPORTS':dashboardWidgetRegistry[item.key].presentationSection;
 }
 
+// Group only adjacent items: default, administrator, and personal ordering is authoritative.
+export function composeDashboardSections(items:readonly DashboardLayoutItem[]) {
+  const groups:{section:DashboardPresentationSection;items:DashboardLayoutItem[]}[]=[];
+  for(const item of items){
+    const section=dashboardItemPresentationSection(item),last=groups.at(-1);
+    if(last?.section===section)last.items.push(item);
+    else groups.push({section,items:[item]});
+  }
+  return groups;
+}
+
+export const dashboardRoleDescriptions:Record<UserRole,string> = {
+  SALES:'Your day, open Opportunities, and follow-ups.',
+  SALES_MANAGER:'Team pipeline, forecast, and follow-up visibility.',
+  SUPPORT:'Your cases, incoming work, and Support follow-ups.',
+  ADMIN:'Data quality, recorded system health, and administration.',
+  MARKETING_MANAGER:'Campaign activity, Trade Show leads, and attribution.',
+  READ_ONLY:'A concise overview of permitted CRM information.',
+};
+
 // A role chooses the default presentation. Authorization still decides which
 // data and actions are accessible; future role-view settings must not grant access.
 const views: Record<UserRole, DashboardView> = {
   SUPPORT: { title: 'Support overview', sections: ['support'] },
   SALES: { title: 'My sales dashboard', sections: ['forecast','closing','stale','tasks','activities','tradeShowLeads','priceExceptions','stage'] },
   SALES_MANAGER: { title: 'Team sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','priceExceptions','stage','category'] },
-  ADMIN: { title: 'Sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','priceExceptions','stage','category','admin','marketing','support'] },
+  ADMIN: { title: 'Operations dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','priceExceptions','stage','category','admin','marketing','support'] },
   READ_ONLY: { title: 'Sales overview', sections: ['forecast','reps','closing','stage','category','priceExceptions'] },
   MARKETING_MANAGER: { title: 'Marketing overview', sections: ['tasks','marketing'] },
 };
 
 const item=(key:DashboardWidgetKey,size?:DashboardWidgetSize):DashboardBuiltinItem=>({kind:'BUILTIN',key,size:size??dashboardWidgetRegistry[key].defaultSize});
 export const systemDashboardDefaults: Record<UserRole,DashboardLayoutConfiguration> = {
-  SUPPORT:{version:1,items:[item('SUPPORT_MY_OPEN'),item('SUPPORT_PRIORITY'),item('SUPPORT_OVERDUE'),item('SUPPORT_OLDEST')]},
-  SALES:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('FORECAST_MOVEMENT'),item('SALES_PLAN_STATUS'),item('PIPELINE_BY_STAGE'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('MY_DAY'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('MY_TRADE_SHOW_LEADS'),item('EXPIRING_PRICE_EXCEPTIONS')]},
-  SALES_MANAGER:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('FORECAST_MOVEMENT'),item('SALES_PLAN_STATUS'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('MY_DAY'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('EXPIRING_PRICE_EXCEPTIONS')]},
-  ADMIN:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('FORECAST_MOVEMENT'),item('SALES_PLAN_STATUS'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES'),item('STALE_ACCOUNTS'),item('MY_DAY'),item('OVERDUE_TASKS'),item('RECENT_ACTIVITY'),item('ADMIN_SHORTCUTS')]},
-  READ_ONLY:{version:1,items:[item('FORECAST_SUMMARY'),item('FORECAST_ATTENTION'),item('PIPELINE_BY_REP'),item('PIPELINE_BY_STAGE'),item('PIPELINE_BY_PRODUCT_CATEGORY'),item('CLOSING_OPPORTUNITIES')]},
-  MARKETING_MANAGER:{version:1,items:[item('OVERDUE_TASKS'),item('MARKETING_ACTIVITY'),item('MARKETING_SUMMARY')]},
+  SUPPORT:{version:1,items:[item('SUPPORT_MY_OPEN'),item('SUPPORT_INTAKE'),item('SUPPORT_PRIORITY'),item('SUPPORT_OVERDUE'),item('SUPPORT_TASKS'),item('SUPPORT_OLDEST'),item('SUPPORT_ACTIVITY')]},
+  SALES:{version:1,items:[item('MY_DAY'),item('OVERDUE_TASKS'),item('CLOSING_OPPORTUNITIES'),item('FORECAST_SUMMARY'),item('PIPELINE_BY_STAGE'),item('FORECAST_ATTENTION'),item('MY_TRADE_SHOW_LEADS'),item('RECENT_ACTIVITY')]},
+  SALES_MANAGER:{version:1,items:[item('FORECAST_SUMMARY'),item('PIPELINE_BY_REP','FULL'),item('PIPELINE_BY_STAGE'),item('CLOSING_OPPORTUNITIES'),item('FORECAST_ATTENTION'),item('RECENT_ACTIVITY'),item('FORECAST_MOVEMENT'),item('OVERDUE_TASKS'),item('MY_DAY')]},
+  ADMIN:{version:1,items:[item('ADMIN_DATA_QUALITY'),item('ADMIN_HEALTH'),item('ADMIN_SHORTCUTS')]},
+  READ_ONLY:{version:1,items:[item('FORECAST_SUMMARY'),item('PIPELINE_BY_STAGE','FULL')]},
+  MARKETING_MANAGER:{version:1,items:[item('MARKETING_ACTIVITY'),item('MARKETING_SUMMARY'),item('OVERDUE_TASKS')]},
 };
 
 export function canUseDashboardWidget(actor:Actor,key:DashboardWidgetKey) {
@@ -170,7 +196,7 @@ export function dashboardAccountWhere(actor: Actor): Prisma.AccountWhereInput {
 
 export function dashboardTaskWhere(actor: Actor, today: Date, repIds: number[]): Prisma.TaskWhereInput {
   if (!can(actor, 'tasks.read')) throw new Error('Access denied');
-  return { ...dashboardOpenTaskWhere(), dueDate: { lt: today }, ...taskScope(actor), ...(actor.role === 'SALES' ? {} : { assignedToId: { in: repIds } }) };
+  return { ...dashboardOpenTaskWhere(), dueDate: { lt: new Date(today.getTime()+8*86400000) }, ...taskScope(actor), ...(actor.role === 'SALES' || actor.role === 'MARKETING_MANAGER' ? { assignedToId: actor.id } : { assignedToId: { in: repIds } }) };
 }
 
 export function dashboardActivityWhere(actor: Actor, repIds: number[]): Prisma.ActivityWhereInput {
