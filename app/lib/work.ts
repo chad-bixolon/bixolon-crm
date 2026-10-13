@@ -60,6 +60,10 @@ export async function saveTask(
     const existing = id ? await tx.task.findUnique({ where: { id } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Task not found or archived.');
     await checkSupportCaseRelation(tx, value.supportCaseId, value.accountId, !!id && existing?.supportCaseId === value.supportCaseId);
+    if (value.contactId && value.contactId !== existing?.contactId) {
+      const contact = await tx.contact.findFirst({ where: { id: value.contactId, archivedAt: null, active: true }, select: { accountId: true } });
+      if (!contact || contact.accountId && value.accountId && contact.accountId !== value.accountId) throw new Error('Contact does not match the selected Account.');
+    }
     if (value.assignedToId && value.assignedToId !== existing?.assignedToId && !(await tx.user.findFirst({ where: { id: value.assignedToId, ...eligibleUserWhere(value.supportCaseId ? 'support-work.write' : 'tasks.write') } }))) throw new Error('Choose an eligible assignee.');
     const completedAt = value.status === 'COMPLETED' ? existing?.completedAt ?? new Date() : null;
    const data = {

@@ -6,9 +6,10 @@ import { requirePermission } from "@/lib/current-user";
 import { notFound } from "next/navigation";
 import { positiveId } from "@/lib/crm-validation";
 export const dynamic = "force-dynamic";
-export default async function NewContactPage({ searchParams }: { searchParams: Promise<{ accountId?: string }> }) {
+export default async function NewContactPage({ searchParams }: { searchParams: Promise<{ accountId?: string | string[] }> }) {
   await requirePermission("contacts.write");
   const rawAccountId = (await searchParams).accountId;
+  if (rawAccountId !== undefined && typeof rawAccountId !== 'string') notFound();
   const accountId = rawAccountId ? positiveId(rawAccountId) : null;
   const accounts = accountId ? await prisma.account.findMany({ where: { id: accountId, status: "ACTIVE", archivedAt: null }, select: { id: true, name: true, addressLine1: true, addressLine2: true, city: true, stateProvince: true, postalCode: true, country: true } }) : [];
   if (rawAccountId && (!accountId || !accounts.length)) notFound();

@@ -8,15 +8,17 @@ import { defaultEligibleUserId } from '@/lib/assignment-eligibility';
 import { caseWorkContext } from '@/lib/support-work';
 import { prisma } from '@/lib/prisma';
 import { notFound } from 'next/navigation';
+import { validatedWorkPrefill } from '@/lib/work-prefill';
 export const dynamic = 'force-dynamic';
 export default async function Page({searchParams}: {searchParams: Promise<{accountId?:string;opportunityId?:string;projectId?:string;contactId?:string;supportCaseId?:string}>}) {
   const p=await searchParams, actor=await currentUser(), caseId=Number(p.supportCaseId);
   if (p.supportCaseId && (!Number.isSafeInteger(caseId)||caseId<1)) notFound();
   if (actor.role==='SUPPORT' && !p.supportCaseId) notFound();
   const supportCase=p.supportCaseId ? await caseWorkContext(prisma,actor,caseId) : null;
+  const prefill=supportCase ? {} : await validatedWorkPrefill(p,actor);
   const contactId=Number(p.contactId);
-  const linkedContactIds=supportCase?.contactId?[supportCase.contactId]:Number.isSafeInteger(contactId)&&contactId>0?[contactId]:[];
-  const options=await workOptions({accountId:supportCase?.accountId ?? (Number(p.accountId)||undefined),opportunityId:supportCase?undefined:(Number(p.opportunityId)||undefined),projectId:supportCase?undefined:(Number(p.projectId)||undefined),supportCaseId:supportCase?.id,contactIds:linkedContactIds});
+  const linkedContactIds=supportCase?.contactId?[supportCase.contactId]:prefill.contactId?[contactId]:[];
+  const options=await workOptions({accountId:supportCase?.accountId ?? prefill.accountId,opportunityId:prefill.opportunityId,projectId:prefill.projectId,supportCaseId:supportCase?.id,contactIds:linkedContactIds});
   if (actor.role==='SUPPORT') { options.opportunities=[]; options.projects=[]; }
-  return <Content><PageHeader title="New activity" eyebrow={supportCase?NAV_CATEGORIES.support:NAV_CATEGORIES.sales}/><WorkForm kind="activity" createKey={randomUUID()} {...options} supportCase={supportCase?{id:supportCase.id,caseNumber:supportCase.caseNumber,contactName:supportCase.contact?`${supportCase.contact.firstName} ${supportCase.contact.lastName}`:null}:undefined} lockAccountId={supportCase?.accountId ?? undefined} linkedContactIds={linkedContactIds} initial={{accountId:supportCase?.accountId??p.accountId??'',opportunityId:supportCase?'':p.opportunityId??'',projectId:supportCase?'':p.projectId??'',userId:defaultEligibleUserId(options.users,actor.id),activityDate:new Date().toISOString().slice(0,16),direction:'NA'}}/></Content>;
+  return <Content><PageHeader title="New activity" eyebrow={supportCase?NAV_CATEGORIES.support:NAV_CATEGORIES.sales}/><WorkForm kind="activity" cancelHref={supportCase ? `/support/cases/${supportCase.id}` : prefill.contactId ? `/contacts/${prefill.contactId}` : prefill.opportunityId ? `/opportunities/${prefill.opportunityId}` : prefill.projectId ? `/projects/${prefill.projectId}` : prefill.accountId ? `/accounts/${prefill.accountId}` : `/`} createKey={randomUUID()} {...options} supportCase={supportCase?{id:supportCase.id,caseNumber:supportCase.caseNumber,contactName:supportCase.contact?`${supportCase.contact.firstName} ${supportCase.contact.lastName}`:null}:undefined} lockAccountId={supportCase?.accountId ?? undefined} linkedContactIds={linkedContactIds} initial={{accountId:supportCase?.accountId??prefill.accountId??'',opportunityId:prefill.opportunityId??'',projectId:prefill.projectId??'',userId:defaultEligibleUserId(options.users,actor.id),activityDate:new Date().toISOString().slice(0,16),direction:'NA'}}/></Content>;
 }

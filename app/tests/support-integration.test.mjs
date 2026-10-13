@@ -42,7 +42,7 @@ test('case link validation checks visibility, account, contact, archive, closure
 
 test('existing work save paths retain optional case foreign keys and Note author provenance',async()=>{
   const made={};
-  const tx={account:{findFirst:async()=>({id:3})},supportCase:{findUnique:async()=>({accountId:3,archivedAt:null,status:'OPEN'})},activityType:{findFirst:async()=>({code:'CALL'})},task:{create:async({data})=>(made.task=data,{id:1,...data})},activity:{create:async({data})=>(made.activity=data,{id:2,...data})},note:{create:async({data})=>(made.note=data,{id:3,...data})}};
+  const tx={account:{findFirst:async()=>({id:3})},contact:{findFirst:async()=>({accountId:3})},supportCase:{findUnique:async()=>({accountId:3,archivedAt:null,status:'OPEN'})},activityType:{findFirst:async()=>({code:'CALL'})},task:{create:async({data})=>(made.task=data,{id:1,...data})},activity:{create:async({data})=>(made.activity=data,{id:2,...data})},note:{create:async({data})=>(made.note=data,{id:3,...data})}};
   const db={$transaction:async fn=>fn(tx)};
   const task=work.parseTask(form([['subject','Follow up'],['accountId','3'],['supportCaseId','12'],['contactId','5'],['status','OPEN'],['priority','NORMAL']])).value;
   const activity=work.parseActivity(form([['subject','Call Jane'],['accountId','3'],['supportCaseId','12'],['type','CALL'],['activityDate','2026-10-08']])).value;

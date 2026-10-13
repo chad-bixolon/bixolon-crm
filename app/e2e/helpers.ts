@@ -2,9 +2,13 @@ import { expect, type Page } from '@playwright/test';
 import { authToken, emails } from './constants.mjs';
 
 export async function signInAs(page: Page, role: keyof typeof emails) {
-  const csrfResponse = await page.request.get('/api/auth/csrf');
-  expect(csrfResponse.ok()).toBeTruthy();
-  const { csrfToken } = await csrfResponse.json() as { csrfToken: string };
+  let csrfToken = '';
+  await expect.poll(async () => {
+    const response = await page.request.get('/api/auth/csrf');
+    if (!response.ok()) return response.status();
+    csrfToken = (await response.json() as { csrfToken: string }).csrfToken;
+    return csrfToken ? response.status() : 0;
+  }, { timeout: 30_000, intervals: [500, 1000, 2000] }).toBe(200);
   const response = await page.request.post('/api/auth/callback/e2e', {
     form: { csrfToken, email: emails[role], token: authToken, callbackUrl: '/' },
     maxRedirects: 0,

@@ -21,6 +21,13 @@ Use the existing classes in `app/app/globals.css` for forms and actions. Keep pa
 - Use the shared `SearchResultsPopover` for results. It stays within the viewport, opens upward when needed, scrolls internally, and caps its height at 320px. Show the two-character prompt initially, `Searching...` while waiting, and a clear no-results message.
 - Keep selected ID and selected label separate from search text. Changing text must clear the prior selected ID. A required relationship needs a selected result; a typed but unselected value is a field error. Preserve selected IDs and labels on failed saves. A changed parent only clears a dependent selection when that selection is no longer eligible.
 
+## Quick Actions
+
+- Detail pages use the shared `QuickActions` row for a few common actions. The authenticated header has one compact Quick Create menu. Filter both by the same permissions as the destination route.
+- A contextual action passes only known relationships into the existing create route. Validate query IDs, access, and relation compatibility on the server, then show each prefilled record by name in its normal picker. Keep picker values editable unless the existing business workflow requires a fixed relationship.
+- Keep actions at least 44px tall and let the row wrap on phones. Reuse the ordinary forms, validation, and save actions. Do not create a second form for a shortcut.
+- Cancel from a contextual Task or Activity returns to the validated source record; save follows the form's existing destination. Global create has no record context.
+
 ## Failed Save / Validation Behavior
 
 - Preserve entered text, dates, options, and unrelated selections after a failed mutation. Show a specific error beside the field where practical and a clear form error for other failures.

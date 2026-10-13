@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { currentUser } from '@/lib/current-user';
 import { can } from '@/lib/authorization';
 import { canEditProject, projectOpportunitiesWhere, projectReadWhere, projectRoleLabels, projectStatusLabels } from '@/lib/projects';
+import { QuickActions } from '@/components/quick-actions';
 import { ProjectOpportunityLinks } from '@/components/project-opportunity-links';
 import { changeProjectOpportunity } from './opportunity-actions';
 import { SaveSuccess } from '@/components/save-success';
@@ -25,7 +26,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   const actor = await currentUser(), id = Number((await params).id), query = await searchParams;
   if (!Number.isSafeInteger(id) || id < 1) notFound();
   const project = await prisma.project.findFirst({ where: { AND: [{ id }, projectReadWhere(actor)] }, include: {
-    primaryAccount: { select: { id: true, name: true, ownerId: true } }, owner: true,
+    primaryAccount: { select: { id: true, name: true, ownerId: true, status: true, archivedAt: true } }, owner: true,
     participants: { include: { account: { select: { id: true, name: true } }, roles: true }, orderBy: { account: { name: 'asc' } } },
   } });
   if (!project) notFound();
@@ -48,6 +49,10 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   const saveMessage = saveFeedbackMessage(query.saved, 'Project');
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.programs} title={project.name} description={project.primaryAccount?.name ?? undefined} action={<div className="page-header-actions"><Link className="btn-secondary" href="/projects">All Projects</Link>{editable && !project.archivedAt && <Link className="btn-primary" href={`/projects/${id}/edit`}>Edit Project</Link>}</div>}/>
     {saveMessage && <SaveSuccess message={saveMessage}/>}
+    <QuickActions actions={editable && !project.archivedAt && can(actor, 'tasks.write') ? [
+      { label: 'Log Activity', href: `/activities/new?projectId=${id}${project.primaryAccountId && project.primaryAccount?.status === 'ACTIVE' && !project.primaryAccount.archivedAt ? `&accountId=${project.primaryAccountId}` : ''}` },
+      { label: 'Create Task', href: `/tasks/new?projectId=${id}${project.primaryAccountId && project.primaryAccount?.status === 'ACTIVE' && !project.primaryAccount.archivedAt ? `&accountId=${project.primaryAccountId}` : ''}` },
+    ] : []}/>
     <div className="panel mb-5 flex flex-wrap items-center justify-between gap-3 p-5"><div className="flex gap-2"><span className="rounded bg-slate-100 px-3 py-1 text-sm">{projectStatusLabels[project.status]}</span>{project.archivedAt && <span className="rounded bg-slate-100 px-3 py-1 text-sm">Archived</span>}</div>{editable && <ProjectArchiveControl id={id} archived={!!project.archivedAt}/>}</div>
     <nav aria-label="Project sections" className="mb-5 flex gap-1 overflow-x-auto border-b">{visibleTabs.map(t => <Link key={t} href={`/projects/${id}?tab=${t.toLowerCase()}`} aria-current={tab === t ? 'page' : undefined} className={`whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium ${tab === t ? 'border-orange-600 text-orange-800' : 'border-transparent text-slate-600'}`}>{t}</Link>)}</nav>
     {tab === 'Overview' && <div className="panel p-6"><h2 className="mb-4 text-lg font-semibold">Overview</h2><dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -64,8 +69,8 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
     {tab === 'Demos' && can(actor, 'sales.read') && <section className="panel p-6"><div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-semibold">Demos ({demos.length})</h2></div>{(project.status === "CANCELLED" || project.status === "COMPLETED" || !!project.archivedAt) && outstandingDemoUnits > 0 && <p className="mb-3 rounded bg-amber-50 p-3 text-sm text-amber-900">Demo equipment still outstanding: {outstandingDemoUnits} unit{outstandingDemoUnits === 1 ? "" : "s"}. Review linked Demo returns.</p>}<DemoList rows={demos} empty="No Demos linked to this Project."/>{editable && can(actor, 'sales.write') && <><div className="mt-4 space-y-2">{demos.filter(demo => actor.role !== 'SALES' || demo.requestedById === actor.id).map(demo => <RecoverableActionForm key={demo.id} action={updateDemoContext.bind(null, demo.id)}><input type="hidden" name="opportunityId" value={demo.opportunity?.id ?? ''}/><button className="text-sm text-orange-800 underline">Unlink {demoLabel(demo)} from Project</button></RecoverableActionForm>)}</div>{demoOptions.length > 0 && <RecoverableActionForm className="mt-4 flex flex-wrap gap-2" action={linkDemoFromProject.bind(null, id)}><select className="field" name="demoId" required><option value="">Choose an existing Demo</option>{demoOptions.map(demo => <option key={demo.id} value={demo.id}>{demoLabel(demo)} · {demo.account.name}</option>)}</select><button className="btn-secondary">Link Demo</button></RecoverableActionForm>}</>}</section>}
     {tab === 'Products' && canSeeSales && <section className="panel p-6"><h2 className="mb-3 text-lg font-semibold">Products via Opportunities</h2>{productRows.length ? <ul className="divide-y">{productRows.map(({ opportunity, line }) => <li key={line.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm"><span>{line.product.sku} · {line.product.name}</span><Link className="text-orange-800" href={`/opportunities/${opportunity.id}`}>{opportunity.name}</Link></li>)}</ul> : <p className="text-sm text-slate-500">No products on linked Opportunities.</p>}</section>}
     {tab === 'Project Updates' && <ProjectUpdates context={{ kind: 'project', id }} rows={updates} options={updateOpportunities} editable={editable && !project.archivedAt} editableIds={editableUpdateIds}/>}
-    {tab === 'Tasks' && canSeeWork && <RelatedWork projectId={id} kind="tasks" visibility={query.tasksView} allowCreate={editable && !project.archivedAt}/>}
-    {tab === 'Activities' && canSeeWork && <RelatedWork projectId={id} kind="activities" visibility={query.activitiesView} allowCreate={editable && !project.archivedAt}/>}
+    {tab === 'Tasks' && canSeeWork && <RelatedWork projectId={id} kind="tasks" visibility={query.tasksView} allowCreate={editable && !project.archivedAt} showCreate={false}/>}
+    {tab === 'Activities' && canSeeWork && <RelatedWork projectId={id} kind="activities" visibility={query.activitiesView} allowCreate={editable && !project.archivedAt} showCreate={false}/>}
     {tab === 'Notes' && canSeeWork && <RelatedWork projectId={id} kind="notes" visibility={query.notesView} allowCreate={editable && !project.archivedAt}/>}
     {tab === 'Documents' && <DocumentsSection parentType="project" parentId={id} actor={actor} view={query.documentsView} basePath={`/projects/${id}?tab=documents`}/>}
   </Content>;

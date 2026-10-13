@@ -13,9 +13,10 @@ const { can } = require(path.join(root, 'lib/authorization.ts'));
 const { saveOpportunity } = require(path.join(root, 'lib/opportunities.ts'));
 const source = file => fs.readFileSync(path.join(root, file), 'utf8');
 
-test('Account Opportunities card offers create only with sales write on an eligible Account', () => {
+test('Account Quick Actions offer create only with sales write on an eligible Account', () => {
   const page = source('app/accounts/[id]/page.tsx');
-  assert.match(page, /can\(actor, 'sales\.write'\) && account\.status === 'ACTIVE' && !account\.archivedAt && <Link className="btn-primary" href=\{`\/opportunities\/new\?accountId=\$\{id\}`\}>New Opportunity<\/Link>/);
+  assert.match(page, /account\.status === 'ACTIVE' && !account\.archivedAt/);
+  assert.match(page, /can\(actor, 'sales\.write'\) \? \[\{ label: 'New Opportunity', href: `\/opportunities\/new\?accountId=\$\{id\}`/);
   assert.match(page, /opportunityMemberships: \{ where: \{ opportunity: operationalOpportunityWhere \}/);
   assert.equal(can({ id: 1, role: 'SALES', active: true, archivedAt: null }, 'sales.write'), true);
   assert.equal(can({ id: 1, role: 'READ_ONLY', active: true, archivedAt: null }, 'sales.write'), false);
@@ -23,7 +24,7 @@ test('Account Opportunities card offers create only with sales write on an eligi
 
 test('new route checks Account context against eligible server options and uses the shared form', () => {
   const page = source('app/opportunities/new/page.tsx');
-  assert.match(page, /if \(!options\.accounts\.length\) notFound\(\)/);
+  assert.match(page, /if \(!account\) notFound\(\)/);
   assert.match(page, /<OpportunityForm[^>]+accountContextId=\{accountContextId\}/);
   assert.match(page, /id: accountContextId, status: 'ACTIVE', archivedAt: null/);
   assert.match(source('lib/operational-where.ts'), /operationalAccountWhere: Prisma\.AccountWhereInput = \{ archivedAt: null, status: 'ACTIVE' \}/);

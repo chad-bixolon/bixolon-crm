@@ -9,11 +9,14 @@ import { taskWhere, taskTiming, taskStatuses, taskPriorities, type TaskFilters }
 import { workOptions } from '@/lib/work-options';
 import { pageNumber } from '@/lib/crm-validation';
 import { recordVisibility } from '@/lib/record-visibility';
+import { currentUser } from '@/lib/current-user';
+import { can } from '@/lib/authorization';
 
 export const dynamic='force-dynamic';
 
 export default async function Page({searchParams}:{searchParams:Promise<TaskFilters & {page?:string}>}) {
-  const f=await searchParams,where=taskWhere(f),count=await prisma.task.count({where});
+  const [f, actor] = await Promise.all([searchParams, currentUser()]);
+  const where=taskWhere(f),count=await prisma.task.count({where});
   const {page,pages}=pageNumber(f.page,count);
   const [tasks,options]=await Promise.all([
     prisma.task.findMany({where,include:{account:true,opportunity:true,assignedTo:true},orderBy:[{dueDate:'asc'},{id:'desc'}],skip:(page-1)*20,take:20}),
@@ -24,7 +27,7 @@ export default async function Page({searchParams}:{searchParams:Promise<TaskFilt
   const select=(key:keyof TaskFilters,label:string,items:{value:string;label:string}[]) => <label className="label">{label}<select className="field filter-control" name={key} defaultValue={f[key]??''}><option value="">All</option>{items.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></label>;
 
   return <Content>
-    <PageHeader title="Tasks" eyebrow={NAV_CATEGORIES.sales} action={<Link className="btn-primary" href="/tasks/new">New task</Link>}/>
+    <PageHeader title="Tasks" eyebrow={NAV_CATEGORIES.sales} action={can(actor, 'tasks.write') && <Link className="btn-primary" href="/tasks/new">New task</Link>}/>
     <SavedViews routeKey="tasks" query={f}/>
     <form method="get" className="responsive-filter-form panel filter-panel filter-grid mb-5" aria-label="Filter tasks">
       <label className="filter-primary-search label">Search<input className="field filter-control" name="q" defaultValue={f.q??''} placeholder="Subject or description"/></label>

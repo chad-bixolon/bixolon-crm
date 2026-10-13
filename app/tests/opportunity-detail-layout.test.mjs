@@ -39,6 +39,7 @@ const pageMocks = {
     activity: { findFirst: async () => null },
   } },
   '@/components/related-work': { RelatedWork: ({ kind }) => React.createElement('section', null, kind) },
+  '@/components/quick-actions': { QuickActions: () => null },
   '@/components/project-updates': { ProjectUpdates: () => React.createElement('section', null, 'Project Updates') },
   '@/lib/projects': { projectReadWhere: () => ({}), canEditProject: () => true },
   '@/lib/engagement': { daysSince: () => null },

@@ -30,18 +30,20 @@ function find(element, type) {
   return null;
 }
 
-test('sign-in page shows centered CRM branding and one Google action', () => {
+test('sign-in page shows compact SalesHub branding and one Google action', () => {
   const page = SignInPage();
   const html = renderToStaticMarkup(page);
-  assert.match(html, /min-h-screen items-center justify-center/);
+  assert.match(html, /min-h-dvh items-center justify-center/);
   assert.match(html, /BIXOLON America/);
   assert.match(html, /src="\/brand\/bixolon-logo.png"/);
   assert.match(html, /width="500" height="40"/);
-  assert.match(html, /class="mx-auto block h-auto w-full max-w-\[320px\]"/);
-  assert.match(html, /<h1[^>]*>Sign in<\/h1>/);
-  assert.match(html, /BIXOLON America Sales CRM/);
-  assert.match(html, /Use your approved BIXOLON corporate account\./);
-  assert.match(html, /Sign in with your Google account/);
+  assert.match(html, /max-w-sm border-t-2 border-t-orange-700/);
+  assert.match(html, /class="mx-auto block h-auto w-full max-w-\[260px\]"/);
+  assert.match(html, /AMERICA \| SALESHUB/);
+  assert.match(html, /<h1[^>]*>Welcome back<\/h1>/);
+  assert.match(html, /Sign in to BIXOLON America SalesHub using your corporate account\./);
+  assert.match(html, /Continue with Google/);
+  assert.match(html, /Authorized BIXOLON America users only\./);
   assert.match(html, /fill="#4285F4"/);
   assert.equal((html.match(/<button/g) ?? []).length, 1);
   assert.match(html, /border-slate-300 bg-white/);

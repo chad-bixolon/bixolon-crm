@@ -4,7 +4,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import type { UserRole } from "@prisma/client";
 import { roleLabels } from "@/lib/role-labels";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { signOutAction } from "@/app/sign-out-action";
 import { endImpersonation } from "@/app/dev/impersonation/actions";
 import type { LabelMap } from "@/lib/configuration";
@@ -12,6 +12,7 @@ import { NotificationBell } from './notification-bell';
 import { GlobalSearchPalette } from './global-search-palette';
 import type { NotificationItem } from '@/lib/notifications';
 import { NAV_CATEGORIES } from '../lib/navigation-categories';
+import { useDismissOnOutside } from './use-dismiss-on-outside';
 
 const navSections = [
   { label: NAV_CATEGORIES.crm, items: ["Dashboard", "Accounts", "Contacts"] },
@@ -25,7 +26,7 @@ const navSections = [
 ] as const;
 const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Support Cases" ? "/support/cases" : item === "Sales Plan" ? "/sales-plan" : item === "Calendar Matches" ? "/calendar-matches" : item === "Price Exceptions" ? "/price-exceptions" : item === "Trade Shows" ? "/trade-shows" : item === "Campaigns" ? "/marketing/campaigns" : item === "Marketing Audiences" ? "/marketing/audiences" : `/${item.toLowerCase()}`;
 const navLabelKeys: Partial<Record<string, keyof LabelMap>> = { Accounts: "ACCOUNT", Contacts: "CONTACT", Projects: "PROJECT", Opportunities: "OPPORTUNITY", Tasks: "TASK" };
-type ShellUser = { name: string; role: UserRole; canManageUsers: boolean; canViewReports: boolean; canViewMarketing:boolean; canViewSales:boolean; canViewOpportunities:boolean; canViewSupport:boolean };
+type ShellUser = { name: string; role: UserRole; canManageUsers: boolean; canViewReports: boolean; canViewMarketing:boolean; canViewSales:boolean; canViewOpportunities:boolean; canViewSupport:boolean; canCreateAccount:boolean; canCreateContact:boolean; canCreateOpportunity:boolean; canCreateTask:boolean };
 type NavItem = (typeof navSections)[number]["items"][number];
 function canSeeNavItem(item: NavItem, user: ShellUser | null) {
   if (!user) return false;
@@ -48,6 +49,12 @@ function canSeeNavItem(item: NavItem, user: ShellUser | null) {
 export function Shell({ children, user, labels, notifications, developmentAdmin = false, impersonating = null }: { children: ReactNode; user: ShellUser | null; labels?: LabelMap; notifications?: { unread: number; rows: NotificationItem[] } | null; developmentAdmin?: boolean; impersonating?: { realName: string; effectiveName: string; role: UserRole } | null }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const quickCreate = useRef<HTMLDetailsElement>(null);
+  const quickCreateIsOpen = useCallback(() => !!quickCreate.current?.open, []);
+  const closeQuickCreate = useCallback(() => {
+    quickCreate.current?.removeAttribute('open');
+  }, []);
+  useDismissOnOutside(quickCreateIsOpen, quickCreate, closeQuickCreate);
   const menuButton = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const drawer = useRef<HTMLElement>(null);
@@ -92,6 +99,13 @@ export function Shell({ children, user, labels, notifications, developmentAdmin 
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 lg:hidden">{currentTitle}</span>
         {user && <div className="flex min-w-0 items-center gap-2 sm:gap-4">
           <GlobalSearchPalette/>
+          {(user.canCreateAccount || user.canCreateContact || user.canCreateOpportunity || user.canCreateTask) && <details ref={quickCreate} className="relative shrink-0 group"><summary className="btn-secondary min-h-11 cursor-pointer list-none" aria-label="New record">+ <span className="hidden sm:inline">New</span></summary><nav aria-label="Quick Create" className="absolute right-0 z-30 mt-2 w-48 max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white p-2 shadow-lg group-open:block">{[
+            user.canCreateAccount && ['New Account', '/accounts/new'],
+            user.canCreateContact && ['New Contact', '/contacts/new'],
+            user.canCreateOpportunity && ['New Opportunity', '/opportunities/new'],
+            user.canCreateTask && ['New Task', '/tasks/new'],
+            user.canCreateTask && ['Log Activity', '/activities/new'],
+          ].filter((item): item is string[] => !!item).map(([label, href]) => <Link key={href} className="block min-h-11 rounded px-3 py-3 text-sm hover:bg-orange-50" href={href} onClick={closeQuickCreate}>{label}</Link>)}</nav></details>}
           {notifications && <NotificationBell {...notifications} />}
           <Link href="/my-integrations" className="hidden text-sm font-medium text-orange-800 hover:underline sm:block">My integrations</Link>
           {developmentAdmin && <Link href="/dev/impersonation" className="btn-secondary hidden sm:inline-flex">Test as user</Link>}
