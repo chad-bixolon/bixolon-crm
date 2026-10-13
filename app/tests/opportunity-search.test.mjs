@@ -10,6 +10,28 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText, filename);
 const require = Module.createRequire(fileURLToPath(import.meta.url));
 const { opportunityWhere, listOpportunities } = require(path.join(root, 'lib/opportunities.ts'));
+const { nearbyCloseQuarters, selectedClosePeriod } = require(path.join(root, 'lib/close-period.ts'));
+const { countOpportunityFilters } = require(path.join(root, 'lib/filter-count.ts'));
+
+test('Close Period uses New York calendar quarters and keeps relative selections semantic', () => {
+  const beforeRollover = new Date('2027-01-01T03:00:00Z'); // December 31 in New York
+  const dates = input => Object.fromEntries(Object.entries(opportunityWhere(input, beforeRollover).expectedCloseDate ?? {}).map(([key, value]) => [key, value.toISOString().slice(0, 10)]));
+  assert.deepEqual(dates({}), {});
+  assert.deepEqual(dates({ closePeriod: 'current-quarter' }), { gte: '2026-10-01', lt: '2027-01-01' });
+  assert.deepEqual(dates({ closePeriod: 'next-quarter' }), { gte: '2027-01-01', lt: '2027-04-01' });
+  assert.deepEqual(dates({ closePeriod: '2026-Q4' }), { gte: '2026-10-01', lt: '2027-01-01' });
+  assert.deepEqual(dates({ closePeriod: '2027-Q1' }), { gte: '2027-01-01', lt: '2027-04-01' });
+  assert.deepEqual(dates({ closePeriod: '2026-Q4', closeFrom: '2026-11-15' }), { gte: '2026-10-01', lt: '2027-01-01' });
+  assert.deepEqual(dates({ closePeriod: 'custom', closeFrom: '2026-11-15', closeTo: '2026-12-20' }), { gte: '2026-11-15', lte: '2026-12-20' });
+  assert.deepEqual(dates({ closeFrom: '2026-11-15' }), { gte: '2026-11-15' });
+  assert.deepEqual(nearbyCloseQuarters(beforeRollover), ['2026-Q3', '2026-Q4', '2027-Q1', '2027-Q2', '2027-Q3', '2027-Q4']);
+  assert.equal(selectedClosePeriod({ closeFrom: '2026-11-15' }), 'custom');
+  assert.equal(countOpportunityFilters({ closePeriod: '' }), 0);
+  assert.equal(countOpportunityFilters({ closePeriod: 'current-quarter' }), 1);
+  assert.equal(countOpportunityFilters({ closePeriod: 'custom', closeFrom: '2026-11-15', closeTo: '2026-12-20' }), 1);
+  assert.equal(countOpportunityFilters({ closeFrom: '2026-11-15', closeTo: '2026-12-20' }), 1);
+  assert.equal(countOpportunityFilters({}), 0); // Clear Filters
+});
 
 test('Opportunity search uses case-insensitive partial name, related competitor name, and Competitive Model', () => {
   for (const q of ['Zebra', 'ZT411', 'ZT41', 'Honeywell', 'PM45']) {

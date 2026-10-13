@@ -2,15 +2,8 @@ import { operationalOpportunityWhere } from './operational-where';
 import { ForecastCategory, Prisma, SalesQuarter, type PrismaClient, type UserRole } from '@prisma/client';
 import { can, opportunityScope, type Actor } from './authorization';
 import { opportunityTotal, weightedValue } from './opportunities';
-
-export const quarters = Object.values(SalesQuarter);
-export function quarterBounds(year: number, quarter: SalesQuarter) {
-  if (!Number.isInteger(year) || year < 2000 || year > 2100 || !quarters.includes(quarter)) throw new Error('Choose a valid year and quarter.');
-  const month = quarters.indexOf(quarter) * 3;
-  // SalesHub stores date-only expected close dates at noon UTC. UTC calendar
-  // boundaries therefore include every New York calendar date, including DST days.
-  return { start: new Date(Date.UTC(year, month, 1)), endExclusive: new Date(Date.UTC(year, month + 3, 1)) };
-}
+import { quarterBounds } from './business-quarter';
+export { quarterBounds, quarters } from './business-quarter';
 
 export function assertForecastAccess(actor: Actor, userId: number) {
   if (!can(actor, 'sales.read') || (actor.role === 'SALES' && actor.id !== userId)) throw new Error('Access denied');

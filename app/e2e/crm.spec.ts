@@ -5,7 +5,7 @@ import { signInAs, uniqueName, watchApplicationErrors } from './helpers';
 test('Account create, failed save, detail, and edit', async ({ page }) => {
   await signInAs(page, 'admin');
   const errors = watchApplicationErrors(page);
-  await page.goto('/accounts');
+  await page.goto(`/accounts?q=${encodeURIComponent(names.account)}`);
   await expect(page.getByRole('main')).toContainText(names.account);
   await page.goto('/accounts/new');
   const form = page.getByRole('form', { name: 'Create account' });

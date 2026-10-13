@@ -6,6 +6,10 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added semantic Opportunity Close Period filters with rolling quarter choices and Saved View support.
+
+- Added personal saved views for commonly used list filters.
+
 - Added a permission-aware global search palette for core CRM records, with keyboard and mobile access.
 
 - Added Admin system health checks and recorded notification/Calendar job runs with conservative stale and failed status.

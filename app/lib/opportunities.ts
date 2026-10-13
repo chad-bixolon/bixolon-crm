@@ -10,6 +10,7 @@ import { canViewPriceException } from "./price-exception-visibility";
 import { odmCustomerSnapshot } from './opportunity-odm-pricing';
 import { priceExceptionMatchesParticipants, unrelatedPriceExceptionMessage } from './price-exception-account-match';
 import { eligibleUser, eligibleUserWhere } from './assignment-eligibility';
+import { closePeriodBounds } from './close-period';
 export type Participant = { accountId: number; roles: OpportunityPartyRole[] };
 export type OpportunityContactInput = { contactId: number; isPrimary: boolean };
 export type Line = { id?: number; productId: number; skuId?: number | null; quantity: number; price: string; priceSource?: OpportunityProductPriceSource; catalogPriceTier?: ProductPriceTier | null; priceExceptionLineId?: number | null; odmCustomerPriceId?: number | null; odmCustomerAccountId?: number | null };
@@ -289,8 +290,8 @@ export async function setOpportunityArchived(client: PrismaClient, id: number, a
     }
   });
 }
-export type OpportunityFilters = { q?: string; stageId?: string; ownerId?: string; competitorId?: string; projectId?: string; forecastCategory?: string; closeFrom?: string; closeTo?: string; accountId?: string; page?: string; archived?: string };
-export function opportunityWhere(filters: OpportunityFilters): Prisma.OpportunityWhereInput {
+export type OpportunityFilters = { q?: string; stageId?: string; ownerId?: string; competitorId?: string; projectId?: string; forecastCategory?: string; closePeriod?: string; closeFrom?: string; closeTo?: string; accountId?: string; page?: string; archived?: string };
+export function opportunityWhere(filters: OpportunityFilters, now = new Date()): Prisma.OpportunityWhereInput {
   const visibility = recordVisibility(filters.archived === "yes" ? "archived" : filters.archived === "all" ? "all" : "active");
   const where: Prisma.OpportunityWhereInput = { ...archivedWhere(visibility), ...(visibility === 'active' ? { AND: [operationalOpportunityWhere] } : {}) };
   if (filters.q?.trim()) {
@@ -304,9 +305,8 @@ export function opportunityWhere(filters: OpportunityFilters): Prisma.Opportunit
   if (filters.projectId === 'none') where.projects = { none: {} };
   else { const projectId = positiveId(filters.projectId ?? ''); if (projectId) where.projects = { some: { projectId } }; }
   if (filters.forecastCategory && Object.values(ForecastCategory).includes(filters.forecastCategory as ForecastCategory)) where.forecastCategory = filters.forecastCategory as ForecastCategory;
-  const from = filters.closeFrom && /^\d{4}-\d{2}-\d{2}$/.test(filters.closeFrom) ? new Date(`${filters.closeFrom}T00:00:00Z`) : null;
-  const to = filters.closeTo && /^\d{4}-\d{2}-\d{2}$/.test(filters.closeTo) ? new Date(`${filters.closeTo}T23:59:59.999Z`) : null;
-  if (from && !Number.isNaN(from.getTime()) || to && !Number.isNaN(to.getTime())) where.expectedCloseDate = { ...(from && !Number.isNaN(from.getTime()) ? { gte: from } : {}), ...(to && !Number.isNaN(to.getTime()) ? { lte: to } : {}) };
+  const close = closePeriodBounds(filters, now);
+  if (close) where.expectedCloseDate = close;
   return where;
 }
 export async function listOpportunities(client: PrismaClient, filters: OpportunityFilters, actor: Actor) {

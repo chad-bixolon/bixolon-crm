@@ -1,3 +1,4 @@
+import { SavedViews } from '@/components/saved-views';
 import { FilterDisclosure } from '../../components/filter-disclosure';
 import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
@@ -24,6 +25,7 @@ export default async function Page({searchParams}:{searchParams:Promise<TaskFilt
 
   return <Content>
     <PageHeader title="Tasks" eyebrow={NAV_CATEGORIES.sales} action={<Link className="btn-primary" href="/tasks/new">New task</Link>}/>
+    <SavedViews routeKey="tasks" query={f}/>
     <form method="get" className="responsive-filter-form panel filter-panel filter-grid mb-5" aria-label="Filter tasks">
       <label className="filter-primary-search label">Search<input className="field filter-control" name="q" defaultValue={f.q??''} placeholder="Subject or description"/></label>
       <button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(f, {visibility: 'active'})} defaults={{visibility: 'active'}} clearHref="/tasks"/>

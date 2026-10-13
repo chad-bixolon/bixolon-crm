@@ -50,8 +50,9 @@ test('pilot filter copy and shared compact controls remain present',()=>{
   assert.match(css,/select\.filter-control[^}]*padding-right: 2rem/);
   assert.match(css,/\.btn-filter-primary, \.btn-filter-secondary[^}]*min-height: var\(--control-height\)/);
   assert.match(source('app/contacts/page.tsx'),/Manage customer, partner, and prospect contacts\./);
-  assert.match(source('app/opportunities/page.tsx'),/Close Date From/);
-  assert.match(source('app/opportunities/page.tsx'),/Close Date Through/);
+  assert.match(source('app/opportunities/page.tsx'),/OpportunityClosePeriod/);
+  assert.match(source('components/opportunity-close-period.tsx'),/Close Date From/);
+  assert.match(source('components/opportunity-close-period.tsx'),/Close Date Through/);
   assert.match(source('app/tasks/page.tsx'),/Due Date From/);
   assert.match(source('app/tasks/page.tsx'),/Due Date Through/);
 });

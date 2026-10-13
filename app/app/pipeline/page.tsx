@@ -1,3 +1,4 @@
+import { SavedViews } from '@/components/saved-views';
 import { FilterDisclosure } from '../../components/filter-disclosure';
 import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
@@ -38,10 +39,11 @@ export default async function Page({searchParams}:{searchParams:Promise<Filters>
 
   return <Content>
     <PageHeader title="Pipeline" eyebrow={NAV_CATEGORIES.sales} description="Open opportunities valued from active product line items."/>
+    <SavedViews routeKey="pipeline" query={f}/>
     <form method="get" className="responsive-filter-form panel filter-panel filter-grid mb-5" aria-label="Filter pipeline"><FilterDisclosure initialCount={countActiveFilters(f, {})} defaults={{}} clearHref="/pipeline"/>
       <label className="label">Owner<select className={control} name="ownerId" defaultValue={f.ownerId??''}><option value="">All</option>{owners.map(o=><option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select></label>
       <label className="label">Stage<select className={control} name="stageId" defaultValue={f.stageId??''}><option value="">All</option>{stages.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-      <OptionalProjectFilter initial={selectedProject ? { ...selectedProject, context: null } : null} none={f.projectId === 'none'}/>
+      <OptionalProjectFilter key={f.projectId ?? ''} initial={selectedProject ? { ...selectedProject, context: null } : null} none={f.projectId === 'none'}/>
       <label className="label">Territory<select className={control} name="territory" defaultValue={f.territory??''}><option value="">All</option>{territories.map(t=><option key={t.code} value={t.code}>{t.name}</option>)}</select></label>
       <label className="label">Close Date From<input className={control} type="date" name="closeFrom" defaultValue={f.closeFrom??''}/></label>
       <label className="label">Close Date Through<input className={control} type="date" name="closeTo" defaultValue={f.closeTo??''}/></label>

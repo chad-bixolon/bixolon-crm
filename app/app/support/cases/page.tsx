@@ -1,3 +1,4 @@
+import { SavedViews } from '@/components/saved-views';
 import { FilterDisclosure } from '../../../components/filter-disclosure';
 import { countActiveFilters } from '../../../lib/filter-count';
 import Link from 'next/link';
@@ -25,6 +26,7 @@ export default async function SupportCasesPage({ searchParams }: { searchParams:
   const filtered = Object.entries(selected).some(([key, value]) => key !== 'page' && value && value !== 'active' && value !== 'current');
   const zone = choices.zone;
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.support} title="Support Cases" description="Track and resolve customer issues." action={can(actor, 'support-cases.write') ? <Link className="btn-primary" href="/support/cases/new">New case</Link> : undefined}/>
+    <SavedViews routeKey="support-cases" query={selected}/>
     <form method="get" className="responsive-filter-form filter-panel filter-grid filter-row mb-4" aria-label="Filter Support Cases">
       <label className="filter-primary-search label">Search<input className="field filter-control" name="q" defaultValue={selected.q} placeholder="Case, contact, subject, serial"/></label>
       <button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(selected, {archive: 'active', sort: 'current'})} defaults={{archive: 'active', sort: 'current'}} clearHref="/support/cases"/>

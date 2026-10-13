@@ -262,6 +262,7 @@ enum TradeShowImportFormat {
 }
 
 model User {
+  savedViews SavedView[]
   assignedSupportCases SupportCase[] @relation("SupportCaseAssignee")
   createdSupportCases SupportCase[] @relation("SupportCaseCreator")
   updatedSupportCases SupportCase[] @relation("SupportCaseUpdater")
@@ -361,6 +362,21 @@ model User {
   archivedDocuments       Document[]         @relation("DocumentArchivedBy")
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
+}
+
+model SavedView {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  routeKey String @db.VarChar(40)
+  name String @db.VarChar(80)
+  queryState Json
+  isDefault Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, routeKey, name])
+  @@index([userId, routeKey])
 }
 
 model Notification {

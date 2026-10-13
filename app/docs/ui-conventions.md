@@ -57,6 +57,9 @@ Use the existing classes in `app/app/globals.css` for forms and actions. Keep pa
 
 ## Responsive list and report filters
 
+- Saved Views sit near each eligible list's filter form. Keep the control compact and the dialog inside the viewport. Applying a view navigates through the route's normal query parser and leaves mobile Filters collapsed.
+- On Opportunities, keep Close Period compact and show Close Date From and Through only for Custom Date Range. Count the entire close period as one active filter.
+
 - Keep the primary Search field and its submit action visible on phones and portrait tablets when a page has Search. Collapse secondary filters by default below 1024px. When there is no Search, collapse the whole filter group. At 1024px and wider, keep the existing expanded layout.
 - Use the shared `FilterDisclosure` inside GET filter forms with `.responsive-filter-form`; mark the primary search wrapper `.filter-primary-search` and use `.filter-mobile-search-submit` for a visible mobile Search action. The disclosure button must expose `aria-expanded`, show the count of non-default filters, and offer Clear when filters are active.
 - Count only business filters. Ignore pagination, view tabs, sort metadata, empty Search, and each page's normal default, including Not Archived or Current. Keep the form controls mounted while collapsed so typed values, selected entities, dates, and query behavior survive opening and closing.

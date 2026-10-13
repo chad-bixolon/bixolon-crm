@@ -1,3 +1,4 @@
+import { SavedViews } from '@/components/saved-views';
 import { FilterDisclosure } from '../../components/filter-disclosure';
 import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
@@ -25,6 +26,7 @@ export default async function ContactsPage({searchParams}:{searchParams:Promise<
   };
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.crm} title="Contacts" description="Manage customer, partner, and prospect contacts." action={can(actor, 'contacts.write') && <Link className="btn-primary" href="/contacts/new">New contact</Link>}/>
+    <SavedViews routeKey="contacts" query={filters}/>
     <form method="get" className="responsive-filter-form panel filter-panel filter-grid filter-grid-five mb-5" aria-label="Filter contacts">
       <input type="hidden" name="sort" value={filters.sort??""}/><input type="hidden" name="dir" value={filters.dir??""}/><input type="hidden" name="pageSize" value={pageSize}/>
       <div className="filter-primary-search"><label className="label" htmlFor="q">Search</label><input className="field filter-control" id="q" name="q" defaultValue={filters.q??""} placeholder="Name, email, or title"/></div>

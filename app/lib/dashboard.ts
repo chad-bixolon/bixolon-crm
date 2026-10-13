@@ -5,6 +5,7 @@ import { canRunReportType, canViewBuiltInReport, canViewReportDefinition, valida
 import { engagementAccountWhere } from './engagement';
 import { dashboardOpenTaskWhere } from './work';
 import { canViewSalesLeadQueue } from './trade-show-leads';
+import { businessQuarter } from './business-quarter';
 
 export type DashboardSection = 'forecast' | 'reps' | 'closing' | 'stage' | 'category' | 'stale' | 'tasks' | 'activities' | 'tradeShowLeads' | 'priceExceptions' | 'admin' | 'marketing' | 'support';
 export type DashboardView = { title: string; sections: readonly DashboardSection[] };
@@ -159,9 +160,7 @@ export function getDashboardViewForRole(actor: Actor): DashboardView {
 }
 
 export function dashboardPeriod(now = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: 'numeric' }).formatToParts(now);
-  const read = (type: string) => Number(parts.find(part => part.type === type)?.value);
-  return { year: read('year'), quarter: `Q${Math.floor((read('month') - 1) / 3) + 1}` as 'Q1'|'Q2'|'Q3'|'Q4' };
+  return businessQuarter(now);
 }
 
 export function dashboardAccountWhere(actor: Actor): Prisma.AccountWhereInput {

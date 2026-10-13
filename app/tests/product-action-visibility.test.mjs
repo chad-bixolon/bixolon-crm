@@ -21,6 +21,7 @@ const originalCss = Module._extensions['.css'];
 Module._extensions['.tsx'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText, filename);
 Module._extensions['.css'] = mod => { mod.exports = new Proxy({}, { get: (_, key) => String(key) }); };
 Module._load = function(request, parent, isMain) {
+  if (request === '@/components/saved-views') return { SavedViews: () => null };
   if (request === 'next/link') return function Link({ href, children, ...props }) { return React.createElement('a', { href, ...props }, children); };
   if (request === 'next/navigation') return { notFound: () => { throw new Error('not found'); }, redirect: href => { throw new Error(`redirect ${href}`); } };
   if (request === '@/components/shell') return { Content: ({ children }) => React.createElement('main', null, children), PageHeader: ({ title, action }) => React.createElement('header', null, React.createElement('h1', null, title), action) };

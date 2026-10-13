@@ -1,3 +1,4 @@
+import { SavedViews } from '@/components/saved-views';
 import { FilterDisclosure } from '../../components/filter-disclosure';
 import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
@@ -22,6 +23,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   const linkFor = (target: number) => accountHref(resolvedFilters, { page: String(target) });
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.crm} title="Accounts" description="Organizations and relationships in the CRM." action={can(actor, 'accounts.write') && <Link href="/accounts/new" className="btn-primary">New account</Link>}/>
     <nav aria-label="Account views" className="mb-4 flex gap-1 border-b border-slate-200">{([ ["all", "All Accounts"], ["my", "My Accounts"] ] as const).map(([value, label]) => <Link key={value} href={accountHref(filters, { view: value, ...(value === "my" ? { salesRepId: "" } : {}) })} aria-current={view === value ? "page" : undefined} className={`border-b-2 px-4 py-2.5 text-sm font-semibold ${view === value ? "border-orange-600 text-orange-800" : "border-transparent text-slate-600 hover:text-slate-900"}`}>{label}</Link>)}</nav>
+    <SavedViews routeKey="accounts" query={filters}/>
     <form className="responsive-filter-form panel mb-3 flex w-full flex-wrap items-end gap-x-1.5 gap-y-1.5 p-1.5" method="get" aria-label="Filter accounts">
       <input type="hidden" name="view" value={view}/>
       <div className="filter-primary-search accounts-filter-field"><label className="mb-0.5 block text-xs font-semibold text-slate-700" htmlFor="q">Search accounts</label><input className="field accounts-filter-control min-w-0" id="q" name="q" defaultValue={filters.q ?? ""} placeholder="Account name"/></div>

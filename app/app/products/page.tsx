@@ -1,3 +1,4 @@
+import { SavedViews } from '@/components/saved-views';
 import { FilterDisclosure } from '../../components/filter-disclosure';
 import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
@@ -24,6 +25,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
 
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.catalogPricing} title="Products" description="Products available for opportunity estimates." action={canManageProducts ? <Link className="btn-primary" href="/products/new">New product</Link> : undefined}/>
+    <SavedViews routeKey="products" query={filters}/>
     <form method="get" className="responsive-filter-form panel filter-panel filter-grid filter-row mb-4" aria-label="Filter products">
       <label className="filter-primary-search label">Search<input className="field filter-control" name="q" id="q" placeholder="SKU or name" defaultValue={filters.q ?? ""}/></label>
       <button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(filters, {})} defaults={{}} clearHref="/products"/>

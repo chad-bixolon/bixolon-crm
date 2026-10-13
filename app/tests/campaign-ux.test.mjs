@@ -37,6 +37,7 @@ const prisma = {
 };
 const Shell = { Content: ({ children }) => React.createElement('main', null, children), PageHeader: ({ title, description, action }) => React.createElement('header', null, React.createElement('h1', null, title), description, action) };
 const mocks = {
+  '@/components/saved-views': { SavedViews: () => null },
   'next/link': ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children),
   'next/navigation': { notFound: () => { throw new Error('NOT_FOUND'); } },
   '@/components/shell': Shell,

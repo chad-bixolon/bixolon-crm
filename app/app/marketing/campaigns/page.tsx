@@ -1,3 +1,4 @@
+import { SavedViews } from '@/components/saved-views';
 import { FilterDisclosure } from '../../../components/filter-disclosure';
 import { countActiveFilters } from '../../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
@@ -20,6 +21,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
   const manage = canManageAttribution(actor);
   const hasCampaigns = campaigns.length > 0 || await prisma.marketingCampaign.count() > 0;
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.marketing} title="Campaigns" description="Marketing initiatives and their recorded influences." action={<div className="page-header-actions">{manage && <Link className="btn-primary" href="/marketing/campaigns/new">New Campaign</Link>}{manage && <Link className="btn-secondary" href="/marketing/lead-sources">Lead Sources</Link>}</div>}/>
+    <SavedViews routeKey="campaigns" query={filters}/>
     <form className="responsive-filter-form panel mb-4 p-3 sm:p-4" method="get" aria-label="Filter Campaigns">
       <div className="filter-grid campaign-filter-grid">
         <div className="filter-primary-search"><label className="label" htmlFor="campaign-search">Search Campaigns</label><input className="field filter-control" id="campaign-search" name="q" defaultValue={q} placeholder="Search Campaigns"/></div>
