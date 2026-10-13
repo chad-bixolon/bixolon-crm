@@ -7,6 +7,7 @@ const groups = [
   { title: "Data & Imports", tools: [
     ["Imports", "/administration/imports", "Preview and confirm CRM, Product, and Price Exception imports."],
     ["PE Cleanup", "/administration/price-exceptions", "Review imported Price Exceptions and correct data issues."],
+    ["Data Quality / Cleanup", "/administration/data-quality", "Review CRM records that may need cleanup or follow-up."],
   ] },
   { title: "Users & Access", tools: [
     ["Users", "/administration/users", "Manage user access and record owners."],
