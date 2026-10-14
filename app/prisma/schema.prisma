@@ -269,6 +269,9 @@ model User {
   updatedSupportCases SupportCase[] @relation("SupportCaseUpdater")
   supportCaseEvents SupportCaseLifecycleEvent[] @relation("SupportCaseEventActor")
   uploadedSupportAttachments SupportCaseAttachment[] @relation("SupportAttachmentUploader")
+  connectedSupportGmail SupportGmailConnection[]
+  linkedSupportEmails SupportCaseEmail[] @relation("SupportEmailLinker")
+  supportInboxDismissals SupportInboxDismissal[] @relation("SupportInboxDismissalActor")
   removedSupportAttachments SupportCaseAttachment[] @relation("SupportAttachmentRemover")
   notifications Notification[]
   notificationPreferences NotificationPreference[]
@@ -599,7 +602,7 @@ model GoogleCalendarEvent {
   attendees            GoogleCalendarAttendee[]
   review               GoogleCalendarEventReview?
 
-  @@unique([connectionId, googleCalendarId, googleEventId])
+  @@unique([connectionId, googleCalendarId, googleEventId], map: "GoogleCalendarEvent_connectionId_googleCalendarId_googleEventId")
   @@index([userId, startAt])
   @@index([userId, startDate])
   @@index([connectionId, status])
@@ -708,6 +711,8 @@ model Account {
   @@index([createdById])
   @@index([updatedById])
   @@index([archivedById])
+  // Existing SQL-managed search indexes; declare them to keep schema parity.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Account_name_trgm_idx")
 }
 
 model AccountBusinessRole {
@@ -827,6 +832,10 @@ model Contact {
   @@index([createdById])
   @@index([updatedById])
   @@index([archivedById])
+  // Existing SQL-managed search indexes; declare them to keep schema parity.
+  @@index([firstName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Contact_firstName_trgm_idx")
+  @@index([lastName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Contact_lastName_trgm_idx")
+  @@index([email(ops: raw("gin_trgm_ops"))], type: Gin, map: "Contact_email_trgm_idx")
 }
 
 model MarketingAudienceContactOverride {
@@ -936,6 +945,8 @@ model Opportunity {
   @@index([createdById])
   @@index([updatedById])
   @@index([archivedById])
+  // Existing SQL-managed search indexes; declare them to keep schema parity.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Opportunity_name_trgm_idx")
 }
 
 model OpportunityHistoryEvent {
@@ -1336,6 +1347,7 @@ model SupportCase {
   updatedAt DateTime @updatedAt
   events SupportCaseLifecycleEvent[]
   attachments SupportCaseAttachment[]
+  emails SupportCaseEmail[]
   activities Activity[]
   tasks Task[]
   notes Note[]
@@ -1377,13 +1389,50 @@ model SupportCaseAttachment {
   fileSizeBytes Int
   uploadedByUserId Int
   uploadedBy User @relation("SupportAttachmentUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  sourceMailbox String?
+  sourceGmailMessageId String?
+  sourceGmailThreadId String?
+  sourceGmailAttachmentId String?
+  sourceGmailPartId String?
   createdAt DateTime @default(now())
   deletedAt DateTime?
   deletedByUserId Int?
   deletedBy User? @relation("SupportAttachmentRemover", fields: [deletedByUserId], references: [id], onDelete: Restrict)
 
+  @@unique([supportCaseId, sourceMailbox, sourceGmailMessageId, sourceGmailPartId], map: "SupportCaseAttachment_email_source_key")
   @@index([supportCaseId, createdAt])
   @@index([supportCaseId, deletedAt, createdAt])
+}
+
+model SupportCaseEmail {
+  id Int @id @default(autoincrement())
+  supportCaseId Int
+  supportCase SupportCase @relation(fields: [supportCaseId], references: [id], onDelete: Restrict)
+  gmailMessageId String @unique
+  gmailThreadId String
+  senderEmail String
+  senderName String?
+  subject String
+  bodyText String
+  messageDate DateTime
+  linkedByUserId Int
+  linkedBy User @relation("SupportEmailLinker", fields: [linkedByUserId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+
+  @@index([supportCaseId, messageDate])
+  @@index([gmailThreadId])
+}
+
+model SupportInboxDismissal {
+  id Int @id @default(autoincrement())
+  mailbox String
+  gmailMessageId String
+  ignoredByUserId Int
+  ignoredBy User @relation("SupportInboxDismissalActor", fields: [ignoredByUserId], references: [id], onDelete: Restrict)
+  ignoredAt DateTime @default(now())
+
+  @@unique([mailbox, gmailMessageId])
+  @@index([ignoredByUserId])
 }
 
 model DemoRequest {
@@ -2000,6 +2049,8 @@ model Project {
   @@index([status, archivedAt])
   @@index([createdById])
   @@index([updatedById])
+  // Existing SQL-managed search indexes; declare them to keep schema parity.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Project_name_trgm_idx")
 }
 
 /// A contextual history entry linked to a Project, an Opportunity, or both.
@@ -2345,4 +2396,17 @@ model CampaignInfluence {
   @@index([contactId, occurredAt])
   @@index([opportunityId, occurredAt])
   @@index([voidedById])
+}
+
+// One shared Support mailbox, with its own dedicated OAuth client and key.
+model SupportGmailConnection {
+  id String @id @default("support")
+  mailbox String
+  refreshTokenEncrypted String
+  grantedScope String
+  connectedAt DateTime
+  connectedByUserId Int
+  connectedBy User @relation(fields: [connectedByUserId], references: [id], onDelete: Restrict)
+  lastSyncedAt DateTime?
+  updatedAt DateTime @updatedAt
 }

@@ -111,7 +111,21 @@ UPDATE "Account" SET status='ARCHIVED',"archivedAt"=now(),"archivedById"=100 WHE
 UPDATE "Opportunity" SET "archivedAt"=now(),"archivedById"=100 WHERE id=100;
 SELECT pg_temp.assert_true('archival preserves history',(SELECT count(*)=3 FROM "Activity") AND (SELECT count(*)=2 FROM "Note"));
 SELECT pg_temp.assert_true('archival does not rewrite children',NOT EXISTS (SELECT 1 FROM "Activity" WHERE "archivedAt" IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM "Note" WHERE "archivedAt" IS NOT NULL));
-SELECT pg_temp.assert_true('history FKs never cascade delete',NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_namespace n ON n.oid=c.connamespace WHERE n.nspname='public' AND c.contype='f' AND c.confdeltype='c'));
+-- Calendar projections and per-user UI preferences have intentional, exact
+-- cascades added after the foundation. Business history (including Support)
+-- still must never cascade. Reject every cascade outside these known edges.
+SELECT pg_temp.assert_true('history FKs never cascade delete',NOT EXISTS (
+  SELECT 1 FROM pg_constraint c JOIN pg_namespace n ON n.oid=c.connamespace
+  WHERE n.nspname='public' AND c.contype='f' AND c.confdeltype='c'
+    AND (c.conrelid::regclass::text, c.conname, c.confrelid::regclass::text) NOT IN (
+      ('"GoogleCalendarEvent"', 'GoogleCalendarEvent_connectionId_fkey', '"GoogleCalendarConnection"'),
+      ('"GoogleCalendarAttendee"', 'GoogleCalendarAttendee_eventId_fkey', '"GoogleCalendarEvent"'),
+      ('"GoogleCalendarEventReview"', 'GoogleCalendarEventReview_eventId_fkey', '"GoogleCalendarEvent"'),
+      ('"NotificationPreference"', 'NotificationPreference_userId_fkey', '"User"'),
+      ('"SavedView"', 'SavedView_userId_fkey', '"User"'),
+      ('"RecentItem"', 'RecentItem_userId_fkey', '"User"')
+    )
+));
 \o
 SELECT count(*) AS integrity_checks_passed FROM test_results;
 ROLLBACK;

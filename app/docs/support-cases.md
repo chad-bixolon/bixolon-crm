@@ -34,7 +34,9 @@ Both history sections use newest-first order and buttons with expanded state for
 
 The migration adds nullable foreign keys and composite indexes for Activity `(supportCaseId, activityDate)`, Task `(supportCaseId, dueDate)`, and Note `(supportCaseId, createdAt)`. It does not rewrite existing records.
 
-Deferred: email ingestion; RMA; warranty validation; SLA; portal; knowledge base; external Support sync; CSAT; canned responses.
+Read-only Gmail intake, email linking and selected attachment import are documented in [Support Email](support-email.md).
+
+Deferred: RMA; warranty validation; SLA; portal; knowledge base; external Support sync; CSAT; canned responses.
 
 ## Operational dashboard, report, and notifications
 
@@ -44,7 +46,7 @@ The first-class report at `/reports/support-cases` follows the existing `support
 
 Management KPIs count current active cases (New, Open, Waiting on Customer, Waiting on Internal), current High/Critical cases, overdue follow-ups, and opened/resolved cases in the selected or current calendar month. Open aging buckets use elapsed time from `openedAt` to now: 0–2, 3–7, 8–14, 15–30, and 31+ days. Individual resolved/closed case age stops at its resolution/close timestamp. Follow-up states use the start of the New York business day; a case is overdue when its due timestamp is earlier than today and it is active and unarchived. Excel contains a summary sheet with generation context, filters, KPIs, and status/priority/category counts, plus a Support Cases sheet with typed dates and numbers. Empty exports include an explanatory row.
 
-Notification Center has a Support category derived from the Support Case entity type. Assignment creates an INFO notice for the assigned user. A Critical assignment or priority transition creates a CRITICAL notice instead of a simultaneous assignment notice. Reopening a Resolved/Closed case sends an INFO notice to the current assignee. These event notices remain historical and dismissible. An overdue follow-up creates a WARNING notice only for its current eligible assignee, keyed to the case, assignee, and due timestamp. It resolves when the date moves to today/future, the case resolves or closes, is archived, or changes assignee. The existing notification evaluator scans Support Cases in bounded batches and returns evaluated, created, and resolved Support counts; deterministic source keys and `skipDuplicates` prevent repeat notices. Unassigned cases do not generate personal notices. No mail or website integration is involved.
+Notification Center has a Support category derived from the Support Case entity type. Assignment creates an INFO notice for the assigned user. A Critical assignment or priority transition creates a CRITICAL notice instead of a simultaneous assignment notice. Reopening a Resolved/Closed case sends an INFO notice to the current assignee. These event notices remain historical and dismissible. An overdue follow-up creates a WARNING notice only for its current eligible assignee, keyed to the case, assignee, and due timestamp. It resolves when the date moves to today/future, the case resolves or closes, is archived, or changes assignee. The existing notification evaluator scans Support Cases in bounded batches and returns evaluated, created, and resolved Support counts; deterministic source keys and `skipDuplicates` prevent repeat notices. Unassigned cases do not generate personal notices. Notifications do not send email or modify Gmail.
 
 ## Support Case attachments
 

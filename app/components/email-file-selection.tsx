@@ -1,0 +1,19 @@
+'use client';
+import { useState } from 'react';
+import type { EmailFileOption } from '@/lib/support-email-file-import';
+import { formatDateTimeForUser } from '@/lib/display-format';
+function size(bytes: number) { return bytes < 1024 ? `${bytes} bytes` : bytes < 1024 * 1024 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`; }
+export function EmailFileSelection({ files, zone, disabled = false }: { files: EmailFileOption[]; zone: string; disabled?: boolean }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [reveal, setReveal] = useState(false);
+  const hidden = files.filter(file => file.hiddenReason);
+  const visible = files.filter(file => reveal || !file.hiddenReason);
+  const eligible = visible.filter(file => file.token && !file.unavailableReason && !file.alreadyImported);
+  if (!files.length) return <section aria-label="Email attachments" className="rounded-lg border border-slate-200 p-4 text-sm"><h2 className="font-semibold">Email attachments</h2><p className="mt-1 text-slate-600">No files detected in the available email messages.</p></section>;
+  return <section aria-label="Email attachments" className="min-w-0 rounded-lg border border-slate-200 p-4 text-sm"><h2 className="font-semibold">Email attachments</h2><p className="mt-1 text-slate-600">Optional · select files to copy into this Case. Nothing is selected automatically. Maximum 25 MB per file and 50 files per import.</p>
+    <div className="mt-3 flex flex-wrap gap-2"><button type="button" className="btn-secondary" disabled={disabled || !eligible.length} onClick={() => setSelected(new Set(eligible.slice(0, 50).map(file => file.token)))}>Select all</button><button type="button" className="btn-secondary" disabled={disabled || !selected.size} onClick={() => setSelected(new Set())}>Clear all</button>{!!hidden.length && <button type="button" className="btn-secondary" disabled={disabled} onClick={() => { setReveal(!reveal); if (reveal) setSelected(previous => new Set([...previous].filter(token => !hidden.some(file => file.token === token)))); }}>{reveal ? 'Hide inline assets' : `Reveal hidden inline assets (${hidden.length})`}</button>}</div>
+    <ul className="mt-3 max-h-80 space-y-2 overflow-y-auto">{visible.map((file, index) => <li key={file.token || `${file.name}-${index}`} className="min-w-0 rounded border border-slate-200 p-3"><label className="flex min-w-0 items-start gap-3"><input className="mt-1 shrink-0" type="checkbox" name="emailFiles" value={file.token} checked={selected.has(file.token)} disabled={disabled || !file.token || !!file.unavailableReason || !!file.alreadyImported || (!selected.has(file.token) && selected.size >= 50)} onChange={event => setSelected(previous => { const next = new Set(previous); if (event.target.checked) next.add(file.token); else next.delete(file.token); return next; })}/><span className="min-w-0"><span className="block break-all font-medium">{file.name}</span><span className="block break-words text-xs text-slate-600">{file.mimeType} · {size(file.size)} · {file.kind === 'inline' ? 'Inline image' : 'Attachment'}</span><span className="block break-words text-xs text-slate-500">{formatDateTimeForUser(new Date(file.received), zone)} · {file.subject}</span>{file.hiddenReason && <span className="block text-xs text-amber-800">{file.hiddenReason} — classification is approximate.</span>}{file.unavailableReason && <span className="block text-xs text-red-700">Unavailable: {file.unavailableReason}</span>}{file.alreadyImported && <span className="block text-xs text-slate-600">{file.alreadyImported}</span>}</span></label></li>)}</ul>
+    {!visible.length && <p className="mt-3 text-slate-600">Only hidden inline assets were found.</p>}
+    <p className="mt-2 text-xs text-slate-600">{selected.size} selected · Gmail stays unchanged. Inline classification can miss useful images; reveal hidden assets to review them.</p>
+  </section>;
+}

@@ -1,10 +1,10 @@
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { assertPermission, type Actor } from './authorization';
 import { supportCaseReadWhere } from './support-cases';
 import type { DocumentStorage } from './document-storage';
 import type { ValidatedSupportAttachment } from './support-attachment-validation';
 
-export async function assertSupportAttachmentAccess(db: PrismaClient, actor: Actor, caseId: number, write = false) {
+export async function assertSupportAttachmentAccess(db: PrismaClient | Prisma.TransactionClient, actor: Actor, caseId: number, write = false) {
   if (write) assertPermission(actor, 'support-cases.write');
   const row = await db.supportCase.findFirst({ where: { AND: [{ id: caseId }, supportCaseReadWhere(actor, true)] }, select: { id: true, archivedAt: true, status: true } });
   if (!row) throw new Error('Support Case not found.');
@@ -12,13 +12,13 @@ export async function assertSupportAttachmentAccess(db: PrismaClient, actor: Act
   return row;
 }
 
-export async function uploadSupportAttachment(db: PrismaClient, storage: DocumentStorage, actor: Actor, caseId: number, file: ValidatedSupportAttachment) {
+export async function uploadSupportAttachment(db: PrismaClient | Prisma.TransactionClient, storage: DocumentStorage, actor: Actor, caseId: number, file: ValidatedSupportAttachment, source: { sourceMailbox: string; sourceGmailMessageId: string; sourceGmailThreadId: string; sourceGmailAttachmentId: string | null; sourceGmailPartId: string } | undefined = undefined) {
   await assertSupportAttachmentAccess(db, actor, caseId, true);
   const storageKey = storage.createSupportKey();
   await storage.uploadDocumentObject({ storageKey, body: file.body, mimeType: file.mimeType });
   try {
     return await db.supportCaseAttachment.create({ data: {
-      supportCaseId: caseId, originalFileName: file.originalFileName, storageKey,
+      ...source, supportCaseId: caseId, originalFileName: file.originalFileName, storageKey,
       contentType: file.mimeType, fileSizeBytes: file.fileSize, uploadedByUserId: actor.id,
     } });
   } catch (error) {
@@ -32,7 +32,7 @@ export class SupportAttachmentMetadataError extends Error {
   constructor() { super('The file was deleted, but its case record could not be updated. Contact an administrator.'); }
 }
 
-export async function removeSupportAttachment(db: PrismaClient, storage: DocumentStorage, actor: Actor, id: number) {
+export async function removeSupportAttachment(db: PrismaClient | Prisma.TransactionClient, storage: DocumentStorage, actor: Actor, id: number) {
   const attachment = await db.supportCaseAttachment.findUnique({ where: { id }, select: { supportCaseId: true, deletedAt: true, storageKey: true } });
   if (!attachment) throw new Error('Attachment not found.');
   await assertSupportAttachmentAccess(db, actor, attachment.supportCaseId, true);
@@ -56,7 +56,7 @@ export async function removeSupportAttachment(db: PrismaClient, storage: Documen
   }
 }
 
-export async function supportAttachmentDownloadUrl(db: PrismaClient, storage: DocumentStorage, actor: Actor, id: number) {
+export async function supportAttachmentDownloadUrl(db: PrismaClient | Prisma.TransactionClient, storage: DocumentStorage, actor: Actor, id: number) {
   const attachment = await db.supportCaseAttachment.findUnique({ where: { id }, select: { supportCaseId: true, deletedAt: true, storageKey: true, originalFileName: true, contentType: true } });
   if (!attachment || attachment.deletedAt) throw new Error('Attachment not found.');
   await assertSupportAttachmentAccess(db, actor, attachment.supportCaseId);

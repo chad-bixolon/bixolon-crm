@@ -12,6 +12,7 @@ import { listSupportCases, supportPriorityLabels, supportStatusLabels } from '@/
 import { supportFormOptions } from '@/lib/support-case-ui';
 import { supportAge } from '@/lib/support-case-display';
 import { formatDateTimeForUser } from '@/lib/display-format';
+import { supportGmailEnabled } from '@/lib/support-gmail';
 export const dynamic = 'force-dynamic';
 type Params = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => typeof v === 'string' ? v : '';
@@ -25,7 +26,7 @@ export default async function SupportCasesPage({ searchParams }: { searchParams:
   const href = (page: number) => { const p = new URLSearchParams(); Object.entries(selected).forEach(([key, value]) => { if (key !== 'page' && value) p.set(key, value); }); p.set('page', String(page)); return `/support/cases?${p}`; };
   const filtered = Object.entries(selected).some(([key, value]) => key !== 'page' && value && value !== 'active' && value !== 'current');
   const zone = choices.zone;
-  return <Content><PageHeader eyebrow={NAV_CATEGORIES.support} title="Support Cases" description="Track and resolve customer issues." action={can(actor, 'support-cases.write') ? <Link className="btn-primary" href="/support/cases/new">New case</Link> : undefined}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.support} title="Support Cases" description="Track and resolve customer issues." action={can(actor, 'support-cases.write') ? <div className="page-header-actions">{supportGmailEnabled() && <Link className="btn-secondary" href="/support/inbox">Support Inbox</Link>}<Link className="btn-primary" href="/support/cases/new">New case</Link></div> : undefined}/>
     <SavedViews routeKey="support-cases" query={selected}/>
     <form method="get" className="responsive-filter-form filter-panel filter-grid filter-row mb-4" aria-label="Filter Support Cases">
       <label className="filter-primary-search label">Search<input className="field filter-control" name="q" defaultValue={selected.q} placeholder="Case, contact, subject, serial"/></label>

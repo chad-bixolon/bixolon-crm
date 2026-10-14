@@ -233,3 +233,16 @@ test('dashboard pipeline aggregate keeps currencies separate and counts actual o
  const totals=analytics.pipelineTotalsByCurrency([row(1,'USD','10.00'),row(2,'USD','20.00'),row(3,'EUR','5.00')]);
  assert.deepEqual(totals.map(x=>[x.currency,x.count,x.estimated.toFixed(2),x.weighted.toFixed(2)]),[['EUR',1,'5.00','2.50'],['USD',2,'30.00','15.00']]);
 });
+
+
+test('long multiline Support note preserves every character, author and Case link when saved', async () => {
+ const body = Array.from({length: 150}, (_, i) => `Step ${i + 1}: Checked printer, cables and driver.`).join('\n');
+ const parsed = work.parseNote(form([['body',body],['accountId','1'],['supportCaseId','42']]));
+ assert.deepEqual(parsed.errors, {});
+ const tx = {account:{findFirst:async()=>({id:1})},supportCase:{findUnique:async()=>({accountId:1,status:'NEW',archivedAt:null})},note:{create:async({data})=>({id:7,...data})}};
+ const saved = await work.saveNote({$transaction:fn=>fn(tx)}, parsed.value, undefined, 9);
+ assert.equal(saved.body, body);
+ assert.equal(saved.supportCaseId, 42);
+ assert.equal(saved.createdById, 9);
+ assert.ok(work.parseNote(form([['body','x'.repeat(10001)],['accountId','1']])).errors.body);
+});

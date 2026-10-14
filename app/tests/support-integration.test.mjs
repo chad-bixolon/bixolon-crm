@@ -59,16 +59,36 @@ test('existing work save paths retain optional case foreign keys and Note author
   assert.equal(work.parseNote(form([['body','Bad'],['accountId','3'],['supportCaseId','abc']])).errors.supportCaseId,'Choose a valid record.');
 });
 
-test('Account and Contact case queries are scoped and bounded',async()=>{
-  const calls=[];
-  const db={supportCase:{findMany:async args=>(calls.push(args),[]),count:async args=>(calls.push(args),2)}};
-  assert.equal((await accountSupportSummary(db,actor('SALES'),3)).openCount,2);
-  assert.ok(calls.every(call=>call.where.accountId===3&&call.where.archivedAt===null));
-  assert.ok(calls.filter(call=>call.take).every(call=>call.take===10));
-  calls.length=0;
-  assert.equal((await contactSupportSummary(db,actor('SUPPORT'),5)).openCount,2);
-  assert.ok(calls.every(call=>call.where.contactId===5&&call.where.archivedAt===null));
-});
+for (const enabled of [false,true]) {
+  test(`Account and Contact case queries are scoped and bounded with Support Gmail ${enabled?'enabled':'disabled'}`,async()=>{
+    const previous=process.env.SUPPORT_GMAIL_ENABLED;
+    process.env.SUPPORT_GMAIL_ENABLED=String(enabled);
+    try {
+      const calls=[], emailCalls=[];
+      const db={supportCase:{findMany:async args=>(calls.push(args),[]),count:async args=>(calls.push(args),2)},supportCaseEmail:{findMany:async args=>(emailCalls.push(args),[])}};
+      const summary=await accountSupportSummary(db,actor('SALES'),3);
+      assert.equal(summary.openCount,2);
+      assert.deepEqual(summary.emails,[]);
+      assert.equal(calls.length,4);
+      assert.ok(calls.every(call=>call.where.accountId===3&&call.where.archivedAt===null));
+      assert.ok(calls.filter(call=>call.take).every(call=>call.take===10));
+      assert.equal(emailCalls.length,enabled?1:0);
+      if (enabled) {
+        assert.deepEqual(emailCalls[0].where,{supportCase:{accountId:3,archivedAt:null}});
+        assert.equal(emailCalls[0].take,30);
+        assert.deepEqual(emailCalls[0].orderBy,[{messageDate:'desc'},{id:'desc'}]);
+      }
+      calls.length=0;
+      assert.equal((await contactSupportSummary(db,actor('SUPPORT'),5)).openCount,2);
+      assert.equal(calls.length,3);
+      assert.ok(calls.every(call=>call.where.contactId===5&&call.where.archivedAt===null));
+      assert.equal(emailCalls.length,enabled?1:0);
+    } finally {
+      if (previous===undefined) delete process.env.SUPPORT_GMAIL_ENABLED;
+      else process.env.SUPPORT_GMAIL_ENABLED=previous;
+    }
+  });
+}
 
 test('timeline merges business labeled sources in time order and caps source queries',async()=>{
   const at=day=>new Date(`2026-10-${day}T12:00:00Z`), calls=[];

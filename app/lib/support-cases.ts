@@ -131,6 +131,10 @@ async function appendChanges(tx: Prisma.TransactionClient, caseId: number, actor
   return new Map(stored.map(event => [event.field, event.id]));
 }
 export async function createSupportCase(db: PrismaClient, actor: Actor, input: SupportCaseInput) {
+  return db.$transaction(tx => createSupportCaseInTransaction(tx, actor, input));
+}
+
+export async function createSupportCaseInTransaction(tx: Prisma.TransactionClient, actor: Actor, input: SupportCaseInput, auditSource = 'CRM') {
   assertPermission(actor, 'support-cases.write');
   assertPermission(actor, 'accounts.read');
   const clean = cleanPatch(input);
@@ -141,18 +145,16 @@ export async function createSupportCase(db: PrismaClient, actor: Actor, input: S
   id(input.accountId, 'Account');
   if (!input.customerNameText && !input.accountId) throw new Error('Enter a customer/end user or link a CRM Account.');
   if (!input.subject || !input.description || !input.source) throw new Error('Subject, description, and source are required.');
-  return db.$transaction(async tx => {
-    await validateReferences(tx, input);
-    const openedAt = new Date();
-    const year = openedAt.getUTCFullYear();
-    const rows = await tx.$queryRaw<{ lastNumber: number }[]>`INSERT INTO "SupportCaseNumberCounter" ("year", "lastNumber") VALUES (${year}, 1) ON CONFLICT ("year") DO UPDATE SET "lastNumber" = "SupportCaseNumberCounter"."lastNumber" + 1 RETURNING "lastNumber"`;
-    const caseNumber = `BXS-${year}-${String(rows[0].lastNumber).padStart(6, '0')}`;
-    const row = await tx.supportCase.create({ data: { ...input, status, priority: input.priority ?? 'NORMAL', nextFollowUpAt: status === 'RESOLVED' || status === 'CLOSED' ? null : input.nextFollowUpAt, resolvedAt: status === 'RESOLVED' ? openedAt : null, closedAt: status === 'CLOSED' ? openedAt : null, caseNumber, openedAt, createdById: actor.id, updatedById: actor.id } });
-    const events = await appendChanges(tx, row.id, actor.id, null, row as unknown as Record<string, unknown>);
-    if (row.assignedToId && status !== 'RESOLVED' && status !== 'CLOSED') await notifySupportEvent(tx, row.id, row.assignedToId, events.get(row.priority === 'CRITICAL' ? 'priority' : 'assignedToId') ?? 0, row.priority === 'CRITICAL' ? 'CRITICAL' : 'ASSIGNED', row.caseNumber);
-    await syncSupportNotifications(tx, row.id, openedAt);
-    return row;
-  });
+  await validateReferences(tx, input);
+  const openedAt = new Date();
+  const year = openedAt.getUTCFullYear();
+  const rows = await tx.$queryRaw<{ lastNumber: number }[]>`INSERT INTO "SupportCaseNumberCounter" ("year", "lastNumber") VALUES (${year}, 1) ON CONFLICT ("year") DO UPDATE SET "lastNumber" = "SupportCaseNumberCounter"."lastNumber" + 1 RETURNING "lastNumber"`;
+  const caseNumber = `BXS-${year}-${String(rows[0].lastNumber).padStart(6, '0')}`;
+  const row = await tx.supportCase.create({ data: { ...input, status, priority: input.priority ?? 'NORMAL', nextFollowUpAt: status === 'RESOLVED' || status === 'CLOSED' ? null : input.nextFollowUpAt, resolvedAt: status === 'RESOLVED' ? openedAt : null, closedAt: status === 'CLOSED' ? openedAt : null, caseNumber, openedAt, createdById: actor.id, updatedById: actor.id } });
+  const events = await appendChanges(tx, row.id, actor.id, null, row as unknown as Record<string, unknown>, auditSource);
+  if (row.assignedToId && status !== 'RESOLVED' && status !== 'CLOSED') await notifySupportEvent(tx, row.id, row.assignedToId, events.get(row.priority === 'CRITICAL' ? 'priority' : 'assignedToId') ?? 0, row.priority === 'CRITICAL' ? 'CRITICAL' : 'ASSIGNED', row.caseNumber);
+  await syncSupportNotifications(tx, row.id, openedAt);
+  return row;
 }
 export async function updateSupportCase(db: PrismaClient, actor: Actor, caseId: number, patch: SupportCasePatch) {
   assertPermission(actor, 'support-cases.write');

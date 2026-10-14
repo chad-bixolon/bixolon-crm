@@ -353,8 +353,29 @@ try:
                     if blocked.returncode == 0 or sql_values('backfill', '''SELECT count(*) FROM information_schema.columns WHERE table_name='ProductSku' AND column_name='odmSubtype';''') != ['0']:
                         raise RuntimeError('ODM subtype migration failed to reject base-SKU conflict atomically')
                     sql('backfill', '''DELETE FROM "ProductSku" WHERE id=5104;''')
+                support_before = None
+                if directory.name == '20261013230000_support_email_production':
+                    sql('backfill', '''INSERT INTO "SupportCase" (id,"caseNumber","customerNameText",subject,description,source,"createdById","updatedById","updatedAt")
+                      VALUES (9100,'BXS-2026-991000','Existing Support customer','Existing printer issue','Preserve description','PHONE',100,100,now());
+                      INSERT INTO "SupportCaseAttachment" (id,"supportCaseId","originalFileName","storageKey","contentType","fileSizeBytes","uploadedByUserId")
+                      VALUES (9100,9100,'existing.log','prod/support-cases/fixture','text/plain',10,100);''')
+                    support_before = {table: sql_values('backfill', f'''SELECT to_jsonb(t)::text FROM "{table}" t WHERE id=9100;''')[0] for table in ('SupportCase','SupportCaseAttachment')}
                 provenance_before = all_table_fingerprints('backfill') if directory.name == '20260927180000_opportunity_product_account_price_provenance' else None
                 sql("backfill", (directory / "migration.sql").read_text())
+                if support_before is not None:
+                    support_after = {table: sql_values('backfill', f'''SELECT (to_jsonb(t) - 'sourceMailbox' - 'sourceGmailMessageId' - 'sourceGmailThreadId' - 'sourceGmailAttachmentId' - 'sourceGmailPartId')::text FROM "{table}" t WHERE id=9100;''')[0] for table in ('SupportCase','SupportCaseAttachment')}
+                    if support_before != support_after:
+                        raise RuntimeError('Support Email migration altered preexisting Case or attachment content')
+                    sql('backfill', '''INSERT INTO "SupportCaseEmail" ("supportCaseId","gmailMessageId","gmailThreadId","senderEmail",subject,"bodyText","messageDate","linkedByUserId") VALUES
+                      (9100,'direct-delivery','direct-thread','fixture@example.test','Same request','Same body',now(),100),
+                      (9100,'group-delivery','group-thread','fixture@example.test','Same request','Same body',now(),100);
+                      INSERT INTO "SupportInboxDismissal" (mailbox,"gmailMessageId","ignoredByUserId") VALUES ('support@example.test','ignored',100);
+                      UPDATE "SupportCaseAttachment" SET "sourceMailbox"='support@example.test',"sourceGmailMessageId"='direct-delivery',"sourceGmailThreadId"='direct-thread',"sourceGmailPartId"='1' WHERE id=9100;''')
+                    if sql('backfill', '''INSERT INTO "SupportCaseEmail" ("supportCaseId","gmailMessageId","gmailThreadId","senderEmail",subject,"bodyText","messageDate","linkedByUserId") VALUES (9100,'direct-delivery','direct-thread','fixture@example.test','Duplicate','Duplicate',now(),100);''', check=False).returncode == 0:
+                        raise RuntimeError('Duplicate Gmail message link was accepted')
+                    if sql('backfill', '''INSERT INTO "SupportCaseAttachment" ("supportCaseId","originalFileName","storageKey","contentType","fileSizeBytes","uploadedByUserId","sourceMailbox","sourceGmailMessageId","sourceGmailPartId") VALUES (9100,'duplicate.log','prod/support-cases/duplicate','text/plain',10,100,'support@example.test','direct-delivery','1');''', check=False).returncode == 0:
+                        raise RuntimeError('Duplicate Gmail attachment provenance was accepted')
+                    print('PASS: Support Email preserves existing Case/attachment rows; distinct deliveries persist; duplicate message/file sources rejected', flush=True)
                 if provenance_before is not None and provenance_before != all_table_fingerprints('backfill'):
                     raise RuntimeError('Opportunity pricing provenance migration changed existing rows')
                 if directory.name == '20260927120000_standard_sku_customer_pricing':

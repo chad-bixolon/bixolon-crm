@@ -17,6 +17,7 @@ export function SupportCaseTimeline({ items, zone, caseId }: { items: CaseTimeli
       <h3 className="font-semibold text-slate-900">{item.href ? <Link href={item.href} className="text-orange-800 hover:underline">{item.title}</Link> : item.title}</h3>
       <p className="mt-1 text-xs text-slate-500">{formatDateTimeForUser(item.at, zone)}{item.actor ? ` · ${item.actor}` : ''}</p>
       {item.detail && <p className="mt-2 break-words whitespace-pre-wrap text-slate-700">{item.detail}</p>}
+      {item.fullBody && <details className="mt-2"><summary className="cursor-pointer text-orange-800">Read full email</summary><p className="mt-2 whitespace-pre-wrap break-words text-slate-700">{item.fullBody}</p></details>}
       {!!item.summary?.length && <dl className="mt-2 grid gap-1 text-slate-700 sm:grid-cols-2">{item.summary.map(field => <div key={field.label} className="min-w-0 break-words"><dt className="inline font-medium">{field.label}: </dt><dd className="inline whitespace-pre-wrap">{field.value}</dd></div>)}</dl>}
     </li>)}</ol> : <p className="text-sm text-slate-500">No timeline items yet.</p>}</div>}
   </section>;

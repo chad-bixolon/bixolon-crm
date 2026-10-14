@@ -19,6 +19,10 @@ Module._load = function(request, parent, isMain) {
   if (request === '@/lib/current-user') return { requireMutation: async () => ({ id: 2, role: 'SUPPORT' }) };
   if (request === '@/lib/prisma') return { prisma };
   if (request === '@/lib/support-cases') return { createSupportCase: async (_db, _actor, input) => { calls.push({ mode: 'create', input }); throw new Error(input.status === 'RESOLVED' && !input.resolutionSummary ? 'Resolution Summary is required when resolving or closing a Support Case.' : 'Unrelated validation error.'); }, updateSupportCase: async (_db, _actor, id, patch) => { calls.push({ mode: 'edit', id, input: patch }); throw new Error('Unrelated validation error.'); } };
+  if (request === '@/lib/support-email') return { createCaseFromSupportEmail: async () => { throw new Error('Unexpected email intake'); } };
+  if (request === '@/lib/support-email-source') return { resolveEmailSource: async () => { throw new Error('Invalid or expired Support email source.'); } };
+  if (request === '@/lib/document-storage') return { documentStorage: {} };
+  if (request === '@/lib/support-email-file-import') return { selectedEmailFiles: () => { throw new Error('Invalid email file selection.'); } };
   if (request === '@/lib/calendar-time') return { calendarLocalToUtc: value => new Date(value + ':00Z') };
   if (request === '@/lib/user-time-zone') return { DEFAULT_USER_TIME_ZONE: 'America/New_York' };
   return originalLoad.call(this, request, parent, isMain);
@@ -82,4 +86,12 @@ test('typed but unselected related entities retain search text and receive field
     assert.equal(result.message, message);
     assert.equal(data.get(query), 'Acme');
   }
+});
+
+
+test('forged email source is rejected before normal Case creation', async () => {
+  calls = [];
+  const result = await saveSupportCase(null, {}, form({ emailSource: 'forged' }));
+  assert.match(result.message, /Invalid or expired Support email source/);
+  assert.equal(calls.length, 0);
 });

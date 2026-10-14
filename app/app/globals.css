@@ -5,6 +5,11 @@ body { background: #f7f8fa; color: #172033; font-family: Arial, Helvetica, sans-
 input, select, button { font: inherit; }
 .field { box-sizing: border-box; width: 100%; min-width: 0; min-height: var(--control-height); border: 1px solid var(--control-border); border-radius: var(--control-radius); background: white; padding: .5rem .75rem; color: #0f172a; font-size: var(--control-font-size); line-height: 1.25rem; }
 .field:not(textarea):not([type="file"]) { height: var(--control-height); }
+/* Email intake needs room for the complete imported conversation. */
+.field.email-thread-description { min-height: 17.5rem; resize: vertical; }
+@media (min-width: 640px) { .field.email-thread-description { min-height: 20rem; } }
+@media (min-width: 1024px) { .field.email-thread-description { min-height: 22.5rem; } }
+.field.note-textarea { min-height: 7.5rem; max-height: clamp(7.5rem, 50dvh, 30rem); resize: vertical; overflow-y: auto; }
 .field::placeholder { color: #64748b; opacity: 1; }
 .field:hover:not(:disabled) { border-color: #94a3b8; }
 .field:focus-visible { outline: 2px solid var(--control-focus); outline-offset: 1px; }

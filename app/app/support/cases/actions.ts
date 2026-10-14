@@ -1,14 +1,18 @@
 'use server';
-import { SupportCasePriority, SupportCaseSource, SupportCaseStatus } from '@prisma/client';
+import { Prisma, SupportCasePriority, SupportCaseSource, SupportCaseStatus } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireMutation } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { archiveSupportCase, createSupportCase, restoreSupportCase, updateSupportCase, type SupportCaseInput, type SupportCasePatch } from '@/lib/support-cases';
 import { calendarLocalToUtc } from '@/lib/calendar-time';
+import { createCaseFromSupportEmail } from '@/lib/support-email';
+import { resolveEmailSource } from '@/lib/support-email-source';
+import { documentStorage } from '@/lib/document-storage';
+import { selectedEmailFiles, importSelectedEmailFiles, recordEmailFileImport } from '@/lib/support-email-file-import';
 import { DEFAULT_USER_TIME_ZONE } from '@/lib/user-time-zone';
 
-export type SupportFormState = { message?: string; field?: string };
+export type SupportFormState = { message?: string; field?: string; savedCaseId?: number; fileFailures?: { name: string; reason: string }[] };
 function optionalId(form: FormData, key: string) { const value = String(form.get(key) ?? ''); if (!value) return null; const number = Number(value); if (!Number.isSafeInteger(number) || number < 1) throw new Error(`Choose a valid ${key}.`); return number; }
 async function readForm(form: FormData, actorId: number) {
   const zone = (await prisma.user.findUnique({ where: { id: actorId }, select: { timeZone: true } }))?.timeZone ?? DEFAULT_USER_TIME_ZONE;
@@ -34,7 +38,14 @@ async function readForm(form: FormData, actorId: number) {
 export async function saveSupportCase(id: number | null, _state: SupportFormState, form: FormData): Promise<SupportFormState> {
   const actor = await requireMutation('support-cases.write');
   let caseId: number;
+  let duplicate = false;
+  let fileStatus = '';
+  const emailSource = String(form.get('emailSource') ?? '');
+  const fileTokens = form.getAll('emailFiles').map(String);
   try {
+    if (id && emailSource) throw new Error('Email intake can only create a new Case.');
+    const context = emailSource ? await resolveEmailSource(actor, emailSource) : null;
+    if (fileTokens.length) { if (!context) throw new Error('Invalid email file selection.'); selectedEmailFiles(actor, emailSource, fileTokens); }
     const input = await readForm(form, actor.id);
     if (id) {
       const before = await prisma.supportCase.findUnique({ where: { id } });
@@ -45,11 +56,29 @@ export async function saveSupportCase(id: number | null, _state: SupportFormStat
       })) as SupportCasePatch;
       await updateSupportCase(prisma, actor, id, patch); caseId = id;
     }
+    else if (context) {
+      const result = await createCaseFromSupportEmail(prisma, actor, input as SupportCaseInput, context.message, context.firstMessage);
+      caseId = result.id; duplicate = result.duplicate;
+    }
     else { const row = await createSupportCase(prisma, actor, input as SupportCaseInput); caseId = row.id; }
-  } catch (error) { const message = error instanceof Error ? error.message : 'Could not save Support Case.'; return { message, field: message.includes('Resolution Summary') ? 'resolutionSummary' : message.includes('customer/end user') ? 'customerNameText' : message.includes('product') || message.includes('Product') ? 'productSkuId' : message.includes('Support Rep') || message.includes('assignee') ? 'assignedToId' : message.includes('Contact') ? 'contactId' : message.includes('Purchased From Account') ? 'purchasedFromAccountId' : message.includes('Account') ? 'accountId' : message.includes('source') ? 'source' : message.includes('follow-up') ? 'nextFollowUpAt' : undefined }; }
+  } catch (error) { const databaseError = error instanceof Prisma.PrismaClientKnownRequestError || error instanceof Prisma.PrismaClientUnknownRequestError; const message = form.get('emailSource') && databaseError ? 'Could not create and link the Case. No Case was saved. Please retry from this form.' : error instanceof Error ? error.message : 'Could not save Support Case.'; return { message, field: message.includes('Resolution Summary') ? 'resolutionSummary' : message.includes('customer/end user') ? 'customerNameText' : message.includes('product') || message.includes('Product') ? 'productSkuId' : message.includes('Support Rep') || message.includes('assignee') ? 'assignedToId' : message.includes('Contact') ? 'contactId' : message.includes('Purchased From Account') ? 'purchasedFromAccountId' : message.includes('Account') ? 'accountId' : message.includes('source') ? 'source' : message.includes('follow-up') ? 'nextFollowUpAt' : undefined }; }
+  // Case and email link are committed. Optional file failures must not report
+  // that the Case rolled back, and retries must never create a second Case.
+  if (fileTokens.length) {
+    try {
+      const result = await importSelectedEmailFiles(prisma, documentStorage, actor, caseId, emailSource, fileTokens);
+      fileStatus = result.failures.length ? 'partial' : 'complete';
+      try { await recordEmailFileImport(prisma, actor, caseId, result); }
+      catch { return { message: 'Case saved and email linked. The file import report could not be saved; review the Case attachments before retrying.', savedCaseId: caseId, fileFailures: result.failures }; }
+    } catch { return { message: 'Case saved and email linked, but selected files could not be imported. Open the saved Case to review and retry.', savedCaseId: caseId }; }
+  }
   revalidatePath('/support/cases');
   revalidatePath(`/support/cases/${caseId}`);
-  redirect(`/support/cases/${caseId}`);
+  revalidatePath('/support/inbox');
+  const params = new URLSearchParams();
+  if (duplicate) params.set('emailIntake', 'already-linked');
+  if (fileStatus) params.set('emailFiles', fileStatus);
+  redirect(`/support/cases/${caseId}${params.size ? `?${params}` : ''}`);
 }
 export async function changeSupportArchive(id: number, archive: boolean, _state: SupportFormState): Promise<SupportFormState> {
   void _state;
