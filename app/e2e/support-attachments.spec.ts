@@ -63,8 +63,9 @@ test('case attachments upload, download, validate, remove, and follow permission
   expect(denied.status()).toBe(403);
 
   await signInAs(page, 'support'); await page.goto(caseUrl);
+  await expect(attachments.getByRole('button', { name: 'Add Attachment' })).toBeVisible();
   page.once('dialog', dialog => dialog.accept());
-  const removal = page.waitForResponse(response => /\/api\/support\/attachments\/\d+$/.test(response.url()) && response.request().method() === 'DELETE');
+  const removal = page.waitForResponse(response => /\/api\/support\/attachments\/\d+$/.test(response.url()) && response.request().method() === 'DELETE', { timeout: 30_000 });
   await attachments.getByRole('button', { name: 'Remove' }).click();
   expect((await removal).status()).toBe(200);
   await expect(attachments).toContainText('No attachments have been added');

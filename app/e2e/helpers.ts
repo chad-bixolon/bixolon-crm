@@ -2,6 +2,9 @@ import { expect, type Page } from '@playwright/test';
 import { authToken, emails } from './constants.mjs';
 
 export async function signInAs(page: Page, role: keyof typeof emails) {
+  // Stop requests from the previous role's page before replacing session cookies.
+  // Late Auth.js responses can otherwise roll its old session over the new login.
+  await page.goto('about:blank');
   let csrfToken = '';
   await expect.poll(async () => {
     const response = await page.request.get('/api/auth/csrf');

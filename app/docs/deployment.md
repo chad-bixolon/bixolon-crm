@@ -91,3 +91,23 @@ App Platform configuration references:
 [Dockerfile builds](https://docs.digitalocean.com/products/app-platform/reference/dockerfile/),
 [monorepo source directories](https://docs.digitalocean.com/products/app-platform/how-to/deploy-from-monorepo/), and
 [health checks](https://docs.digitalocean.com/products/app-platform/how-to/manage-health-checks/).
+
+## Support Gmail rollout
+
+See [Support Gmail production rollout](support-email-rollout.md) for dedicated OAuth configuration, PostgreSQL encrypted token persistence, runtime boundaries, migration sequence and controlled verification. Gmail stays read-only; local development uses synthetic fixtures.
+
+## Local Docker storage and dependency recovery
+
+The main local CRM uses its existing PostgreSQL cluster and normal Google login. Keep server-specific database paths in ignored `compose.override.yml`; the repository Compose default remains portable. On the current local host the existing cluster is `/var/lib/docker/postgres-data`. Docker's storage root and PostgreSQL's bind source are separate settings: moving Docker storage does not move a bind-mounted database. Inspect the actual container mounts before starting or recreating PostgreSQL.
+
+Use a long-form database bind with `bind.create_host_path: false` in the local override. This makes a missing source path fail instead of silently creating a directory in which PostgreSQL initializes an empty cluster. Never overwrite, initialize, or restore into the original cluster as part of a path repair. Back up a cleanly stopped cluster before changing its bind; validate a protected logical backup from a separate recovery copy if the original cannot yet be started safely. Once the intended cluster is running, use the existing [backup and migration checks](migration-operations.md), compare pre-repair data fingerprints, and apply only reviewed forward migrations when pending.
+
+The development app mounts an anonymous `/app/node_modules` volume. Rebuilding its image alone can leave that volume on an older dependency set. After confirming that the newly built development image matches the current lockfile, replace only the app container and its anonymous dependency volume:
+
+```sh
+docker compose up -d --no-deps --force-recreate --renew-anon-volumes app
+docker compose exec -T app node -p 'require("next/package.json").version'
+docker compose exec -T app npm run db:status
+```
+
+Verify database health, `/api/health`, and real Google login afterward. Do not use `docker compose down -v` for this repair. The isolated port-3001 POC belongs to its own Compose project and must stay untouched. Main must not enable E2E authentication, Support Inbox mocks, or fixtures; those modes belong to the disposable `saleshub_e2e` database. A locally enabled Inbox route explains that live Gmail requires the configured production environment.
