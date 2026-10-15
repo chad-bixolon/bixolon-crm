@@ -127,7 +127,7 @@ test('Case-only logging needs no invented Account or Contact; edited recipient d
 });
 
 test('Activities permit a real Case parent without an Account while preserving Sales relationship checks', async () => {
-  const make = changes => { const f = new FormData(); for (const [key, value] of Object.entries({ subject: 'Call', type: 'CALL', activityDate: '2026-10-10T13:42', ...changes })) f.set(key, value); return parseActivity(f); };
+  const make = changes => { const f = new FormData(); for (const [key, value] of Object.entries({ subject: 'Call', type: 'CALL', userId: '7', activityDate: '2026-10-10T13:42', ...changes })) f.set(key, value); return parseActivity(f); };
   assert.ok(make({}).errors.accountId);
   const parsed = make({ supportCaseId: '12' });
   assert.deepEqual(parsed.errors, {});
@@ -166,7 +166,7 @@ test('timeline renders outbound attribution/time/summary/subject/recipient disti
   assert.equal(item.kind, 'Outbound Email'); assert.equal(item.title, 'Outbound Email'); assert.equal(item.actor, 'Chad Guenther → Jane Smith');
   assert.equal(item.detail, input().summary); assert.equal(item.fullBody, undefined);
   const generic = supportActivityTimelineItem({ ...activity, emailRecipientEmail: null, emailRecipientName: null, description: 'x'.repeat(5000) });
-  assert.equal(generic.href, `/activities/${row.id}/edit`); assert.ok(generic.detail.length <= 241);
+  assert.equal(generic.href, `/activities/${row.id}`); assert.ok(generic.detail.length <= 241);
   const html = renderToStaticMarkup(React.createElement(CaseTimelineEntry, { item, zone: 'America/New_York' }));
   for (const text of ['Outbound Email', 'Chad Guenther → Jane Smith', 'Sent updated firmware', 'Re: RFID setup', 'jane@example.test', '9:42']) assert.ok(html.includes(text), text);
   assert.doesNotMatch(html, /Read full email|attachment|Send button/);

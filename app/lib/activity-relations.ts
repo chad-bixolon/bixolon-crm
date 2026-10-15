@@ -1,6 +1,18 @@
 export type RelatedOption = { id: number; name: string; accountIds: number[]; projectIds?: number[]; opportunityIds?: number[] };
 export type ContactOption = { id: number; name: string; accountId: number | null; accountName?: string | null; email?: string | null; active: boolean; archivedAt?: Date | null };
 
+export function activityAccountPrefill(context: { contact?: { accountId: number | null } | null; opportunity?: { participants: { accountId: number }[] } | null; project?: { primaryAccountId: number | null; participants: { accountId: number }[] } | null }) {
+  const { contact, opportunity, project } = context;
+  const groups = [
+    ...(contact?.accountId ? [[contact.accountId]] : []),
+    ...(opportunity ? [opportunity.participants.map(row => row.accountId)] : []),
+    ...(project ? [[...(project.primaryAccountId ? [project.primaryAccountId] : []), ...project.participants.map(row => row.accountId)]] : []),
+  ];
+  const candidates = [...new Set(groups[0] ?? [])].filter(id => groups.every(group => group.includes(id)));
+  if (project?.primaryAccountId && candidates.includes(project.primaryAccountId)) return project.primaryAccountId;
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
 export function activityChoices(accountId: number, originalAccountId: number, opportunities: RelatedOption[], projects: RelatedOption[], contacts: ContactOption[], historical: { opportunityId?: number; projectId?: number; contactIds: number[] }, selected: { opportunityId?: number; projectId?: number } = {}) {
   const sameAccount = accountId > 0 && accountId === originalAccountId;
   const historicalPair = sameAccount && selected.opportunityId === historical.opportunityId && selected.projectId === historical.projectId;

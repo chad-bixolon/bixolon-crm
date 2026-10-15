@@ -10,6 +10,7 @@ input, select, button { font: inherit; }
 @media (min-width: 640px) { .field.email-thread-description { min-height: 20rem; } }
 @media (min-width: 1024px) { .field.email-thread-description { min-height: 22.5rem; } }
 .field.note-textarea { min-height: 7.5rem; max-height: clamp(7.5rem, 50dvh, 30rem); resize: vertical; overflow-y: auto; }
+.field.activity-textarea { min-height: 4.5rem; max-height: clamp(7.5rem, 50dvh, 30rem); resize: vertical; overflow-y: auto; }
 .field::placeholder { color: #64748b; opacity: 1; }
 .field:hover:not(:disabled) { border-color: #94a3b8; }
 .field:focus-visible { outline: 2px solid var(--control-focus); outline-offset: 1px; }

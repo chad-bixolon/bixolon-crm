@@ -42,10 +42,10 @@ test('case link validation checks visibility, account, contact, archive, closure
 
 test('existing work save paths retain optional case foreign keys and Note author provenance',async()=>{
   const made={};
-  const tx={account:{findFirst:async()=>({id:3})},contact:{findFirst:async()=>({accountId:3})},supportCase:{findUnique:async()=>({accountId:3,archivedAt:null,status:'OPEN'})},activityType:{findFirst:async()=>({code:'CALL'})},task:{create:async({data})=>(made.task=data,{id:1,...data})},activity:{create:async({data})=>(made.activity=data,{id:2,...data})},note:{create:async({data})=>(made.note=data,{id:3,...data})}};
+  const tx={user:{findFirst:async()=>({id:7})},account:{findFirst:async()=>({id:3})},contact:{findFirst:async()=>({accountId:3})},supportCase:{findUnique:async()=>({accountId:3,archivedAt:null,status:'OPEN'})},activityType:{findFirst:async()=>({code:'CALL'})},task:{create:async({data})=>(made.task=data,{id:1,...data})},activity:{create:async({data})=>(made.activity=data,{id:2,...data})},note:{create:async({data})=>(made.note=data,{id:3,...data})}};
   const db={$transaction:async fn=>fn(tx)};
   const task=work.parseTask(form([['subject','Follow up'],['accountId','3'],['supportCaseId','12'],['contactId','5'],['status','OPEN'],['priority','NORMAL']])).value;
-  const activity=work.parseActivity(form([['subject','Call Jane'],['accountId','3'],['supportCaseId','12'],['type','CALL'],['activityDate','2026-10-08']])).value;
+  const activity=work.parseActivity(form([['subject','Call Jane'],['userId','7'],['accountId','3'],['supportCaseId','12'],['type','CALL'],['activityDate','2026-10-08']])).value;
   const note=work.parseNote(form([['body','Reviewing logs'],['accountId','3'],['supportCaseId','12'],['createdById','99']])).value;
   await work.saveTask(db,task,undefined,undefined,7);
   await work.saveActivity(db,activity,undefined,7);
@@ -171,7 +171,7 @@ test('case quick actions open existing create flows with case, Account, and Cont
     if(name==='@/components/work-form')return {WorkForm};
     if(name==='@/components/shell')return {Content:shell,PageHeader:shell};
     if(name==='@/lib/current-user')return {currentUser:async()=>actor('SUPPORT')};
-    if(name==='@/lib/support-work')return {caseWorkContext:async()=>row};
+    if(name==='@/lib/support-work')return {caseWorkContext:async()=>row,assertWorkPermission};
     if(name==='@/lib/work-options')return {workOptions:async()=>({accounts:[],opportunities:[],projects:[],users:[{id:7,name:'Sam Rep'}],contacts:[],activityTypes:[]})};
     if(name==='@/lib/prisma')return {prisma:{}};
     if(name==='next/navigation')return {notFound:()=>{throw new Error('Not found');}};

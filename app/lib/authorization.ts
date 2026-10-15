@@ -50,7 +50,7 @@ export function routeAccess(path: string, actor: Actor | null): 'sign-in' | 'den
   if (!actor) return 'sign-in';
   if (!actor.active || actor.archivedAt) return 'denied';
   if (path.startsWith('/support/inbox') || path.startsWith('/api/support-gmail/')) return process.env.SUPPORT_GMAIL_ENABLED === 'true' && can(actor, 'support-cases.write') ? 'allowed' : 'denied';
-  if (actor.role === 'SUPPORT' && (['/activities/new', '/tasks/new', '/notes/new'].includes(path) || /^\/tasks\/\d+$/.test(path))) return 'allowed';
+  if (actor.role === 'SUPPORT' && (['/activities/new', '/tasks/new', '/notes/new'].includes(path) || /^\/(tasks|activities)\/\d+$/.test(path))) return 'allowed';
   if (path === '/demos' && actor.role !== 'ADMIN') return 'denied';
   if (path.startsWith('/demos/') && !/^\/demos\/\d+$/.test(path)) return 'denied';
   if (path === '/trade-shows/my-leads' && !['ADMIN','SALES_MANAGER','SALES'].includes(actor.role)) return 'denied';

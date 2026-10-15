@@ -49,9 +49,9 @@ test('task lifecycle sets completion once and clears it on reopening',async()=>{
  assert.equal(work.taskTiming(row,new Date('2026-09-16T12:00:00Z')),'Due today');
 });
 test('activity and note require linked membership and valid references',async()=>{
- const activity=work.parseActivity(form([['subject','Demo'],['type','DEMO'],['accountId','1'],['opportunityId','2'],['activityDate','2026-09-16']]));assert.deepEqual(activity.errors,{});
+ const activity=work.parseActivity(form([['subject','Demo'],['userId','7'],['type','DEMO'],['accountId','1'],['opportunityId','2'],['activityDate','2026-09-16']]));assert.deepEqual(activity.errors,{});
  const note=work.parseNote(form([['body','Follow up'],['accountId','1'],['opportunityId','2']]));assert.deepEqual(note.errors,{});
- const tx={account:{findFirst:async()=>({id:1})},opportunity:{findFirst:async()=>({id:2})},opportunityAccount:{findUnique:async()=>null},activityType:{findFirst:async()=>({code:'DEMO'})},activity:{create:async({data})=>data},note:{create:async({data})=>data}};
+ const tx={user:{findFirst:async()=>({id:7})},account:{findFirst:async()=>({id:1})},opportunity:{findFirst:async()=>({id:2})},opportunityAccount:{findUnique:async()=>null},activityType:{findFirst:async()=>({code:'DEMO'})},activity:{create:async({data})=>data},note:{create:async({data})=>data}};
  await assert.rejects(work.saveActivity({$transaction:fn=>fn(tx)},activity.value),/Opportunity is not associated/);
  await assert.rejects(work.saveNote({$transaction:fn=>fn(tx)},note.value),/participant/);
  tx.opportunityAccount.findUnique=async()=>({accountId:1});
@@ -146,9 +146,9 @@ test('Activity choices narrow in both directions and keep only compatible select
  assert.deepEqual(activityRelations.retainedActivitySelections(2,0,opportunities,projects,contacts,history,selected),{opportunityId:10,projectId:20,contactIds:[31]});
 });
 test('Activity server validates Account, Opportunity, Project, and their link',async()=>{
- const value=work.parseActivity(form([['subject','Call'],['type','CALL'],['accountId','1'],['opportunityId','10'],['projectId','20'],['activityDate','2026-09-18T14:30']])).value;
+ const value=work.parseActivity(form([['subject','Call'],['userId','7'],['type','CALL'],['accountId','1'],['opportunityId','10'],['projectId','20'],['activityDate','2026-09-18T14:30']])).value;
  let opportunityAccount=true, projectAccount=true, linked=true, created=0;
- const tx={account:{findFirst:async()=>({id:1})},opportunity:{findFirst:async()=>({id:10})},opportunityAccount:{findUnique:async()=>opportunityAccount?{}:null},project:{findFirst:async()=>({id:20}),findUnique:async()=>({primaryAccountId:projectAccount?1:2,participants:[]})},opportunityProject:{findUnique:async()=>linked?{}:null},activityType:{findFirst:async()=>({code:'CALL'})},activity:{create:async({data})=>{created++;return {id:7,...data};}}};
+ const tx={user:{findFirst:async()=>({id:7})},account:{findFirst:async()=>({id:1})},opportunity:{findFirst:async()=>({id:10})},opportunityAccount:{findUnique:async()=>opportunityAccount?{}:null},project:{findFirst:async()=>({id:20}),findUnique:async()=>({primaryAccountId:projectAccount?1:2,participants:[]})},opportunityProject:{findUnique:async()=>linked?{}:null},activityType:{findFirst:async()=>({code:'CALL'})},activity:{create:async({data})=>{created++;return {id:7,...data};}}};
  const client={$transaction:fn=>fn(tx)};
  assert.equal((await work.saveActivity(client,value)).id,7);
  opportunityAccount=false; await assert.rejects(work.saveActivity(client,value),/Opportunity is not associated/);
@@ -184,15 +184,15 @@ test('Activity validation state retains every submitted field',()=>{
  assert.equal(work.activityErrorField('Account is not a participant in this opportunity.'),'opportunityId');
 });
 test('manually submitted unrelated Activity Project and Contact are rejected',async()=>{
- const input=work.parseActivity(form([['subject','Call'],['type','CALL'],['accountId','1'],['projectId','20'],['activityDate','2026-09-18T14:30'],['contactIds','30']]));
- const tx={account:{findFirst:async()=>({id:1})},project:{findFirst:async()=>({id:20}),findUnique:async()=>({primaryAccountId:2,participants:[]})},activityType:{findFirst:async()=>({code:'CALL'})},contact:{findMany:async()=>[{id:30,accountId:2,active:true}]},activity:{create:async({data})=>({id:7,...data})}};
+ const input=work.parseActivity(form([['subject','Call'],['userId','7'],['type','CALL'],['accountId','1'],['projectId','20'],['activityDate','2026-09-18T14:30'],['contactIds','30']]));
+ const tx={user:{findFirst:async()=>({id:7})},account:{findFirst:async()=>({id:1})},project:{findFirst:async()=>({id:20}),findUnique:async()=>({primaryAccountId:2,participants:[]})},activityType:{findFirst:async()=>({code:'CALL'})},contact:{findMany:async()=>[{id:30,accountId:2,active:true}]},activity:{create:async({data})=>({id:7,...data})}};
  await assert.rejects(work.saveActivity({$transaction:fn=>fn(tx)},input.value),/Project is not associated/);
  tx.project.findUnique=async()=>({primaryAccountId:2,participants:[{accountId:1}]});
  await assert.rejects(work.saveActivity({$transaction:fn=>fn(tx)},input.value),/Contact is not associated/);
 });
 test('Activity accepts eligible unassigned Contacts and existing inactive Contact history',async()=>{
- const value=work.parseActivity(form([['subject','Call'],['type','CALL'],['accountId','1'],['activityDate','2026-09-18T14:30'],['contactIds','30'],['contactIds','31']])).value;
- const tx={account:{findFirst:async()=>({id:1})},activity:{findFirst:async()=>({id:7,accountId:1,type:'CALL'}),update:async({data})=>({id:7,...data})},activityType:{findFirst:async()=>({code:'CALL'})},activityContact:{count:async()=>2,findMany:async()=>[{contactId:31}],createMany:async()=>({})},contact:{findMany:async()=>[{id:30,accountId:null,active:true},{id:31,accountId:2,active:false}]}};
+ const value=work.parseActivity(form([['subject','Call'],['userId','7'],['type','CALL'],['accountId','1'],['activityDate','2026-09-18T14:30'],['contactIds','30'],['contactIds','31']])).value;
+ const tx={user:{findFirst:async()=>({id:7})},account:{findFirst:async()=>({id:1})},activity:{findFirst:async()=>({id:7,accountId:1,type:'CALL'}),update:async({data})=>({id:7,...data})},activityType:{findFirst:async()=>({code:'CALL'})},activityContact:{count:async()=>2,findMany:async()=>[{contactId:31}],createMany:async()=>({})},contact:{findMany:async()=>[{id:30,accountId:null,active:true},{id:31,accountId:2,active:false}]}};
  const saved=await work.saveActivity({$transaction:fn=>fn(tx)},value,7);
  assert.equal(saved.accountId,1);
  assert.equal(saved.contactIds,undefined);

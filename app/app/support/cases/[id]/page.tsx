@@ -28,7 +28,6 @@ export default async function SupportCaseDetailPage({ params, searchParams }: { 
   if (!row) notFound();
   const history = await caseHistoryView(prisma, id, row.createdAt, zone, supportGmailEnabled());
   const attachments = await prisma.supportCaseAttachment.findMany({ where: { supportCaseId: id, deletedAt: null }, include: { uploadedBy: { select: { firstName: true, lastName: true } } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
-  if (!can(actor, 'tasks.write')) for (const item of history.timeline) if (item.source === 'Activity') item.href = undefined;
   const allowNewWork = !row.archivedAt && row.status !== 'CLOSED' && canCreateCaseWork(actor);
   const emailContext = allowNewWork && canLogSupportEmail(actor) ? await supportOutboundEmailContext(prisma, actor, id) : null;
   const workActions = <><Link className="btn-secondary" href={`/activities/new?supportCaseId=${id}`}>Log Activity</Link><Link className="btn-secondary" href={`/tasks/new?supportCaseId=${id}`}>Create Task</Link><Link className="btn-secondary" href={`/notes/new?supportCaseId=${id}`}>Add Note</Link></>;

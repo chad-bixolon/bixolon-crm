@@ -27,10 +27,10 @@ export function supportActivityTimelineItem(row: TimelineActivity): CaseTimeline
   const contacts = row.contacts.map(link => `${link.contact.firstName} ${link.contact.lastName}`).join(', ');
   if (row.type === 'EMAIL' && row.direction === 'OUTBOUND') {
     const recipient = row.emailRecipientName || contacts || row.emailRecipientEmail;
-    return { key: `activity-${row.id}`, at: row.activityDate, source: 'Activity', kind: 'Outbound Email', title: 'Outbound Email', actor: [actor, recipient].filter(Boolean).join(' → '), detail: row.description ? row.emailRecipientEmail ? row.description : preview(row.description, 240) : undefined, href: row.emailRecipientEmail ? undefined : `/activities/${row.id}/edit`,
+    return { key: `activity-${row.id}`, at: row.activityDate, source: 'Activity', kind: 'Outbound Email', title: 'Outbound Email', actor: [actor, recipient].filter(Boolean).join(' → '), detail: row.description ? row.emailRecipientEmail ? row.description : preview(row.description, 240) : undefined, href: row.emailRecipientEmail ? undefined : `/activities/${row.id}`,
       summary: [{ label: 'Subject', value: row.subject }, ...(row.emailRecipientEmail ? [{ label: 'To', value: row.emailRecipientEmail }] : [])] };
   }
-  return { key: `activity-${row.id}`, at: row.activityDate, source: 'Activity', title: `${row.activityType.name} logged`, detail: [row.subject, row.description && preview(row.description, 240), contacts].filter(Boolean).join(' · '), actor, href: `/activities/${row.id}/edit`, ...(row.type === 'EMAIL' && row.direction === 'INBOUND' ? { kind: 'Inbound Email' as const } : {}) };
+  return { key: `activity-${row.id}`, at: row.activityDate, source: 'Activity', title: `${row.activityType.name} logged`, detail: [row.subject, row.description && preview(row.description, 240), contacts].filter(Boolean).join(' · '), actor, href: `/activities/${row.id}`, ...(row.type === 'EMAIL' && row.direction === 'INBOUND' ? { kind: 'Inbound Email' as const } : {}) };
 }
 
 function creationSummary(fields: readonly SupportHistoryEvent[], zone: string) {
