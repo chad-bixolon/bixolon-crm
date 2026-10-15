@@ -157,38 +157,40 @@ export async function createSupportCaseInTransaction(tx: Prisma.TransactionClien
   return row;
 }
 export async function updateSupportCase(db: PrismaClient, actor: Actor, caseId: number, patch: SupportCasePatch) {
+  return db.$transaction(tx => updateSupportCaseInTransaction(tx, actor, caseId, patch));
+}
+/** Retains lifecycle history, notifications, and validation inside a caller's transaction. */
+export async function updateSupportCaseInTransaction(tx: Prisma.TransactionClient, actor: Actor, caseId: number, patch: SupportCasePatch) {
   assertPermission(actor, 'support-cases.write');
   assertPermission(actor, 'accounts.read');
   id(caseId, 'case');
   patch = cleanPatch(patch);
   validateFields(patch);
-  return db.$transaction(async tx => {
-    // Serialize edits to a case so the audit comparison sees the committed predecessor.
-    await tx.$queryRaw`SELECT id FROM "SupportCase" WHERE id = ${caseId} FOR UPDATE`;
-    const before = await tx.supportCase.findUnique({ where: { id: caseId } });
-    if (!before) throw new Error('Case not found.');
-    if (before.archivedAt) throw new Error('Restore the case before editing.');
-    if (!(patch.customerNameText === undefined ? before.customerNameText : patch.customerNameText) && !(patch.accountId === undefined ? before.accountId : patch.accountId)) throw new Error('Enter a customer/end user or link a CRM Account.');
-    if (patch.status !== undefined && !validSupportTransition(before.status, patch.status)) throw new Error('Invalid status transition.');
-    validateResolution(patch.status ?? before.status, patch.resolutionSummary === undefined ? before.resolutionSummary : patch.resolutionSummary);
-    await validateReferences(tx, patch, before);
-    const next = { ...patch } as SupportCasePatch & { resolvedAt?: Date | null; closedAt?: Date | null };
-    if (patch.status && patch.status !== before.status) {
-      if (patch.status === 'RESOLVED') next.resolvedAt = new Date();
-      else if (patch.status === 'CLOSED') next.closedAt = new Date();
-      else { next.resolvedAt = null; next.closedAt = null; }
-    }
-    const changed = Object.entries(next).some(([key, value]) => auditValue(value) !== auditValue((before as unknown as Record<string, unknown>)[key]));
-    if (!changed) return before;
-    const after = await tx.supportCase.update({ where: { id: caseId }, data: { ...next, updatedById: actor.id } });
-    const events = await appendChanges(tx, caseId, actor.id, before as unknown as Record<string, unknown>, after as unknown as Record<string, unknown>);
-    const critical = after.priority === 'CRITICAL' && (before.priority !== 'CRITICAL' || before.assignedToId !== after.assignedToId);
-    if (critical) await notifySupportEvent(tx, caseId, after.assignedToId, events.get(before.priority !== 'CRITICAL' ? 'priority' : 'assignedToId') ?? 0, 'CRITICAL', after.caseNumber);
-    else if (after.assignedToId && before.assignedToId !== after.assignedToId) await notifySupportEvent(tx, caseId, after.assignedToId, events.get('assignedToId') ?? 0, 'ASSIGNED', after.caseNumber);
-    if (['RESOLVED','CLOSED'].includes(before.status) && ['NEW','OPEN','WAITING_ON_CUSTOMER','WAITING_ON_INTERNAL'].includes(after.status)) await notifySupportEvent(tx, caseId, after.assignedToId, events.get('status') ?? 0, 'REOPENED', after.caseNumber);
-    await syncSupportNotifications(tx, caseId);
-    return after;
-  });
+  // Serialize edits to a case so the audit comparison sees the committed predecessor.
+  await tx.$queryRaw`SELECT id FROM "SupportCase" WHERE id = ${caseId} FOR UPDATE`;
+  const before = await tx.supportCase.findUnique({ where: { id: caseId } });
+  if (!before) throw new Error('Case not found.');
+  if (before.archivedAt) throw new Error('Restore the case before editing.');
+  if (!(patch.customerNameText === undefined ? before.customerNameText : patch.customerNameText) && !(patch.accountId === undefined ? before.accountId : patch.accountId)) throw new Error('Enter a customer/end user or link a CRM Account.');
+  if (patch.status !== undefined && !validSupportTransition(before.status, patch.status)) throw new Error('Invalid status transition.');
+  validateResolution(patch.status ?? before.status, patch.resolutionSummary === undefined ? before.resolutionSummary : patch.resolutionSummary);
+  await validateReferences(tx, patch, before);
+  const next = { ...patch } as SupportCasePatch & { resolvedAt?: Date | null; closedAt?: Date | null };
+  if (patch.status && patch.status !== before.status) {
+    if (patch.status === 'RESOLVED') next.resolvedAt = new Date();
+    else if (patch.status === 'CLOSED') next.closedAt = new Date();
+    else { next.resolvedAt = null; next.closedAt = null; }
+  }
+  const changed = Object.entries(next).some(([key, value]) => auditValue(value) !== auditValue((before as unknown as Record<string, unknown>)[key]));
+  if (!changed) return before;
+  const after = await tx.supportCase.update({ where: { id: caseId }, data: { ...next, updatedById: actor.id } });
+  const events = await appendChanges(tx, caseId, actor.id, before as unknown as Record<string, unknown>, after as unknown as Record<string, unknown>);
+  const critical = after.priority === 'CRITICAL' && (before.priority !== 'CRITICAL' || before.assignedToId !== after.assignedToId);
+  if (critical) await notifySupportEvent(tx, caseId, after.assignedToId, events.get(before.priority !== 'CRITICAL' ? 'priority' : 'assignedToId') ?? 0, 'CRITICAL', after.caseNumber);
+  else if (after.assignedToId && before.assignedToId !== after.assignedToId) await notifySupportEvent(tx, caseId, after.assignedToId, events.get('assignedToId') ?? 0, 'ASSIGNED', after.caseNumber);
+  if (['RESOLVED','CLOSED'].includes(before.status) && ['NEW','OPEN','WAITING_ON_CUSTOMER','WAITING_ON_INTERNAL'].includes(after.status)) await notifySupportEvent(tx, caseId, after.assignedToId, events.get('status') ?? 0, 'REOPENED', after.caseNumber);
+  await syncSupportNotifications(tx, caseId);
+  return after;
 }
 export function changeSupportCaseStatus(db: PrismaClient, actor: Actor, caseId: number, status: SupportCaseStatus, resolutionSummary?: string | null) {
   return updateSupportCase(db, actor, caseId, { status, ...(resolutionSummary === undefined ? {} : { resolutionSummary }) });

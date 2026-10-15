@@ -43,6 +43,7 @@ test('Activity links unassigned Contacts only with an explicit valid Account', a
   const links = [];
   const contact = { id: 5, accountId: null, active: true };
   const tx = {
+    user: { findFirst: async () => ({ id: 7 }) },
     account: { findFirst: async ({ where }) => where.id === 1 ? { id: 1 } : null },
     activityType: { findFirst: async () => ({ code: 'MEETING' }) },
     contact: { findMany: async () => [contact] },
@@ -50,7 +51,7 @@ test('Activity links unassigned Contacts only with an explicit valid Account', a
     activity: { create: async ({ data }) => (row = { id: 12, ...data }) },
   };
   const client = { $transaction: fn => fn(tx) };
-  const value = parseActivity(form([...fields.filter(([key]) => key !== 'contactIds'), ['contactIds', '5']])).value;
+  const value = parseActivity(form([...fields.filter(([key]) => key !== 'contactIds'), ['contactIds', '5'], ['userId', '7']])).value;
   assert.equal((await saveActivity(client, value)).accountId, 1);
   assert.deepEqual(links, [{ activityId: 12, contactId: 5 }]);
   await assert.rejects(saveActivity(client, { ...value, accountId: 99 }), /Account not found/);

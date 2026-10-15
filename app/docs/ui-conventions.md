@@ -77,3 +77,10 @@ Use the existing classes in `app/app/globals.css` for forms and actions. Keep pa
 - Keep the primary Search field and its submit action visible on phones and portrait tablets when a page has Search. Collapse secondary filters by default below 1024px. When there is no Search, collapse the whole filter group. At 1024px and wider, keep the existing expanded layout.
 - Use the shared `FilterDisclosure` inside GET filter forms with `.responsive-filter-form`; mark the primary search wrapper `.filter-primary-search` and use `.filter-mobile-search-submit` for a visible mobile Search action. The disclosure button must expose `aria-expanded`, show the count of non-default filters, and offer Clear when filters are active.
 - Count only business filters. Ignore pagination, view tabs, sort metadata, empty Search, and each page's normal default, including Not Archived or Current. Keep the form controls mounted while collapsed so typed values, selected entities, dates, and query behavior survive opening and closing.
+
+## Bulk list actions
+
+- Tasks and Support Cases use `BulkSelection`, `BulkCheckbox` and `BulkPageCheckbox`. Keep selection on the current page, maximum 20, with explicit eligible-page selection. No permanent action toolbar: show count, clear and actions only after selection. Do not imply all filtered results are selected.
+- Preserve existing GET filters, sort, page and Saved Views. Clear selection on navigation; refresh list data after success. Reuse the same selection for responsive cards and tables.
+- Use an explicit modal confirmation with record count, action and target. Keep it within the viewport, trap keyboard focus and support Cancel/Escape. Clear selection without confirmation. Recheck permissions, versions and every individual business rule in an atomic server transaction; retain per-record history and acting-user attribution.
+- See [Bulk Actions v1](bulk-actions.md) for supported actions, permissions, failure behavior, limits and intentional deferrals.

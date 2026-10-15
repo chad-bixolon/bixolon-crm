@@ -57,35 +57,7 @@ export async function saveTask(
     if (existing) return existing;
   }
   try { return await client.$transaction(async tx => {
-    await checkRelations(tx, value.accountId, value.opportunityId, value.projectId);
-    const existing = id ? await tx.task.findUnique({ where: { id } }) : null;
-    if (id && (!existing || existing.archivedAt)) throw new Error('Task not found or archived.');
-    await checkSupportCaseRelation(tx, value.supportCaseId, value.accountId, !!id && existing?.supportCaseId === value.supportCaseId);
-    if (value.contactId && value.contactId !== existing?.contactId) {
-      const contact = await tx.contact.findFirst({ where: { id: value.contactId, archivedAt: null, active: true }, select: { accountId: true } });
-      if (!contact || contact.accountId && value.accountId && contact.accountId !== value.accountId) throw new Error('Contact does not match the selected Account.');
-    }
-    if (value.assignedToId && value.assignedToId !== existing?.assignedToId && !(await tx.user.findFirst({ where: { id: value.assignedToId, ...eligibleUserWhere(value.supportCaseId ? 'support-work.write' : 'tasks.write') } }))) throw new Error('Choose an eligible assignee.');
-    const completedAt = value.status === 'COMPLETED' ? existing?.completedAt ?? new Date() : null;
-   const data = {
-  ...value,
-  completedAt,
-  ...(!id && createKey ? { createKey } : {}),
-  ...(actorId
-    ? {
-        updatedById: actorId,
-        ...(!id ? { createdById: actorId } : {}),
-      }
-    : {}),
-};
-    const row = id ? await tx.task.update({ where: { id }, data }) : await tx.task.create({ data });
-    // Partial Prisma clients used by existing domain tests omit Notification.
-    if (tx.notification && value.assignedToId && value.assignedToId !== existing?.assignedToId) {
-      const event = await tx.taskAssignmentEvent.create({ data: { taskId: row.id, fromUserId: existing?.assignedToId ?? null, toUserId: value.assignedToId, actorId } });
-      await notifyTaskAssignment(tx, row.id, value.assignedToId, event.id);
-    }
-    if (tx.notification) await syncTaskNotifications(tx, row.id);
-    return row;
+    return saveTaskInTransaction(tx, value, id, createKey, actorId);
   }); } catch (error) {
     // A concurrent request may have won the unique-key race.
     if (!id && createKey && typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
@@ -94,6 +66,35 @@ export async function saveTask(
     }
     throw error;
   }
+}
+/** Shared mutation path for individual saves and atomic bulk work. */
+export async function saveTaskInTransaction(
+  tx: Prisma.TransactionClient, value: TaskInput, id?: number, createKey?: string, actorId?: number,
+) {
+  await checkRelations(tx, value.accountId, value.opportunityId, value.projectId);
+  const existing = id ? await tx.task.findUnique({ where: { id } }) : null;
+  if (id && (!existing || existing.archivedAt)) throw new Error('Task not found or archived.');
+  await checkSupportCaseRelation(tx, value.supportCaseId, value.accountId, !!id && existing?.supportCaseId === value.supportCaseId);
+  if (value.contactId && value.contactId !== existing?.contactId) {
+    const contact = await tx.contact.findFirst({ where: { id: value.contactId, archivedAt: null, active: true }, select: { accountId: true } });
+    if (!contact || contact.accountId && value.accountId && contact.accountId !== value.accountId) throw new Error('Contact does not match the selected Account.');
+  }
+  if (value.assignedToId && value.assignedToId !== existing?.assignedToId && !(await tx.user.findFirst({ where: { id: value.assignedToId, ...eligibleUserWhere(value.supportCaseId ? 'support-work.write' : 'tasks.write') } }))) throw new Error('Choose an eligible assignee.');
+  const completedAt = value.status === 'COMPLETED' ? existing?.completedAt ?? new Date() : null;
+  const data = {
+    ...value,
+    completedAt,
+    ...(!id && createKey ? { createKey } : {}),
+    ...(actorId ? { updatedById: actorId, ...(!id ? { createdById: actorId } : {}) } : {}),
+  };
+  const row = id ? await tx.task.update({ where: { id }, data }) : await tx.task.create({ data });
+  // Partial Prisma clients used by existing domain tests omit Notification.
+  if (tx.notification && value.assignedToId && value.assignedToId !== existing?.assignedToId) {
+    const event = await tx.taskAssignmentEvent.create({ data: { taskId: row.id, fromUserId: existing?.assignedToId ?? null, toUserId: value.assignedToId, actorId } });
+    await notifyTaskAssignment(tx, row.id, value.assignedToId, event.id);
+  }
+  if (tx.notification) await syncTaskNotifications(tx, row.id);
+  return row;
 }
 export type TaskFilters = { q?: string; status?: string; priority?: string; assignedToId?: string; accountId?: string; opportunityId?: string; dueFrom?: string; dueTo?: string; visibility?: string };
 export function taskWhere(f: TaskFilters): Prisma.TaskWhereInput {

@@ -199,3 +199,6 @@ select.pe-cleanup-control { padding-right: 2rem; }
 .saved-views-item > div { display:flex; flex-wrap:wrap; gap:.25rem; }
 .saved-views-item button { min-height:2.75rem; padding:.35rem .55rem; color:#9a3412; text-decoration:underline; }
 @media (max-width: 480px) { .saved-views-row, .saved-views-menu { width:100%; } .saved-views-menu summary { max-width:100%; } }
+dialog.bulk-confirm-dialog { margin: auto; width: calc(100% - 2rem); max-width: 32rem; max-height: calc(100dvh - 2rem); overflow-y: auto; }
+dialog.bulk-confirm-dialog::backdrop { background: rgb(15 23 42 / 50%); }
+dialog.bulk-confirm-dialog:not([open]) { display: none; }

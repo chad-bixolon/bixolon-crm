@@ -12,6 +12,9 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added safe current-page bulk actions for Tasks (complete, assign, set due date) and Support Cases (assign, change priority), with a 20-record limit, selection-only controls, responsive confirmation dialogs, and preserved filters, pagination and Saved Views.
+- Bulk mutations recheck effective-user permissions, scope, displayed versions and individual business rules inside atomic transactions, preserving per-record history, notifications and attribution. Added direct authorization/rollback and desktop/tablet/phone browser coverage. No migrations; deletion, archive, Case status and ambiguous sales/relationship changes are intentionally deferred. Existing Price Exception bulk administration is unchanged.
+
 - Added Role-Based Dashboard Polish v1 using shared widgets and centralized defaults for all six roles: personal Sales work, team manager summaries, Support intake/tasks/activity, Admin Data Quality and recorded job health, existing Marketing campaign/attribution content, and a concise Read Only overview.
 - Dashboard and customization now honor cross-section ordering; Tasks include overdue and next-seven-day follow-ups. Preserved permissions, Quick Actions, header Recent Items, real-identity My Day, and existing saved layout overrides. Added role, empty-state, impersonation and responsive coverage; no schema changes.
 
