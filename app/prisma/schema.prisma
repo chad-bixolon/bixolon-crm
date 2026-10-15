@@ -1944,6 +1944,8 @@ model Activity {
   subject       String
   description   String?
   direction     ActivityDirection @default(NA)
+  emailRecipientName String?       @db.VarChar(200)
+  emailRecipientEmail String?      @db.VarChar(254)
   outcome       String?
   nextStep      String?
   followUpDate  DateTime?

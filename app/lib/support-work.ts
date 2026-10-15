@@ -14,7 +14,7 @@ export function assertWorkPermission(actor: Actor, supportCaseId: number | null)
 
 export async function caseWorkContext(db: PrismaClient, actor: Actor, supportCaseId: number, accountId?: number | null, contactIds: number[] = [], allowHistorical = false) {
   if (!Number.isSafeInteger(supportCaseId) || supportCaseId < 1) throw new Error('Choose a valid Support Case.');
-  const row = await db.supportCase.findFirst({ where: { id: supportCaseId, ...supportCaseReadWhere(actor, allowHistorical) }, select: { id: true, caseNumber: true, subject: true, accountId: true, contactId: true, status: true, archivedAt: true, account: { select: { name: true } }, contact: { select: { firstName: true, lastName: true } } } });
+  const row = await db.supportCase.findFirst({ where: { id: supportCaseId, ...supportCaseReadWhere(actor, allowHistorical) }, select: { id: true, caseNumber: true, subject: true, accountId: true, contactId: true, status: true, archivedAt: true, account: { select: { name: true } }, contact: { select: { firstName: true, lastName: true, email: true, active: true, archivedAt: true, accountId: true } } } });
   if (!row) throw new Error('Support Case not found or unavailable.');
   if (!allowHistorical && (row.archivedAt || row.status === 'CLOSED')) throw new Error('Reopen or restore the Support Case before adding work.');
   if (accountId !== undefined && row.accountId !== accountId) throw new Error('Support Case Account does not match the selected Account.');

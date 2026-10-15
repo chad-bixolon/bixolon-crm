@@ -36,6 +36,20 @@ The migration adds nullable foreign keys and composite indexes for Activity `(su
 
 Read-only Gmail intake, email linking and selected attachment import are documented in [Support Email](support-email.md).
 
+## Log an outbound email response
+
+Gmail is the system of record for email. SalesHub is the system of record for the Support Case.
+
+On an open or Resolved Case, Support and Admin users can choose **Log Email Response** alongside the existing Case work actions. This records an email already sent outside SalesHub. The compact form fills in the Case, its Account and Contact context, the current user, and the current time in that user's time zone. Recipient defaults to an active Case Contact's valid email, then to the most recently linked inbound sender when safe. Missing addresses stay blank and editable; the Support mailbox is never suggested as the recipient. The subject comes from the linked email or Case subject, preserving an existing `Re:` prefix. Recipient name/email, subject, and sent time can be corrected before saving.
+
+Enter a short operational summary, such as “Sent firmware V1.36 and RFID setup guide; asked customer to retest.” Summary is required and limited to 2,000 characters. The five-line textarea grows with typing or pasting, supports vertical resizing, and scrolls at its height cap. This is an interaction log, not an email composer or a place to paste an email chain.
+
+The log reuses `Activity` with the existing `EMAIL` type and `OUTBOUND` direction. It stores recipient name/email snapshots, subject, sent time, summary, server-derived Case/Account/Contact relationships, and the authenticated user as responsible user and creator. A Contact relationship is added only when that active Case Contact matches the logged recipient. Cases without Accounts are supported. No separate outbound email table, email body field, or attachment copy is created. Closed or archived Cases must be reopened or restored before adding a log. Read Only and other roles without both Case write and work write permissions cannot log a response.
+
+The Case Timeline labels inbound and outbound email separately. An outbound entry shows the Support user → recipient, sent timestamp, short summary, subject, and recipient address. Notes, Tasks, and Case updates retain their own quiet labels. This action works independently of the Gmail integration setting. It does not send email, fetch Sent Mail, change OAuth scopes, create drafts, change labels or read state, mirror Gmail, or copy email attachments. If a file belongs permanently in the Case, add it through the existing Case attachment workflow.
+
+The additive `20261014170000_support_outbound_email_logging` migration adds two nullable recipient fields to Activity and permits a Case-only Activity parent. Apply it through the normal reviewed migration process before releasing this code; existing Activities and Activity types are preserved.
+
 Deferred: RMA; warranty validation; SLA; portal; knowledge base; external Support sync; CSAT; canned responses.
 
 ## Operational dashboard, report, and notifications

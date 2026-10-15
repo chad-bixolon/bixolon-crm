@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     ".next-e2e/**",
     ".playwright-browsers/**",
     ".playwright-deps/**",
+    // Git-ignored local recovery/validation artifacts, separate from app/reports routes.
+    "reports/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

@@ -5,6 +5,7 @@ export type CaseTimelineItem = {
   key: string; at: Date; source: 'Case' | 'Activity' | 'Task' | 'Note' | 'Attachment' | 'Email';
   title: string; detail?: string; fullBody?: string; summary?: { label: string; value: string }[];
   actor?: string; href?: string;
+  kind?: 'Inbound Email' | 'Outbound Email';
 };
 export type CaseHistoryView = { timeline: CaseTimelineItem[]; auditEvents: SupportHistoryEvent[]; auditTruncated: boolean };
 const LIMIT_PER_WORK_SOURCE = 40;
@@ -14,6 +15,23 @@ const LIMIT_INITIAL = 24;
 const activeStatuses = new Set(['NEW', 'OPEN', 'WAITING_ON_CUSTOMER', 'WAITING_ON_INTERNAL']);
 const actorName = (event: SupportHistoryEvent) => `${event.actor.firstName} ${event.actor.lastName}`;
 const preview = (value: string, length = 180) => value.length > length ? `${value.slice(0, length).trimEnd()}…` : value;
+
+type TimelineActivity = {
+  id: number; activityDate: Date; subject: string; description: string | null;
+  type?: string; direction?: string; emailRecipientName?: string | null; emailRecipientEmail?: string | null;
+  activityType: { name: string }; user: { firstName: string; lastName: string } | null;
+  contacts: { contact: { firstName: string; lastName: string } }[];
+};
+export function supportActivityTimelineItem(row: TimelineActivity): CaseTimelineItem {
+  const actor = row.user ? `${row.user.firstName} ${row.user.lastName}` : undefined;
+  const contacts = row.contacts.map(link => `${link.contact.firstName} ${link.contact.lastName}`).join(', ');
+  if (row.type === 'EMAIL' && row.direction === 'OUTBOUND') {
+    const recipient = row.emailRecipientName || contacts || row.emailRecipientEmail;
+    return { key: `activity-${row.id}`, at: row.activityDate, source: 'Activity', kind: 'Outbound Email', title: 'Outbound Email', actor: [actor, recipient].filter(Boolean).join(' → '), detail: row.description ? row.emailRecipientEmail ? row.description : preview(row.description, 240) : undefined, href: row.emailRecipientEmail ? undefined : `/activities/${row.id}/edit`,
+      summary: [{ label: 'Subject', value: row.subject }, ...(row.emailRecipientEmail ? [{ label: 'To', value: row.emailRecipientEmail }] : [])] };
+  }
+  return { key: `activity-${row.id}`, at: row.activityDate, source: 'Activity', title: `${row.activityType.name} logged`, detail: [row.subject, row.description && preview(row.description, 240), contacts].filter(Boolean).join(' · '), actor, href: `/activities/${row.id}/edit`, ...(row.type === 'EMAIL' && row.direction === 'INBOUND' ? { kind: 'Inbound Email' as const } : {}) };
+}
 
 function creationSummary(fields: readonly SupportHistoryEvent[], zone: string) {
   const get = (field: string) => fields.find(item => item.field === field);
@@ -86,7 +104,7 @@ export async function caseHistoryView(db: PrismaClient, caseId: number, createdA
   const initial = auditEvents.some(event => event.field === 'CREATED') ? [] : await db.supportCaseLifecycleEvent.findMany({ where: { supportCaseId: caseId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: LIMIT_INITIAL, include: { actor: { select: { firstName: true, lastName: true } } } });
   const lifecycle = [...new Map([...initial, ...auditEvents].map(event => [event.id, event])).values()].sort((a, b) => a.id - b.id);
   const operational = classifySupportLifecycle(lifecycle, createdAt, zone);
-  const activityItems: CaseTimelineItem[] = activities.map(row => ({ key: `activity-${row.id}`, at: row.activityDate, source: 'Activity', title: `${row.activityType.name} logged`, detail: [row.subject, row.description && preview(row.description, 240), row.contacts.map(link => `${link.contact.firstName} ${link.contact.lastName}`).join(', ')].filter(Boolean).join(' · '), actor: row.user ? `${row.user.firstName} ${row.user.lastName}` : undefined, href: `/activities/${row.id}/edit` }));
+  const activityItems: CaseTimelineItem[] = activities.map(supportActivityTimelineItem);
   const taskItems: CaseTimelineItem[] = tasks.flatMap(row => {
     const detail = [row.subject, row.dueDate ? `Due ${row.dueDate.toISOString().slice(0, 10)}` : null, row.assignedTo ? `Assigned to ${row.assignedTo.firstName} ${row.assignedTo.lastName}` : null].filter(Boolean).join(' · ');
     return [{ key: `task-created-${row.id}`, at: row.createdAt, source: 'Task', title: 'Task created', detail, href: `/tasks/${row.id}` }, ...(row.completedAt ? [{ key: `task-completed-${row.id}`, at: row.completedAt, source: 'Task' as const, title: 'Task completed', detail: row.subject, href: `/tasks/${row.id}` }] : [])];
@@ -97,7 +115,7 @@ export async function caseHistoryView(db: PrismaClient, caseId: number, createdA
     ...(row.deletedAt && row.deletedBy ? [{ key: `attachment-removed-${row.id}`, at: row.deletedAt, source: 'Attachment' as const, title: 'Attachment removed', detail: row.originalFileName, actor: `${row.deletedBy.firstName} ${row.deletedBy.lastName}` }] : []),
   ]);
   const origin = lifecycle.find(event => event.field === 'CREATED' && event.source.startsWith('EMAIL_ORIGIN:'))?.source.slice('EMAIL_ORIGIN:'.length);
-  const emailItems: CaseTimelineItem[] = emails.map(row => ({ key: `email-${row.id}`, at: row.messageDate, source: 'Email', title: `${origin === row.gmailMessageId ? 'Case originated from email' : 'Email received'} · ${row.subject}`, detail: `${row.senderEmail} · ${preview(row.bodyText || row.subject, 240)}`, fullBody: row.bodyText }));
+  const emailItems: CaseTimelineItem[] = emails.map(row => ({ key: `email-${row.id}`, at: row.messageDate, source: 'Email', kind: 'Inbound Email', title: `${origin === row.gmailMessageId ? 'Case originated from email' : 'Email received'} · ${row.subject}`, detail: `${row.senderEmail} · ${preview(row.bodyText || row.subject, 240)}`, fullBody: row.bodyText }));
   const created = operational.find(item => item.title === 'Case created');
   const sorted = [...operational.filter(item => item !== created), ...activityItems, ...taskItems, ...noteItems, ...attachmentItems, ...emailItems].sort((a, b) => b.at.getTime() - a.at.getTime() || b.key.localeCompare(a.key));
   return { timeline: [...sorted.slice(0, LIMIT_TIMELINE - (created ? 1 : 0)), ...(created ? [created] : [])], auditEvents, auditTruncated: recent.length > LIMIT_AUDIT };
