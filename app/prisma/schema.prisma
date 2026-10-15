@@ -964,6 +964,7 @@ model OpportunitySnapshotRun {
   scopeVersion     String   @default("OPEN_OPERATIONAL_V1") @db.VarChar(32)
   createdAt        DateTime @default(now())
   snapshots        OpportunitySnapshot[]
+  forecastRuns     ForecastSnapshotRun[]
 
   @@index([snapshotAt, id])
 }
@@ -980,6 +981,8 @@ model OpportunitySnapshot {
   accounts             Json
   ownerId              Int?
   ownerName            String?
+  /// Null for older open-only snapshots; captured eligibility for forecast-ready runs.
+  ownerForecastEligible Boolean?
   stageId              Int
   stageName            String
   amount               Decimal @db.Decimal(18, 2)
@@ -998,6 +1001,47 @@ model OpportunitySnapshot {
   @@index([stageId, runId])
   @@index([snapshotAt])
   @@index([accountIds], type: Gin)
+  @@index([runId, expectedCloseDate, currencyCode, forecastCategory], map: "OpportunitySnapshot_runId_close_currency_category_idx")
+}
+
+/// Source-linked immutable forecast history. Separate from legacy ForecastSnapshot.
+model ForecastSnapshotRun {
+  id                    Int @id @default(autoincrement())
+  sourceRunId           Int
+  sourceRun             OpportunitySnapshotRun @relation(fields: [sourceRunId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  snapshotAt            DateTime
+  createdAt             DateTime @default(now())
+  createdById           Int
+  createdByName         String
+  year                  Int
+  quarter               SalesQuarter
+  opportunityCount      Int
+  salespersonCount      Int
+  rowCount              Int
+  status                String @default("COMPLETE") @db.VarChar(16)
+  rulesVersion          String @default("QUARTERLY_V1") @db.VarChar(32)
+  rows                  ForecastSnapshotRollup[]
+
+  @@unique([sourceRunId, year, quarter])
+  @@index([year, quarter, snapshotAt])
+  @@index([snapshotAt, id])
+}
+
+model ForecastSnapshotRollup {
+  id                    Int @id @default(autoincrement())
+  runId                 Int
+  run                   ForecastSnapshotRun @relation(fields: [runId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  ownerId               Int
+  ownerName             String
+  currencyCode          String @db.Char(3)
+  forecastCategory      ForecastCategory
+  categoryName          String
+  amount                Decimal @db.Decimal(18, 2)
+  opportunityCount      Int
+
+  @@unique([runId, ownerId, currencyCode, forecastCategory], map: "ForecastSnapshotRollup_group_key")
+  @@index([ownerId, runId])
+  @@index([currencyCode, forecastCategory, runId])
 }
 
 model OpportunityHistoryEvent {

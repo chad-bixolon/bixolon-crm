@@ -12,6 +12,11 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added immutable source-linked Forecast Snapshot runs and owner/currency/category rollups with forward-only migration, duplicate protection, atomic completeness checks and exact source validation. Migration: `20261015160000_forecast_snapshot_runs`.
+- Added explicit forecast-ready scope to the shared Opportunity Snapshot capture service, preserving open/Closed Won status and point-in-time owner eligibility without changing default open-only or live forecast behavior.
+- Added Admin preview/confirmation and Admin/Sales Manager Forecast Snapshot History with quarterly comparisons, salesperson history, currency separation, safe percentage math and drill-through to the shared Opportunity Snapshot comparison.
+- Documented inclusive Pipeline semantics, Expected Close Date period rules, Closed Won limitations, storage estimates, future accuracy reporting and shared-service weekly automation. No schedule, FX, backfill or production migration added.
+
 - Added Opportunity Snapshots v1: immutable weekly run/row models, atomic Admin preview/confirmation with stale-preview and duplicate-week protection, and preserved Opportunity, Account, owner, stage, value, probability and forecast context. Forward-only migration: `20261015120000_opportunity_snapshots`.
 - Added Admin/Sales Manager Opportunity Snapshot History comparisons with historical filters, currency-separated pipeline totals, bounded server pagination, and compact owner-scoped detail history. Open operational scope, neutral entry/exit interpretation, storage estimate, and deferred automation are documented in `docs/opportunity-snapshots.md`. No scheduler or live Opportunity save changes.
 

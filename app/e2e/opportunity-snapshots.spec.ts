@@ -42,7 +42,7 @@ test.beforeAll(async () => {
   const project = await db.project.create({ data: { name: `${tag} Archived Project`, primaryAccountRole: 'END_CUSTOMER', createdById: admin.id, archivedAt: new Date() } });
   inactiveProjectId = (await create('Archived Project', { name: `${tag} Archived Project`, stageId, projects: { create: { projectId: project.id } } })).id;
 
-  oldSnapshot = { opportunityId: movingId, opportunityName: `${tag} Moving`, accountIds: [accountId], accounts: [{ id: accountId, name: `${tag} Account` }], ownerId: repId, ownerName: 'Original Rep', stageId, stageName: 'Qualification', amount: new Prisma.Decimal('59.85'), currencyCode: 'USD', expectedCloseDate: new Date('2026-11-01T12:00:00Z'), probability: 20, probabilityOverride: null, stageProbability: 20, forecastCategory: 'PIPELINE', status: 'OPEN', productCount: 1 };
+  oldSnapshot = { opportunityId: movingId, opportunityName: `${tag} Moving`, accountIds: [accountId], accounts: [{ id: accountId, name: `${tag} Account` }], ownerId: repId, ownerName: 'Original Rep', ownerForecastEligible: null, stageId, stageName: 'Qualification', amount: new Prisma.Decimal('59.85'), currencyCode: 'USD', expectedCloseDate: new Date('2026-11-01T12:00:00Z'), probability: 20, probabilityOverride: null, stageProbability: 20, forecastCategory: 'PIPELINE', status: 'OPEN', productCount: 1 };
   const count = await db.opportunitySnapshotRun.count();
   const earlier = new Date(Date.UTC(2000, 0, 3 + count * 14)), later = new Date(earlier.getTime() + 7 * 86400000);
   async function historicalRun(at: Date, rows: typeof oldSnapshot[]) {

@@ -16,5 +16,5 @@ export function verifySnapshotPreview(token: string, actorId: number, secret: st
   if (!payload || !supplied || extra || supplied.length !== expected.length || !timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) throw new Error('Invalid snapshot preview.');
   const value = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
   if (value.actorId !== actorId || typeof value.preparedAt !== 'string' || typeof value.week !== 'string' || !Number.isSafeInteger(value.count) || value.count < 0 || typeof value.fingerprint !== 'string') throw new Error('Invalid snapshot preview.');
-  return { preparedAt: value.preparedAt, week: value.week, count: value.count, fingerprint: value.fingerprint };
+  return { preparedAt: value.preparedAt, week: value.week, count: value.count, fingerprint: value.fingerprint, ...(value.forecastReady !== undefined ? { forecastReady: value.forecastReady === true } : {}) };
 }

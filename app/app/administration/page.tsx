@@ -32,6 +32,7 @@ const groups = [
     ["System Health", "/administration/system-health", "Review database, object storage, and scheduled job status."],
     ["System Settings", "/administration/settings", "Set safe reporting and warning defaults."],
     ["Opportunity & Forecast History", "/administration/history", "Capture weekly forecast snapshots and archive eligible history."],
+    ["Forecast Snapshots", "/administration/forecast-snapshots", "Preview and confirm quarterly rollups from Opportunity Snapshot runs."],
     ["Opportunity Snapshots", "/administration/opportunity-snapshots", "Preview and confirm immutable weekly Opportunity snapshot sets."],
   ] },
 ] as const;

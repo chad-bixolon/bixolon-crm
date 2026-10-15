@@ -10,7 +10,11 @@ Events preserve the effective actor ID and display name, Opportunity name, first
 
 Current stage age starts at the latest stage-change or initial baseline event. Existing Opportunities without a stage event show unknown age; updatedAt is never used as a substitute. Close-date movement is recorded as old/new dates. Quarter and year movement can be derived from those dates; no historical dates are fabricated.
 
-## Forecast snapshots
+## Source-linked Forecast Snapshots
+
+The new Forecast Snapshot History report derives immutable quarterly rollups from forecast-ready Opportunity Snapshot runs. It preserves source linkage, owner eligibility and Closed Won outcomes by Expected Close Date. See [Forecast Snapshots v1](../../docs/forecast-snapshots.md). The legacy feature described below remains unchanged and is not used as the source for this report.
+
+## Legacy forecast snapshots
 
 The Admin Opportunity History page captures a New York calendar week (Monday start) for a selected year, quarter, and currency. One row per active sales rep and scope is stored; the unique key prevents duplicate weekly captures. Capture invokes `forecastForRep`, the same service as the current forecast report, and stores Pipeline, Weighted Pipeline, Best Case, Commit, target, and target status as decimals. The first capture is the first baseline. Historical weeks before capture are unavailable. The Admin operation should be run once a week until a scheduler is established; there is no implicit cron dependency. Weekly snapshots freeze the first capture and do not overwrite it on retry.
 

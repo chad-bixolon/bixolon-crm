@@ -7,6 +7,8 @@ import { currentUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { canReadOpportunitySnapshots, compareSnapshotRuns, snapshotAccounts } from '@/lib/opportunity-snapshots';
 import { formatCurrency } from '@/lib/display-format';
+import { quarters } from '@/lib/business-quarter';
+import type { SalesQuarter } from '@prisma/client';
 import { forecastLabels } from '@/lib/crm-validation';
 
 export const dynamic = 'force-dynamic';
@@ -22,10 +24,12 @@ function dateParam(value: string | string[] | undefined) {
 function SnapshotValues({ row }: { row: OpportunitySnapshot | null }) {
   if (!row) return <span className="text-slate-500">Outside snapshot set</span>;
   return <dl className="space-y-1">
+    <div><dt className="inline text-slate-500">Status: </dt><dd className="inline">{row.status}</dd></div>
     <div><dt className="inline text-slate-500">Stage: </dt><dd className="inline">{row.stageName}</dd></div>
     <div><dt className="inline text-slate-500">Value: </dt><dd className="inline">{formatCurrency(row.amount, row.currencyCode)} {row.currencyCode}</dd></div>
     <div><dt className="inline text-slate-500">Close: </dt><dd className="inline">{row.expectedCloseDate?.toISOString().slice(0, 10) ?? '—'}</dd></div>
     <div><dt className="inline text-slate-500">Owner: </dt><dd className="inline">{row.ownerName ?? 'Unassigned'}</dd></div>
+    {row.ownerForecastEligible != null && <div><dt className="inline text-slate-500">Forecast owner: </dt><dd className="inline">{row.ownerForecastEligible ? 'Eligible at capture' : 'Ineligible at capture'}</dd></div>}
     <div><dt className="inline text-slate-500">Forecast: </dt><dd className="inline">{forecastLabels[row.forecastCategory]}</dd></div>
     <div><dt className="inline text-slate-500">Probability: </dt><dd className="inline">{row.probability}%</dd></div>
     <div><dt className="inline text-slate-500">Accounts: </dt><dd className="inline">{snapshotAccounts(row.accounts).map(a => a.name).join(' · ') || 'None'}</dd></div>
@@ -46,7 +50,9 @@ export default async function OpportunitySnapshotsPage({ searchParams }: { searc
   const extraIds = [beforeId, afterId].filter((id): id is number => !!id && !runs.some(run => run.id === id));
   const extraRuns = extraIds.length ? await prisma.opportunitySnapshotRun.findMany({ where: { id: { in: extraIds } }, take: 2 }) : [];
   const options = [...runs, ...extraRuns];
-  const filters = { ownerId: idParam(params.ownerId), stageId: idParam(params.stageId), accountId: idParam(params.accountId), opportunityId: idParam(params.opportunityId), page: idParam(params.page) };
+  const year = Number(scalar(params.year)), quarter = scalar(params.quarter) as SalesQuarter;
+  const forecastPeriod = Number.isInteger(year) && year >= 2000 && year <= 2100 && quarters.includes(quarter) ? { year, quarter } : undefined;
+  const filters = { forecastPeriod, currencyCode: scalar(params.currencyCode), category: scalar(params.category), ownerId: idParam(params.ownerId), stageId: idParam(params.stageId), accountId: idParam(params.accountId), opportunityId: idParam(params.opportunityId), page: idParam(params.page) };
   const selectedRuns = [beforeId, afterId].filter((id): id is number => !!id);
   const [owners, stages, accounts] = selectedRuns.length ? await Promise.all([
     prisma.$queryRaw<{ id: number; name: string }[]>(Prisma.sql`SELECT "ownerId" AS id, min("ownerName") AS name FROM "OpportunitySnapshot" WHERE "runId" IN (${Prisma.join(selectedRuns)}) AND "ownerId" IS NOT NULL GROUP BY "ownerId" ORDER BY name LIMIT 201`),
@@ -73,15 +79,19 @@ export default async function OpportunitySnapshotsPage({ searchParams }: { searc
       <label className="text-sm">Run date through (UTC)<input className="field mt-1" type="date" name="through" defaultValue={through?.toISOString().slice(0, 10)}/></label>
       {([['before', 'Earlier run', beforeId], ['after', 'Later run', afterId]] as const).map(([name, label, selected]) => <label className="min-w-0 text-sm" key={name}>{label}<select className="field mt-1 w-full" name={name} defaultValue={selected ?? ''}><option value="">Choose a run</option>{options.map(run => <option key={run.id} value={run.id}>#{run.id} · {run.snapshotAt.toISOString()} · {run.opportunityCount} deals</option>)}</select></label>)}
       {([['ownerId', 'Salesperson', owners], ['stageId', 'Stage', stages], ['accountId', 'Account', accounts]] as const).map(([name, label, values]) => <label className="min-w-0 text-sm" key={name}>{label}<select className="field mt-1 w-full" name={name} defaultValue={scalar(params[name]) ?? ''}><option value="">All</option>{values.map(value => <option key={value.id} value={value.id}>{value.name}</option>)}</select></label>)}
+      {forecastPeriod && <><input type="hidden" name="year" value={forecastPeriod.year}/><input type="hidden" name="quarter" value={forecastPeriod.quarter}/></>}
+      {filters.currencyCode && <input type="hidden" name="currencyCode" value={filters.currencyCode}/>}
+      {filters.category && <input type="hidden" name="category" value={filters.category}/>}
       {filters.opportunityId && <input type="hidden" name="opportunityId" value={filters.opportunityId}/>}
       <div className="flex flex-wrap items-end gap-3"><button className="btn-primary">Compare snapshots</button><Link className="text-sm text-orange-800 underline" href="/reports/opportunity-snapshots">Reset</Link></div>
     </form>
     <p className="mb-4 text-sm text-slate-600">Filters match either endpoint; both historical values remain visible. Up to 50 Opportunities per page. Run choices show up to 104 runs in the UTC date window. {Math.max(owners.length, stages.length, accounts.length) > 200 && 'Filter choices are limited to the first 201 historical names.'}</p>
-    <p className="panel mb-5 p-4 text-sm">Scope: open, operational Opportunities only. A missing row means the Opportunity left this snapshot scope. Closure, archival, or an Account/Project becoming inactive may cause an exit; the reason is not recorded. Entries may be new or returning. Forecast category movement does not by itself establish entry to or exit from a particular quarterly forecast.</p>
+    {forecastPeriod && <p className="panel mb-5 p-4 text-sm">Forecast drill-through: {forecastPeriod.year} {forecastPeriod.quarter} · {filters.currencyCode ?? 'all currencies'} · {filters.category ?? 'open + won'}. Filters match the selected forecast slice at either endpoint; both deal snapshots remain visible. Pipeline includes Pipeline, Best Case and Commit. <Link className="underline" href={`/reports/forecast-snapshots?year=${forecastPeriod.year}&quarter=${forecastPeriod.quarter}`}>Forecast Snapshot History</Link></p>}
+    <p className="panel mb-5 p-4 text-sm">Scope is preserved on each run: open-only or forecast-ready (open + Closed Won). A missing row means the Opportunity left this snapshot scope. Loss, archival, or an Account/Project becoming inactive may cause an exit; the reason is not recorded. Entries may be new or returning. Forecast membership explanations appear when a forecast period is selected.</p>
     {error && <p className="panel mb-5 p-4 text-red-700" role="alert">{error}</p>}
     {!result && !error && <p className="panel p-5">{runs.length < 2 ? 'Capture two different weekly runs to compare Opportunity history. Snapshots cannot reconstruct dates before the first capture.' : 'Choose two snapshot runs to compare.'}</p>}
     {result && <>
-      <section className="panel mb-5 p-5"><h2 className="mb-3 font-semibold">Pipeline at each snapshot</h2><p className="mb-3 text-sm text-slate-600">Totals cover all Opportunities matching either endpoint, across all pages. Currencies remain separate.</p><ul className="space-y-2 text-sm">{result.totals.map(total => <li key={`${total.runId}-${total.currencyCode}`}>Run #{total.runId} · {total.currencyCode} · {String(total.count)} Opportunities · {formatCurrency(total.amount, total.currencyCode)}</li>)}</ul>{!result.totals.length && <p className="text-sm">No matching Opportunities.</p>}</section>
+      <section className="panel mb-5 p-5"><h2 className="mb-3 font-semibold">{forecastPeriod ? 'Underlying Opportunity values at each snapshot' : 'Pipeline at each snapshot'}</h2><p className="mb-3 text-sm text-slate-600">Totals cover all Opportunities matching either endpoint, across all pages. Currencies remain separate. {forecastPeriod && 'Both captured deal values are retained, including values outside the selected forecast slice. These cohort totals can differ from the forecast rollup.'}</p><ul className="space-y-2 text-sm">{result.totals.map(total => <li key={`${total.runId}-${total.currencyCode}`}>Run #{total.runId} · {total.currencyCode} · {String(total.count)} Opportunities · {formatCurrency(total.amount, total.currencyCode)}</li>)}</ul>{!result.totals.length && <p className="text-sm">No matching Opportunities.</p>}</section>
       <section className="panel min-w-0 overflow-x-auto" aria-label="Snapshot comparison"><table className="w-full min-w-[860px] table-fixed text-left text-sm"><thead className="border-b bg-slate-50"><tr><th className="w-[20%] p-4">Opportunity</th><th className="w-[24%] p-4">Movement</th><th className="w-[28%] p-4">Earlier · #{result.before.id}<span className="block text-xs font-normal">{result.before.snapshotAt.toISOString()}</span></th><th className="w-[28%] p-4">Later · #{result.after.id}<span className="block text-xs font-normal">{result.after.snapshotAt.toISOString()}</span></th></tr></thead><tbody className="divide-y">{result.rows.map(row => <tr className="align-top" key={row.opportunityId}><td className="break-words p-4"><Link className="text-orange-800 underline" href={`/opportunities/${row.opportunityId}`}>{row.after?.opportunityName ?? row.before?.opportunityName}</Link></td><td className="p-4"><ul className="space-y-2">{row.changes.map(change => <li key={change}>{change}</li>)}</ul></td><td className="break-words p-4"><SnapshotValues row={row.before}/></td><td className="break-words p-4"><SnapshotValues row={row.after}/></td></tr>)}</tbody></table>{!result.rows.length && <p className="p-5 text-sm">No matching Opportunities.</p>}</section>
       <nav className="mt-4 flex gap-4 text-sm" aria-label="Snapshot report pages">{result.page > 1 && <Link className="text-orange-800 underline" href={pageHref(result.page - 1)}>Previous</Link>}<span>Page {result.page}</span>{result.hasMore && <Link className="text-orange-800 underline" href={pageHref(result.page + 1)}>Next</Link>}</nav>
     </>}

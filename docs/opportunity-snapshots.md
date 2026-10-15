@@ -28,6 +28,12 @@ IDs describing historical live entities deliberately have no foreign keys to mut
 
 Existing `OpportunityHistoryEvent` and its archive record selected changes and baselines. `ForecastSnapshot` and its archive preserve weekly **aggregate** rep/quarter/currency metrics. Dashboard forecast movement and existing forecast reports use those structures. They cannot reconstruct complete Opportunity-level sets at arbitrary past dates, and are unchanged by this implementation. Snapshot history starts with the first manual capture; there is no backfill or invented prehistory.
 
+## Forecast-ready extension
+
+Forecast Snapshots v1 adds an explicit forecast-ready option to this same shared capture service. The default open-only rules below remain available. Forecast-ready scope (`FORECAST_OPERATIONAL_V1`) captures open plus Closed Won Opportunities with the same operational filters and freezes `ownerForecastEligible` for every row. Closed Won uses stage status, and Expected Close Date assigns its forecast quarter. One run per week still applies across both scopes; choose the scope before capture. Older runs are immutable and cannot supply the missing eligibility/outcomes. Source-linked `ForecastSnapshotRun` / `ForecastSnapshotRollup` records derive only from compatible forecast-ready runs. See [Forecast Snapshots](forecast-snapshots.md) for exact category/period/currency rules, manual confirmation, permissions, drill-through, storage and accuracy limitations. The legacy aggregate `ForecastSnapshot` table remains unchanged.
+
+The Opportunity comparison now also shows captured status/owner-eligibility changes and accepts period, currency and forecast-category drill-through filters. Those filters match either endpoint and preserve both values; absent endpoints still have unknown scope exit reasons.
+
 ## Exact inclusion rules
 
 Scope version: `OPEN_OPERATIONAL_V1`.
@@ -76,7 +82,7 @@ Interpretation:
 
 Read-only production inventory on October 15, 2026: **7 total Opportunities, 6 eligible open, 1 archived**. At a steady six eligible deals, 52 weekly captures produce **312 snapshot rows and 52 run rows per year**. General growth is `52 × average eligible open Opportunity count`; 1,000 open deals means 52,000 rows/year. Display-name lengths and Account participant counts affect byte size; this is a row estimate, not a measured disk budget. No notes, descriptions, attachments, product rows, pricing provenance, contacts or large texts are copied.
 
-Deferred: automatic scheduling; intentional revisions/reruns; retention/export; recently closed sets and precise exit reasons; primary Account; realized revenue; actual closing date; detailed product snapshots; period-aware forecast entry/exit classification. There is no automatic retention deletion.
+Deferred: automatic scheduling; intentional revisions/reruns; retention/export; Closed Lost capture and precise exit reasons; primary Account; realized revenue; actual closing date; detailed product snapshots. The forecast-ready extension supplies Closed Won capture and period-aware entry/exit labels; missing source endpoints still have unknown reasons. There is no automatic retention deletion.
 
 To enable weekly automation later, choose a documented New York weekly capture time, establish an active authorized service identity, and call the same `previewOpportunitySnapshot` / `captureOpportunitySnapshot` service. An automated caller may pass its trusted in-process preview without a browser token, but must explicitly authorize the scheduled capture, re-preview if data changed, handle weekly uniqueness as an idempotent outcome, and alert on failure or missed runs. Introduce explicit scheduled-source attribution and operational job logging as part of that change. Keep the same database transaction, limits, immutable tables, scope version and concurrency protections. Do not introduce scheduling through an HTTP GET or a user page visit.
 

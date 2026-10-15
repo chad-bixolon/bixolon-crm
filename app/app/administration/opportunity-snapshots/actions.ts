@@ -10,12 +10,12 @@ function safeMessage(error: unknown) {
   return /^(This week already|Snapshot exceeds|Explicit confirmation|Preview expired|Snapshot week changed|Opportunity data changed|Invalid snapshot preview)/.test(message)
     ? message : 'Could not capture the snapshot. No partial run was saved. Try again.';
 }
-export async function previewSnapshotAction() {
+export async function previewSnapshotAction(forecastReady = false) {
   const actor = await requireMutation('users.manage');
   assertSnapshotAdmin(actor);
   try {
-    const preview = await previewOpportunitySnapshot(prisma, actor);
-    return { preview: { preparedAt: preview.preparedAt, week: preview.week, count: preview.count, token: signSnapshotPreview(preview, actor.id, process.env.AUTH_SECRET ?? '') } };
+    const preview = await previewOpportunitySnapshot(prisma, actor, forecastReady);
+    return { preview: { preparedAt: preview.preparedAt, week: preview.week, count: preview.count, forecastReady: preview.forecastReady, token: signSnapshotPreview(preview, actor.id, process.env.AUTH_SECRET ?? '') } };
   } catch (error) { return { error: safeMessage(error) }; }
 }
 export async function confirmSnapshotAction(token: string, confirmed: boolean) {

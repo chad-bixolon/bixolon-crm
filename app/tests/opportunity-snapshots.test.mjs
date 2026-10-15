@@ -124,3 +124,22 @@ test('live detail survives a pending snapshot rollout while unexpected storage e
   client.opportunitySnapshot.findMany = async () => { throw new Error('unexpected database error'); };
   await assert.rejects(snapshots.opportunitySnapshotHistory(client, actor(), 1), /unexpected database error/);
 });
+
+
+test('forecast-ready source capture freezes owner eligibility and includes won-stage status', async () => {
+  const f = fake(); Object.assign(f.live.owner, { role: 'SALES_MANAGER', active: true, archivedAt: null });
+  f.live.stage.isClosed = true; f.live.stage.isWon = true; f.live.forecastCategory = 'CLOSED';
+  const preview = await snapshots.previewOpportunitySnapshot(f.client, actor(), true);
+  const run = await snapshots.captureOpportunitySnapshot(f.client, actor(), preview, true);
+  assert.equal(run.scopeVersion, snapshots.FORECAST_SNAPSHOT_SCOPE);
+  assert.equal(f.rows[0].status, 'WON'); assert.equal(f.rows[0].ownerForecastEligible, true);
+  assert.deepEqual(f.queries[0].where, snapshots.forecastSnapshotWhere);
+  f.live.owner.active = false;
+  assert.equal(f.rows[0].ownerForecastEligible, true);
+});
+test('owner eligibility changes after preview require another source preview', async () => {
+  const f = fake(); Object.assign(f.live.owner, { role: 'SALES', active: true, archivedAt: null });
+  const preview = await snapshots.previewOpportunitySnapshot(f.client, actor(), true);
+  f.live.owner.active = false;
+  await assert.rejects(snapshots.captureOpportunitySnapshot(f.client, actor(), preview, true), /data changed/);
+});

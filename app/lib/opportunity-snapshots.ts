@@ -2,8 +2,14 @@ import { createHash } from 'node:crypto';
 import { Prisma, type PrismaClient, type OpportunitySnapshot } from '@prisma/client';
 import { can, opportunityScope, type Actor } from './authorization';
 import { operationalOpportunityWhere } from './operational-where';
+import { quarterBounds } from './business-quarter';
+import { inSnapshotForecast, type ForecastPeriod } from './forecast-snapshot-rules';
 
 export const SNAPSHOT_SCOPE = 'OPEN_OPERATIONAL_V1';
+export const FORECAST_SNAPSHOT_SCOPE = 'FORECAST_OPERATIONAL_V1';
+export const forecastSnapshotWhere: Prisma.OpportunityWhereInput = {
+  AND: [operationalOpportunityWhere, { OR: [{ stage: { isClosed: false } }, { stage: { isClosed: true, isWon: true } }] }],
+};
 export const SNAPSHOT_LIMIT = 10000;
 export const snapshotWhere: Prisma.OpportunityWhereInput = {
   AND: [operationalOpportunityWhere, { stage: { isClosed: false } }],
@@ -22,13 +28,13 @@ export function snapshotWeek(at: Date) {
   return day;
 }
 
-async function readSnapshotSet(tx: Prisma.TransactionClient) {
+async function readSnapshotSet(tx: Prisma.TransactionClient, forecastReady = false) {
   const rows = await tx.opportunity.findMany({
-    where: snapshotWhere, orderBy: { id: 'asc' }, take: SNAPSHOT_LIMIT + 1,
+    where: forecastReady ? forecastSnapshotWhere : snapshotWhere, orderBy: { id: 'asc' }, take: SNAPSHOT_LIMIT + 1,
     select: {
       id: true, name: true, ownerId: true, stageId: true, currencyCode: true,
       expectedCloseDate: true, probability: true, forecastCategory: true,
-      owner: { select: { firstName: true, lastName: true } },
+      owner: { select: { firstName: true, lastName: true, role: true, active: true, archivedAt: true } },
       stage: { select: { name: true, probability: true, isClosed: true, isWon: true } },
       participants: { orderBy: { accountId: 'asc' }, select: { accountId: true, account: { select: { name: true } } } },
       products: { where: { archivedAt: null }, select: { quantity: true, estimatedUnitPrice: true } },
@@ -40,6 +46,7 @@ async function readSnapshotSet(tx: Prisma.TransactionClient) {
     accountIds: row.participants.map(p => p.accountId),
     accounts: row.participants.map(p => ({ id: p.accountId, name: p.account.name })),
     ownerId: row.ownerId, ownerName: row.owner ? `${row.owner.firstName} ${row.owner.lastName}` : null,
+    ownerForecastEligible: forecastReady ? !!(row.owner && row.owner.active && !row.owner.archivedAt && ['SALES', 'SALES_MANAGER'].includes(row.owner.role)) : null,
     stageId: row.stageId, stageName: row.stage.name,
     amount: row.products.reduce((sum, line) => sum.add(line.estimatedUnitPrice.mul(line.quantity)), new Prisma.Decimal(0)).toFixed(2),
     currencyCode: row.currencyCode, expectedCloseDate: row.expectedCloseDate,
@@ -53,16 +60,16 @@ async function readSnapshotSet(tx: Prisma.TransactionClient) {
 function fingerprint(rows: Awaited<ReturnType<typeof readSnapshotSet>>) {
   return createHash('sha256').update(JSON.stringify(rows)).digest('hex');
 }
-export type SnapshotPreview = { preparedAt: string; week: string; count: number; fingerprint: string };
+export type SnapshotPreview = { preparedAt: string; week: string; count: number; fingerprint: string; forecastReady?: boolean };
 
-export async function previewOpportunitySnapshot(client: PrismaClient, actor: Actor): Promise<SnapshotPreview> {
+export async function previewOpportunitySnapshot(client: PrismaClient, actor: Actor, forecastReady = false): Promise<SnapshotPreview> {
   assertSnapshotAdmin(actor);
   return client.$transaction(async tx => {
     const [{ at }] = await tx.$queryRaw<{ at: Date }[]>`SELECT transaction_timestamp() AS at`;
     const week = snapshotWeek(at);
     if (await tx.opportunitySnapshotRun.findUnique({ where: { snapshotWeek: week }, select: { id: true } })) throw new Error('This week already has an immutable snapshot run. Reruns are disabled in v1.');
-    const rows = await readSnapshotSet(tx);
-    return { preparedAt: at.toISOString(), week: week.toISOString().slice(0, 10), count: rows.length, fingerprint: fingerprint(rows) };
+    const rows = await readSnapshotSet(tx, forecastReady);
+    return { preparedAt: at.toISOString(), week: week.toISOString().slice(0, 10), count: rows.length, fingerprint: fingerprint(rows), forecastReady };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 60000 });
 }
 
@@ -78,13 +85,13 @@ export async function captureOpportunitySnapshot(client: PrismaClient, actor: Ac
       const [{ at }] = await tx.$queryRaw<{ at: Date }[]>`SELECT transaction_timestamp() AS at`;
       const week = snapshotWeek(at);
       if (week.toISOString().slice(0, 10) !== preview.week) throw new Error('Snapshot week changed. Preview again.');
-      const rows = await readSnapshotSet(tx);
+      const rows = await readSnapshotSet(tx, preview.forecastReady === true);
       if (rows.length !== preview.count || fingerprint(rows) !== preview.fingerprint) throw new Error('Opportunity data changed. Preview again before confirming.');
       const user = await tx.user.findUniqueOrThrow({ where: { id: actor.id }, select: { firstName: true, lastName: true } });
       const run = await tx.opportunitySnapshotRun.create({ data: {
         snapshotAt: at, snapshotWeek: week, createdById: actor.id,
         createdByName: `${user.firstName} ${user.lastName}`, opportunityCount: rows.length,
-        scopeVersion: SNAPSHOT_SCOPE,
+        scopeVersion: preview.forecastReady ? FORECAST_SNAPSHOT_SCOPE : SNAPSHOT_SCOPE,
       } });
       // Bounded inserts avoid parameter limits without changing the point-in-time read.
       for (let offset = 0; offset < rows.length; offset += 500) {
@@ -118,11 +125,13 @@ export function compareOpportunitySnapshots(before: OpportunitySnapshot | null, 
   }
   if (before.ownerId !== after.ownerId) changes.push('Owner changed');
   if (before.forecastCategory !== after.forecastCategory) changes.push('Forecast category changed');
+  if (before.status !== after.status) changes.push(`Status changed: ${before.status} → ${after.status}`);
+  if (before.ownerForecastEligible != null && after.ownerForecastEligible != null && before.ownerForecastEligible !== after.ownerForecastEligible) changes.push('Owner forecast eligibility changed');
   if (before.probability !== after.probability) changes.push('Probability changed');
   return changes.length ? changes : ['No tracked movement'];
 }
 
-export type SnapshotFilters = { ownerId?: number; stageId?: number; accountId?: number; opportunityId?: number; page?: number };
+export type SnapshotFilters = { ownerId?: number; stageId?: number; accountId?: number; opportunityId?: number; page?: number; forecastPeriod?: ForecastPeriod; currencyCode?: string; category?: string };
 export async function compareSnapshotRuns(client: PrismaClient, actor: Actor, beforeId: number, afterId: number, filters: SnapshotFilters = {}) {
   if (!canReadOpportunitySnapshots(actor)) throw new Error('Access denied');
   if (![beforeId, afterId].every(id => Number.isSafeInteger(id) && id > 0) || beforeId === afterId) throw new Error('Choose two different snapshot runs.');
@@ -130,7 +139,13 @@ export async function compareSnapshotRuns(client: PrismaClient, actor: Actor, be
     const runs = await tx.opportunitySnapshotRun.findMany({ where: { id: { in: [beforeId, afterId] } }, take: 2 });
     const before = runs.find(r => r.id === beforeId), after = runs.find(r => r.id === afterId);
     if (!before || !after || before.snapshotAt >= after.snapshotAt) throw new Error('Choose an earlier and a later snapshot run.');
+    const bounds = filters.forecastPeriod ? quarterBounds(filters.forecastPeriod.year, filters.forecastPeriod.quarter) : null;
+    if (filters.currencyCode && !/^[A-Z]{3}$/.test(filters.currencyCode)) throw new Error('Choose a currency.');
+    if (filters.category && !['ALL_OPEN', 'PIPELINE', 'BEST_CASE', 'COMMIT', 'CLOSED'].includes(filters.category)) throw new Error('Choose a forecast category.');
     const conditions = [
+      bounds ? Prisma.sql`"expectedCloseDate" >= ${bounds.start} AND "expectedCloseDate" < ${bounds.endExclusive} AND "ownerForecastEligible" = true AND "ownerId" IS NOT NULL AND ((status = 'OPEN' AND "forecastCategory" IN ('PIPELINE', 'BEST_CASE', 'COMMIT')) OR status = 'WON')` : Prisma.empty,
+      filters.currencyCode ? Prisma.sql`"currencyCode" = ${filters.currencyCode}` : Prisma.empty,
+      filters.category === 'ALL_OPEN' ? Prisma.sql`status = 'OPEN' AND "forecastCategory" IN ('PIPELINE', 'BEST_CASE', 'COMMIT')` : filters.category === 'CLOSED' ? Prisma.sql`status = 'WON'` : filters.category ? Prisma.sql`status = 'OPEN' AND "forecastCategory" = ${filters.category}::"ForecastCategory"` : Prisma.empty,
       filters.ownerId ? Prisma.sql`"ownerId" = ${filters.ownerId}` : Prisma.empty,
       filters.stageId ? Prisma.sql`"stageId" = ${filters.stageId}` : Prisma.empty,
       filters.accountId ? Prisma.sql`"accountIds" @> ARRAY[${filters.accountId}]::integer[]` : Prisma.empty,
@@ -156,7 +171,15 @@ export async function compareSnapshotRuns(client: PrismaClient, actor: Actor, be
     const newRows = new Map(rows.filter(row => row.runId === afterId).map(row => [row.opportunityId, row]));
     return { before, after, totals, page, hasMore: keys.length > 50, rows: ids.map(id => {
       const old = oldRows.get(id) ?? null, current = newRows.get(id) ?? null;
-      return { opportunityId: id, before: old, after: current, changes: compareOpportunitySnapshots(old, current) };
+      const changes = compareOpportunitySnapshots(old, current);
+      if (filters.forecastPeriod) {
+        const context = { ownerId: filters.ownerId, currencyCode: filters.currencyCode, category: filters.category };
+        const was = inSnapshotForecast(old, filters.forecastPeriod, context), now = inSnapshotForecast(current, filters.forecastPeriod, context);
+        if (was && !now) changes.push(current ? 'Left selected forecast slice — compare captured values' : 'Left selected forecast slice — scope exit reason unknown');
+        if (!was && now) changes.push('Entered selected forecast slice');
+        if (old && current && old.forecastCategory !== current.forecastCategory) changes.push(`Category: ${old.forecastCategory} → ${current.forecastCategory}`);
+      }
+      return { opportunityId: id, before: old, after: current, changes };
     }) };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
 }

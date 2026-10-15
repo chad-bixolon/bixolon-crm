@@ -45,7 +45,7 @@ const expected = [
   ['Sales Configuration', [['Sales Stages', '/administration/sales-stages'], ['Sales Targets', '/administration/sales-targets'], ['Competitors', '/administration/competitors'], ['Territories', '/administration/lookups/territories']]],
   ['CRM Configuration', [['Support Case Categories', '/administration/support-case-categories'], ['Industries', '/administration/lookups/industries'], ['Activity Types', '/administration/lookups/activity-types'], ['Labels & Terminology', '/administration/labels']]],
   ['Product Configuration', [['Product Categories', '/administration/lookups/product-categories']]],
-  ['System & History', [['System Health', '/administration/system-health'], ['System Settings', '/administration/settings'], ['Opportunity & Forecast History', '/administration/history']]],
+  ['System & History', [['System Health', '/administration/system-health'], ['System Settings', '/administration/settings'], ['Opportunity & Forecast History', '/administration/history'], ['Forecast Snapshots', '/administration/forecast-snapshots'], ['Opportunity Snapshots', '/administration/opportunity-snapshots']]],
 ];
 
 test('Administration renders every existing tool in its intended group and destination', async () => {
@@ -68,7 +68,7 @@ test('Administration renders every existing tool in its intended group and desti
     return [heading, links];
   });
   assert.deepEqual(actual, expected);
-  assert.equal(actual.flatMap(([, links]) => links).length, 17);
+  assert.equal(actual.flatMap(([, links]) => links).length, 19);
 });
 
 test('Administration keeps the effective-user management permission gate', async () => {
