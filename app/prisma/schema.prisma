@@ -949,6 +949,57 @@ model Opportunity {
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Opportunity_name_trgm_idx")
 }
 
+/// Weekly, append-only point-in-time reporting. Historical IDs deliberately have
+/// no live foreign keys, so renaming, archiving or deleting live data cannot
+/// rewrite historical meaning. SQL triggers enforce immutability.
+model OpportunitySnapshotRun {
+  id               Int      @id @default(autoincrement())
+  snapshotAt       DateTime
+  snapshotWeek     DateTime @unique @db.Date
+  createdById      Int
+  createdByName    String
+  opportunityCount Int
+  status           String   @default("COMPLETE") @db.VarChar(16)
+  source           String   @default("MANUAL") @db.VarChar(16)
+  scopeVersion     String   @default("OPEN_OPERATIONAL_V1") @db.VarChar(32)
+  createdAt        DateTime @default(now())
+  snapshots        OpportunitySnapshot[]
+
+  @@index([snapshotAt, id])
+}
+
+model OpportunitySnapshot {
+  id                   Int      @id @default(autoincrement())
+  runId                Int
+  run                  OpportunitySnapshotRun @relation(fields: [runId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  snapshotAt           DateTime
+  opportunityId        Int
+  opportunityName      String
+  /// All participating Accounts; no primary Account exists in the live model.
+  accountIds           Int[]
+  accounts             Json
+  ownerId              Int?
+  ownerName            String?
+  stageId              Int
+  stageName            String
+  amount               Decimal @db.Decimal(18, 2)
+  currencyCode         String  @db.Char(3)
+  expectedCloseDate    DateTime?
+  probability          Int
+  probabilityOverride  Int?
+  stageProbability     Int
+  forecastCategory     ForecastCategory
+  status               String @db.VarChar(8)
+  productCount         Int
+
+  @@unique([runId, opportunityId])
+  @@index([opportunityId, snapshotAt])
+  @@index([ownerId, runId])
+  @@index([stageId, runId])
+  @@index([snapshotAt])
+  @@index([accountIds], type: Gin)
+}
+
 model OpportunityHistoryEvent {
   id Int @id @default(autoincrement())
   opportunityId Int

@@ -49,6 +49,7 @@ export function routeAccess(path: string, actor: Actor | null): 'sign-in' | 'den
   if (path === '/sign-in' || path === '/access-denied' || path === '/brand/bixolon-logo.png' || path === '/icon.png' || path.startsWith('/api/auth/') || path === '/api/health') return 'allowed';
   if (!actor) return 'sign-in';
   if (!actor.active || actor.archivedAt) return 'denied';
+  if (path.startsWith('/reports/opportunity-snapshots')) return ['ADMIN', 'SALES_MANAGER'].includes(actor.role) && can(actor, 'sales.read') ? 'allowed' : 'denied';
   if (path.startsWith('/support/inbox') || path.startsWith('/api/support-gmail/')) return process.env.SUPPORT_GMAIL_ENABLED === 'true' && can(actor, 'support-cases.write') ? 'allowed' : 'denied';
   if (actor.role === 'SUPPORT' && (['/activities/new', '/tasks/new', '/notes/new'].includes(path) || /^\/(tasks|activities)\/\d+$/.test(path))) return 'allowed';
   if (path === '/demos' && actor.role !== 'ADMIN') return 'denied';

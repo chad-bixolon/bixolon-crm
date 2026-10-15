@@ -12,6 +12,9 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added Opportunity Snapshots v1: immutable weekly run/row models, atomic Admin preview/confirmation with stale-preview and duplicate-week protection, and preserved Opportunity, Account, owner, stage, value, probability and forecast context. Forward-only migration: `20261015120000_opportunity_snapshots`.
+- Added Admin/Sales Manager Opportunity Snapshot History comparisons with historical filters, currency-separated pipeline totals, bounded server pagination, and compact owner-scoped detail history. Open operational scope, neutral entry/exit interpretation, storage estimate, and deferred automation are documented in `docs/opportunity-snapshots.md`. No scheduler or live Opportunity save changes.
+
 - Added safe current-page bulk actions for Tasks (complete, assign, set due date) and Support Cases (assign, change priority), with a 20-record limit, selection-only controls, responsive confirmation dialogs, and preserved filters, pagination and Saved Views.
 - Bulk mutations recheck effective-user permissions, scope, displayed versions and individual business rules inside atomic transactions, preserving per-record history, notifications and attribution. Added direct authorization/rollback and desktop/tablet/phone browser coverage. No migrations; deletion, archive, Case status and ambiguous sales/relationship changes are intentionally deferred. Existing Price Exception bulk administration is unchanged.
 

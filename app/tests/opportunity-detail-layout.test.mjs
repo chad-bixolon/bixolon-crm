@@ -55,6 +55,8 @@ const pageMocks = {
   '@/lib/demos': { demoLabel: row => row.demoNumber },
   '@/lib/authorization': { can: () => true },
   '@/lib/opportunity-history': { opportunityHistory: async () => history, stageStartedAt: () => null },
+  '@/lib/opportunity-snapshots': { opportunitySnapshotHistory: async () => [], canReadOpportunitySnapshots: () => true },
+  '@/components/opportunity-snapshot-history': { OpportunitySnapshotHistory: () => null },
   '@/lib/marketing-attribution': { opportunityAttribution: async () => ({ leadSource: null, influences: [] }) },
   '@/components/marketing-attribution-card': { MarketingAttributionCard: () => null },
   '@/components/recoverable-action-form': { RecoverableActionForm: ({ children, action, ...props }) => { void action; return React.createElement('form', props, children); } },
