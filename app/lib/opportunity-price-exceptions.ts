@@ -1,3 +1,4 @@
+import { businessToday } from './price-exception-dates';
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { Actor } from "./authorization";
 import { priceExceptionVisibilityWhere } from "./price-exception-visibility";
@@ -33,7 +34,7 @@ export function moqEligibility(opportunityQuantity: number, normalizedMoq: strin
 }
 
 export function priceExceptionEligibilityWhere(skuId: number, currencyCode: string, today = new Date()): Prisma.PriceExceptionLineWhereInput {
-  const cutoff = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const cutoff = businessToday(today);
   return {
     retiredAt: null,
     productSkuId: skuId,

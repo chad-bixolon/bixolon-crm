@@ -60,6 +60,11 @@ Existing outbound presentation remains distinct from inbound linked emails and k
 
 Account, Opportunity and Project Activity timelines use the same relationship context renderer as Activity detail: Account, Opportunity, Project, Support Case when applicable, and Calendar source when linked. Timelines retain type, date/time, responsible user, Subject, Contacts, description and optional outcome/next step/follow-up date. Links open readable details instead of requiring edit access. Case timelines keep their existing business-event and inbound/outbound email presentation, with general Activity links opening authorized details.
 
+Related Task titles also open readable Task details; Edit remains on the detail
+page for permitted writers. Notes are already readable in the related list and
+have no separate read-only detail page. Their action is **Edit note**, shown only
+to permitted writers in editable parent context; Read Only receives no edit link.
+
 Reporting continues to use stable type codes, explicit responsible user (`userId`), occurrence date (`activityDate`), Subject and validated relationships. Audit author fields (`createdById`/`updatedById`) remain separate from the responsible user. No scoring, ranking or passive time tracking is introduced. Existing reports and historical counts are not rewritten, including older future-dated Activities.
 
 ## Compatibility and scope

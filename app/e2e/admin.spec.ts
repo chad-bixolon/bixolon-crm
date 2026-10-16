@@ -29,7 +29,7 @@ test('Admin Users, Support categories, and History management render', async ({ 
 test('snapshot capture shows one outcome and refreshes the current-week status', async ({ page }) => {
   await signInAs(page, 'admin');
   await page.goto('/administration/history');
-  const status = page.getByRole('region', { name: 'Forecast Snapshot History' });
+  const status = page.getByRole('region', { name: 'Forecast Movement captures' });
   const form = status.locator('form');
   const weekText = await status.locator('dt', { hasText: 'Current week' }).locator('..').locator('dd').innerText();
   const snapshotWeek = new Date(`${new Date(weekText).toISOString().slice(0, 10)}T00:00:00.000Z`);

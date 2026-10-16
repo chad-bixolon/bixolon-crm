@@ -77,3 +77,14 @@ ALTER TYPE "UserRole" ADD VALUE 'MARKETING_MANAGER';
 | READ_ONLY | Read | Read | Read | Read | No | No | No explicit pricing permission |
 
 Checks run in the request proxy and again in each mutating server action. The current user's active status and role are read from the CRM `User` record when a session is loaded. Future integrations and customer-specific pricing can use dedicated permission names in `lib/authorization.ts`.
+
+The standalone Pipeline applies the same Opportunity ownership scope as the
+Opportunity list and reports: Sales sees only owned Opportunities; Admin and
+Sales Manager retain team visibility. An Owner URL filter cannot widen that
+scope, including during Test as user. Pipeline still includes all open forecast
+categories, including Omitted; it is not the same population as Quarterly Forecast.
+
+Account Opportunity tabs retain their existing broader relationship context.
+Whether Sales should see cross-owner Opportunity names/links there remains an
+owner policy decision; this cleanup does not change that behavior or grant access
+to those Opportunity details.

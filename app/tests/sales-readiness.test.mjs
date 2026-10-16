@@ -72,7 +72,10 @@ test('complete valid Opportunity needs no review', async () => {
 test('sales helper text and terminology are present in the forms', () => {
   const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
   const opp = read('components/opportunity-form.tsx');
-  for (const phrase of ['Companies in this deal', 'Role in this deal', 'Used to place the Opportunity in a forecast quarter.', 'Commit is an explicit forecast choice', 'Weighted Pipeline uses this override', 'Expected close date — determines forecast quarter', 'Owner — determines rep ownership/reporting', 'Products/value — determines deal value', 'Save anyway', 'Continue editing']) assert(opp.includes(phrase), phrase);
+  for (const phrase of ['Companies in this deal', 'Role in this deal', 'Used to place the Opportunity in a forecast quarter.', 'Weighted Pipeline uses this override', 'Expected close date — determines forecast quarter', 'Owner — determines rep ownership/reporting', 'Products/value — determines deal value', 'Save anyway', 'Continue editing']) assert(opp.includes(phrase), phrase);
+  // The contextual guide is the stable destination for forecast-category meaning.
+  assert.match(opp, /<HelpLink topic="forecast-categories"/);
+  assert.match(opp, /ForecastCategory\.COMMIT/);
   const odm = read('components/product-odm-fields.tsx');
   for (const phrase of ['Type of custom SKU', 'This custom SKU is intended for a specific customer.', 'This custom SKU may be used for more than one customer.', 'Its price is not inherited.']) assert(odm.includes(phrase), phrase);
   assert(read('components/product-form.tsx').includes('Product = model/family. SKU = exact part number.'));

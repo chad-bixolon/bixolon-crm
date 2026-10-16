@@ -34,8 +34,8 @@ const groups = [
     ["Maintenance History", "/administration/maintenance-history", "See who performed supported maintenance actions and when."],
     ["System Health", "/administration/system-health", "Review database, object storage, and scheduled job status."],
     ["System Settings", "/administration/settings", "Set safe reporting and warning defaults."],
-    ["Opportunity & Forecast History", "/administration/history", "Review historical Opportunity and forecast snapshots."],
-    ["Forecast Snapshots", "/administration/forecast-snapshots", "Create and review historical forecast snapshots by quarter."],
+    ["Opportunity & Forecast History", "/administration/history", "Manage Opportunity changes and separate weekly Forecast Movement captures."],
+    ["Forecast Snapshots", "/administration/forecast-snapshots", "Create quarterly forecast history from Opportunity Snapshots."],
     ["Opportunity Snapshots", "/administration/opportunity-snapshots", "Capture and compare weekly Opportunity history."],
   ] },
 ] as const;

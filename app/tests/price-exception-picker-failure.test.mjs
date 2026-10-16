@@ -19,6 +19,7 @@ Module._load = function(request, parent, isMain) {
   if (request === '@/lib/price-exception-resolution') return { parsePriceExceptionAccountPatch: () => { parsed++; return { errors: {}, values: {}, patch: {} }; }, PriceExceptionAccountValidationError: class extends Error {}, updatePriceExceptionAccountLinks: async () => { throw new Error('Should not save'); }, parseAssignedSalesRepUserId: () => ({}) };
   if (request === '@/lib/price-exception-follow-up') return { parseFollowUpForm: () => ({}), updatePriceExceptionFollowUp: async () => ({}) };
   if (request === '@/lib/price-exception-lifecycle') return { markPriceExceptionExpired: async () => {} };
+  if (request === '@/lib/price-exception-dates') return require(path.join(root, 'lib/price-exception-dates.ts'));
   return originalLoad.call(this, request, parent, isMain);
 };
 const { resolvePriceExceptionAccounts } = require(path.join(root, 'app/price-exceptions/[id]/actions.ts'));

@@ -1,4 +1,5 @@
 'use server';
+import { isPriceExceptionExpired } from '@/lib/price-exception-dates';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireMutation } from '@/lib/current-user';
@@ -74,6 +75,6 @@ export async function restorePriceException(form:FormData){
   if(!Number.isSafeInteger(id)||id<=0)throw new Error('Invalid Price Exception.');
   const row=await prisma.priceException.findFirst({where:{id,archivedAt:{not:null}},select:{expirationDate:true}});
   if(!row)throw new Error('Archived Price Exception not found.');
-  await prisma.priceException.update({where:{id},data:{status:row.expirationDate&&row.expirationDate<new Date()?'EXPIRED':'ACTIVE',archivedAt:null,updatedById:actor.id}});
+  await prisma.priceException.update({where:{id},data:{status:isPriceExceptionExpired(row.expirationDate)?'EXPIRED':'ACTIVE',archivedAt:null,updatedById:actor.id}});
   revalidatePath('/price-exceptions');revalidatePath(`/price-exceptions/${id}`);revalidatePath('/accounts');
 }

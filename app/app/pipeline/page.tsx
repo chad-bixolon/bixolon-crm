@@ -4,6 +4,7 @@ import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import { operationalOpportunityWhere } from '@/lib/operational-where';
 import { currentUser } from '@/lib/current-user';
+import { opportunityScope } from '@/lib/authorization';
 import { OptionalProjectFilter } from '@/components/optional-project-filter';
 import { projectReadWhere } from '@/lib/projects';
 import Link from 'next/link';
@@ -27,7 +28,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Filters>
   const selectedProjectId = positiveId(f.projectId ?? '');
   const selectedProject = selectedProjectId ? await prisma.project.findFirst({ where: { AND: [{ id: selectedProjectId }, projectReadWhere(actor)] }, select: { id: true, name: true } }) : null;
   const [rows,owners,stages,territories]=await Promise.all([
-    prisma.opportunity.findMany({where:{AND:[operationalOpportunityWhere],stage:{isClosed:false},...(ownerId?{ownerId}:{}),...(stageId?{stageId}:{}),...pipelineProjectFilter(f.projectId),...(f.territory?{participants:{some:{account:{territory:f.territory}}}}:{}),...(from||to?{expectedCloseDate:{...(from?{gte:from}:{}),...(to?{lt:new Date(to.getTime()+86400000)}:{})}}:{})},include:{stage:true,products:{where:{archivedAt:null}}}}),
+    prisma.opportunity.findMany({where:{AND:[operationalOpportunityWhere,opportunityScope(actor)],stage:{isClosed:false},...(ownerId?{ownerId}:{}),...(stageId?{stageId}:{}),...pipelineProjectFilter(f.projectId),...(f.territory?{participants:{some:{account:{territory:f.territory}}}}:{}),...(from||to?{expectedCloseDate:{...(from?{gte:from}:{}),...(to?{lt:new Date(to.getTime()+86400000)}:{})}}:{})},include:{stage:true,products:{where:{archivedAt:null}}}}),
     prisma.user.findMany({where:{active:true,archivedAt:null},orderBy:{lastName:'asc'}}),
     prisma.salesStage.findMany({orderBy:{sortOrder:'asc'}}),
     prisma.territory.findMany({orderBy:{name:'asc'}}),
@@ -38,7 +39,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Filters>
   const control='field filter-control';
 
   return <Content>
-    <PageHeader title="Pipeline" eyebrow={NAV_CATEGORIES.sales} description="Open opportunities valued from active product line items."/>
+    <PageHeader title="Pipeline" eyebrow={NAV_CATEGORIES.sales} description="Open opportunities you can access, valued from active product line items. Includes Omitted deals."/>
     <SavedViews routeKey="pipeline" query={f}/>
     <form method="get" className="responsive-filter-form panel filter-panel filter-grid mb-5" aria-label="Filter pipeline"><FilterDisclosure initialCount={countActiveFilters(f, {})} defaults={{}} clearHref="/pipeline"/>
       <label className="label">Owner<select className={control} name="ownerId" defaultValue={f.ownerId??''}><option value="">All</option>{owners.map(o=><option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select></label>

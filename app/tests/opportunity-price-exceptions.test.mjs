@@ -126,6 +126,28 @@ function saveDb({ existingLine = null, selectedLines = [], catalogPrices = [], o
 const input = lineInput => ({ name: 'Deal', description: null, ownerId: null, projectIds: [], stageId: 1, expectedCloseDate: null, probability: null, forecastCategory: null, currencyCode: 'USD', participants, lines: [lineInput] });
 const selectedLine = (overrides = {}) => ({ id: 102, productSkuId: 9, approvedUnitPrice: new Prisma.Decimal('189.00'), currencyCode: 'USD', sourceQuantity: new Prisma.Decimal('1000'), sourceQuantityRaw: '1000', sourceUnit: null, priceException: parent(), ...overrides });
 
+test('Opportunity save accepts a PE through New York expiration day and rejects it after midnight', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-17T00:00:00Z') });
+  const expirationDate = new Date('2026-10-16T00:00:00Z');
+  const selected = selectedLine({ priceException: parent({ expirationDate }) });
+  const priced = { productId: 3, skuId: 9, quantity: 1000, price: '189.00', priceSource: 'PRICE_EXCEPTION', priceExceptionLineId: 102 };
+  for (const instant of ['2026-10-16T23:59:59Z', '2026-10-17T00:00:00Z', '2026-10-17T03:59:59Z']) {
+    t.mock.timers.setTime(new Date(instant).getTime());
+    const db = saveDb({ selectedLines: [selected] });
+    await saveOpportunity(db.client, input(priced));
+    assert.equal(db.writes.length, 1, instant);
+  }
+  t.mock.timers.setTime(new Date('2026-10-17T04:00:00Z').getTime());
+  const expired = saveDb({ selectedLines: [selected] });
+  await assert.rejects(saveOpportunity(expired.client, input(priced)), /no longer available for new selection/);
+  assert.deepEqual(expired.writes, []);
+  // Keeping a historical selection must remain possible after expiration.
+  const historical = saveDb({ existingLine: { id: 55, skuId: 9, priceSource: 'PRICE_EXCEPTION', priceExceptionLineId: 102, priceExceptionCurrencyCode: 'USD', priceExceptionSourceQty: '1000', estimatedUnitPrice: new Prisma.Decimal('189'), quantity: 1000 }, selectedLines: [selected] });
+  await saveOpportunity(historical.client, input({ ...priced, id: 55 }), 5);
+  assert.equal(historical.writes.length, 1);
+  assert.equal(expirationDate.toISOString(), '2026-10-16T00:00:00.000Z');
+});
+
 test('stale or invalid SKU ID fails before Opportunity writes', async () => {
   const db = saveDb();
   await assert.rejects(saveOpportunity(db.client, input({ productId: 3, skuId: 999, quantity: 2, price: '35.00' })), /Select a product from the suggestions/);

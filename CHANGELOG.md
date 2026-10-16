@@ -12,6 +12,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Correctness Cleanup v1: scoped standalone Pipeline totals to the effective salesperson, aligned Price Exception selection/save/restore with New York expiration dates, corrected related Task/Note navigation, and distinguished Forecast Movement captures from Forecast Snapshot History. Account cross-owner relationship context is unchanged pending an owner policy decision. No database changes.
+
 - Added Help & Onboarding v1 at `/help`, with practical, searchable guidance grouped by role and a Help & Guide entry in the account menu. Topics and editing instructions follow existing permissions, including Read Only access and the full Admin guide.
 - Added contextual Help links for Forecast Category, forecasting and snapshots, Support Inbox, Log Email Response, Price Exceptions, Audit History, Maintenance History, and Bulk Actions. Simplified nearby helper text and documented topic maintenance in `app/docs/help-maintenance.md`. No database changes.
 

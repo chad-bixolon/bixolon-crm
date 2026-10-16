@@ -4,6 +4,13 @@ The Products page has a separate Price Exception filter. Its indicator counts di
 
 The Price Exception lookup lists those tiers before an Opportunity exists. Search by linked Account name and SKU or Product name, then verify the exact Account role, SKU, MOQ, currency, and approved price. Each row links to the PE detail and Product. Historical, expired, unresolved, and unpriced records remain available on the existing Price Exceptions history page.
 
+Expiration uses the America/New_York business date everywhere: lookup, Product
+indicators, Opportunity selection/save, expiration reporting, and renewal
+follow-up. A PE remains unexpired throughout its expiration date and expires at
+the next New York midnight, including daylight-saving changes. Restore uses the
+same rule to choose Active or Expired. Stored dates and unchanged historical
+Opportunity pricing selections are preserved; no historical dates are shifted.
+
 `PE_LIST` remains a SKU catalog-source enum value with explicit template import, manual SKU classification, and existing filter support. The repository has no PE List workbook mapping, but this is not enough evidence that the value is unused in stored data. Keep it as a classification for SKUs explicitly sourced from a PE list; never set it because a PE references a SKU. Remove the Catalog Source option only after a separate inventory of stored `PE_LIST` SKUs and a decision about their replacement classification.
 
 ## Expiration follow-up

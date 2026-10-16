@@ -3,6 +3,8 @@ import { can, type Actor } from './authorization';
 import { scopedPriceExceptionWhere } from './price-exception-visibility';
 import { priceExceptionListSummary } from './price-exception-list-summary';
 import { closedFollowUpStatuses, followUpOverdue } from './price-exception-follow-up';
+import { businessToday } from './price-exception-dates';
+export { businessToday } from './price-exception-dates';
 
 export type ExpirationWindow = 'all'|'follow-up'|'expired'|'next30'|'next60'|'next90'|'none'|'future'|'activeExpired';
 export const expirationOptions = [
@@ -10,11 +12,6 @@ export const expirationOptions = [
   ['next60','Expires in next 60 days'],['next90','Expires in next 90 days'],['none','No expiration date'],
 ] as const;
 const dayMs=86400000;
-export function businessToday(now=new Date()) {
-  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);
-  const value=(type:string)=>parts.find(part=>part.type===type)!.value;
-  return new Date(`${value('year')}-${value('month')}-${value('day')}T00:00:00.000Z`);
-}
 export const addDays=(date:Date,days:number)=>new Date(date.getTime()+days*dayMs);
 export function daysUntilExpiration(date:Date|null,today:Date) { return date===null?null:Math.round((date.getTime()-today.getTime())/dayMs); }
 export function expirationState(date:Date|null,today:Date) {

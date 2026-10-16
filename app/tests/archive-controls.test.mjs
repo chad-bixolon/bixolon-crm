@@ -27,6 +27,7 @@ Module._load=function(name,parent,isMain){
  if(name==='@/lib/price-exception-resolution')return require(path.join(root,'lib/price-exception-resolution.ts'));
  if(name==='@/lib/price-exception-follow-up')return require(path.join(root,'lib/price-exception-follow-up.ts'));
  if(name==='@/lib/price-exception-lifecycle')return require(path.join(root,'lib/price-exception-lifecycle.ts'));
+ if(name==='@/lib/price-exception-dates')return require(path.join(root,'lib/price-exception-dates.ts'));
  return load.call(this,name,parent,isMain);
 };
 const activities=require(path.join(root,'app/activities/actions.ts'));
@@ -48,4 +49,17 @@ test('Price Exception restore retains imported source history and uses expiratio
  assert.equal(pe.archivedAt,null);
  assert.equal(pe.status,'EXPIRED');
  assert.equal(pe.peCode,'PE-9');
+});
+
+test('Price Exception restore follows New York midnight without changing its saved date', async t => {
+ t.mock.timers.enable({apis:['Date'],now:new Date('2026-10-17T00:00:00Z')});
+ const expirationDate = new Date('2026-10-16T00:00:00Z');
+ const form = new FormData(); form.set('id','9');
+ for (const [instant,status] of [['2026-10-17T00:00:00Z','ACTIVE'],['2026-10-17T03:59:59Z','ACTIVE'],['2026-10-17T04:00:00Z','EXPIRED']]) {
+  t.mock.timers.setTime(new Date(instant).getTime());
+  pe={id:9,archivedAt:new Date(),expirationDate,status:'ARCHIVED',peCode:'PE-9'};
+  await pricing.restorePriceException(form);
+  assert.equal(pe.status,status);
+  assert.equal(pe.expirationDate,expirationDate);
+ }
 });

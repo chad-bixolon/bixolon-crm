@@ -1,7 +1,7 @@
 import { Prisma, type PriceExceptionFollowUpStatus, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { scopedPriceExceptionWhere } from './price-exception-visibility';
-import { businessToday } from './price-exception-expiration';
+import { businessToday } from './price-exception-dates';
 import { notifyPeFollowUpAssignment, syncPeNotificationsInTransaction } from './pe-notification-evaluator';
 
 export const followUpStatuses = ['NOT_STARTED','IN_PROGRESS','RENEWAL_REQUESTED','REPLACEMENT_SUBMITTED','NO_RENEWAL_NEEDED','COMPLETED'] as const;

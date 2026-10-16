@@ -1,3 +1,4 @@
+import { businessToday } from './price-exception-dates';
 import { Prisma, ProductCatalogSource, type PrismaClient } from '@prisma/client';
 import type { Actor } from './authorization';
 import { pageNumber } from './crm-validation';
@@ -17,7 +18,7 @@ export function activePriceExceptionLineWhere(
   filters: PriceExceptionLookupFilters = {},
   now = new Date(),
 ): Prisma.PriceExceptionLineWhereInput {
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const today = businessToday(now);
   const parent: Prisma.PriceExceptionWhereInput = {
     status: 'ACTIVE',
     archivedAt: null,

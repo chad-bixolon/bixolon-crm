@@ -14,6 +14,13 @@ Current stage age starts at the latest stage-change or initial baseline event. E
 
 The new Forecast Snapshot History report derives immutable quarterly rollups from forecast-ready Opportunity Snapshot runs. It preserves source linkage, owner eligibility and Closed Won outcomes by Expected Close Date. See [Forecast Snapshots v1](../../docs/forecast-snapshots.md). The legacy feature described below remains unchanged and is not used as the source for this report.
 
+In the UI, **Forecast Snapshot History** is the point-in-time comparison tied to
+Opportunity Snapshots. **Forecast Movement** uses separate weekly captures,
+including targets and Weighted Pipeline, managed in Opportunity & Forecast
+History. Creating either kind does not populate the other. The legacy Admin
+capture section is labeled **Forecast Movement captures** to distinguish it from
+the new report.
+
 ## Legacy forecast snapshots
 
 The Admin Opportunity History page captures a New York calendar week (Monday start) for a selected year, quarter, and currency. One row per active sales rep and scope is stored; the unique key prevents duplicate weekly captures. Capture invokes `forecastForRep`, the same service as the current forecast report, and stores Pipeline, Weighted Pipeline, Best Case, Commit, target, and target status as decimals. The first capture is the first baseline. Historical weeks before capture are unavailable. The Admin operation should be run once a week until a scheduler is established; there is no implicit cron dependency. Weekly snapshots freeze the first capture and do not overwrite it on retry.

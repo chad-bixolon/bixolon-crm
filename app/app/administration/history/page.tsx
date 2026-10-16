@@ -47,10 +47,11 @@ export default async function HistoryAdministration({ searchParams }: { searchPa
     _count: { _all: true }, _max: { capturedAt: true },
   }) : null;
   const eligible = preview.events > 0 || preview.snapshots > 0;
-  return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Opportunity & Forecast History" action={<Link className="btn-secondary" href="/administration/settings">Retention setting</Link>}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Opportunity & Forecast History" description="Manage Opportunity changes and the separate weekly captures used by Forecast Movement." action={<Link className="btn-secondary" href="/administration/settings">Retention setting</Link>}/>
+    <p className="mb-4 text-sm text-slate-600">These captures include targets and Weighted Pipeline. They do not populate <Link className="text-orange-800 underline" href="/reports/forecast-snapshots">Forecast Snapshot History</Link>, which uses Opportunity Snapshots.</p>
     {feedback.restore === 'complete' && <p className="panel mb-4 p-4 text-sm">Archive batch restored.</p>}
     <section className="panel mb-4 p-4 sm:p-5" aria-labelledby="snapshot-status-heading">
-      <div className="flex flex-wrap items-center justify-between gap-2"><h2 id="snapshot-status-heading" className="text-lg font-semibold">Forecast Snapshot History</h2><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${currentSnapshots?._count._all ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>{currentSnapshots?._count._all ? 'Active' : 'Not captured'}</span></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><h2 id="snapshot-status-heading" className="text-lg font-semibold">Forecast Movement captures</h2><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${currentSnapshots?._count._all ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>{currentSnapshots?._count._all ? 'Active' : 'Not captured'}</span></div>
       <dl className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
         <div className="flex min-w-0 justify-between gap-3 border-b border-slate-100 py-1"><dt className="text-slate-600">Current week</dt><dd className="text-right font-medium">{currentWeek}</dd></div>
         <div className="flex min-w-0 justify-between gap-3 border-b border-slate-100 py-1"><dt className="text-slate-600">Last captured</dt><dd className="text-right font-medium">{currentSnapshots?._max.capturedAt ? formatEasternDateTime(currentSnapshots._max.capturedAt) : 'Not captured yet'}</dd></div>

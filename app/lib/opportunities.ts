@@ -1,3 +1,4 @@
+import { isPriceExceptionExpired } from './price-exception-dates';
 import { operationalProjectWhere, operationalOpportunityWhere } from './operational-where';
 import { ForecastCategory, OpportunityPartyRole, OpportunityProductPriceSource, Prisma, ProductPriceTier, type PrismaClient } from "@prisma/client";
 import { field, optional, pageNumber, positiveId, required, type Errors } from "./crm-validation";
@@ -170,10 +171,9 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
         const retainingHistoricalSelection = !!selected && old?.priceSource === "PRICE_EXCEPTION" && old.priceExceptionLineId === selected.id && old.skuId === line.skuId && old.priceExceptionCurrencyCode === input.currencyCode;
         if (!selected) throw new Error("Choose a Price Exception line for this SKU and Opportunity currency.");
         if (!priceExceptionMatchesParticipants(selected.priceException, input.participants)) throw new Error(unrelatedPriceExceptionMessage);
-        const cutoff = new Date(); cutoff.setUTCHours(0, 0, 0, 0);
         if (!retainingHistoricalSelection && (!selected || selected.retiredAt || selected.productSkuId !== line.skuId || !selected.approvedUnitPrice || selected.currencyCode !== input.currencyCode)) throw new Error("Choose a Price Exception line for this SKU and Opportunity currency.");
         if (!retainingHistoricalSelection && (!actor || !canViewPriceException(actor, selected!.priceException))) throw new Error("That Price Exception is not available to this user.");
-        if (!retainingHistoricalSelection && (selected!.priceException.status !== "ACTIVE" || selected!.priceException.archivedAt || (selected!.priceException.expirationDate && selected!.priceException.expirationDate < cutoff))) throw new Error("That Price Exception is no longer available for new selection.");
+        if (!retainingHistoricalSelection && (selected!.priceException.status !== "ACTIVE" || selected!.priceException.archivedAt || isPriceExceptionExpired(selected!.priceException.expirationDate))) throw new Error("That Price Exception is no longer available for new selection.");
         const eligibility = moqEligibility(line.quantity, retainingHistoricalSelection ? old.priceExceptionSourceQty : selected!.sourceQuantity?.toString() ?? null);
         const pricingChanged = !old || old.quantity !== line.quantity || !old.estimatedUnitPrice.equals(line.price) || !retainingHistoricalSelection;
         if (eligibility === "UNKNOWN" && pricingChanged) throw new Error("This Price Exception has no resolved numeric MOQ and cannot be applied directly.");
