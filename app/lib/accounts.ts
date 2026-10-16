@@ -1,3 +1,4 @@
+import { recordMaintenance } from './admin-maintenance';
 import { AccountBusinessRoleCode, AccountStatus, Prisma, type PrismaClient, type UserRole } from "@prisma/client";
 import type { AccountFields } from "./account-validation";
 import { parseAccountForm } from "./account-validation";
@@ -132,12 +133,13 @@ export async function saveAccount(client: PrismaClient, input: AccountFields, id
   });
 }
 
-export async function setAccountArchived(client: PrismaClient, id: number, archive: boolean) {
+export async function setAccountArchived(client: PrismaClient, id: number, archive: boolean, actorId?: number) {
   return client.$transaction(async (tx) => {
     const account = await tx.account.findUnique({ where: { id }, select: { status: true } });
     if (!account) throw new Error("Account not found.");
     if (archive && account.status === "ARCHIVED") throw new Error("Account is already archived.");
     if (!archive && account.status !== "ARCHIVED") throw new Error("Account is already active.");
-    await tx.account.update({ where: { id }, data: { status: archive ? "ARCHIVED" : "ACTIVE", archivedAt: archive ? new Date() : null } });
+    await tx.account.update({ where: { id }, data: { status: archive ? "ARCHIVED" : "ACTIVE", archivedAt: archive ? new Date() : null, archivedById: archive ? actorId : null, updatedById: actorId } });
+    if (actorId) await recordMaintenance(tx, actorId, 'Account', archive ? 'Archive' : 'Restore', [id]);
   });
 }

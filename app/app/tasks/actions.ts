@@ -1,4 +1,5 @@
 'use server';
+import { recordMaintenance } from '../../lib/admin-maintenance';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
@@ -22,14 +23,14 @@ export async function submitTask(id: number | null, _old: WorkState, form: FormD
   redirect(destination);
 }
 export async function archiveTask(id: number, _old: WorkState): Promise<WorkState> {
-  void _old; assertPermission(await currentUser(), 'tasks.write'); const row = await prisma.task.findUnique({ where: { id } }); if (!row) return { errors: {}, message: 'Task not found.' }; await assertProjectWorkEdit(prisma, await currentUser(), row.projectId);
-  if (!row.archivedAt) await prisma.$transaction(async tx => { await tx.task.update({ where: { id }, data: { archivedAt: new Date() } }); await syncTaskNotifications(tx, id); });
+  void _old; const actor = await currentUser(); assertPermission(actor, 'tasks.write'); const row = await prisma.task.findUnique({ where: { id } }); if (!row) return { errors: {}, message: 'Task not found.' }; await assertProjectWorkEdit(prisma, await currentUser(), row.projectId);
+  if (!row.archivedAt) await prisma.$transaction(async tx => { await tx.task.update({ where: { id }, data: { archivedAt: new Date(), archivedById: actor.id, updatedById: actor.id } }); await recordMaintenance(tx, actor.id, 'Task', 'Archive', [id]); await syncTaskNotifications(tx, id); });
   revalidatePath('/tasks'); revalidatePath(`/tasks/${id}/edit`); revalidatePath('/'); if (row.accountId) revalidatePath(`/accounts/${row.accountId}`); if (row.opportunityId) revalidatePath(`/opportunities/${row.opportunityId}`);
   redirect('/tasks?visibility=archived');
 }
 export async function reactivateTask(id: number, _old: WorkState): Promise<WorkState> {
-  void _old; assertPermission(await currentUser(), 'tasks.write'); const row = await prisma.task.findUnique({ where: { id } }); if (!row) return { errors: {}, message: 'Task not found.' }; await assertProjectWorkEdit(prisma, await currentUser(), row.projectId);
-  if (row.archivedAt) await prisma.$transaction(async tx => { await tx.task.update({ where: { id }, data: { archivedAt: null } }); await syncTaskNotifications(tx, id); });
+  void _old; const actor = await currentUser(); assertPermission(actor, 'tasks.write'); const row = await prisma.task.findUnique({ where: { id } }); if (!row) return { errors: {}, message: 'Task not found.' }; await assertProjectWorkEdit(prisma, await currentUser(), row.projectId);
+  if (row.archivedAt) await prisma.$transaction(async tx => { await tx.task.update({ where: { id }, data: { archivedAt: null, archivedById: null, updatedById: actor.id } }); await recordMaintenance(tx, actor.id, 'Task', 'Restore', [id]); await syncTaskNotifications(tx, id); });
   revalidatePath('/tasks'); revalidatePath(`/tasks/${id}/edit`); revalidatePath('/'); if (row.accountId) revalidatePath(`/accounts/${row.accountId}`); if (row.opportunityId) revalidatePath(`/opportunities/${row.opportunityId}`);
   redirect(`/tasks/${id}/edit`);
 }

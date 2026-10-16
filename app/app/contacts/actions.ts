@@ -30,8 +30,8 @@ export async function submitContact(id: number | null, originatingAccountId: num
 }
 export async function changeContactState(id: number, state: "active" | "inactive" | "archived", _old: FormState): Promise<FormState> {
   void _old;
-  await requireMutation("contacts.write");
-  try { await setContactState(prisma, id, state); }
+  const actor = await requireMutation("contacts.write");
+  try { await setContactState(prisma, id, state, actor.id); }
   catch (error) { return { errors: {}, message: friendlyError(error, "Contact status could not be changed.") }; }
   revalidatePath("/contacts"); revalidatePath(`/contacts/${id}`); revalidatePath("/accounts");
   return { errors: {}, message: `Contact ${state === "active" ? "activated" : state === "inactive" ? "deactivated" : "archived"}.` };

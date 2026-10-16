@@ -12,6 +12,9 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added Admin-only Ownership & Reassignment, Audit History and Maintenance History areas, reusing record validation, bulk confirmation and existing per-module histories with server pagination. Added the small append-only maintenance ledger migration `20261015210000_admin_maintenance_history`.
+- Extended System Health with safe Calendar connection/sync and Support Gmail fetch status; removed free-form job/provider errors from the health display. Documented audit coverage, missing historical evidence and deferred integrations in `app/docs/administration-audit.md`.
+
 - Added immutable source-linked Forecast Snapshot runs and owner/currency/category rollups with forward-only migration, duplicate protection, atomic completeness checks and exact source validation. Migration: `20261015160000_forecast_snapshot_runs`.
 - Added explicit forecast-ready scope to the shared Opportunity Snapshot capture service, preserving open/Closed Won status and point-in-time owner eligibility without changing default open-only or live forecast behavior.
 - Added Admin preview/confirmation and Admin/Sales Manager Forecast Snapshot History with quarterly comparisons, salesperson history, currency separation, safe percentage math and drill-through to the shared Opportunity Snapshot comparison.

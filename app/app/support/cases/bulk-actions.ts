@@ -11,6 +11,9 @@ export async function changeCases(request: BulkRequest): Promise<BulkResult> {
     revalidatePath('/support/cases');
     for (const record of request.records) revalidatePath(`/support/cases/${record.id}`);
     revalidatePath('/');
+    revalidatePath('/administration/ownership');
+    revalidatePath('/administration/audit-history');
+    revalidatePath('/administration/maintenance-history');
     return { ok: true, count };
   } catch (error) {
     return { ok: false, message: error instanceof Error && !('code' in error) ? error.message : 'No records changed. Refresh the list and try again.' };

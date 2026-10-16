@@ -69,7 +69,7 @@ test('History administration presents dates, statuses, and empty states clearly'
   assert.match(admin, /No archived history batches are available to restore\./);
   assert.match(admin, /_count: \{ _all: true \}/);
   assert.match(admin, /formatEasternDateTime\(batch\.archivedAt\)/);
-  assert.match(admin, /\{eligible \? <form action=\{archiveHistoryAction\}/);
+  assert.match(admin, /\{eligible \? <ConfirmMaintenanceForm message="[^"]+" action=\{archiveHistoryAction\}/);
   for (const action of ['captureSnapshotAction', 'archiveHistoryAction', 'restoreHistoryAction']) assert.match(admin, new RegExp(`action=\\{${action}\\}`));
   assert.match(admin, /refreshOnSuccess/);
   assert.doesNotMatch(admin, /feedback\.capture/);
@@ -213,7 +213,7 @@ test('archived Opportunity events remain readable under the same Opportunity sco
 test('archive copies before removal, preserves context, and rolls back on a failed copy', async () => {
   const old = new Date('2020-01-01'), event = { id: 3, opportunityId: 4, opportunityName: 'Archived deal', actorName: 'Former rep', eventType: 'ACCOUNT_ROLE_CHANGED', relatedRecordId: 8, relatedRecordName: 'BlueStar', oldRoles: ['VAR_RESELLER'], newRoles: ['DISTRIBUTOR'], occurredAt: old, createdAt: old };
   const writes = [];
-  const tx = { opportunityHistoryEvent: { findMany: async () => [event], deleteMany: async () => { writes.push('delete'); return { count: 1 }; } }, forecastSnapshot: { findMany: async () => [] }, opportunityHistoryArchive: { createMany: async ({ data }) => { writes.push(data[0]); return { count: 1 }; } } };
+  const tx = { adminMaintenanceEvent: { create: async () => ({ id: 1 }) }, opportunityHistoryEvent: { findMany: async () => [event], deleteMany: async () => { writes.push('delete'); return { count: 1 }; } }, forecastSnapshot: { findMany: async () => [] }, opportunityHistoryArchive: { createMany: async ({ data }) => { writes.push(data[0]); return { count: 1 }; } } };
   const client = { systemSetting: { findMany: async () => [] }, $transaction: async fn => fn(tx) };
   const result = await archiveHistoryBatch(client, actor('ADMIN'), new Date('2020-02-01'));
   assert.equal(result.events, 1);
@@ -245,6 +245,7 @@ test('Admin restore moves original events and snapshots atomically, preserving v
   const snapshot = { id: 70, sourceId: 5, archiveBatchId: batchId, archivedAt: new Date(), snapshotWeek: date, capturedAt: date, year: 2020, quarter: 'Q1', currencyCode: 'USD', repId: 7, repName: 'Former rep', pipeline: new Prisma.Decimal('200'), weightedPipeline: new Prisma.Decimal('100'), bestCase: new Prisma.Decimal('0'), commit: new Prisma.Decimal('0'), target: null, targetStatus: 'NO_TARGET', createdAt: date };
   const operations = [];
   const tx = {
+    adminMaintenanceEvent: { create: async () => ({ id: 1 }) },
     opportunityHistoryArchive: { findMany: async () => [event], deleteMany: async () => { operations.push('remove event archive'); return { count: 1 }; } },
     forecastSnapshotArchive: { findMany: async () => [snapshot], deleteMany: async () => { operations.push('remove snapshot archive'); return { count: 1 }; } },
     opportunityHistoryEvent: { count: async () => 0, createMany: async ({ data }) => { operations.push(data[0]); return { count: 1 }; } },

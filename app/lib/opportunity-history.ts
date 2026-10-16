@@ -1,3 +1,4 @@
+import { recordMaintenance } from './admin-maintenance';
 import { randomUUID } from 'node:crypto';
 import { Prisma, type PrismaClient, type SalesQuarter } from '@prisma/client';
 import { can, opportunityScope, type Actor } from './authorization';
@@ -100,6 +101,7 @@ export async function restoreHistoryBatch(client: PrismaClient, actor: Actor, ba
       const removed = await tx.forecastSnapshotArchive.deleteMany({ where: { id: { in: snapshots.map(row => row.id) } } });
       if (removed.count !== snapshots.length) throw new Error('Snapshot archive cleanup count mismatch');
     }
+    await recordMaintenance(tx, actor.id, 'History', 'Restore', [], events.length + snapshots.length);
     return { batchId, events: events.length, snapshots: snapshots.length };
   });
 }
@@ -148,6 +150,7 @@ export async function archiveHistoryBatch(client: PrismaClient, actor: Actor, cu
       const removed = await tx.forecastSnapshot.deleteMany({ where: { id: { in: snapshots.map(row => row.id) } } });
       if (removed.count !== snapshots.length) throw new Error('Snapshot removal count mismatch');
     }
+    await recordMaintenance(tx, actor.id, 'History', 'Archive', [], events.length + snapshots.length);
     return { batch, events: events.length, snapshots: snapshots.length };
   });
 }

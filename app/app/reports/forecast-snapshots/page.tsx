@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '@/lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Prisma, type SalesQuarter } from '@prisma/client';
@@ -61,7 +62,7 @@ export default async function ForecastSnapshotsReport({ searchParams }: { search
     if (category) q.set('category', category);
     return `/reports/opportunity-snapshots?${q}`;
   };
-  return <Content><PageHeader eyebrow="Reports" title="Forecast Snapshot History" description="Compare preserved quarterly forecasts and review the Opportunity snapshots behind each change." action={actor.role === 'ADMIN' ? <Link className="btn-secondary" href="/administration/forecast-snapshots">Create Forecast Snapshot</Link> : <Link className="btn-secondary" href="/reports">Reports</Link>}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.reports} title="Forecast Snapshot History" description="Compare preserved quarterly forecasts and review the Opportunity snapshots behind each change." action={actor.role === 'ADMIN' ? <Link className="btn-secondary" href="/administration/forecast-snapshots">Create Forecast Snapshot</Link> : <Link className="btn-secondary" href="/reports">Reports</Link>}/>
     <form className="panel mb-5 grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
       <label className="text-sm">Forecast year<input className="field mt-1" type="number" min="2000" max="2100" name="year" defaultValue={year}/></label>
       <label className="text-sm">Forecast quarter<select className="field mt-1" name="quarter" aria-label="Forecast quarter" defaultValue={quarter}>{quarters.map(q => <option key={q}>{q}</option>)}</select></label>

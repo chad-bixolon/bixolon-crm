@@ -1,4 +1,5 @@
 'use server';
+import { recordMaintenance } from '../../lib/admin-maintenance';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
@@ -30,6 +31,7 @@ export async function setActivityArchived(form: FormData) {
   const data = {archivedAt:archived?new Date():null,archivedById:archived?actor.id:null,updatedById:actor.id};
   if (prisma.notification) await prisma.$transaction(async tx => {
     await tx.activity.update({where:{id},data});
+    await recordMaintenance(tx, actor.id, 'Activity', archived ? 'Archive' : 'Restore', [id]);
     if (row.opportunityId) await syncOpportunityNotifications(tx, row.opportunityId, (await getSettings(tx as typeof prisma)).COMMIT_FOLLOW_UP_DAYS);
   });
   else await prisma.activity.update({where:{id},data});

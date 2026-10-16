@@ -1,3 +1,4 @@
+import { recordMaintenance } from './admin-maintenance';
 import { createHash } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { assertPermission, type Actor } from './authorization';
@@ -110,6 +111,7 @@ export async function applyPriceExceptionCleanup(db: PrismaClient, actor: Actor,
       if (result.count !== 1) throw new Error('A Price Exception changed. Preview again.');
       if (request.action === 'expire') await tx.priceExceptionLifecycleEvent.create({data:{priceExceptionId:row.id,oldStatus:'ACTIVE',newStatus:'EXPIRED',actorId:actor.id,source:'Bulk cleanup action',createdAt:now}});
     }
+    await recordMaintenance(tx, actor.id, 'Price Exception', request.action === 'archive' ? 'Cleanup archive' : request.action === 'expire' ? 'Cleanup expire' : request.action === 'assignOwner' ? 'Cleanup assignment' : 'Cleanup link', plan.rows.map(row => row.id));
     return plan.rows.length;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 });
 }

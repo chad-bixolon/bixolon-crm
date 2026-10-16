@@ -1,3 +1,4 @@
+import { recordMaintenance } from './admin-maintenance';
 import { AccountBusinessRoleCode, AccountStatus, Prisma, type PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { parseImportCsv, type CsvRow, type ImportHeader } from './import-csv';
@@ -145,6 +146,7 @@ export async function applyImport(db:PrismaClient,csv:string,expectedDigest:stri
       if (item.id) await tx.contact.update({where:{id:item.id},data:data as Prisma.ContactUncheckedUpdateInput});
       else await tx.contact.create({data:{...data,firstName:String(data.firstName),lastName:String(data.lastName),createdById:actorId} as Prisma.ContactUncheckedCreateInput});
     }
+    await recordMaintenance(tx, actorId, 'CRM import', 'Import', [], plan.counts.newAccounts + plan.counts.updatedAccounts + plan.counts.newContacts + plan.counts.updatedContacts);
     return plan.counts;
   },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,timeout:30000});
 }

@@ -29,7 +29,8 @@ export async function submitAccount(id: number | null, _state: FormState, form: 
 }
 export async function changeArchiveState(id: number, archive: boolean, _state: FormState): Promise<FormState> {
   void _state;
-  try { await setAccountArchived(prisma, id, archive); }
+  const actor = await requireMutation('accounts.write');
+  try { await setAccountArchived(prisma, id, archive, actor.id); }
   catch (error) { return { errors: {}, message: error instanceof Error ? error.message : "Could not update account status." }; }
   revalidatePath("/accounts");
   revalidatePath(`/accounts/${id}`);

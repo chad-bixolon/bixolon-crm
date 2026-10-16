@@ -1,3 +1,4 @@
+import { recordMaintenance } from './admin-maintenance';
 import { MarketingPreference, Prisma, type PrismaClient } from "@prisma/client";
 import { can, type Actor } from "./authorization";
 import { field, optional, pageNumber, phone, positiveId, required, type Errors } from "./crm-validation";
@@ -47,7 +48,13 @@ export async function saveContactRecord(tx: ContactWriteClient, input: ContactIn
 export async function saveContact(client: PrismaClient, input: ContactInput, id?: number, actor?: Actor) {
   return client.$transaction(tx => saveContactRecord(tx, input, id, actor));
 }
-export async function setContactState(client: PrismaClient, id: number, state: "active" | "inactive" | "archived") {
+export async function setContactState(client: PrismaClient, id: number, state: "active" | "inactive" | "archived", actorId?: number) {
+  if (actorId) return client.$transaction(async tx => {
+    const before = await tx.contact.findUnique({ where: { id }, select: { archivedAt: true, active: true } });
+    await setContactState(tx as PrismaClient, id, state);
+    await tx.contact.update({ where: { id }, data: { updatedById: actorId, archivedById: state === "archived" ? actorId : null } });
+    if (before && (Boolean(before.archivedAt) !== (state === "archived") || before.active !== (state === "active"))) await recordMaintenance(tx, actorId, "Contact", state === "archived" ? "Archive" : before.archivedAt ? "Restore" : state === "active" ? "Activate" : "Deactivate", [id]);
+  });
   const existing = await client.contact.findUnique({ where: { id } });
   if (!existing) throw new Error("Contact not found.");
   if (state === "active") {

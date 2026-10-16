@@ -256,7 +256,7 @@ test('lookup administration validates stable codes and sort order', () => {
   assert.match(parseLookup(form([['code', 'R'], ['name', 'Retail'], ['sortOrder', '-1']]), false).errors.sortOrder, /zero or more/);
 });
 test('archive and reactivate update status and timestamp; repeated action fails', async () => {
-  let row = { status: 'ACTIVE', archivedAt: null };
+  let row = { status: 'ACTIVE', archivedAt: null, archivedById: null, updatedById: undefined };
   const client = { $transaction: async (fn) => fn({ account: {
     findUnique: async () => ({ status: row.status }),
     update: async ({ data }) => { row = { ...row, ...data }; },
@@ -265,5 +265,5 @@ test('archive and reactivate update status and timestamp; repeated action fails'
   assert.equal(row.status, 'ARCHIVED'); assert.ok(row.archivedAt instanceof Date);
   await assert.rejects(setAccountArchived(client, 7, true), /already archived/);
   await setAccountArchived(client, 7, false);
-  assert.deepEqual(row, { status: 'ACTIVE', archivedAt: null });
+  assert.deepEqual(row, { status: 'ACTIVE', archivedAt: null, archivedById: null, updatedById: undefined });
 });

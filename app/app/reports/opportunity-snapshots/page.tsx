@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '@/lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { OpportunitySnapshot } from '@prisma/client';
@@ -73,7 +74,7 @@ export default async function OpportunitySnapshotsPage({ searchParams }: { searc
     if (beforeId) query.set('before', String(beforeId)); if (afterId) query.set('after', String(afterId));
     query.set('page', String(page)); return `/reports/opportunity-snapshots?${query}`;
   };
-  return <Content><PageHeader eyebrow="Reports" title="Opportunity Snapshot History" description="Compare Opportunity history using names and values preserved at each capture." action={actor.role === 'ADMIN' ? <Link className="btn-secondary" href="/administration/opportunity-snapshots">Capture snapshot</Link> : <Link className="btn-secondary" href="/reports">Reports</Link>}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.reports} title="Opportunity Snapshot History" description="Compare Opportunity history using names and values preserved at each capture." action={actor.role === 'ADMIN' ? <Link className="btn-secondary" href="/administration/opportunity-snapshots">Capture snapshot</Link> : <Link className="btn-secondary" href="/reports">Reports</Link>}/>
     <form className="panel mb-5 grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
       <label className="text-sm">Snapshot date from (UTC)<input className="field mt-1" type="date" name="from" defaultValue={from?.toISOString().slice(0, 10)}/></label>
       <label className="text-sm">Snapshot date through (UTC)<input className="field mt-1" type="date" name="through" defaultValue={through?.toISOString().slice(0, 10)}/></label>

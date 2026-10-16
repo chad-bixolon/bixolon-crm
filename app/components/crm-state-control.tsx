@@ -8,10 +8,10 @@ export function CrmStateControl({ kind, id, state }: { kind: "contact" | "produc
   const desired = state === "active" ? "inactive" : "active";
   const handler = kind === "contact" ? changeContactState.bind(null, id, desired) : kind === "product" ? changeProductState.bind(null, id, desired) : changeOpportunityArchive.bind(null, id, state !== "archived");
   const [result, action, pending] = useActionState(handler, { errors: {} } as State);
-  return <form action={action} className="inline-flex items-center gap-2"><button className="btn-secondary disabled:opacity-60" disabled={pending}>{pending ? "Updating…" : state === "archived" ? "Reactivate" : kind === "opportunity" ? "Archive" : state === "active" ? "Deactivate" : "Activate"}</button>{result.message && <span role="status" className="text-sm text-slate-600">{result.message}</span>}</form>;
+  return <form onSubmit={event => { if (kind !== "product" && !window.confirm("Confirm this record status change?")) event.preventDefault(); }} action={action} className="inline-flex items-center gap-2"><button className="btn-secondary disabled:opacity-60" disabled={pending}>{pending ? "Updating…" : state === "archived" ? "Reactivate" : kind === "opportunity" ? "Archive" : state === "active" ? "Deactivate" : "Activate"}</button>{result.message && <span role="status" className="text-sm text-slate-600">{result.message}</span>}</form>;
 }
 export function ArchiveCrmControl({ kind, id }: { kind: "contact" | "product"; id: number }) {
   const handler = kind === "contact" ? changeContactState.bind(null, id, "archived") : changeProductState.bind(null, id, "archived");
   const [result, action, pending] = useActionState(handler, { errors: {} } as State);
-  return <form action={action} className="inline-flex items-center gap-2"><button className="btn-secondary disabled:opacity-60" disabled={pending}>{pending ? "Archiving…" : "Archive"}</button>{result.message && <span role="status" className="text-sm text-slate-600">{result.message}</span>}</form>;
+  return <form onSubmit={event => { if (kind !== "product" && !window.confirm("Confirm this record status change?")) event.preventDefault(); }} action={action} className="inline-flex items-center gap-2"><button className="btn-secondary disabled:opacity-60" disabled={pending}>{pending ? "Archiving…" : "Archive"}</button>{result.message && <span role="status" className="text-sm text-slate-600">{result.message}</span>}</form>;
 }

@@ -2507,3 +2507,17 @@ model SupportGmailConnection {
   lastSyncedAt DateTime?
   updatedAt DateTime @updatedAt
 }
+
+/// Operational maintenance only. Append-only; no arbitrary payloads or secrets.
+model AdminMaintenanceEvent {
+  id Int @id @default(autoincrement())
+  occurredAt DateTime @default(now())
+  actorId Int
+  entityType String @db.VarChar(40)
+  action String @db.VarChar(40)
+  recordIds Int[]
+  recordCount Int
+
+  @@index([occurredAt(sort: Desc), id(sort: Desc)])
+  @@index([actorId, occurredAt])
+}

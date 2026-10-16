@@ -1,3 +1,4 @@
+import { ConfirmMaintenanceForm } from '@/components/confirm-maintenance-form';
 import { RecoverableActionForm } from '@/components/recoverable-action-form';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
@@ -77,7 +78,7 @@ export default async function HistoryAdministration({ searchParams }: { searchPa
         <div className="flex justify-between gap-3 border-b border-slate-100 py-1"><dt className="text-slate-600">Eligible Opportunity events</dt><dd className="font-medium tabular-nums">{preview.events}</dd></div>
         <div className="flex justify-between gap-3 border-b border-slate-100 py-1"><dt className="text-slate-600">Eligible forecast snapshots</dt><dd className="font-medium tabular-nums">{preview.snapshots}</dd></div>
       </dl>
-      {eligible ? <form action={archiveHistoryAction} className="mt-4"><input type="hidden" name="cutoff" value={preview.cutoff.toISOString()}/><input type="hidden" name="events" value={preview.events}/><input type="hidden" name="snapshots" value={preview.snapshots}/><button className="btn-secondary">Archive next 500 of each</button></form> : <p className="mt-3 text-sm text-slate-600">No history is currently eligible for archive.</p>}
+      {eligible ? <ConfirmMaintenanceForm message="Archive this batch of retained history?" action={archiveHistoryAction} className="mt-4"><input type="hidden" name="cutoff" value={preview.cutoff.toISOString()}/><input type="hidden" name="events" value={preview.events}/><input type="hidden" name="snapshots" value={preview.snapshots}/><button className="btn-secondary">Archive next 500 of each</button></ConfirmMaintenanceForm> : <p className="mt-3 text-sm text-slate-600">No history is currently eligible for archive.</p>}
     </section>
     <section className="panel p-4 sm:p-5" aria-labelledby="restore-history-heading">
       <h2 id="restore-history-heading" className="text-lg font-semibold">Restore History</h2>
@@ -88,7 +89,7 @@ export default async function HistoryAdministration({ searchParams }: { searchPa
             {events?._min.occurredAt && events._max.occurredAt && <p className="text-slate-600">Opportunity events: {formatEasternDate(events._min.occurredAt)} – {formatEasternDate(events._max.occurredAt)}</p>}
             {snapshots?._min.capturedAt && snapshots._max.capturedAt && <p className="text-slate-600">Forecast snapshots: {formatEasternDate(snapshots._min.capturedAt)} – {formatEasternDate(snapshots._max.capturedAt)}</p>}
           </div>
-          <form action={restoreHistoryAction}><input type="hidden" name="batchId" value={batch.archiveBatchId}/><button className="btn-secondary">Restore</button></form>
+          <ConfirmMaintenanceForm message="Restore this archived history batch?" action={restoreHistoryAction}><input type="hidden" name="batchId" value={batch.archiveBatchId}/><button className="btn-secondary">Restore</button></ConfirmMaintenanceForm>
         </li>;
       })}</ul> : <p className="mt-2 text-sm text-slate-600">No archived history batches are available to restore.</p>}
     </section>

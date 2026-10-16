@@ -1,3 +1,4 @@
+import { NAV_CATEGORIES } from '@/lib/navigation-categories';
 import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
 import { requirePermission } from '@/lib/current-user';
@@ -12,7 +13,7 @@ export default async function ForecastSnapshotAdministration() {
     prisma.opportunitySnapshotRun.findMany({ where: { scopeVersion: FORECAST_SNAPSHOT_SCOPE, status: 'COMPLETE' }, orderBy: [{ snapshotAt: 'desc' }, { id: 'desc' }], take: 104 }),
     prisma.forecastSnapshotRun.findMany({ orderBy: [{ snapshotAt: 'desc' }, { id: 'desc' }], take: 12 }),
   ]);
-  return <Content><PageHeader eyebrow="Administration" title="Forecast Snapshots" description="Create and review historical forecast snapshots by quarter." action={<Link className="btn-secondary" href="/reports/forecast-snapshots">Forecast Snapshot History</Link>}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Forecast Snapshots" description="Create and review historical forecast snapshots by quarter." action={<Link className="btn-secondary" href="/reports/forecast-snapshots">Forecast Snapshot History</Link>}/>
     <p className="panel mb-5 p-5 text-sm">Forecast snapshots use preserved Opportunity data from a selected snapshot run. Pipeline includes Pipeline, Best Case, and Commit, while Best Case and Commit remain separate totals. Closed Won is based on the captured won stage and Expected Close Date. Currencies are reported separately.</p>
     <p className="mb-3 text-xs text-slate-600">One forecast snapshot can be created per Opportunity Snapshot source and quarter. Automated scheduling is not enabled yet.</p>
     <p className="mb-5 text-sm">Select an Opportunity Snapshot that includes forecast data. The most recent eligible snapshot runs are shown below. <Link className="underline" href="/administration/opportunity-snapshots">Capture an Opportunity Snapshot</Link></p>

@@ -1,3 +1,4 @@
+import { recordMaintenance } from './admin-maintenance';
 import { Prisma, SupportCasePriority, type PrismaClient } from '@prisma/client';
 import { assertPermission, can, taskScope, type Actor } from './authorization';
 import { eligibleUserWhere } from './assignment-eligibility';
@@ -51,6 +52,7 @@ export async function bulkTasks(db: PrismaClient, actor: Actor, request: BulkReq
       if (!parsed.value) throw new Error(`A selected Task needs individual review: ${Object.values(parsed.errors)[0]}`);
       await saveTaskInTransaction(tx, value, row.id, undefined, actor.id);
     }
+    await recordMaintenance(tx, actor.id, 'Task', request.action === 'assign' ? 'Reassign' : request.action === 'complete' ? 'Bulk complete' : 'Bulk due date', ids);
     return rows.length;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 });
 }
@@ -69,6 +71,7 @@ export async function bulkSupportCases(db: PrismaClient, actor: Actor, request: 
     assertVersions(rows, request);
     if (assignedToId && !await tx.user.findFirst({ where: { id: assignedToId, ...eligibleUserWhere('support-cases.write') }, select: { id: true } })) throw new Error('Select an eligible Support Rep.');
     for (const row of rows) await updateSupportCaseInTransaction(tx, actor, row.id, assignedToId ? { assignedToId } : { priority });
+    await recordMaintenance(tx, actor.id, 'Support Case', request.action === 'assign' ? 'Reassign' : 'Bulk priority', ids);
     return rows.length;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 });
 }

@@ -10,6 +10,7 @@ const groups = [
     ["Data Quality / Cleanup", "/administration/data-quality", "Review CRM records that may need cleanup or follow-up."],
   ] },
   { title: "Users & Access", tools: [
+    ["Ownership & Reassignment", "/administration/ownership", "Review records assigned to inactive or ineligible users and safely reassign work."],
     ["Users", "/administration/users", "Manage user access and record owners."],
     ["Dashboard Views", "/administration/dashboard-views", "Configure the default Dashboard for each role."],
   ] },
@@ -29,6 +30,8 @@ const groups = [
     ["Product Categories", "/administration/lookups/product-categories", "Manage Product category choices and order."],
   ] },
   { title: "System & History", tools: [
+    ["Audit History", "/administration/audit-history", "Review business changes across existing history sources."],
+    ["Maintenance History", "/administration/maintenance-history", "See who performed supported maintenance actions and when."],
     ["System Health", "/administration/system-health", "Review database, object storage, and scheduled job status."],
     ["System Settings", "/administration/settings", "Set safe reporting and warning defaults."],
     ["Opportunity & Forecast History", "/administration/history", "Review historical Opportunity and forecast snapshots."],

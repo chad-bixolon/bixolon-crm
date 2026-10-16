@@ -12,8 +12,8 @@ const taskActions: Action[] = [{ value: 'assign', label: 'Assign' }, { value: 'd
 const caseActions: Action[] = [{ value: 'assign', label: 'Assign' }, { value: 'priority', label: 'Change priority' }];
 const priorities = [{ value: 'LOW', label: 'Low' }, { value: 'NORMAL', label: 'Normal' }, { value: 'HIGH', label: 'High' }, { value: 'CRITICAL', label: 'Critical' }];
 
-export function BulkSelection({ kind, records, assignees, enabled, children }: {
-  kind: 'tasks' | 'cases'; records: BulkRecord[]; assignees: { id: number; name: string }[]; enabled: boolean; children: ReactNode;
+export function BulkSelection({ kind, records, assignees, enabled, children, allowedActions }: {
+  kind: 'tasks' | 'cases'; records: BulkRecord[]; assignees: { id: number; name: string }[]; enabled: boolean; children: ReactNode; allowedActions?: string[];
 }) {
   const [selected, setSelected] = useState<BulkRecord[]>([]), [action, setAction] = useState<Action | null>(null);
   const [review, setReview] = useState<BulkRecord[]>([]);
@@ -35,7 +35,7 @@ export function BulkSelection({ kind, records, assignees, enabled, children }: {
       {ids.length > 0 && <div className="panel mb-3 flex flex-wrap items-center gap-2 p-3 text-sm" aria-label="Bulk actions">
         <strong aria-live="polite">{ids.length} selected</strong><span className="text-slate-600">on this page · limit {BULK_SELECTION_LIMIT}</span>
         <button type="button" className="btn-secondary" disabled={busy} onClick={() => { setSelected([]); setMessage(''); }}>Clear selection</button>
-        {(kind === 'tasks' ? taskActions : caseActions).map(item => <button key={item.value} type="button" className="btn-secondary" disabled={busy} onClick={event => { trigger.current = event.currentTarget; setAction(item); setReview(current); setValue(''); setError(''); dialog.current?.showModal(); }}>{item.label}</button>)}
+        {(kind === 'tasks' ? taskActions : caseActions).filter(item => !allowedActions || allowedActions.includes(item.value)).map(item => <button key={item.value} type="button" className="btn-secondary" disabled={busy} onClick={event => { trigger.current = event.currentTarget; setAction(item); setReview(current); setValue(''); setError(''); dialog.current?.showModal(); }}>{item.label}</button>)}
       </div>}
       {message && <p role="status" className="mb-3 text-sm text-emerald-800">{message}</p>}
       <dialog ref={dialog} className="bulk-confirm-dialog saved-views-dialog" aria-label="Confirm bulk update" onCancel={event => { event.preventDefault(); close(); }} onKeyDown={event => {
