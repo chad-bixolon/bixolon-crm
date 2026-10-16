@@ -49,11 +49,11 @@ export default async function HistoryAdministration({ searchParams }: { searchPa
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Opportunity & Forecast History" action={<Link className="btn-secondary" href="/administration/settings">Retention setting</Link>}/>
     {feedback.restore === 'complete' && <p className="panel mb-4 p-4 text-sm">Archive batch restored.</p>}
     <section className="panel mb-4 p-4 sm:p-5" aria-labelledby="snapshot-status-heading">
-      <div className="flex flex-wrap items-center justify-between gap-2"><h2 id="snapshot-status-heading" className="text-lg font-semibold">Forecast Snapshot Status</h2><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${currentSnapshots?._count._all ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>{currentSnapshots?._count._all ? 'Active' : 'Not captured'}</span></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><h2 id="snapshot-status-heading" className="text-lg font-semibold">Forecast Snapshot History</h2><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${currentSnapshots?._count._all ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>{currentSnapshots?._count._all ? 'Active' : 'Not captured'}</span></div>
       <dl className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
         <div className="flex min-w-0 justify-between gap-3 border-b border-slate-100 py-1"><dt className="text-slate-600">Current week</dt><dd className="text-right font-medium">{currentWeek}</dd></div>
         <div className="flex min-w-0 justify-between gap-3 border-b border-slate-100 py-1"><dt className="text-slate-600">Last captured</dt><dd className="text-right font-medium">{currentSnapshots?._max.capturedAt ? formatEasternDateTime(currentSnapshots._max.capturedAt) : 'Not captured yet'}</dd></div>
-        <div className="flex min-w-0 justify-between gap-3 border-b border-slate-100 py-1"><dt className="text-slate-600">Rep snapshots</dt><dd className="text-right font-medium tabular-nums">{currentSnapshots?._count._all ?? 0}</dd></div>
+        <div className="flex min-w-0 justify-between gap-3 border-b border-slate-100 py-1"><dt className="text-slate-600">Sales reps captured</dt><dd className="text-right font-medium tabular-nums">{currentSnapshots?._count._all ?? 0}</dd></div>
         <div className="flex min-w-0 justify-between gap-3 border-b border-slate-100 py-1"><dt className="text-slate-600">Forecast period</dt><dd className="text-right font-medium">{forecastYear} {forecastQuarter}</dd></div>
         <div className="flex min-w-0 justify-between gap-3 border-b border-slate-100 py-1"><dt className="text-slate-600">Currency</dt><dd className="text-right font-medium">{forecastCurrency ?? '—'}</dd></div>
       </dl>
@@ -61,9 +61,9 @@ export default async function HistoryAdministration({ searchParams }: { searchPa
         <div className="w-24"><label className="label" htmlFor="snapshot-year">Year</label><input className="field" id="snapshot-year" type="number" name="year" min="2000" max="2100" defaultValue={forecastYear}/></div>
         <div className="w-28"><label className="label" htmlFor="snapshot-quarter">Quarter</label><select className="field" id="snapshot-quarter" name="quarter" defaultValue={forecastQuarter}>{Object.values(SalesQuarter).map(q=><option key={q}>{q}</option>)}</select></div>
         <div className="w-28"><label className="label" htmlFor="snapshot-currency">Currency</label><select className="field" id="snapshot-currency" name="currencyCode" defaultValue={forecastCurrency}>{currencies.map(currency=><option key={currency.code}>{currency.code}</option>)}</select></div>
-        <button className="btn-primary self-end">Capture snapshot</button>
+        <button className="btn-primary self-end">Capture Forecast</button>
       </RecoverableActionForm>
-      <p className="mt-2 text-xs text-slate-600">Captures one snapshot per active rep for the selected period and currency. Repeating a New York calendar week preserves the first snapshot.</p>
+      <p className="mt-2 text-xs text-slate-600">Captures the current forecast for each eligible sales rep for the selected quarter and currency. Only one snapshot per rep, quarter, and currency is kept per calendar week in New York time.</p>
     </section>
     <section className="panel mb-4 min-w-0 p-4 sm:p-5" aria-labelledby="recent-snapshots-heading">
       <h2 id="recent-snapshots-heading" className="text-lg font-semibold">Recent Snapshots <span className="text-sm font-normal text-slate-500">({latestSnapshots.length})</span></h2>

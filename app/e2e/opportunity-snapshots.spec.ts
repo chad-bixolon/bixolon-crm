@@ -67,11 +67,11 @@ test.afterAll(async () => {
 test('manual capture confirms a complete set, excludes out-of-scope records, and prevents duplicates', async ({ page }) => {
   await signInAs(page, 'admin');
   await page.goto('/administration/opportunity-snapshots');
-  const capture = page.getByRole('region', { name: 'Manual snapshot capture', exact: true });
+  const capture = page.getByRole('region', { name: 'Capture Opportunity Snapshot', exact: true });
   await page.getByRole('button', { name: 'Preview snapshot', exact: true }).click();
   const existing = await db.opportunitySnapshotRun.findUnique({ where: { snapshotWeek: snapshotWeek(new Date()) } });
   if (existing) {
-    await expect(capture.getByRole('alert')).toContainText('already has an immutable snapshot run');
+    await expect(capture.getByRole('alert')).toContainText('already has an Opportunity Snapshot');
     return;
   }
   const expectedCount = await db.opportunity.count({ where: snapshotWhere });
@@ -87,7 +87,7 @@ test('manual capture confirms a complete set, excludes out-of-scope records, and
   expect(row.amount.toFixed(2)).toBe('59.85'); expect(row.productCount).toBe(1); expect(row.probability).toBe(20);
   expect(row.accountIds).toEqual([accountId]); expect(row.stageName).toContain('Qualification');
   await page.getByRole('button', { name: 'Preview snapshot', exact: true }).click();
-  await expect(capture.getByRole('alert')).toContainText('already has an immutable snapshot run');
+  await expect(capture.getByRole('alert')).toContainText('already has an Opportunity Snapshot');
 });
 
 test('database rejects mutation, extension and incomplete sets; live edits do not rewrite history', async () => {
@@ -109,9 +109,9 @@ test('server comparisons retain both endpoints through owner/stage/Account filte
   const movement = result.rows.find(row => row.opportunityId === movingId)!;
   expect(movement.changes).toEqual(['Stage changed', 'Amount increased', 'Close date slipped', 'Owner changed', 'Forecast category changed', 'Probability changed']);
   expect(movement.after?.ownerId).toBe(managerId);
-  expect(result.rows.find(row => row.opportunityId === removedId)?.changes).toEqual(['Left snapshot scope — closure/removal reason not captured']);
+  expect(result.rows.find(row => row.opportunityId === removedId)?.changes).toEqual(['No longer included — reason not recorded']);
   const all = await compareSnapshotRuns(db, admin, beforeId, afterId);
-  expect(all.rows.find(row => row.opportunityId === enteredId)?.changes).toEqual(['Entered snapshot set']);
+  expect(all.rows.find(row => row.opportunityId === enteredId)?.changes).toEqual(['Newly included in this snapshot']);
   expect((await compareSnapshotRuns(db, admin, beforeId, afterId, { accountId: 2147483647 })).rows).toHaveLength(0);
   expect(all.totals.find(row => row.runId === beforeId)?.amount.toFixed(2)).toBe('119.70');
   for (const role of ['SALES_MANAGER', 'SALES', 'READ_ONLY', 'SUPPORT', 'MARKETING_MANAGER'] as const) {
@@ -127,7 +127,7 @@ test('report and detail retain historical values, respect filters and deny unaut
   const moving = page.getByRole('region', { name: 'Snapshot comparison' }).getByRole('row').filter({ hasText: `${tag} Moving` });
   await expect(moving).toContainText('Amount increased'); await expect(moving).toContainText('Owner changed');
   await expect(moving).toContainText('Original Rep'); await expect(moving).toContainText('New Owner');
-  await expect(page.getByLabel('Run date from (UTC)')).toHaveValue('2000-01-01');
+  await expect(page.getByLabel('Snapshot date from (UTC)')).toHaveValue('2000-01-01');
   await page.getByRole('button', { name: 'Compare snapshots', exact: true }).click();
   await expect(moving).toContainText('Close date slipped');
   await page.goto(`/opportunities/${movingId}`);

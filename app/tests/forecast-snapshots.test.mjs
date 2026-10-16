@@ -65,11 +65,11 @@ test('duplicate protection, required confirmation, expired previews and legacy s
   await assert.rejects(service.captureForecastSnapshot(f.client, actor, p, false), /Explicit confirmation/);
   await assert.rejects(service.captureForecastSnapshot(f.client, actor, { ...p, preparedAt: '2000-01-01' }, true), /expired/);
   f.source.scopeVersion = sources.SNAPSHOT_SCOPE;
-  await assert.rejects(service.captureForecastSnapshot(f.client, actor, p, true), /forecast-ready/);
+  await assert.rejects(service.captureForecastSnapshot(f.client, actor, p, true), /includes forecast data/);
   f.source.scopeVersion = sources.FORECAST_SNAPSHOT_SCOPE;
   await service.captureForecastSnapshot(f.client, actor, p, true);
-  await assert.rejects(service.captureForecastSnapshot(f.client, actor, p, true), /already have/);
-  await assert.rejects(service.previewForecastSnapshot(f.client, actor, period), /already have/);
+  await assert.rejects(service.captureForecastSnapshot(f.client, actor, p, true), /already has/);
+  await assert.rejects(service.previewForecastSnapshot(f.client, actor, period), /already has/);
 });
 test('incomplete sources are rejected; empty sources produce valid zero runs', async () => {
   const f = fake(); f.source.opportunityCount = 2;

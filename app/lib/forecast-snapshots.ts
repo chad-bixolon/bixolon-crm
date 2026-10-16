@@ -12,12 +12,12 @@ export function assertForecastReportAccess(actor: Actor) {
 }
 async function readRollup(tx: Prisma.TransactionClient, input: ForecastCaptureInput) {
   quarterBounds(input.year, input.quarter);
-  if (!Number.isSafeInteger(input.sourceRunId) || input.sourceRunId <= 0) throw new Error('Choose a compatible source run.');
+  if (!Number.isSafeInteger(input.sourceRunId) || input.sourceRunId <= 0) throw new Error('Choose an Opportunity Snapshot that includes forecast data.');
   const source = await tx.opportunitySnapshotRun.findUnique({ where: { id: input.sourceRunId } });
-  if (!source || source.status !== 'COMPLETE' || source.scopeVersion !== FORECAST_SNAPSHOT_SCOPE) throw new Error('Choose a forecast-ready Opportunity Snapshot Run. Older open-only runs cannot supply owner eligibility or Closed Won history.');
-  if (await tx.forecastSnapshotRun.findUnique({ where: { sourceRunId_year_quarter: { sourceRunId: input.sourceRunId, year: input.year, quarter: input.quarter } } })) throw new Error('This source run and forecast period already have an immutable Forecast Snapshot.');
+  if (!source || source.status !== 'COMPLETE' || source.scopeVersion !== FORECAST_SNAPSHOT_SCOPE) throw new Error('Choose an Opportunity Snapshot that includes forecast data. Snapshots of open Opportunities only do not include owner eligibility or Closed Won history.');
+  if (await tx.forecastSnapshotRun.findUnique({ where: { sourceRunId_year_quarter: { sourceRunId: input.sourceRunId, year: input.year, quarter: input.quarter } } })) throw new Error('This Opportunity Snapshot already has a Forecast Snapshot for the selected quarter.');
   const snapshots = await tx.opportunitySnapshot.findMany({ where: { runId: source.id }, orderBy: { opportunityId: 'asc' }, take: SNAPSHOT_LIMIT + 1 });
-  if (snapshots.length > SNAPSHOT_LIMIT || snapshots.length !== source.opportunityCount || snapshots.some(row => row.ownerForecastEligible === null)) throw new Error('Source snapshot is incomplete or incompatible.');
+  if (snapshots.length > SNAPSHOT_LIMIT || snapshots.length !== source.opportunityCount || snapshots.some(row => row.ownerForecastEligible === null)) throw new Error('Source snapshot is incomplete or does not include the required forecast data.');
   const grouped = new Map<string, { ownerId: number; ownerName: string; currencyCode: string; forecastCategory: keyof typeof snapshotCategoryNames; categoryName: string; amount: Prisma.Decimal; opportunityCount: number }>();
   for (const row of snapshots) {
     if (!inSnapshotForecast(row, input)) continue;
@@ -60,7 +60,7 @@ export async function captureForecastSnapshot(client: PrismaClient, actor: Actor
       return run;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 60000 });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new Error('This source run and forecast period already have an immutable Forecast Snapshot.');
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new Error('This Opportunity Snapshot already has a Forecast Snapshot for the selected quarter.');
     throw error;
   }
 }
@@ -77,12 +77,12 @@ export function summarizeForecastRows(rows: Pick<ForecastSnapshotRollup, 'foreca
 }
 export async function compareForecastSnapshotRuns(client: PrismaClient, actor: Actor, beforeId: number, afterId: number, filters: { ownerId?: number; currencyCode?: string } = {}) {
   assertForecastReportAccess(actor);
-  if (![beforeId, afterId].every(id => Number.isSafeInteger(id) && id > 0) || beforeId === afterId) throw new Error('Choose two different forecast runs.');
+  if (![beforeId, afterId].every(id => Number.isSafeInteger(id) && id > 0) || beforeId === afterId) throw new Error('Choose two different Forecast Snapshots.');
   if (filters.currencyCode && !/^[A-Z]{3}$/.test(filters.currencyCode)) throw new Error('Choose a currency.');
   return client.$transaction(async tx => {
     const runs = await tx.forecastSnapshotRun.findMany({ where: { id: { in: [beforeId, afterId] } }, take: 2 });
     const before = runs.find(run => run.id === beforeId), after = runs.find(run => run.id === afterId);
-    if (!before || !after || before.snapshotAt >= after.snapshotAt || before.year !== after.year || before.quarter !== after.quarter) throw new Error('Choose earlier and later runs for the same forecast period.');
+    if (!before || !after || before.snapshotAt >= after.snapshotAt || before.year !== after.year || before.quarter !== after.quarter) throw new Error('Choose earlier and later snapshots for the same forecast period.');
     const rows = await tx.forecastSnapshotRollup.findMany({ where: { runId: { in: [beforeId, afterId] }, ...(filters.ownerId ? { ownerId: filters.ownerId } : {}), ...(filters.currencyCode ? { currencyCode: filters.currencyCode } : {}) } });
     const currencies = [...new Set(rows.map(row => row.currencyCode))].sort();
     // Preserve currencies and both endpoint owner sets. A reassignment is a

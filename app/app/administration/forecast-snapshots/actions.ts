@@ -7,8 +7,8 @@ import { captureForecastSnapshot, previewForecastSnapshot, summarizeForecastRows
 import { signForecastPreview, verifyForecastPreview } from '@/lib/forecast-snapshot-preview';
 function safeMessage(error: unknown) {
   const message = error instanceof Error ? error.message : '';
-  return /^(Choose |This source run|Source snapshot|Explicit confirmation|Preview expired|Invalid forecast preview)/.test(message)
-    ? message : 'Could not capture the Forecast Snapshot. No partial run was saved. Try again.';
+  return /^(Choose |This Opportunity Snapshot|Source snapshot|Explicit confirmation|Preview expired|Invalid forecast preview)/.test(message)
+    ? message : 'Could not capture the Forecast Snapshot. No partial snapshot was saved. Try again.';
 }
 export async function previewForecastAction(input: { sourceRunId: number; year: number; quarter: SalesQuarter }) {
   const actor = await requireMutation('users.manage');
@@ -28,6 +28,6 @@ export async function confirmForecastAction(token: string, confirmed: boolean) {
   try {
     const run = await captureForecastSnapshot(prisma, actor, verifyForecastPreview(token, actor.id, process.env.AUTH_SECRET ?? ''), confirmed);
     revalidatePath('/administration/forecast-snapshots'); revalidatePath('/reports/forecast-snapshots');
-    return { success: `Created Forecast Snapshot #${run.id} from Opportunity Snapshot Run #${run.sourceRunId}: ${run.opportunityCount} Opportunities for ${run.year} ${run.quarter}.`, runId: run.id };
+    return { success: `Created Forecast Snapshot #${run.id} using Opportunity Snapshot #${run.sourceRunId}: ${run.opportunityCount} Opportunities for ${run.year} ${run.quarter}.`, runId: run.id };
   } catch (error) { return { error: safeMessage(error) }; }
 }

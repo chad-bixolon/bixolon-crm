@@ -101,9 +101,9 @@ test('close dates slip/pull in only when both dates exist and differ by calendar
   assert.deepEqual(snapshots.compareOpportunitySnapshots(snapshot(), snapshot({ expectedCloseDate: new Date('2026-11-01T12:00:00Z') })), ['No tracked movement']);
 });
 test('entered and absent records never invent a loss or a slip', () => {
-  assert.deepEqual(snapshots.compareOpportunitySnapshots(null, snapshot()), ['Entered snapshot set']);
+  assert.deepEqual(snapshots.compareOpportunitySnapshots(null, snapshot()), ['Newly included in this snapshot']);
   const removed = snapshots.compareOpportunitySnapshots(snapshot(), null).join(' ');
-  assert.match(removed, /reason not captured/); assert.doesNotMatch(removed, /lost|slipped|won/i);
+  assert.match(removed, /reason not recorded/); assert.doesNotMatch(removed, /lost|slipped|won/i);
 });
 test('SALES detail history requires current ownership AND historical ownership, bounded to eight', async () => {
   let query;

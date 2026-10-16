@@ -29,7 +29,7 @@ test('Admin Users, Support categories, and History management render', async ({ 
 test('snapshot capture shows one outcome and refreshes the current-week status', async ({ page }) => {
   await signInAs(page, 'admin');
   await page.goto('/administration/history');
-  const status = page.getByRole('region', { name: 'Forecast Snapshot Status' });
+  const status = page.getByRole('region', { name: 'Forecast Snapshot History' });
   const form = status.locator('form');
   const weekText = await status.locator('dt', { hasText: 'Current week' }).locator('..').locator('dd').innerText();
   const snapshotWeek = new Date(`${new Date(weekText).toISOString().slice(0, 10)}T00:00:00.000Z`);
@@ -43,30 +43,30 @@ test('snapshot capture shows one outcome and refreshes the current-week status',
     await db.$disconnect();
   }
   await page.reload();
-  await expect(status.locator('dt', { hasText: 'Rep snapshots' }).locator('..').locator('dd')).toHaveText('0');
-  await form.getByRole('button', { name: 'Capture snapshot' }).click();
+  await expect(status.locator('dt', { hasText: 'Sales reps captured' }).locator('..').locator('dd')).toHaveText('0');
+  await form.getByRole('button', { name: 'Capture Forecast' }).click();
   const success = form.getByRole('status').filter({ hasText: /^Captured \d+ rep snapshots? for the week of / });
   await expect(success).toBeVisible();
   const count = Number((await success.innerText()).match(/^Captured (\d+)/)?.[1]);
   expect(count).toBeGreaterThan(0);
   await expect(form.getByRole('alert')).toHaveCount(0);
-  await expect(status.locator('dt', { hasText: 'Rep snapshots' }).locator('..').locator('dd')).toHaveText(String(count));
+  await expect(status.locator('dt', { hasText: 'Sales reps captured' }).locator('..').locator('dd')).toHaveText(String(count));
   const lastCaptured = status.locator('dt', { hasText: 'Last captured' }).locator('..').locator('dd');
   await expect(lastCaptured).not.toHaveText('Not captured yet');
   const firstCaptureTime = await lastCaptured.innerText();
 
   await form.getByLabel('Year').evaluate(input => (input as HTMLInputElement).min = '1900');
   await form.getByLabel('Year').fill('1999');
-  await form.getByRole('button', { name: 'Capture snapshot' }).click();
+  await form.getByRole('button', { name: 'Capture Forecast' }).click();
   await expect(form.getByRole('alert')).toHaveText('Choose a valid year and quarter.');
   await expect(page.getByText(/^Captured \d+ rep snapshots? for the week of /)).toHaveCount(0);
   await expect(form.getByLabel('Year')).toHaveValue('1999');
-  await expect(status.locator('dt', { hasText: 'Rep snapshots' }).locator('..').locator('dd')).toHaveText(String(count));
+  await expect(status.locator('dt', { hasText: 'Sales reps captured' }).locator('..').locator('dd')).toHaveText(String(count));
 
   await form.getByLabel('Year').fill(String(year));
-  await form.getByRole('button', { name: 'Capture snapshot' }).click();
+  await form.getByRole('button', { name: 'Capture Forecast' }).click();
   await expect(form.getByRole('status').filter({ hasText: 'were already captured.' })).toBeVisible();
   await expect(form.getByRole('alert')).toHaveCount(0);
-  await expect(status.locator('dt', { hasText: 'Rep snapshots' }).locator('..').locator('dd')).toHaveText(String(count));
+  await expect(status.locator('dt', { hasText: 'Sales reps captured' }).locator('..').locator('dd')).toHaveText(String(count));
   await expect(lastCaptured).toHaveText(firstCaptureTime);
 });

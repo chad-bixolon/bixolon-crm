@@ -31,9 +31,9 @@ const groups = [
   { title: "System & History", tools: [
     ["System Health", "/administration/system-health", "Review database, object storage, and scheduled job status."],
     ["System Settings", "/administration/settings", "Set safe reporting and warning defaults."],
-    ["Opportunity & Forecast History", "/administration/history", "Capture weekly forecast snapshots and archive eligible history."],
-    ["Forecast Snapshots", "/administration/forecast-snapshots", "Preview and confirm quarterly rollups from Opportunity Snapshot runs."],
-    ["Opportunity Snapshots", "/administration/opportunity-snapshots", "Preview and confirm immutable weekly Opportunity snapshot sets."],
+    ["Opportunity & Forecast History", "/administration/history", "Review historical Opportunity and forecast snapshots."],
+    ["Forecast Snapshots", "/administration/forecast-snapshots", "Create and review historical forecast snapshots by quarter."],
+    ["Opportunity Snapshots", "/administration/opportunity-snapshots", "Capture and compare weekly Opportunity history."],
   ] },
 ] as const;
 

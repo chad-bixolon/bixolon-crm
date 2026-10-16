@@ -67,7 +67,7 @@ export async function previewOpportunitySnapshot(client: PrismaClient, actor: Ac
   return client.$transaction(async tx => {
     const [{ at }] = await tx.$queryRaw<{ at: Date }[]>`SELECT transaction_timestamp() AS at`;
     const week = snapshotWeek(at);
-    if (await tx.opportunitySnapshotRun.findUnique({ where: { snapshotWeek: week }, select: { id: true } })) throw new Error('This week already has an immutable snapshot run. Reruns are disabled in v1.');
+    if (await tx.opportunitySnapshotRun.findUnique({ where: { snapshotWeek: week }, select: { id: true } })) throw new Error('This week already has an Opportunity Snapshot. Existing snapshots cannot be replaced.');
     const rows = await readSnapshotSet(tx, forecastReady);
     return { preparedAt: at.toISOString(), week: week.toISOString().slice(0, 10), count: rows.length, fingerprint: fingerprint(rows), forecastReady };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 60000 });
@@ -100,7 +100,7 @@ export async function captureOpportunitySnapshot(client: PrismaClient, actor: Ac
       return run;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 60000 });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new Error('This week already has an immutable snapshot run. Reruns are disabled in v1.');
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new Error('This week already has an Opportunity Snapshot. Existing snapshots cannot be replaced.');
     throw error;
   }
 }
@@ -111,8 +111,8 @@ export function snapshotAccounts(value: Prisma.JsonValue): { id: number; name: s
 }
 const dateKey = (at: Date | null) => at?.toISOString().slice(0, 10) ?? null;
 export function compareOpportunitySnapshots(before: OpportunitySnapshot | null, after: OpportunitySnapshot | null) {
-  if (!before) return ['Entered snapshot set'];
-  if (!after) return ['Left snapshot scope — closure/removal reason not captured'];
+  if (!before) return ['Newly included in this snapshot'];
+  if (!after) return ['No longer included — reason not recorded'];
   const changes: string[] = [];
   if (before.stageId !== after.stageId) changes.push('Stage changed');
   else if (before.stageName !== after.stageName) changes.push('Stage renamed');
@@ -134,11 +134,11 @@ export function compareOpportunitySnapshots(before: OpportunitySnapshot | null, 
 export type SnapshotFilters = { ownerId?: number; stageId?: number; accountId?: number; opportunityId?: number; page?: number; forecastPeriod?: ForecastPeriod; currencyCode?: string; category?: string };
 export async function compareSnapshotRuns(client: PrismaClient, actor: Actor, beforeId: number, afterId: number, filters: SnapshotFilters = {}) {
   if (!canReadOpportunitySnapshots(actor)) throw new Error('Access denied');
-  if (![beforeId, afterId].every(id => Number.isSafeInteger(id) && id > 0) || beforeId === afterId) throw new Error('Choose two different snapshot runs.');
+  if (![beforeId, afterId].every(id => Number.isSafeInteger(id) && id > 0) || beforeId === afterId) throw new Error('Choose two different snapshots.');
   return client.$transaction(async tx => {
     const runs = await tx.opportunitySnapshotRun.findMany({ where: { id: { in: [beforeId, afterId] } }, take: 2 });
     const before = runs.find(r => r.id === beforeId), after = runs.find(r => r.id === afterId);
-    if (!before || !after || before.snapshotAt >= after.snapshotAt) throw new Error('Choose an earlier and a later snapshot run.');
+    if (!before || !after || before.snapshotAt >= after.snapshotAt) throw new Error('Choose an earlier and a later snapshot.');
     const bounds = filters.forecastPeriod ? quarterBounds(filters.forecastPeriod.year, filters.forecastPeriod.quarter) : null;
     if (filters.currencyCode && !/^[A-Z]{3}$/.test(filters.currencyCode)) throw new Error('Choose a currency.');
     if (filters.category && !['ALL_OPEN', 'PIPELINE', 'BEST_CASE', 'COMMIT', 'CLOSED'].includes(filters.category)) throw new Error('Choose a forecast category.');
@@ -175,8 +175,8 @@ export async function compareSnapshotRuns(client: PrismaClient, actor: Actor, be
       if (filters.forecastPeriod) {
         const context = { ownerId: filters.ownerId, currencyCode: filters.currencyCode, category: filters.category };
         const was = inSnapshotForecast(old, filters.forecastPeriod, context), now = inSnapshotForecast(current, filters.forecastPeriod, context);
-        if (was && !now) changes.push(current ? 'Left selected forecast slice — compare captured values' : 'Left selected forecast slice — scope exit reason unknown');
-        if (!was && now) changes.push('Entered selected forecast slice');
+        if (was && !now) changes.push(current ? 'No longer matches the selected forecast — compare captured values' : 'No longer matches the selected forecast — reason for absence not recorded');
+        if (!was && now) changes.push('Now matches the selected forecast');
         if (old && current && old.forecastCategory !== current.forecastCategory) changes.push(`Category: ${old.forecastCategory} → ${current.forecastCategory}`);
       }
       return { opportunityId: id, before: old, after: current, changes };

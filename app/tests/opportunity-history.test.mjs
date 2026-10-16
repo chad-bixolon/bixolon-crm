@@ -47,8 +47,8 @@ test('movement comparison needs two distinct captured weeks', () => {
 test('History administration presents dates, statuses, and empty states clearly', () => {
   const admin = fs.readFileSync(path.join(root, 'app/administration/history/page.tsx'), 'utf8');
   assert.match(admin, /title="Opportunity & Forecast History"/);
-  for (const heading of ['Forecast Snapshot Status', 'Recent Snapshots', 'Archive Status', 'Restore History']) assert.ok(admin.includes(heading));
-  for (const label of ['Current week', 'Last captured', 'Rep snapshots', 'Forecast period', 'Currency', 'Active history retention', 'Archive cutoff', 'Eligible Opportunity events', 'Eligible forecast snapshots']) assert.ok(admin.includes(label));
+  for (const heading of ['Forecast Snapshot History', 'Recent Snapshots', 'Archive Status', 'Restore History']) assert.ok(admin.includes(heading));
+  for (const label of ['Current week', 'Last captured', 'Sales reps captured', 'Forecast period', 'Currency', 'Active history retention', 'Archive cutoff', 'Eligible Opportunity events', 'Eligible forecast snapshots']) assert.ok(admin.includes(label));
   assert.match(admin, /\{currentWeek\}/);
   assert.match(admin, /snapshotWeek, year: forecastYear, quarter: forecastQuarter, currencyCode: forecastCurrency/);
   assert.match(admin, /currentSnapshots\?\._count\._all \? 'Active' : 'Not captured'/);

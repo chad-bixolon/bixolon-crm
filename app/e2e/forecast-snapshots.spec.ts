@@ -45,17 +45,17 @@ test.afterAll(async () => { await db.opportunity.update({ where: { id: movingId 
 
 test('manual preview names source, period, currencies, counts and requires confirmation; duplicates are rejected', async ({ page }) => {
   await signInAs(page, 'admin'); await page.goto('/administration/forecast-snapshots');
-  await page.getByLabel('Source Opportunity Snapshot Run').selectOption(String(extraSourceId));
+  await page.getByLabel('Opportunity Snapshot Source').selectOption(String(extraSourceId));
   await page.getByLabel('Forecast year', { exact: true }).fill('2026'); await page.getByLabel('Forecast quarter', { exact: true }).selectOption('Q4');
-  await page.getByRole('button', { name: 'Preview Forecast Snapshot', exact: true }).click();
-  const region = page.getByRole('region', { name: 'Manual Forecast Snapshot', exact: true });
-  await expect(region).toContainText('5 included Opportunities · 1 salespeople'); await expect(region).toContainText('USD'); await expect(region).toContainText('EUR');
+  await page.getByRole('button', { name: 'Preview Snapshot', exact: true }).click();
+  const region = page.getByRole('region', { name: 'Create Forecast Snapshot', exact: true });
+  await expect(region).toContainText('5 included Opportunities · 1 sales rep'); await expect(region).toContainText('USD'); await expect(region).toContainText('EUR');
   await expect(region.getByRole('button', { name: 'Confirm Forecast Snapshot', exact: true })).toBeDisabled();
-  await region.getByRole('checkbox', { name: /I confirm this immutable/ }).check(); await region.getByRole('button', { name: 'Confirm Forecast Snapshot', exact: true }).click();
-  await expect(region.getByRole('status')).toContainText(`from Opportunity Snapshot Run #${extraSourceId}`);
+  await region.getByRole('checkbox', { name: /I confirm creation/ }).check(); await region.getByRole('button', { name: 'Confirm Forecast Snapshot', exact: true }).click();
+  await expect(region.getByRole('status')).toContainText(`using Opportunity Snapshot #${extraSourceId}`);
   const run = await db.forecastSnapshotRun.findUniqueOrThrow({ where: { sourceRunId_year_quarter: { sourceRunId: extraSourceId, ...period } } });
   expect(run.opportunityCount).toBe(5); expect(run.sourceRunId).toBe(extraSourceId);
-  await page.getByRole('button', { name: 'Preview Forecast Snapshot', exact: true }).click(); await expect(region.getByRole('alert')).toContainText('already have an immutable');
+  await page.getByRole('button', { name: 'Preview Snapshot', exact: true }).click(); await expect(region.getByRole('alert')).toContainText('already has a Forecast Snapshot');
 });
 test('correct rollups, period/currency filters, comparison math, won handling and owner movement', async () => {
   const result = await compareForecastSnapshotRuns(db, admin, beforeId, afterId);
@@ -77,12 +77,12 @@ test('shared Opportunity comparison explains categories, amount, close-period ex
   const result = await compareSnapshotRuns(db, admin, beforeSourceId, afterSourceId, { forecastPeriod: period, currencyCode: 'USD' });
   const moving = result.rows.find(row => row.opportunityId === movingId)!;
   expect(moving.changes).toContain('Amount increased'); expect(moving.changes).toContain('Owner changed'); expect(moving.changes).toContain('Category: PIPELINE → COMMIT');
-  expect(result.rows.find(row => row.opportunityId === outId)?.changes).toContain('Left selected forecast slice — compare captured values');
-  expect(result.rows.find(row => row.opportunityId === removedId)?.changes).toContain('Left selected forecast slice — scope exit reason unknown');
-  expect(result.rows.find(row => row.opportunityId === entryId)?.changes).toContain('Entered selected forecast slice');
+  expect(result.rows.find(row => row.opportunityId === outId)?.changes).toContain('No longer matches the selected forecast — compare captured values');
+  expect(result.rows.find(row => row.opportunityId === removedId)?.changes).toContain('No longer matches the selected forecast — reason for absence not recorded');
+  expect(result.rows.find(row => row.opportunityId === entryId)?.changes).toContain('Now matches the selected forecast');
   expect(result.rows.find(row => row.opportunityId === wonId)?.changes).toContain('Status changed: OPEN → WON');
   const commit = await compareSnapshotRuns(db, admin, beforeSourceId, afterSourceId, { forecastPeriod: period, currencyCode: 'USD', ownerId: managerId, category: 'COMMIT' });
-  expect(commit.rows).toHaveLength(1); expect(commit.rows[0].before?.ownerId).toBe(repId); expect(commit.rows[0].changes).toContain('Entered selected forecast slice');
+  expect(commit.rows).toHaveLength(1); expect(commit.rows[0].before?.ownerId).toBe(repId); expect(commit.rows[0].changes).toContain('Now matches the selected forecast');
 });
 test('database freezes rollups and runs, validates source amounts and rejects late rows and concurrent duplicates', async () => {
   const stored = await db.forecastSnapshotRollup.findFirstOrThrow({ where: { runId: beforeId } });
@@ -107,17 +107,17 @@ test('database freezes rollups and runs, validates source amounts and rejects la
 test('management report filters, salesperson history and drill-through preserve source endpoints', async ({ page }) => {
   await signInAs(page, 'salesManager'); await page.goto(`/reports/forecast-snapshots?before=${beforeId}&after=${afterId}&year=2026&quarter=Q4&currencyCode=USD&ownerId=${repId}`);
   await expect(page.getByRole('heading', { name: 'Forecast Snapshot History', exact: true })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Forecast comparison' })).toContainText('zero baseline');
+  await expect(page.getByRole('region', { name: 'Forecast comparison' })).toContainText('previous value is zero');
   await expect(page.getByRole('heading', { name: 'Forecast History — Historical Chad', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Compare forecasts', exact: true }).click();
   await expect(page.getByLabel('Currency', { exact: true })).toHaveValue('USD');
   const row = page.getByRole('region', { name: 'Forecast comparison' }).getByRole('row').filter({ hasText: 'Team · USD' }).filter({ hasText: 'Pipeline (all open forecast categories)' });
   await row.getByRole('link', { name: 'Explain movement', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`before=${beforeSourceId}&after=${afterSourceId}`));
-  await expect(page.getByText(/Forecast drill-through:/)).toContainText('2026 Q4');
+  await expect(page.getByText(/Opportunities behind the forecast:/)).toContainText('2026 Q4');
   const comparison = page.getByRole('region', { name: 'Snapshot comparison', exact: true });
   await expect(comparison).toContainText(`${tag} Pipeline to Commit`); await expect(comparison).toContainText('Owner changed');
-  await expect(comparison).toContainText('scope exit reason unknown');
+  await expect(comparison).toContainText('reason for absence not recorded');
   await page.getByRole('button', { name: 'Compare snapshots', exact: true }).click(); await expect(page).toHaveURL(/category=ALL_OPEN/);
 });
 test('snapshot creation and team history deny Sales and other unauthorized roles', async ({ page }) => {
