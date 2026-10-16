@@ -5,7 +5,7 @@ export type CaseTimelineItem = {
   key: string; at: Date; source: 'Case' | 'Activity' | 'Task' | 'Note' | 'Attachment' | 'Email';
   title: string; detail?: string; fullBody?: string; summary?: { label: string; value: string }[];
   actor?: string; href?: string;
-  kind?: 'Inbound Email' | 'Outbound Email';
+  kind?: 'Inbound Email' | 'Email Response Logged';
 };
 export type CaseHistoryView = { timeline: CaseTimelineItem[]; auditEvents: SupportHistoryEvent[]; auditTruncated: boolean };
 const LIMIT_PER_WORK_SOURCE = 40;
@@ -27,7 +27,7 @@ export function supportActivityTimelineItem(row: TimelineActivity): CaseTimeline
   const contacts = row.contacts.map(link => `${link.contact.firstName} ${link.contact.lastName}`).join(', ');
   if (row.type === 'EMAIL' && row.direction === 'OUTBOUND') {
     const recipient = row.emailRecipientName || contacts || row.emailRecipientEmail;
-    return { key: `activity-${row.id}`, at: row.activityDate, source: 'Activity', kind: 'Outbound Email', title: 'Outbound Email', actor: [actor, recipient].filter(Boolean).join(' → '), detail: row.description ? row.emailRecipientEmail ? row.description : preview(row.description, 240) : undefined, href: row.emailRecipientEmail ? undefined : `/activities/${row.id}`,
+    return { key: `activity-${row.id}`, at: row.activityDate, source: 'Activity', kind: 'Email Response Logged', title: 'Email Response Logged', actor: [actor, recipient].filter(Boolean).join(' → '), detail: row.description ? row.emailRecipientEmail ? row.description : preview(row.description, 240) : undefined, href: row.emailRecipientEmail ? undefined : `/activities/${row.id}`,
       summary: [{ label: 'Subject', value: row.subject }, ...(row.emailRecipientEmail ? [{ label: 'To', value: row.emailRecipientEmail }] : [])] };
   }
   return { key: `activity-${row.id}`, at: row.activityDate, source: 'Activity', title: `${row.activityType.name} logged`, detail: [row.subject, row.description && preview(row.description, 240), contacts].filter(Boolean).join(' · '), actor, href: `/activities/${row.id}`, ...(row.type === 'EMAIL' && row.direction === 'INBOUND' ? { kind: 'Inbound Email' as const } : {}) };

@@ -7,7 +7,7 @@ import type { CaseTimelineItem } from '@/lib/support-case-timeline';
 
 export function CaseTimelineEntry({ item, zone }: { item: CaseTimelineItem; zone: string }) {
   const label = item.kind || (item.source === 'Case' ? 'Case Update' : item.source);
-  const color = item.kind === 'Outbound Email' ? 'bg-orange-50 text-orange-800' : item.kind === 'Inbound Email' ? 'bg-sky-50 text-sky-800' : 'bg-slate-100 text-slate-600';
+  const color = item.kind === 'Email Response Logged' ? 'bg-orange-50 text-orange-800' : item.kind === 'Inbound Email' ? 'bg-sky-50 text-sky-800' : 'bg-slate-100 text-slate-600';
   return <li className="min-w-0 py-4 text-sm">
     {item.title !== label && <span className={`mb-1 inline-block rounded px-2 py-0.5 text-xs ${color}`}>{label}</span>}
     <h3 className="break-words font-semibold text-slate-900">{item.title === label ? <span className={`inline-block rounded px-2 py-0.5 ${color}`}>{item.href ? <Link href={item.href}>{item.title}</Link> : item.title}</span> : item.href ? <Link href={item.href} className="text-orange-800 hover:underline">{item.title}</Link> : item.title}</h3>

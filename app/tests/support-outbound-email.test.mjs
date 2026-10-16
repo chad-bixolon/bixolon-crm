@@ -163,15 +163,15 @@ test('timeline renders outbound attribution/time/summary/subject/recipient disti
   const row = await logSupportOutboundEmail(mock.db, actor(), 12, input());
   const activity = { ...row, activityType: { name: 'Email' }, user: { firstName: 'Chad', lastName: 'Guenther' }, contacts: [{ contact: { firstName: 'Jane', lastName: 'Smith' } }] };
   const item = supportActivityTimelineItem(activity);
-  assert.equal(item.kind, 'Outbound Email'); assert.equal(item.title, 'Outbound Email'); assert.equal(item.actor, 'Chad Guenther → Jane Smith');
+  assert.equal(item.kind, 'Email Response Logged'); assert.equal(item.title, 'Email Response Logged'); assert.equal(item.actor, 'Chad Guenther → Jane Smith');
   assert.equal(item.detail, input().summary); assert.equal(item.fullBody, undefined);
   const generic = supportActivityTimelineItem({ ...activity, emailRecipientEmail: null, emailRecipientName: null, description: 'x'.repeat(5000) });
   assert.equal(generic.href, `/activities/${row.id}`); assert.ok(generic.detail.length <= 241);
   const html = renderToStaticMarkup(React.createElement(CaseTimelineEntry, { item, zone: 'America/New_York' }));
-  for (const text of ['Outbound Email', 'Chad Guenther → Jane Smith', 'Sent updated firmware', 'Re: RFID setup', 'jane@example.test', '9:42']) assert.ok(html.includes(text), text);
-  assert.doesNotMatch(html, /Read full email|attachment|Send button/);
+  for (const text of ['Email Response Logged', 'Chad Guenther → Jane Smith', 'Sent updated firmware', 'Re: RFID setup', 'jane@example.test', '9:42']) assert.ok(html.includes(text), text);
+  assert.doesNotMatch(html, /Outbound Email|Read full email|attachment|Send button/);
   const db = { supportCaseLifecycleEvent: { findMany: async () => [] }, activity: { findMany: async () => [activity] }, task: { findMany: async () => [] }, note: { findMany: async () => [] }, supportCaseAttachment: { findMany: async () => [] }, supportCaseEmail: { findMany: async () => [{ id: 8, messageDate: new Date('2026-10-09T12:00Z'), gmailMessageId: 'inbound', subject: 'RFID setup', senderEmail: 'jane@example.test', bodyText: 'Existing inbound content' }] } };
-  assert.deepEqual((await caseHistoryView(db, 12, new Date('2026-10-09'), 'UTC', true)).timeline.map(entry => entry.kind), ['Outbound Email', 'Inbound Email']);
+  assert.deepEqual((await caseHistoryView(db, 12, new Date('2026-10-09'), 'UTC', true)).timeline.map(entry => entry.kind), ['Email Response Logged', 'Inbound Email']);
   for (const [source, label] of [['Note', 'Note'], ['Task', 'Task'], ['Case', 'Case Update']]) assert.ok(renderToStaticMarkup(React.createElement(CaseTimelineEntry, { item: { key: source, at: new Date(), source, title: 'Test' }, zone: 'UTC' })).includes(label));
 });
 

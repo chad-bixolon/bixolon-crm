@@ -76,11 +76,12 @@ for (const [width, height] of [[1440, 900], [768, 1024], [390, 844]]) {
     await panel.getByRole('button', { name: 'Done' }).click();
     const timeline = page.getByRole('region', { name: 'Case Timeline' });
     await timeline.getByRole('button', { name: 'Show timeline' }).click();
-    await expect(timeline.getByRole('heading', { name: 'Outbound Email', exact: true })).toBeVisible();
+    await expect(timeline.getByRole('heading', { name: 'Email Response Logged', exact: true })).toBeVisible();
+    await expect(timeline).not.toContainText('Outbound Email');
     await expect(timeline).toContainText(`${user.firstName} ${user.lastName} → ${contact!.firstName} ${contact!.lastName}`);
     await expect(timeline).toContainText('Edited reply subject'); await expect(timeline).toContainText(activity.description!);
     await expect(timeline.getByText('Inbound Email', { exact: true })).toBeVisible();
-    const outboundItem = timeline.locator('li').filter({ has: page.getByRole('heading', { name: 'Outbound Email', exact: true }) });
+    const outboundItem = timeline.locator('li').filter({ has: page.getByRole('heading', { name: 'Email Response Logged', exact: true }) });
     await expect(outboundItem.locator('details')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`outbound-timeline-${width}.png`), fullPage: true });
@@ -131,7 +132,7 @@ test('linked requester fallback works without a Contact; Admin can log; Read Onl
   await signInAs(page, 'readOnly'); await page.goto(`/support/cases/${row.id}`);
   await expect(page.getByRole('button', { name: 'Log Email Response', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Show timeline', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Outbound Email', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Email Response Logged', exact: true })).toBeVisible();
 });
 
 test('closed and archived Cases do not offer outbound logging', async ({ page }) => {
