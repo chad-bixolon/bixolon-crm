@@ -1,3 +1,4 @@
+import { HelpLink } from '@/components/help-link';
 import { NAV_CATEGORIES } from '@/lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -62,7 +63,7 @@ export default async function ForecastSnapshotsReport({ searchParams }: { search
     if (category) q.set('category', category);
     return `/reports/opportunity-snapshots?${q}`;
   };
-  return <Content><PageHeader eyebrow={NAV_CATEGORIES.reports} title="Forecast Snapshot History" description="Compare preserved quarterly forecasts and review the Opportunity snapshots behind each change." action={actor.role === 'ADMIN' ? <Link className="btn-secondary" href="/administration/forecast-snapshots">Create Forecast Snapshot</Link> : <Link className="btn-secondary" href="/reports">Reports</Link>}/>
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.reports} title="Forecast Snapshot History" description="Compare preserved quarterly forecasts and review the Opportunity snapshots behind each change." action={actor.role === 'ADMIN' ? <Link className="btn-secondary" href="/administration/forecast-snapshots">Create Forecast Snapshot</Link> : <Link className="btn-secondary" href="/reports">Reports</Link>}/><div className="mb-4"><HelpLink topic="forecast-snapshots">Help with Forecast Snapshots</HelpLink></div>
     <form className="panel mb-5 grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
       <label className="text-sm">Forecast year<input className="field mt-1" type="number" min="2000" max="2100" name="year" defaultValue={year}/></label>
       <label className="text-sm">Forecast quarter<select className="field mt-1" name="quarter" aria-label="Forecast quarter" defaultValue={quarter}>{quarters.map(q => <option key={q}>{q}</option>)}</select></label>
@@ -73,7 +74,7 @@ export default async function ForecastSnapshotsReport({ searchParams }: { search
       <label className="text-sm">Snapshot date through (UTC)<input className="field mt-1" type="date" name="through" defaultValue={through?.toISOString().slice(0, 10)}/></label>
       <div className="flex items-center gap-4"><button className="btn-primary">Compare forecasts</button><Link className="text-sm underline" href="/reports/forecast-snapshots">Reset</Link></div>
     </form>
-    <p className="panel mb-5 p-4 text-sm">Pipeline includes open Opportunities in Pipeline, Best Case, and Commit. Best Case and Commit are also shown separately and are already included in Pipeline. Closed Won is based on the captured won stage and Expected Close Date in {year} {quarter}. Actual booking dates and final forecast accuracy are unavailable. Opportunity counts include eligible open and won Opportunities. Percentage change is not shown when the previous value is zero. Currencies are reported separately. Dates show when the Opportunity data was captured.</p>
+    <p className="panel mb-5 p-4 text-sm">Pipeline includes Best Case and Commit; currencies stay separate. Closed Won uses the captured won stage and Expected Close Date in {year} {quarter}, rather than an actual booking date.</p>
     <p className="mb-4 text-sm text-slate-600">Up to 104 snapshots are shown for the selected dates (UTC). Use the period and date filters for older history.{owners.length > 200 && ' The salesperson list shows up to 201 names recorded in snapshots.'}</p>
     {error && <p role="alert" className="panel mb-5 p-4 text-red-700">{error}</p>}
     {!result && !error && <p className="panel mb-5 p-5">{runs.length < 2 ? 'Create two Forecast Snapshots from different Opportunity capture dates for this period to compare. History begins with the first capture.' : 'Choose two Forecast Snapshots.'}</p>}

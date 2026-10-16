@@ -1,3 +1,4 @@
+import { HelpLink } from '@/components/help-link';
 import { SavedViews } from '@/components/saved-views';
 import { FilterDisclosure } from '../../components/filter-disclosure';
 import { countActiveFilters } from '../../lib/filter-count';
@@ -19,7 +20,7 @@ export default async function PriceExceptionsPage({searchParams}:{searchParams:P
   const {rows,count,page,pages,salesReps}=await listPriceExceptions(prisma,filters,actor);
   const control='field filter-control';
   return <Content>
-    <PageHeader eyebrow={NAV_CATEGORIES.catalogPricing} title="Price Exceptions" description="Finalized Price Exception records imported from BIXOLON operational sources." action={<Link className="btn-primary" href="/price-exceptions/lookup">Find a valid PE</Link>}/>
+    <PageHeader eyebrow={NAV_CATEGORIES.catalogPricing} title="Price Exceptions" description="Review approved special pricing, customer links, and expiration dates." action={<Link className="btn-primary" href="/price-exceptions/lookup">Find a valid PE</Link>}/><div className="mb-4"><HelpLink topic="price-exceptions">Help with Price Exceptions</HelpLink></div>
     <SavedViews routeKey="price-exceptions" query={filters}/>
     <form className="responsive-filter-form panel filter-panel filter-grid mb-5" method="get" aria-label="Filter Price Exceptions">
       <label className="filter-primary-search label">Search<input className={control} name="q" defaultValue={filters.q??''} placeholder="PE # or SKU"/></label>

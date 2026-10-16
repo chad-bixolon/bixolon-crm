@@ -12,6 +12,9 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added Help & Onboarding v1 at `/help`, with practical, searchable guidance grouped by role and a Help & Guide entry in the account menu. Topics and editing instructions follow existing permissions, including Read Only access and the full Admin guide.
+- Added contextual Help links for Forecast Category, forecasting and snapshots, Support Inbox, Log Email Response, Price Exceptions, Audit History, Maintenance History, and Bulk Actions. Simplified nearby helper text and documented topic maintenance in `app/docs/help-maintenance.md`. No database changes.
+
 - Added Admin-only Ownership & Reassignment, Audit History and Maintenance History areas, reusing record validation, bulk confirmation and existing per-module histories with server pagination. Added the small append-only maintenance ledger migration `20261015210000_admin_maintenance_history`.
 - Extended System Health with safe Calendar connection/sync and Support Gmail fetch status; removed free-form job/provider errors from the health display. Documented audit coverage, missing historical evidence and deferred integrations in `app/docs/administration-audit.md`.
 

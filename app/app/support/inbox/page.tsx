@@ -1,3 +1,4 @@
+import { HelpLink } from '@/components/help-link';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
@@ -19,7 +20,7 @@ export const dynamic = 'force-dynamic';
 export default async function SupportInboxPage({ searchParams }: { searchParams: Promise<{ connection?: string; showIgnored?: string }> }) {
   if (!supportGmailEnabled()) notFound();
   const actor = await requirePermission('support-cases.write');
-  const heading = <div className="[&>div]:mb-3"><PageHeader eyebrow={NAV_CATEGORIES.support} title="Support Inbox" action={<Link href="/support/cases" className="btn-secondary">Support Cases</Link>}/></div>;
+  const heading = <div className="[&>div]:mb-3"><PageHeader eyebrow={NAV_CATEGORIES.support} title="Support Inbox" action={<Link href="/support/cases" className="btn-secondary">Support Cases</Link>}/><div className="mb-4"><HelpLink topic="support-inbox">Help with Support Inbox</HelpLink></div></div>;
   const mock = supportGmailMockMode();
   const mode = supportGmailMode();
   const lookback = supportGmailLookbackDays();

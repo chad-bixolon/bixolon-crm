@@ -1,4 +1,5 @@
 'use client';
+import { HelpLink } from './help-link';
 
 import { createContext, useContext, useId, useRef, useState, useTransition, type ReactNode } from 'react';
 import { changeTasks } from '@/app/tasks/bulk-actions';
@@ -36,6 +37,7 @@ export function BulkSelection({ kind, records, assignees, enabled, children, all
         <strong aria-live="polite">{ids.length} selected</strong><span className="text-slate-600">on this page · limit {BULK_SELECTION_LIMIT}</span>
         <button type="button" className="btn-secondary" disabled={busy} onClick={() => { setSelected([]); setMessage(''); }}>Clear selection</button>
         {(kind === 'tasks' ? taskActions : caseActions).filter(item => !allowedActions || allowedActions.includes(item.value)).map(item => <button key={item.value} type="button" className="btn-secondary" disabled={busy} onClick={event => { trigger.current = event.currentTarget; setAction(item); setReview(current); setValue(''); setError(''); dialog.current?.showModal(); }}>{item.label}</button>)}
+        <HelpLink topic="bulk-actions">Help with Bulk Actions</HelpLink>
       </div>}
       {message && <p role="status" className="mb-3 text-sm text-emerald-800">{message}</p>}
       <dialog ref={dialog} className="bulk-confirm-dialog saved-views-dialog" aria-label="Confirm bulk update" onCancel={event => { event.preventDefault(); close(); }} onKeyDown={event => {
@@ -67,7 +69,7 @@ export function BulkSelection({ kind, records, assignees, enabled, children, all
           {action?.value === 'assign' && <div><label className="label" htmlFor={targetId}>{kind === 'tasks' ? 'Assignee' : 'Support Rep'}</label><select id={targetId} className="field" required value={value} disabled={busy} onChange={event => setValue(event.target.value)}><option value="">Choose…</option>{assignees.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></div>}
           {action?.value === 'dueDate' && <div><label className="label" htmlFor={targetId}>Due date</label><input id={targetId} className="field" type="date" required value={value} disabled={busy} onChange={event => setValue(event.target.value)}/></div>}
           {action?.value === 'priority' && <div><label className="label" htmlFor={targetId}>Priority</label><select id={targetId} className="field" required value={value} disabled={busy} onChange={event => setValue(event.target.value)}><option value="">Choose…</option>{priorities.map(row => <option key={row.value} value={row.value}>{row.label}</option>)}</select></div>}
-          <p className="text-sm text-slate-600">Every selected record must pass validation. If any record fails, none will change.</p>
+          <p className="text-sm text-slate-600">If any selected record needs a correction, none of the selected records will change.</p>
           {error && <p role="alert" className="break-words text-sm text-red-700">{error}</p>}
           <div className="form-action-row"><button type="button" className="btn-secondary" disabled={busy} onClick={close}>Cancel</button><button type="submit" className="btn-primary" disabled={busy || !review.length || (action?.value !== 'complete' && !value)}>{busy ? 'Updating…' : `Confirm ${review.length} updates`}</button></div>
         </form>

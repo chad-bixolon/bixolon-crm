@@ -1,0 +1,176 @@
+import { can, routeAccess, type Actor, type Permission } from '../authorization';
+
+export const helpGroups = ['Getting Started', 'Sales', 'Sales Management', 'Support', 'Marketing', 'Administration'] as const;
+type HelpSection = { heading: string; paragraphs: string[]; permission?: Permission };
+type HelpTopic = { title: string; summary: string; group: typeof helpGroups[number]; permission?: Permission; accessPath?: string; sections: HelpSection[] };
+
+// User guidance only. Operational and maintainer notes belong in app/docs.
+export const helpTopics = {
+  'getting-started': {
+    title: 'Getting started', group: 'Getting Started', summary: 'Find your way around SalesHub and pick up where you left off.',
+    sections: [
+      { heading: 'What SalesHub is for', paragraphs: ["Keep customer relationships, deals, follow-up work, and Support Cases in one place. Before a customer call, check the Account for recent conversations, open work, and the people involved.", "Start with your Dashboard. Its contents depend on your role and any layout you’ve saved. The side menu shows the areas you can access; on a phone or tablet, open the menu button to see them."] },
+      { heading: 'Search and Recent Items', paragraphs: ["Use Search when you know what you’re looking for. Recent Items is faster when you want to get back to something you were just working on. Both are in the header and only show records you can access."] },
+      { heading: 'New and Quick Actions', permission: 'support-work.write', paragraphs: ["Use New in the header to start a record where that option is available. On a customer or deal page, Quick Actions save time by filling in the relationships already known from that page. Review the details before saving. Support Case work starts from the Case’s own actions."] },
+      { heading: 'Notifications', paragraphs: ["Open the bell to review assignments and follow-ups that need attention. Open a notification to check the record before acting. You can adjust notification preferences or snooze optional categories; Critical alerts stay on."] },
+      { heading: 'My Day', paragraphs: ["Use My Day from the Dashboard to review meetings, completed Activities, and Tasks for a chosen date. Calendar details depend on your connection. Connecting Calendar doesn’t automatically log meetings as Activities."] },
+      { heading: 'Your access', paragraphs: ["If you can open a record but don’t see an edit or create action, your role may only have viewing access. Ask an Admin if you need different access for your work."] },
+    ],
+  },
+  'accounts-contacts': {
+    title: 'Accounts & Contacts', group: 'Getting Started', summary: 'Keep companies, people, and their relationships clear.', permission: 'accounts.read',
+    sections: [
+      { heading: 'Company or person?', paragraphs: ["An Account represents an organization you work with, such as a distributor, reseller, OEM, or end customer. A Contact represents a person, such as the buyer at a reseller or the technician testing a printer.", "Relationships help the next person understand who’s involved. A deal may include a distributor, a reseller, and an end customer. Link the right companies and people so conversations and follow-up work are easy to find."] },
+      { heading: 'Before adding someone', paragraphs: ["Search by company name and the person’s name or email first. Check spelling variations and existing Account relationships before assuming someone is missing."] },
+      { heading: 'Create a Contact', permission: 'contacts.write', paragraphs: ["Create a Contact when you have a new person to work with and no existing Contact matches. Link their Account when you know it. If their company is unclear, verify it before linking them to a similar name. Use the existing Contact when the same person is involved in another deal."] },
+    ],
+  },
+  'activities-tasks': {
+    title: 'Activities & Tasks', group: 'Getting Started', summary: 'Record what happened and keep the next step separate.',
+    sections: [
+      { heading: 'Happened or still to do?', paragraphs: ["Activity = something that happened. Task = something that still needs to happen. After a printer demo, record the demo as an Activity. If you promised to send setup instructions tomorrow, create a Task.", "A Note is background or working information. Use a Task when someone needs to do something; a Note alone won’t track that work."] },
+      { heading: 'Choose an Activity type', paragraphs: ["Call: a completed phone or voice conversation. Email: a message already sent or received. Meeting: a meeting that has taken place. Demo: a completed product demonstration.", "Technical Review: a technical discussion, such as firmware or integration requirements. Site Visit: a visit to a customer location. Trade Show / Event: a conversation at an event; the standard choice is Trade Show. Other: an interaction that doesn’t fit a more specific choice.", "You may also see active choices such as Quote / Proposal, Sample / Evaluation, or Follow-up. A Follow-up Activity still records a completed interaction. Retired or deactivated types may appear on historical records; use an active choice for new work."] },
+      { heading: 'Make the next handoff easy', permission: 'support-work.write', paragraphs: ["Write a short subject and enough detail for a colleague to understand the outcome. Check the occurrence date and the time zone shown in the form. Put future work in a Task with an assignee and a due date.", "A follow-up date on an Activity is a reference date. When creating an Activity, select Create follow-up task if you also want a Task. Completing a Task doesn’t automatically record an Activity."] },
+      { heading: 'Check the relationships', permission: 'support-work.write', paragraphs: ["Quick Actions fill in known Account, Contact, Opportunity, Project, or Case details. If several Accounts could apply, you may need to choose one. Check those links before saving so the work appears with the right customer.", "For Support work, start from the Case so its customer details carry through."] },
+      { heading: 'Calendar meetings', permission: 'sales.read', paragraphs: ["For a synced meeting, use Calendar Matches to log it once rather than also entering it manually."] },
+    ],
+  },
+  'saved-views': {
+    title: 'Saved Views', group: 'Getting Started', summary: 'Return to the list filters you use most often.',
+    sections: [
+      { heading: 'Save a useful starting point', paragraphs: ["On lists with Saved Views, set your filters and save the view with a name you’ll recognize, such as ‘My open deals’. Views are personal. They don’t give you access to extra records.", "Make a view the default if you want it applied when opening that list without other filters. Changing filters marks the view Modified; it doesn’t replace your saved settings. Use Manage views to rename, delete, or change the default."] },
+      { heading: 'Check dates when you return', paragraphs: ["A saved calendar date stays fixed. On Opportunities, Current Quarter and Next Quarter move with the calendar; a named quarter or custom date range stays fixed. Saved Views keep list filters, while saved reports keep a report’s setup."] },
+    ],
+  },
+  'reports-dashboards': {
+    title: 'Reports & Dashboards', group: 'Getting Started', summary: 'Start with your role’s overview, then narrow the question.',
+    sections: [
+      { heading: 'Start with your Dashboard', paragraphs: ["Sales usually starts with personal deals and follow-ups. Sales managers see team summaries. Support focuses on Cases and follow-ups; Marketing has campaign and event information. Admin and Read Only have their own starting views. Your saved layout can change what appears."] },
+      { heading: 'Use filters deliberately', paragraphs: ["Open Reports for a closer look at the reports available to your role. Check the date range, owner, status, and currency before comparing numbers. A filtered list or report may answer a different question from a Dashboard card.", "Use Saved Views for a repeatable list of records. Use a saved report when you need the same report setup again. When snapshot comparisons are available to your role, use them to compare earlier points in time rather than today’s changing records."] },
+    ],
+  },
+  opportunities: {
+    title: 'Opportunities', group: 'Sales', summary: 'Keep a real potential sale current enough for the next conversation.', permission: 'opportunities.read',
+    sections: [
+      { heading: 'What belongs here', paragraphs: ["Use an Opportunity for a potential sale you’re actively working, such as a reseller’s planned printer deployment. Link the participating Accounts and Contacts so the customer, channel partners, and people involved are clear.", "Stage says where the deal is in the sales process. Expected Close Date is your current estimate of when it will close. Owner is the person responsible for keeping it current. Forecast Category says how confidently it belongs in the forecast; stage alone doesn’t make a deal Commit."] },
+      { heading: 'Products and estimated value', paragraphs: ["Opportunity value comes from the products’ quantities and estimated unit prices. Keep those lines current as scope changes. Check SKU, quantity, currency, and pricing source before relying on the total."] },
+      { heading: 'Customer Context', paragraphs: ["Record the customer’s current product, competitor, pricing information, and pain points when you know them. For example: ‘Replacing older desktop printers; needs faster label changes.’ Keep it useful for the next customer conversation."] },
+      { heading: 'Before a forecast review', permission: 'sales.write', paragraphs: ["Update stage, Expected Close Date, products, owner, and Forecast Category together. If a rollout moves into next quarter, change the date rather than leaving an old close date in place."] },
+    ],
+  },
+  'forecast-categories': {
+    title: 'Forecast Category', group: 'Sales', summary: 'Choose the confidence level that matches the deal today.', permission: 'opportunities.read',
+    sections: [
+      { heading: 'The choices', paragraphs: ["Pipeline: a developing deal. Best Case: a deal that could close in the period if things go well. Commit: a deal you’re explicitly putting in your committed forecast. Agree that judgment with your manager; SalesHub doesn’t infer Commit from stage.", "Omitted: keep the Opportunity, but leave it out of the open forecast. A won stage sets the category to Closed; a lost stage sets it to Omitted."] },
+      { heading: 'How the totals work', paragraphs: ["The Pipeline total includes open deals in Pipeline, Best Case, and Commit. Best Case and Commit are also shown separately. Don’t add those three displayed totals together: Best Case and Commit are already inside Pipeline. Closed Won is separate."] },
+    ],
+  },
+  forecasting: {
+    title: 'Forecasting', group: 'Sales', summary: 'Read Pipeline, Best Case, Commit, and Closed Won correctly.', permission: 'sales.read',
+    sections: [
+      { heading: 'Read the forecast', paragraphs: ["Pipeline includes open deals marked Pipeline, Best Case, or Commit. Best Case and Commit use the full deal values, without a probability adjustment. Omitted deals and closed deals don’t contribute to open Pipeline. Weighted Pipeline applies the deal’s probability, which is a different measure.", "Team forecast totals include active Sales and Sales Manager owners. Check owner, Expected Close Date, and the selected period when a deal appears to be missing. Values come from current product quantities and estimated unit prices."] },
+      { heading: 'Keep currencies separate', paragraphs: ["USD and other currencies remain separate. SalesHub doesn’t convert them into a combined forecast total. Compare like currencies and the same period."] },
+      { heading: 'Closed Won and history', paragraphs: ["In Forecast Snapshot History, Closed Won means deals in a won stage at capture, placed in a quarter by Expected Close Date. It isn’t booked or recognized revenue and doesn’t establish the actual date a deal was won.", "Opportunity snapshots preserve what the pipeline looked like at a point in time so you can compare how deals moved later. Forecast snapshots preserve forecast totals for a point in time so managers can compare what changed week to week. Snapshot comparison reports are available to Sales Managers and Admins."] },
+    ],
+  },
+  'price-exceptions': {
+    title: 'Price Exceptions', group: 'Sales', summary: 'Check approved special pricing and follow up before it expires.', permission: 'pricing.read',
+    sections: [
+      { heading: 'When to use one', paragraphs: ["A Price Exception records special approved pricing for particular customers and products. Use Price Exception lookup when checking whether special pricing is available, even before you have an Opportunity.", "Check the linked customer, SKU, approved price, currency, and minimum quantity. Different tiers may apply at different quantities. A similar product name or customer name isn’t enough to confirm the price applies."] },
+      { heading: 'Using it on a deal', paragraphs: ["Where applicable, select PE pricing on the Opportunity product line and check that the participating Account and quantity match. The Opportunity’s actual unit price determines its value; the PE approved price is also available for reference."] },
+      { heading: 'Expiration and follow-up', paragraphs: ["Check the expiration date before using a price. A PE can still have an Active status even though its date has passed; the date and stored status are separate. Follow-up status tracks renewal work, not whether a price is valid.", "Use the expiring PE report to review upcoming renewals. Availability and follow-up actions depend on your access and which PEs are assigned to you."] },
+    ],
+  },
+  'opportunity-snapshots': {
+    title: 'Opportunity Snapshots', group: 'Sales Management', summary: 'Compare deals as they looked at two earlier points in time.', accessPath: '/reports/opportunity-snapshots',
+    sections: [
+      { heading: 'Why use a snapshot?', paragraphs: ["Opportunity snapshots preserve what the pipeline looked like at a point in time so you can compare how deals moved later. Use Opportunity Snapshot History to compare dates, then narrow by owner, stage, category, or currency.", "Review changes in value, stage, owner, and Expected Close Date. A deal entering or leaving a snapshot isn’t automatically a win or loss; changed dates, relationships, or archive state can also affect what’s included. Keep currencies separate."] },
+      { heading: 'Capturing a snapshot', permission: 'users.manage', paragraphs: ["Admins capture snapshots in Administration. The default includes open, unarchived Opportunities with eligible Accounts and Projects, including Omitted deals and deals without an owner or close date. Select Include forecast data if you’ll need Forecast Snapshots; it also includes Closed Won deals. Archive known test records before capturing; they aren’t filtered out automatically.", "Preview and review before confirming. Only one capture is available per calendar week, Monday–Sunday in New York time. You can’t replace that capture or add the forecast option afterward. Captures are manual; there’s no automatic schedule."] },
+    ],
+  },
+  'forecast-snapshots': {
+    title: 'Forecast Snapshots', group: 'Sales Management', summary: 'Compare quarterly forecast totals and trace changes back to deals.', accessPath: '/reports/forecast-snapshots',
+    sections: [
+      { heading: 'Compare the same quarter', paragraphs: ["Forecast snapshots preserve the forecast totals for a point in time so managers can compare what changed week to week. In Forecast Snapshot History, choose the forecast year and quarter, then two capture dates. Narrow by salesperson or currency when useful.", "Pipeline includes Best Case and Commit. Closed Won uses the captured won stage and Expected Close Date, rather than an actual booking date. Currencies remain separate. Explain movement opens the Opportunity comparison behind the change.", "Opportunity counts include open forecast deals and won deals. A missing snapshot means there’s no saved history for that selection. It doesn’t mean the forecast was zero. When the earlier value is zero, a percentage change isn’t shown."] },
+      { heading: 'Creating the totals', permission: 'users.manage', paragraphs: ["First capture an Opportunity Snapshot with Include forecast data selected. In Administration → Forecast Snapshots, choose that capture and the quarter, preview the totals, then confirm. Older open-only captures can’t be used for this.", "There’s one Forecast Snapshot per Opportunity capture and quarter. Its point in time comes from the Opportunity capture, even if you create the totals later. Only eligible Sales and Sales Manager owners with deals dated in that quarter contribute. Capture is manual."] },
+    ],
+  },
+  'support-cases': {
+    title: 'Support Cases', group: 'Support', summary: 'Keep the customer issue, responsibility, and next step together.', permission: 'support-cases.read',
+    sections: [
+      { heading: 'What belongs in a Case', paragraphs: ["Gmail is the system of record for email. SalesHub is the system of record for the Support Case.", "Use a Case for a customer issue that needs investigation, a response, or follow-up, such as a printer setup problem. Keep the problem and resolution understandable to the next Support rep. Link the customer Account and Contact when you can identify them confidently."] },
+      { heading: 'Working the Case', permission: 'support-cases.write', paragraphs: ["Choose an eligible Support rep or Admin as the assignee so responsibility is clear. Assignment doesn’t prevent another Support rep from helping. Set priority to match urgency and keep status current: New, Open, Waiting on Customer, Waiting on Internal, Resolved, or Closed.", "Use Waiting on Customer or Waiting on Internal to show what’s blocking progress. Record the resolution when the issue is resolved or closed. Set the next follow-up when you need to return to it. Archive is separate from closing a Case."] },
+      { heading: 'Notes, Tasks, and history', paragraphs: ["Notes hold troubleshooting details or internal context. Tasks track work still to do, such as checking a firmware result with the customer. Activities record completed interactions. Adding work doesn’t change Case status.", "Case Timeline shows the working story, including linked emails and logged responses. The Case’s Audit History has more detailed recorded changes. Sales, Marketing, and Read Only can review Cases but can’t manage them."] },
+      { heading: 'Add work from the Case', permission: 'support-cases.write', paragraphs: ["Start Notes, Tasks, and Activities from the Case actions to carry its customer details through. A Closed or archived Case must be reopened or restored before adding new work; a Resolved Case can still receive follow-up work."] },
+    ],
+  },
+  'support-inbox': {
+    title: 'Support Inbox', group: 'Support', summary: 'Decide whether an email needs a new Case, an existing Case, or no action.', permission: 'support-cases.write',
+    sections: [
+      { heading: 'Start with the request', paragraphs: ["Gmail is the system of record for email. SalesHub is the system of record for the Support Case. Open Support Inbox from Support Cases when the mailbox connection is available. It shows a recent window of messages, not your full Gmail mailbox.", "Create a Case when the email describes a new customer issue that needs tracking. Link to an existing Case when it continues the same issue. Review suggestions and the BXS Case number before linking; a matching sender alone doesn’t prove it’s the same issue.", "Ignore messages that don’t need a Case, such as routine notices or unrelated mail. Ignore only hides the message from the normal SalesHub inbox view; it doesn’t delete or change anything in Gmail. Show ignored messages to restore one if needed."] },
+      { heading: 'Creating a Case from email', paragraphs: ["Review the suggested subject, requester, Account, Contact, and Description / Email Thread. SalesHub carries available email text and quoted history into that description and links the selected email to the Case. It may use the earliest available customer request from the recent conversation to help fill the form.", "Read the description before saving, especially if the newest message is only a short reply. Older messages outside the available window aren’t automatically retrieved as a complete thread. Correct the issue summary and customer links when needed; a new Account or Contact isn’t created automatically."] },
+      { heading: 'Choose attachments', paragraphs: ["Select only the files the Case needs, such as a sample label or diagnostic image. Files aren’t imported automatically. Signature and decorative images are hidden initially; review them if a needed file is missing from the first list.", "If a file fails to import, the Case can still be saved. Read the result and use the Case’s email attachment review to retry available files. Keep Gmail for the original message and its full email history."] },
+      { heading: 'Linking and replying', paragraphs: ["Link to Existing Case adds email context to that Case. It doesn’t send a response or automatically change the Case’s status. Send replies from Gmail, then use Log Email Response in the Case to leave a short summary."] },
+    ],
+  },
+  'log-email-response': {
+    title: 'Log Email Response', group: 'Support', summary: 'Leave a Case history entry after sending your reply from Gmail.', permission: 'support-cases.write',
+    sections: [
+      { heading: 'Send first, then log', paragraphs: ["SalesHub does not send the email. Send the response from Gmail, then log a short summary in the Case so the Case history shows that you responded.", "Choose Log Email Response on the Case. Check the recipient, subject, and sent time; suggested details may need correcting. Write what you sent and what should happen next, such as ‘Sent the firmware update and asked the customer to retest label alignment.’"] },
+      { heading: 'Keep the full email in Gmail', paragraphs: ["The entry is a short record of the interaction. It doesn’t copy your sent email or its attachments from Gmail. Add a file separately to the Case if it belongs with the issue. Reopen or restore a Closed or archived Case before logging a response."] },
+    ],
+  },
+  'trade-shows': {
+    title: 'Trade Shows & follow-up', group: 'Marketing', summary: 'Review event leads, check existing relationships, and follow through.', permission: 'trade-shows.read',
+    sections: [
+      { heading: 'Start with the lead', paragraphs: ["Open the Trade Show to review its leads and the customer’s interests. Check existing Account and Contact matches before creating anyone new. Lead details help the next rep understand the event conversation."] },
+      { heading: 'Manage event leads', permission: 'trade-shows.manage', paragraphs: ["Create the Trade Show, import its lead list, and review matches and routing before confirming. Resolve uncertain company and Contact matches rather than guessing from a similar name."] },
+      { heading: 'Follow through', permission: 'trade-shows.leads.write', paragraphs: ["Route a lead to BIXOLON Sales when a rep should follow up. New imports or routing and assignment changes create or update the Sales follow-up Task. The usual due date is two business days, unless an Admin changes that setting. Older unchanged leads aren’t automatically given a Task.", "Use the Task to track the next action and the lead to keep the customer context current. Completing the Task doesn’t change lead status or log an Activity. Record the conversation separately when it happens."] },
+      { heading: 'Source and campaign', paragraphs: ["Lead Source explains where the relationship started; a Campaign identifies the event or initiative. Linking an event lead can fill a Contact’s blank Lead Source without replacing an existing one. Campaign touches show interactions over time; they don’t assign revenue credit."] },
+    ],
+  },
+  'marketing-attribution': {
+    title: 'Marketing source & campaigns', group: 'Marketing', summary: 'Keep first touch distinct from later campaign interactions.', permission: 'marketing.read',
+    sections: [
+      { heading: 'First touch and later touches', paragraphs: ["Lead Source describes the original source. A Marketing Campaign is a named event or initiative. Campaign Influence records a dated interaction, so someone can have several campaign touches while keeping their original Lead Source.", "Use attribution and lead source reports to review the information recorded today. Campaign touches don’t assign revenue credit. An Opportunity may show different sources from its event lead and linked Contacts; don’t assume they all started in the same place."] },
+      { heading: 'Correcting a source', permission: 'marketing.write', paragraphs: ["If a first-touch source is wrong, correct it with a reason rather than adding an unrelated campaign touch to compensate. Historical campaign touches remain available when a Campaign is archived."] },
+    ],
+  },
+  'data-quality': {
+    title: 'Data Quality', group: 'Administration', summary: 'Review likely problems and correct the records that need attention.', permission: 'users.manage',
+    sections: [{ heading: 'Use the lists as a review queue', paragraphs: ["Start here when customer records, ownership, or pricing links need cleanup. Open an issue group, review the records, and follow the links to make the appropriate correction. A count is a reason to check, not proof that every listed record is wrong.", "The same record may appear in more than one group. Check the customer context before changing it, especially where a name could refer to more than one company."] }],
+  },
+  'ownership-reassignment': {
+    title: 'Ownership & Reassignment', group: 'Administration', summary: 'Hand active work to someone who can take it forward.', permission: 'users.manage',
+    sections: [{ heading: 'When responsibilities change', paragraphs: ["Use Ownership & Reassignment when someone changes roles, leaves the company, or active records are still assigned to an inactive user. Filter by record type and current user, then review who should take over. Contacts follow their Account’s owner.", "Tasks and Support Cases offer confirmed bulk reassignment for up to 20 selected records on the current page. Other records link to their individual edit forms. This page focuses on current work with an unsuitable owner; use Data Quality to review unowned Accounts and Opportunities."] }],
+  },
+  'system-health': {
+    title: 'System Health', group: 'Administration', summary: 'Check recorded service and connection status when something seems delayed.', permission: 'users.manage',
+    sections: [{ heading: 'Check what SalesHub has observed', paragraphs: ["Use System Health to check database, file storage, recorded scheduled jobs, Calendar connections, and Support Gmail status. If notifications or Calendar updates seem delayed, look for failed or stale checks and the latest recorded times.", "A connection marked Connected doesn’t prove that the next request will succeed. Missing or old evidence needs investigation; it isn’t a clean bill of health. This page reports status. Use the relevant integration page for connection settings."] }],
+  },
+  'audit-history': {
+    title: 'Audit History', group: 'Administration', summary: 'Check who changed something and the values recorded at the time.', permission: 'users.manage',
+    sections: [{ heading: 'Investigate a change', paragraphs: ["Use Audit History when you need to understand a recorded change, such as an Opportunity’s owner or a Case’s priority. Filter by date, person, record type, or action, then open the record for context. Previous and new values appear where they were recorded.", "Coverage depends on the type of record and change. Not recorded means SalesHub doesn’t have that detail; don’t treat it as proof that nothing changed. This isn’t a complete history of every field on every page."] }],
+  },
+  'maintenance-history': {
+    title: 'Maintenance History', group: 'Administration', summary: 'Review recorded cleanup, import, archive, and bulk work.', permission: 'users.manage',
+    sections: [{ heading: 'Review a larger action', paragraphs: ["Use Maintenance History to check supported cleanup actions, confirmed imports, archive or restore work, and bulk changes. Entries show who acted, when, what kind of work was done, and how many records were affected. Open individual record links for context.", "Only supported actions are recorded here; older work isn’t filled in afterward. Use Audit History or the record’s own history for recorded field changes. Maintenance History is a review page, with no editing controls."] }],
+  },
+  'bulk-actions': {
+    title: 'Bulk Actions', group: 'Getting Started', summary: 'Review a small selection before applying the same change.', permission: 'support-work.write',
+    sections: [
+      { heading: 'Select, review, confirm', paragraphs: ["Use Bulk Actions when the same supported change applies to several records. Select up to 20 records on the current page. Review the selected records and the proposed change before confirming; selecting a page doesn’t select every matching result.", "If a record changed while you were reviewing, or one needs a correction, the selection won’t be partly applied. Refresh, review the affected record, and try again."] },
+      { heading: 'Tasks', permission: 'tasks.write', paragraphs: ["On Tasks, you can complete selected Tasks, reassign them, or set a due date. Choose the same change only when it makes sense for every selected Task."] },
+      { heading: 'Support Cases', permission: 'support-cases.write', paragraphs: ["On Support Cases, you can reassign selected Cases or change priority. Status changes still need individual review."] },
+      { heading: 'Other cleanup tools', permission: 'users.manage', paragraphs: ["PE Cleanup has its own confirmed actions. Review those selections separately. Bulk Actions doesn’t provide a general way to delete records or rewrite customer relationships."] },
+    ],
+  },
+} satisfies Record<string, HelpTopic>;
+
+export type HelpTopicId = keyof typeof helpTopics;
+export function visibleHelpTopics(actor: Actor) {
+  if (routeAccess('/', actor) !== 'allowed') return [];
+  return (Object.entries(helpTopics) as [HelpTopicId, HelpTopic][])
+    .filter(([, topic]) => (!topic.permission || can(actor, topic.permission)) && (!topic.accessPath || routeAccess(topic.accessPath, actor) === 'allowed'))
+    .map(([id, topic]) => ({ id, ...topic, sections: topic.sections.filter(section => !section.permission || can(actor, section.permission)) }));
+}

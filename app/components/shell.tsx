@@ -61,7 +61,7 @@ export function Shell({ children, user, labels, notifications, developmentAdmin 
   const drawer = useRef<HTMLElement>(null);
   const currentItem = navSections.flatMap(section => section.items).filter(item => canSeeNavItem(item, user)).find(item => { const href = hrefFor(item); return href === '/' ? pathname === '/' : pathname.startsWith(href); });
   const currentKey = currentItem && navLabelKeys[currentItem];
-  const currentTitle = currentItem && currentKey && labels ? currentKey === 'OPPORTUNITY' && labels[currentKey] === 'Opportunity' ? 'Opportunities' : `${labels[currentKey]}s` : currentItem ?? 'SalesHub';
+  const currentTitle = currentItem && currentKey && labels ? currentKey === 'OPPORTUNITY' && labels[currentKey] === 'Opportunity' ? 'Opportunities' : `${labels[currentKey]}s` : currentItem ?? (pathname.startsWith('/help') ? 'Help & Guide' : 'SalesHub');
   useEffect(() => { if (menuOpen) closeButton.current?.focus(); }, [menuOpen]);
   useEffect(() => {
     if (!menuOpen) return;
