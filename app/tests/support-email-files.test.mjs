@@ -119,7 +119,9 @@ test('Google adapter discovers parts, keeps Description text-only and only GETs 
   try{
     await connection.saveSupportGmailConnection('support@bixolonusa.com','unit-refresh',actor);
     const adapter=new gmail.GoogleGmailSupportMailbox(fetcher);
-    const [normalized]=await adapter.recent();
+    const [summary]=await adapter.recent();
+    assert.equal(summary.bodyText,'');assert.equal(summary.files,undefined);
+    const normalized=await adapter.get(summary.id);
     assert.equal(normalized.files.length,2);assert.equal(normalized.bodyText,'Real body only.');
     const description=source.emailCasePrefill(normalized,normalized,null,null).description;
     assert.doesNotMatch(description,/ATTACHMENT CONTENT|base64|Content-Disposition|iVBORw/);
@@ -233,7 +235,7 @@ test('missing origin uses surviving retained reply and preserves exact attachmen
 test('missing origin can recover recent same-thread context while unrelated replies stay excluded', async () => {
   const origin = reviewMessage(0), reply = reviewMessage(1);
   const f = reviewFixture([origin]);
-  f.mailbox.get = async () => null;
+  f.mailbox.get = async id => id === reply.id ? reply : null;
   f.mailbox.recent = async () => [reply, { ...reply, id: 'unrelated', threadId: 'unrelated-thread' }];
   const review = await service.caseEmailFileContext(f.db, actor, 11, undefined, f.mailbox);
   assert.equal(review.groups.length, 1);

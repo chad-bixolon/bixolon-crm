@@ -1,4 +1,4 @@
-import { productionEnv, installConnectionDb } from './support-gmail-test-helpers.mjs';
+import { productionEnv, installConnectionDb, resetGmailRuntime } from './support-gmail-test-helpers.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -14,6 +14,9 @@ const resolve = Module._resolveFilename;
 Module._resolveFilename = function(request, parent, ...args) { return resolve.call(this, request.startsWith('@/') ? path.join(root, request.slice(2)) : request, parent, ...args); };
 const credentials = installConnectionDb();
 const gmail = require(path.join(root, 'lib/support-gmail.ts'));
+const { SupportGmailRuntime, supportGmailRuntime } = require(path.join(root, 'lib/support-gmail-runtime.ts'));
+const { signEmailSource } = require(path.join(root, 'lib/support-email-source.ts'));
+const newRuntime = () => { let now = Date.now(); return new SupportGmailRuntime(() => now, async ms => { now += ms; }, () => 0); };
 const connection = require(path.join(root, 'lib/support-gmail-connection.ts'));
 const { SUPPORT_GMAIL_SCOPE } = require(path.join(root, 'lib/support-gmail-config.ts'));
 const { throwSupportGmailHttpError } = require(path.join(root, 'lib/support-gmail-errors.ts'));
@@ -34,7 +37,7 @@ Module._load = load;
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), {status});
 const message = id => ({ id, threadId: `thread-${id}`, internalDate: String(Date.now()), payload: { headers: [{name: 'From', value: 'customer@example.test'}], mimeType: 'text/plain', body: {data: Buffer.from('Printer jam').toString('base64url')} } });
-const form = id => { const data = new FormData(); data.set('messageId', id); return data; };
+const form = id => { const data = new FormData(); data.set('messageId', id); data.set('emailSource', signEmailSource(actor, {id, threadId: `thread-${id}`})); return data; };
 function provider({failStage, failure, scope, tokenPrefix = 'access'} = {}) {
   const calls = []; let refreshes = 0;
   const fetcher = async (url, init) => {
@@ -44,6 +47,7 @@ function provider({failStage, failure, scope, tokenPrefix = 'access'} = {}) {
     if (stage === 'token-refresh') return json({access_token: `${tokenPrefix}-${++refreshes}`, expires_in: 1, ...(scope === undefined ? {} : {scope})});
     assert.equal(init.headers.Authorization, `Bearer ${tokenPrefix}-${refreshes}`);
     if (stage === 'profile') return json({emailAddress: 'support@example.test'});
+    if (url.includes('/messages/missing?')) return json({}, 404);
     if (stage === 'list') return json({messages: [{id:'one'}, {id:'two'}, {id:'three'}]});
     return json(message(url.match(/messages\/([^?]+)/)[1]));
   };
@@ -53,7 +57,7 @@ function provider({failStage, failure, scope, tokenPrefix = 'access'} = {}) {
 let original, logs;
 test.beforeEach(t => {
   const env = productionEnv(); original = Object.fromEntries(Object.keys(env).map(key => [key, process.env[key]]));
-  Object.assign(process.env, env); credentials.reset(); dismissed.clear(); logs = [];
+  Object.assign(process.env, env); credentials.reset(); dismissed.clear(); resetGmailRuntime(supportGmailRuntime); logs = [];
   t.mock.method(console, 'error', (...args) => logs.push(args));
 });
 test.afterEach(() => { for (const [key, value] of Object.entries(original)) if (value === undefined) delete process.env[key]; else process.env[key] = value; });
@@ -71,12 +75,14 @@ test('real connect, repeated Ignore, refresh without scope and fresh adapters re
   assert.deepEqual([...dismissed], ['one', 'two', 'three']);
   assert.equal(google.refreshes, 4);
   assert.equal(credentials.record.grantedScope, SUPPORT_GMAIL_SCOPE);
-  const fresh = new gmail.GoogleGmailSupportMailbox(google.fetcher);
+  const fresh = new gmail.GoogleGmailSupportMailbox(google.fetcher, newRuntime());
   assert.equal((await fresh.get('one')).id, 'one');
   assert.equal(google.refreshes, 5);
   assert.ok(google.calls.every(call => call.cache === 'no-store'));
   assert.ok(google.calls.filter(call => call.stage !== 'token-refresh').every(call => call.method === 'GET'));
-  assert.deepEqual(logs, []);
+  assert.ok(!logs.length);
+  assert.equal(google.calls.filter(call => call.stage === 'list').length, 0);
+  assert.equal(google.calls.filter(call => call.stage === 'message').length, 5);
 });
 
 test('403 reason mapping is consistent at profile, list, full message, get and attachment reads', async () => {
@@ -96,7 +102,7 @@ test('403 reason mapping is consistent at profile, list, full message, get and a
   ]) {
     for (const [failStage, operation] of [['profile','recent'], ['list','recent'], ['message','recent'], ['message','get'], ['message','attachment']]) {
       const google = provider({failStage, failure: () => json({error:{message:'private-provider-message', errors:[{reason}]}}, status)});
-      const mailbox = new gmail.GoogleGmailSupportMailbox(google.fetcher);
+      const mailbox = new gmail.GoogleGmailSupportMailbox(google.fetcher, newRuntime());
       if (status === 404 && operation === 'get') { assert.equal(await mailbox.get('one'), null); continue; }
       await assert.rejects(mailbox[operation]('one', '0'), expected);
       // recent() fetches several messages concurrently, each with safe diagnostics.
@@ -119,11 +125,13 @@ test('Ignore does not persist on a Gmail failure; recovery needs no reconnect an
   await connection.saveSupportGmailConnection('support@example.test', 'refresh', actor);
   for (const [status, reason, expected] of [[403,'userRateLimitExceeded',/rate limited/], [404,'notFound',/message not found/], [503,'backendError',/temporarily unavailable/]]) {
     const google = provider({failStage:'message', failure: () => json({error:{errors:[{reason}]}}, status)});
+    resetGmailRuntime(supportGmailRuntime);
     t.mock.method(globalThis, 'fetch', google.fetcher);
     const result = await ignoreInboxMessage({}, form('one'));
     assert.match(result.message, expected); assert.equal(dismissed.size, 0);
     assert.equal((await connection.connectionStatus()).connected, true);
   }
+  resetGmailRuntime(supportGmailRuntime);
   t.mock.method(globalThis, 'fetch', provider().fetcher);
   assert.deepEqual(await ignoreInboxMessage({}, form('missing')), {message:'Gmail message not found.'});
   assert.equal(dismissed.size, 0);
@@ -134,14 +142,14 @@ test('Ignore does not persist on a Gmail failure; recovery needs no reconnect an
 test('expired access token, revoked refresh token, OAuth client rejection and explicit broader scope stay distinct', async () => {
   await connection.saveSupportGmailConnection('support@example.test', 'refresh', actor);
   for (const [status, error, expected] of [[400,'invalid_grant',/connection expired/], [401,'invalid_client',/OAuth client was rejected/], [400,'invalid_request',/token refresh failed/]]) {
-    await assert.rejects(new gmail.GoogleGmailSupportMailbox(provider({failStage:'token-refresh', failure:() => json({error},status)}).fetcher).recent(), expected);
+    await assert.rejects(new gmail.GoogleGmailSupportMailbox(provider({failStage:'token-refresh', failure:() => json({error},status)}).fetcher, newRuntime()).recent(), expected);
   }
   const stale = provider({failStage:'message', failure:() => json({error:{errors:[{reason:'authError'}]}},401)});
-  await assert.rejects(new gmail.GoogleGmailSupportMailbox(stale.fetcher).get('one'), /connection expired/);
+  await assert.rejects(new gmail.GoogleGmailSupportMailbox(stale.fetcher, newRuntime()).get('one'), /connection expired/);
   // A new operation refreshes again; no stale access token survives the operation.
-  assert.equal((await new gmail.GoogleGmailSupportMailbox(provider({tokenPrefix:'fresh'}).fetcher).get('one')).id, 'one');
+  assert.equal((await new gmail.GoogleGmailSupportMailbox(provider({tokenPrefix:'fresh'}).fetcher, newRuntime()).get('one')).id, 'one');
   for (const scope of ['', `${SUPPORT_GMAIL_SCOPE} https://www.googleapis.com/auth/gmail.modify`]) {
-    await assert.rejects(new gmail.GoogleGmailSupportMailbox(provider({scope}).fetcher).recent(), /only gmail.readonly/);
+    await assert.rejects(new gmail.GoogleGmailSupportMailbox(provider({scope}).fetcher, newRuntime()).recent(), /only gmail.readonly/);
   }
   assert.equal(credentials.record.grantedScope, SUPPORT_GMAIL_SCOPE);
 });
@@ -150,7 +158,7 @@ test('network and timeout diagnostics contain only fixed stages/status/categorie
   await connection.saveSupportGmailConnection('support@example.test', 'private-refresh-token', actor);
   for (const failStage of ['token-refresh', 'profile', 'message']) for (const [name, expected, category] of [['Error', /connection failed/, 'network'], ['TimeoutError', /timed out/, 'timeout']]) {
     const failure = () => { throw Object.assign(new Error('private-access-token private-client-secret private-encryption-key private-authorization-code'), {name}); };
-    await assert.rejects(new gmail.GoogleGmailSupportMailbox(provider({failStage, failure}).fetcher).get('one'), expected);
+    await assert.rejects(new gmail.GoogleGmailSupportMailbox(provider({failStage, failure}).fetcher, newRuntime()).get('one'), expected);
     assert.deepEqual(logs.at(-1), [`[Support Gmail] stage=${failStage === 'message' ? 'read' : failStage} status=none category=${category}`]);
   }
   assert.doesNotMatch(JSON.stringify(logs), /private-|https:|Bearer|refresh_token/);
@@ -158,13 +166,13 @@ test('network and timeout diagnostics contain only fixed stages/status/categorie
 
 test('concurrent mailbox requests use local fresh tokens and reread shared connection after reconnect/disconnect', async () => {
   await connection.saveSupportGmailConnection('support@example.test', 'old-refresh', actor);
-  const a = new gmail.GoogleGmailSupportMailbox(provider({tokenPrefix:'instance-a'}).fetcher);
-  const b = new gmail.GoogleGmailSupportMailbox(provider({tokenPrefix:'instance-b'}).fetcher);
+  const a = new gmail.GoogleGmailSupportMailbox(provider({tokenPrefix:'instance-a'}).fetcher, newRuntime());
+  const b = new gmail.GoogleGmailSupportMailbox(provider({tokenPrefix:'instance-b'}).fetcher, newRuntime());
   assert.deepEqual((await Promise.all([a.get('one'), b.get('two')])).map(row => row.id), ['one','two']);
   await connection.saveSupportGmailConnection('support@example.test', 'new-refresh', actor);
   const next = provider();
   const fetcher = async (url, init) => { if (url.endsWith('/token')) assert.equal(init.body.get('refresh_token'), 'new-refresh'); return next.fetcher(url, init); };
-  assert.equal((await new gmail.GoogleGmailSupportMailbox(fetcher).get('one')).id, 'one');
+  assert.equal((await new gmail.GoogleGmailSupportMailbox(fetcher, newRuntime()).get('one')).id, 'one');
   await connection.disconnectSupportGmail(actor);
   await assert.rejects(a.get('one'), /Connect Support Gmail/);
   await assert.rejects(b.get('two'), /Connect Support Gmail/);

@@ -1,16 +1,18 @@
+import { supportGmailRuntime, gmailWorkflow, type SupportGmailRuntime } from './support-gmail-runtime';
 import { discoverGmailFiles, gmailParts, isFilePart, decodeGmailFile, type GmailPart, type SupportMailFile } from './support-gmail-files';
-import { connectedRefreshToken, verifyReadOnlyScope, recordSupportGmailFetch } from './support-gmail-connection';
+import { connectedRefreshToken, verifyReadOnlyScope, recordSupportGmailFetch, supportGmailReadIdentity } from './support-gmail-connection';
 import { assertLiveSupportGmailEnvironment, assertSupportGmailEnabled, supportGmailMockMode, supportGmailTestFixtureMode, supportGmailLookbackDays } from './support-gmail-config';
 import { logSupportGmailReadFailure, throwSupportGmailHttpError, type SupportGmailReadStage } from './support-gmail-errors';
 export * from './support-gmail-config';
-export type SupportMailMessage = { id: string; threadId: string; senderEmail: string; senderName: string | null; recipients: string; subject: string; snippet: string; bodyText: string; messageDate: Date; hasAttachments?: boolean; files?: SupportMailFile[] };
-export interface GmailSupportMailbox { recent(): Promise<SupportMailMessage[]>; get(id: string): Promise<SupportMailMessage | null>; attachment(messageId: string, partId: string): Promise<{ message: SupportMailMessage; file: SupportMailFile; body: Uint8Array }> }
+export type SupportMailMessage = { id: string; threadId: string; senderEmail: string; senderName: string | null; recipients: string; subject: string; snippet: string; bodyText: string; messageDate: Date; sourceExcluded?: boolean; hasAttachments?: boolean; files?: SupportMailFile[] };
+export type SupportMailReview = { message: SupportMailMessage | null; error?: string };
+export interface GmailSupportMailbox { recent(): Promise<SupportMailMessage[]>; get(id: string): Promise<SupportMailMessage | null>; getMany?(ids: string[]): Promise<(SupportMailMessage | null)[]>; review?(ids: string[]): Promise<SupportMailReview[]>; attachment(messageId: string, partId: string): Promise<{ message: SupportMailMessage; file: SupportMailFile; body: Uint8Array }> }
 
 let lastFetch: { at: Date | null; result: string } = { at: null, result: 'No fetch yet' };
 export function supportGmailFetchStatus() { return lastFetch; }
 export async function recentSupportMail(): Promise<SupportMailMessage[]> {
   try {
-    const messages = await supportMailbox().recent();
+    const messages = await gmailWorkflow('inbox', () => supportMailbox().recent());
     const at = new Date();
     if (!supportGmailMockMode() && !supportGmailTestFixtureMode()) await recordSupportGmailFetch(at);
     lastFetch = { at, result: `Fetched ${messages.length} messages` };
@@ -115,7 +117,7 @@ export class MockGmailSupportMailbox implements GmailSupportMailbox {
   }
 }
 
-type GmailMessage = { id?: string; threadId?: string; snippet?: string; internalDate?: string; payload?: GmailPart & { headers?: { name: string; value: string }[] } };
+type GmailMessage = { labelIds?: string[]; id?: string; threadId?: string; snippet?: string; internalDate?: string; payload?: GmailPart & { headers?: { name: string; value: string }[] } };
 export function htmlToPlainText(html: string) {
   return html.replace(/<\s*(script|style)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
     .replace(/<\s*br\s*\/?\s*>/gi, '\n').replace(/<\s*\/\s*(p|div|li|tr)\s*>/gi, '\n')
@@ -153,71 +155,114 @@ function normalize(message: GmailMessage): SupportMailMessage {
   const senderName = from.includes('<') ? from.slice(0, from.lastIndexOf('<')).replace(/^"|"$/g, '').trim() || null : null;
   const date = Number(message.internalDate);
   if (!senderEmail || !senderEmail.includes('@') || !Number.isFinite(date) || date <= 0) throw new Error('Gmail returned an incomplete message.');
-  return { id: message.id, threadId: message.threadId, senderEmail, senderName, recipients: header('to'), subject: header('subject') || '(no subject)', snippet: message.snippet ?? '', bodyText: decodedText(message.payload), messageDate: new Date(date), hasAttachments: containsAttachment(message.payload), files: discoverGmailFiles(message.payload) };
+  return { sourceExcluded: message.labelIds?.some(label => label === 'SPAM' || label === 'TRASH'), id: message.id, threadId: message.threadId, senderEmail, senderName, recipients: header('to'), subject: header('subject') || '(no subject)', snippet: message.snippet ?? '', bodyText: decodedText(message.payload), messageDate: new Date(date), hasAttachments: containsAttachment(message.payload), files: discoverGmailFiles(message.payload) };
 }
 
 export class GoogleGmailSupportMailbox implements GmailSupportMailbox {
-  constructor(private readonly fetcher: typeof fetch = fetch) {}
-  private async request(url: string, options: RequestInit, stage: SupportGmailReadStage = 'read') { return gmailFetch(url, options, this.fetcher, stage); }
-  private async token() {
+  constructor(private readonly fetcher: typeof fetch = fetch, private readonly runtime: SupportGmailRuntime = supportGmailRuntime) {}
+  private async request(mailbox: string, url: string, options: RequestInit, stage: SupportGmailReadStage = 'read') {
+    return this.runtime.request(mailbox, (options.method ?? 'GET') === 'GET', () => gmailFetch(url, options, this.fetcher, stage), response => throwSupportGmailHttpError(response, stage));
+  }
+  private async token(identity: { mailbox: string; version: string }) {
     assertLiveSupportGmailEnvironment();
     const { SUPPORT_GMAIL_CLIENT_ID: clientId, SUPPORT_GMAIL_CLIENT_SECRET: clientSecret } = process.env;
-    const { refreshToken, email: mailbox, scope } = await connectedRefreshToken();
+    const { refreshToken, email: mailbox, scope, connectedAt } = await connectedRefreshToken();
+    if (identity.mailbox !== mailbox || identity.version !== connectedAt) throw new Error('Support Gmail connection changed. Please try again.');
     if (!clientId || !clientSecret) throw new Error('Dedicated Support Gmail OAuth client is required.');
-    const response = await this.request('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: 'refresh_token' }), cache: 'no-store' }, 'token-refresh');
+    const response = await this.request(mailbox, 'https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: 'refresh_token' }), cache: 'no-store' }, 'token-refresh');
     if (!response.ok) await throwSupportGmailHttpError(response, 'token-refresh');
     const token = await gmailJson<{ access_token?: string; scope?: string }>(response);
     if (typeof token.access_token !== 'string' || !token.access_token) throw new Error('Support Gmail token refresh returned no access token.');
-    // Refresh responses may omit scope; retain the verified PostgreSQL grant.
     verifyReadOnlyScope(token.scope ?? scope);
-    const profile = await this.request('https://gmail.googleapis.com/gmail/v1/users/me/profile', { headers: { Authorization: `Bearer ${token.access_token}` }, cache: 'no-store' }, 'profile');
+    const profile = await this.request(mailbox, 'https://gmail.googleapis.com/gmail/v1/users/me/profile', { headers: { Authorization: `Bearer ${token.access_token}` }, cache: 'no-store' }, 'profile');
     if (!profile.ok) await throwSupportGmailHttpError(profile, 'profile');
     if ((await gmailJson<{ emailAddress?: string }>(profile)).emailAddress?.toLowerCase() !== mailbox.toLowerCase()) throw new Error('Connected Gmail account does not match SUPPORT_GMAIL_MAILBOX.');
     return token.access_token;
   }
-  private async gmail(path: string, token: string) {
-    const response = await this.request(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+  private async read<T>(operation: string, expensive: boolean, ttl: number, run: (token: string, mailbox: string) => Promise<T>) {
+    assertLiveSupportGmailEnvironment();
+    const identity = await supportGmailReadIdentity();
+    return this.runtime.run(identity.mailbox, identity.version, operation, expensive, ttl, async () => {
+      const result = await run(await this.token(identity), identity.mailbox);
+      // Never return/cache a result from a connection disconnected or replaced mid-read.
+      const current = await supportGmailReadIdentity();
+      if (current.mailbox !== identity.mailbox || current.version !== identity.version) throw new Error('Support Gmail connection changed. Please try again.');
+      return result;
+    });
+  }
+  private async gmail(path: string, token: string, mailbox: string) {
+    const response = await this.request(mailbox, `https://gmail.googleapis.com/gmail/v1/users/me/${path}`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
     if (!response.ok) await throwSupportGmailHttpError(response, 'read');
     return gmailJson<unknown>(response);
   }
   async recent() {
-    const token = await this.token();
     const days = supportGmailLookbackDays();
-    // Gmail's after: operator is strict; include the boundary second and filter precisely below.
-    const after = Math.floor((Date.now() - days * 86400000) / 1000) - 1;
-    const result = await this.gmail(`messages?maxResults=50&q=${encodeURIComponent(`after:${after} -in:spam -in:trash`)}`, token) as { messages?: { id: string }[] };
-    const rows: GmailMessage[] = [];
-    const ids = (result.messages ?? []).slice(0, 50);
-    for (let index = 0; index < ids.length; index += 5) rows.push(...await Promise.all(ids.slice(index, index + 5).map(row => this.gmail(`messages/${encodeURIComponent(row.id)}?format=full`, token) as Promise<GmailMessage>)));
-    const cutoff = Date.now() - days * 86400000;
-    return rows.map(normalize).filter(row => row.messageDate.getTime() >= cutoff).sort((a, b) => b.messageDate.getTime() - a.messageDate.getTime());
+    return this.read(`recent:${days}`, true, 10000, async (token, mailbox) => {
+      const after = Math.floor((Date.now() - days * 86400000) / 1000) - 1;
+      const result = await this.gmail(`messages?maxResults=50&q=${encodeURIComponent(`after:${after} -in:spam -in:trash`)}`, token, mailbox) as { messages?: { id: string }[] };
+      const rows: GmailMessage[] = [];
+      const ids = (result.messages ?? []).slice(0, 50);
+      for (let index = 0; index < ids.length; index += 5) {
+        // Drain all five reads before releasing the operation on failure.
+        const batch = await Promise.allSettled(ids.slice(index, index + 5).map(row => this.gmail(`messages/${encodeURIComponent(row.id)}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject`, token, mailbox) as Promise<GmailMessage>));
+        for (const row of batch) { if (row.status === 'rejected') throw row.reason; rows.push(row.value); }
+      }
+      const cutoff = Date.now() - days * 86400000;
+      return rows.map(row => ({ ...normalize(row), bodyText: '', files: undefined, hasAttachments: undefined })).filter(row => row.messageDate.getTime() >= cutoff).sort((a, b) => b.messageDate.getTime() - a.messageDate.getTime());
+    });
+  }
+  private async message(id: string, token: string, mailbox: string) {
+    const response = await this.request(mailbox, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=full`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+    if (response.status === 404) return null;
+    if (!response.ok) await throwSupportGmailHttpError(response, 'read');
+    const message = normalize(await gmailJson<GmailMessage>(response));
+    if (message.id !== id) throw new Error('Gmail returned an incomplete message.');
+    return message;
   }
   async get(id: string) {
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) return null;
-    const token = await this.token();
-    const response = await this.request(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=full`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
-    if (response.status === 404) return null;
-    if (!response.ok) await throwSupportGmailHttpError(response, 'read');
-    return normalize(await gmailJson<GmailMessage>(response));
+    return this.read(`get:${id}`, false, 0, (token, mailbox) => this.message(id, token, mailbox));
+  }
+  async getMany(ids: string[]) {
+    if (ids.length > 50 || ids.some(id => !/^[A-Za-z0-9_-]{1,128}$/.test(id))) throw new Error('Invalid Support inbox message.');
+    return this.read(`getMany:${JSON.stringify(ids)}`, true, 0, async (token, mailbox) => {
+      const messages = [];
+      for (const id of ids) messages.push(await this.message(id, token, mailbox));
+      return messages;
+    });
+  }
+  async review(ids: string[]) {
+    if (ids.length > 200 || ids.some(id => !/^[A-Za-z0-9_-]{1,128}$/.test(id))) throw new Error('Invalid Gmail file source.');
+    return this.read(`review:${JSON.stringify(ids)}`, true, 0, async (token, mailbox) => {
+      const messages: SupportMailReview[] = [];
+      for (const id of ids) {
+        try { messages.push({ message: await this.message(id, token, mailbox) }); }
+        catch (error) { messages.push({ message: null, error: error instanceof Error && /^Support Gmail /.test(error.message) ? error.message : 'Source email could not be read. Please retry.' }); }
+      }
+      return messages;
+    });
   }
   async attachment(messageId: string, partId: string) {
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(messageId) || !/^[A-Za-z0-9_.-]{1,128}$/.test(partId)) throw new Error('Invalid Gmail file source.');
-    const token = await this.token();
-    const raw = await this.gmail(`messages/${encodeURIComponent(messageId)}?format=full`, token) as GmailMessage;
-    const message = normalize(raw);
-    if (message.id !== messageId) throw new Error('Invalid Gmail file source.');
-    const file = message.files?.find(row => row.partId === partId);
-    if (!file || file.unavailableReason) throw new Error(file?.unavailableReason || 'Email file is no longer available.');
-    const part = gmailParts(raw.payload).find(row => row.partId === partId)!.part;
-    let data = part.body?.data;
-    if (file.attachmentId) {
-      const result = await this.gmail(`messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(file.attachmentId)}`, token) as { data?: string; size?: number };
-      if (result.size !== file.size) throw new Error('File is too large or incomplete.');
-      data = result.data;
-    }
-    return { message, file, body: decodeGmailFile(data, file.size) };
+    return this.read(`attachment:${messageId}:${partId}`, false, 0, async (token, mailbox) => {
+      const raw = await this.gmail(`messages/${encodeURIComponent(messageId)}?format=full`, token, mailbox) as GmailMessage;
+      const message = normalize(raw);
+      if (message.id !== messageId) throw new Error('Invalid Gmail file source.');
+      const file = message.files?.find(row => row.partId === partId);
+      if (!file || file.unavailableReason) throw new Error(file?.unavailableReason || 'Email file is no longer available.');
+      const part = gmailParts(raw.payload).find(row => row.partId === partId)!.part;
+      let data = part.body?.data;
+      if (file.attachmentId) {
+        const result = await this.gmail(`messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(file.attachmentId)}`, token, mailbox) as { data?: string; size?: number };
+        if (result.size !== file.size) throw new Error('File is too large or incomplete.');
+        data = result.data;
+      }
+      return { message, file, body: decodeGmailFile(data, file.size) };
+    });
   }
-
+}
+export async function fullSupportMessages(mailbox: GmailSupportMailbox, ids: string[]) {
+  return mailbox.getMany ? mailbox.getMany(ids) : Promise.all(ids.map(id => mailbox.get(id)));
 }
 export function supportMailbox(): GmailSupportMailbox {
   assertSupportGmailEnabled();

@@ -270,11 +270,12 @@ test('live adapter injection reads normalized messages without any Gmail mutatio
       else body={id:'one',threadId:'thread',internalDate:String(Date.now()),snippet:'Hello',payload:{mimeType:'text/plain',body:{data:Buffer.from('Read-only body').toString('base64url')},headers:[{name:'From',value:'Customer <customer@example.test>'},{name:'Subject',value:'Printer repair'}]}};
       return new Response(JSON.stringify(body));
     };
-    const rows=await new gmail.GoogleGmailSupportMailbox(fetcher).recent();assert.equal(rows[0].bodyText,'Read-only body');assert.equal(rows[0].senderEmail,'customer@example.test');
+    const { SupportGmailRuntime } = require(path.join(root,'lib/support-gmail-runtime.ts'));
+    const rows=await new gmail.GoogleGmailSupportMailbox(fetcher, new SupportGmailRuntime()).recent();assert.equal(rows[0].bodyText,'');assert.equal(rows[0].senderEmail,'customer@example.test');
     assert.equal(calls.length,4);assert.equal(calls[0].method,'POST');for(const call of calls.slice(1)){assert.equal(call.method,'GET');assert.match(call.url,/users\/me\/(profile|messages)/);}
     assert.doesNotMatch(JSON.stringify(rows),/unit-access|unit-refresh/);
-    await assert.rejects(new gmail.GoogleGmailSupportMailbox(async()=>new Response('private malformed token')).recent(),/^Error: Support Gmail returned an invalid response/);
-    for(const status of [401,403,429,500])await assert.rejects(new gmail.GoogleGmailSupportMailbox(async(url,init)=>String(url).includes('/token')?fetcher(url,init):new Response('',{status})).recent(),/expired|denied|rate limited|temporarily unavailable/);
+    await assert.rejects(new gmail.GoogleGmailSupportMailbox(async()=>new Response('private malformed token'), new SupportGmailRuntime()).recent(),/^Error: Support Gmail returned an invalid response/);
+    for(const status of [401,403,429,500])await assert.rejects(new gmail.GoogleGmailSupportMailbox(async(url,init)=>String(url).includes('/token')?fetcher(url,init):new Response('',{status}), new SupportGmailRuntime()).recent(),/expired|denied|rate limited|temporarily unavailable/);
   }finally{}
 });
 

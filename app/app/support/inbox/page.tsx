@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { recentSupportMail, supportGmailEnabled, supportGmailFetchStatus, supportGmailLookbackDays, supportGmailMode, supportGmailMockMode, supportGmailTestFixtureMode } from '@/lib/support-gmail';
 import { connectionStatus, supportGmailClientConfigured } from '@/lib/support-gmail-connection';
 import { supportGmailEnvironmentIssue } from '@/lib/support-gmail-config';
+import { signEmailSource } from '@/lib/support-email-source';
 import { inboxMailboxIdentity, suggestSupportEmails } from '@/lib/support-email';
 import { connectSupportGmail, disconnectInboxGmail } from './actions';
 import { InboxMessageActions } from './message-actions';
@@ -17,7 +18,7 @@ import { inboxMatchSummary, inboxAttachmentLabel } from '@/lib/support-inbox-dis
 export const dynamic = 'force-dynamic';
 export default async function SupportInboxPage({ searchParams }: { searchParams: Promise<{ connection?: string; showIgnored?: string }> }) {
   if (!supportGmailEnabled()) notFound();
-  await requirePermission('support-cases.write');
+  const actor = await requirePermission('support-cases.write');
   const heading = <div className="[&>div]:mb-3"><PageHeader eyebrow={NAV_CATEGORIES.support} title="Support Inbox" action={<Link href="/support/cases" className="btn-secondary">Support Cases</Link>}/></div>;
   const mock = supportGmailMockMode();
   const mode = supportGmailMode();
@@ -105,9 +106,9 @@ export default async function SupportInboxPage({ searchParams }: { searchParams:
             {suggestion.multipleCaseReferences && <p>Multiple case numbers found — review required</p>}
           </div>
         </InboxDisclosure>
-        <InboxMessageActions messageId={message.id} suggestedCases={suggestion.suggestedCases} linked={!!suggestion.alreadyLinkedCaseId}/>
+        <InboxMessageActions emailSource={signEmailSource(actor, message)} messageId={message.id} suggestedCases={suggestion.suggestedCases} linked={!!suggestion.alreadyLinkedCaseId}/>
       </article>;
     })}{!rows.length && <p className="panel p-5">No unignored recent messages.</p>}</div>
-    {params.showIgnored === '1' && <section className="mt-6 space-y-3" aria-label="Ignored messages"><h2 className="text-lg font-semibold">Ignored messages</h2>{ignored.map(message => <article className="panel p-4" key={message.id} data-message-state="ignored"><p className="break-words font-medium">{message.subject}</p><p className="break-all text-sm text-slate-600">{message.senderEmail}</p><InboxMessageActions messageId={message.id} suggestedCases={[]} ignored/></article>)}{!ignored.length && <p className="panel p-4 text-sm">No ignored messages in this recent window.</p>}</section>}
+    {params.showIgnored === '1' && <section className="mt-6 space-y-3" aria-label="Ignored messages"><h2 className="text-lg font-semibold">Ignored messages</h2>{ignored.map(message => <article className="panel p-4" key={message.id} data-message-state="ignored"><p className="break-words font-medium">{message.subject}</p><p className="break-all text-sm text-slate-600">{message.senderEmail}</p><InboxMessageActions emailSource={signEmailSource(actor, message)} messageId={message.id} suggestedCases={[]} ignored/></article>)}{!ignored.length && <p className="panel p-4 text-sm">No ignored messages in this recent window.</p>}</section>}
   </Content>;
 }

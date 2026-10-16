@@ -116,6 +116,12 @@ export async function connectionStatus(db?: ConnectionDb) {
   verifyReadOnlyScope(record.grantedScope);
   return { connected: true, email: record.mailbox, connectedAt: record.connectedAt.toISOString(), lastSyncedAt: record.lastSyncedAt };
 }
+// Public identity/version only; rechecked even on in-memory cache hits.
+export async function supportGmailReadIdentity(db?: ConnectionDb) {
+  const status = await connectionStatus(db);
+  if (!status.connected || !status.email || !status.connectedAt) throw new Error('Connect Support Gmail to read the Support inbox.');
+  return { mailbox: status.email, version: status.connectedAt };
+}
 export async function connectedRefreshToken(db?: ConnectionDb): Promise<StoredConnection> {
   assertOAuthAvailable();
   const record = await (db ?? await connectionDb()).supportGmailConnection.findUnique({ where: { id: 'support' } });

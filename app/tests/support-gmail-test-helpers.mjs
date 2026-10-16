@@ -20,3 +20,9 @@ export function installConnectionDb() {
   require.cache[filename] = {id: filename, filename, loaded: true, exports: {prisma: db}};
   return {db, get record() {return record;}, reset() {record = null;}};
 }
+
+// Isolate process-local optimization state between independent provider scenarios.
+// Production adapters share one runtime; these tests exercise that explicitly.
+export function resetGmailRuntime(runtime) {
+  runtime.states.clear(); runtime.cache.clear(); runtime.pending.clear();
+}

@@ -1,5 +1,20 @@
 export type SupportGmailReadStage = 'token-refresh' | 'profile' | 'read';
-type FailureCategory = 'invalid-token' | 'invalid-grant' | 'oauth-client' | 'insufficient-scope' | 'rate-limit' | 'quota' | 'domain-policy' | 'forbidden' | 'not-found' | 'transient' | 'request-failed' | 'network' | 'timeout';
+export type FailureCategory = 'invalid-token' | 'invalid-grant' | 'oauth-client' | 'insufficient-scope' | 'rate-limit' | 'quota' | 'domain-policy' | 'forbidden' | 'not-found' | 'transient' | 'request-failed' | 'network' | 'timeout';
+
+export class SupportGmailHttpError extends Error {
+  constructor(message: string, public readonly category: FailureCategory, public readonly retryAfterMs?: number) { super(message); this.name = 'SupportGmailHttpError'; }
+}
+// The process-wide runtime may be called from separately bundled Next routes.
+// Use the fixed error brand/category rather than constructor identity across bundles.
+export function isSupportGmailRateLimit(error: unknown): error is SupportGmailHttpError {
+  return error instanceof Error && error.name === 'SupportGmailHttpError' && 'category' in error && error.category === 'rate-limit';
+}
+export function retryAfterMilliseconds(value: string | null, now = Date.now()): number | undefined {
+  if (!value) return undefined;
+  if (/^\d+(?:\.\d+)?$/.test(value.trim())) { const ms = Number(value) * 1000; return Number.isFinite(ms) ? ms : undefined; }
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, date - now) : undefined;
+}
 
 export function logSupportGmailReadFailure(stage: SupportGmailReadStage, status: number | 'none', category: FailureCategory) {
   // Never log URLs, headers, payloads, provider messages or caught exceptions.
@@ -41,5 +56,5 @@ export async function throwSupportGmailHttpError(response: Response, stage: Supp
     category = 'transient'; message = 'Support Gmail is temporarily unavailable. Try again later.';
   }
   logSupportGmailReadFailure(stage, status, category);
-  throw new Error(message);
+  throw new SupportGmailHttpError(message, category, retryAfterMilliseconds(response.headers.get('Retry-After')));
 }

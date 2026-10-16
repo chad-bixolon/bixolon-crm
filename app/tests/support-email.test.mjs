@@ -187,6 +187,7 @@ test('encrypted connection and Google adapter only call Gmail read endpoints wit
   const old = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   const originalFetch = global.fetch;
   Object.assign(process.env, productionEnv('test@example.test'));
+  const { SupportGmailRuntime } = require(path.join(root, 'lib/support-gmail-runtime.ts'));
   const calls = [];
   global.fetch = async (url, init = {}) => {
     calls.push({ url: String(url), method: init.method ?? 'GET' });
@@ -205,7 +206,7 @@ test('encrypted connection and Google adapter only call Gmail read endpoints wit
     assert.equal(authorization.searchParams.get('scope'), SUPPORT_GMAIL_SCOPE);
     assert.equal(authorization.searchParams.get('redirect_uri'), 'https://saleshub.example.test/api/support-gmail/callback');
     await assert.rejects(exchangeSupportGmailCode('code', verifier, async () => ({ ok: true, json: async () => ({ access_token: 'token', refresh_token: 'refresh', token_type: 'Bearer', scope: `${SUPPORT_GMAIL_SCOPE} https://www.googleapis.com/auth/gmail.modify` }) })), /only gmail.readonly/);
-    assert.deepEqual(await new GoogleGmailSupportMailbox().recent(), []);
+    assert.deepEqual(await new GoogleGmailSupportMailbox(undefined, new SupportGmailRuntime()).recent(), []);
     assert.equal(calls[0].method, 'POST');
     assert.equal(calls.length, 3);
     for (const call of calls.slice(1)) { assert.equal(call.method, 'GET'); assert.match(call.url, /\/users\/me\/(?:profile|messages\?)/); }
@@ -214,11 +215,11 @@ test('encrypted connection and Google adapter only call Gmail read endpoints wit
     const after = Number(decodeURIComponent(calls[2].url).match(/after:(\d+)/)[1]);
     assert.ok(Math.abs(after - Math.floor((Date.now() - 30 * 86400000) / 1000)) < 5);
     for (const [status, message] of [[401, /expired/], [403, /denied/], [429, /rate limited/], [500, /temporarily unavailable/]]) {
-      global.fetch = async url => String(url).includes('/token') ? { ok: true, json: async () => ({ access_token: 'token', scope: SUPPORT_GMAIL_SCOPE }) } : String(url).endsWith('/profile') ? { ok: true, json: async () => ({ emailAddress: 'test@example.test' }) } : { ok: false, status };
-      await assert.rejects(new GoogleGmailSupportMailbox().recent(), message);
+      global.fetch = async url => String(url).includes('/token') ? { ok: true, json: async () => ({ access_token: 'token', scope: SUPPORT_GMAIL_SCOPE }) } : String(url).endsWith('/profile') ? { ok: true, json: async () => ({ emailAddress: 'test@example.test' }) } : new Response('', {status, headers: {'Retry-After':'10'}});
+      await assert.rejects(new GoogleGmailSupportMailbox(undefined, new SupportGmailRuntime()).recent(), message);
     }
     global.fetch = async () => { throw Object.assign(new Error('aborted'), { name: 'TimeoutError' }); };
-    await assert.rejects(new GoogleGmailSupportMailbox().recent(), /timed out/);
+    await assert.rejects(new GoogleGmailSupportMailbox(undefined, new SupportGmailRuntime()).recent(), /timed out/);
     await disconnectSupportGmail(actor('SUPPORT'));
     assert.equal((await connectionStatus()).connected, false);
   } finally {

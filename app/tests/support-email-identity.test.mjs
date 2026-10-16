@@ -93,14 +93,14 @@ test('routed copies keep distinct Gmail IDs despite a shared RFC Message-ID, tim
     assert.equal(group.subject, '[tech-support]');
     assert.equal(direct.subject, '(no subject)');
     assert.notEqual(group.threadId, direct.threadId);
-    assert.equal(inboxAttachmentLabel(group), '2 attachments');
-    assert.equal(inboxAttachmentLabel(direct), '2 attachments');
+    assert.equal(inboxAttachmentLabel(group), null);
+    assert.equal(inboxAttachmentLabel(direct), null);
     assert.equal(messages.filter(message => message.threadId === 'group-thread').length, 2);
-    assert.equal(calls.filter(call => call.url.includes('?format=full')).length, 4);
+    assert.equal(calls.filter(call => call.url.includes('?format=metadata')).length, 4);
     assert.ok(calls.every(call => !call.url.includes('/threads')));
     assert.equal(calls[0].method, 'POST');
     assert.ok(calls.slice(1).every(call => call.method === 'GET'));
-    for (const message of messages) assert.deepEqual(await mailbox.get(message.id), message);
+    for (const message of messages) { const full = await mailbox.get(message.id); assert.equal(full.id, message.id); assert.equal(full.threadId, message.threadId); assert.equal(full.bodyText, 'Printer problem.'); assert.equal(inboxAttachmentLabel(full), '2 attachments'); }
   });
 });
 
@@ -163,6 +163,7 @@ test('a recent reply surfaces an older thread without importing dormant messages
     });
     const messages=await adapter.recent();
     assert.deepEqual(messages.map(row=>[row.id,row.threadId]),[['recent-reply','old-thread']]);
-    assert.equal(messages[0].bodyText,quoted);
+    assert.equal(messages[0].bodyText,'');
+    assert.equal((await adapter.get('recent-reply')).bodyText,quoted);
   } finally {for(const[key,value]of Object.entries(prior))if(value===undefined)delete process.env[key];else process.env[key]=value;}
 });

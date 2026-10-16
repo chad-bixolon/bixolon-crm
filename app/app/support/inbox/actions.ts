@@ -4,7 +4,8 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { getRealAuthenticatedUser, requireMutation } from '@/lib/current-user';
 import { assertEmailPersistenceAllowed, assertInboxActor, inboxMailboxIdentity, ignoreSupportEmail, linkSupportEmail, restoreSupportEmail } from '@/lib/support-email';
-import { recentSupportMail } from '@/lib/support-gmail';
+import { resolveInboxSource } from '@/lib/support-email-source';
+import { gmailWorkflow } from '@/lib/support-gmail-runtime';
 import { cookies, headers } from 'next/headers';
 import { can } from '@/lib/authorization';
 import { assertLiveSupportGmailRequest } from '@/lib/support-gmail-config';
@@ -37,7 +38,7 @@ export async function disconnectInboxGmail() {
 export type InboxActionState = { message?: string; caseId?: string; caseNumber?: string };
 function safeInboxError(error: unknown) {
   const value = error instanceof Error ? error.message : '';
-  return /^(Choose a |Support Case |This email |This Gmail thread |Gmail message |Support Gmail |Connect Gmail |Invalid Support inbox |This message )/.test(value) ? value : 'Could not save this inbox action. Try again.';
+  return /^(Choose a |Support Case |This email |This Gmail thread |Gmail message |Support Gmail |Connect Gmail |Invalid Support inbox |Invalid or expired Support email |This message )/.test(value) ? value : 'Could not save this inbox action. Try again.';
 }
 export async function linkInboxMessage(_state: InboxActionState, form: FormData): Promise<InboxActionState> {
   const actor = await requireMutation('support-cases.write');
@@ -55,8 +56,7 @@ export async function linkInboxMessage(_state: InboxActionState, form: FormData)
       caseId = row.id;
     }
     if (!caseId) throw new Error('Choose a Support Case or enter its exact case number.');
-    const message = (await recentSupportMail()).find(item => item.id === messageId);
-    if (!message) throw new Error('Gmail message not found.');
+    const message = await gmailWorkflow('link', () => resolveInboxSource(actor, String(form.get('emailSource') ?? ''), messageId));
     await linkSupportEmail(prisma, actor, message, caseId);
     linkedCaseId = caseId;
   } catch (error) {
@@ -72,7 +72,7 @@ export async function ignoreInboxMessage(_state: InboxActionState, form: FormDat
   try {
     assertEmailPersistenceAllowed();
     const messageId = String(form.get('messageId') ?? '');
-    if (!(await recentSupportMail()).some(message => message.id === messageId)) throw new Error('Gmail message not found.');
+    await gmailWorkflow('ignore', () => resolveInboxSource(actor, String(form.get('emailSource') ?? ''), messageId));
     await ignoreSupportEmail(prisma, actor, inboxMailboxIdentity(), messageId);
   } catch (error) { return { message: safeInboxError(error) }; }
   revalidatePath('/support/inbox');
@@ -85,7 +85,7 @@ export async function restoreInboxMessage(_state: InboxActionState, form: FormDa
   try {
     assertEmailPersistenceAllowed();
     const messageId = String(form.get('messageId') ?? '');
-    if (!(await recentSupportMail()).some(message => message.id === messageId)) throw new Error('Gmail message not found.');
+    await gmailWorkflow('restore', () => resolveInboxSource(actor, String(form.get('emailSource') ?? ''), messageId));
     await restoreSupportEmail(prisma, actor, inboxMailboxIdentity(), messageId);
   }
   catch (error) { return { message: safeInboxError(error) }; }

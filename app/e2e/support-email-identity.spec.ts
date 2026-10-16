@@ -42,3 +42,20 @@ test('duplicate-looking Gmail messages stay separate and ignoring one preserves 
   await expect(second).toHaveCount(1);
   expect(googleRequests).toEqual([]);
 });
+
+test('Ignore rejects a forged signed inbox source and keeps the message visible', async ({ page }) => {
+  await signInAs(page, 'support');
+  await page.goto('/support/inbox');
+  const card = page.locator('article[aria-labelledby="message-poc-duplicates-b"]');
+  const form = card.locator('form').filter({ has: page.getByRole('button', { name: 'Ignore', exact: true }) });
+  // Tamper at submission time so hydration cannot restore the hidden value.
+  await form.evaluate(form => form.addEventListener('submit', () => {
+    const source = form.querySelector<HTMLInputElement>('input[name="emailSource"]')!;
+    source.value += 'forged';
+  }, { capture: true, once: true }));
+  await form.getByRole('button', { name: 'Ignore', exact: true }).click();
+  await expect(form.getByRole('alert')).toContainText('Invalid or expired Support email source');
+  await expect(card).toHaveCount(1);
+  await page.reload();
+  await expect(card).toHaveCount(1);
+});

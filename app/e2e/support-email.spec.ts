@@ -201,6 +201,7 @@ test('invalid source query, forged signed source and denied user cannot use inta
   await expect(page.getByRole('button', { name: 'Create case', exact: true })).toHaveCount(0);
   await page.goto('/support/inbox');
   await page.getByRole('article').filter({ hasText: 'POC intake invalid request' }).getByRole('link', { name: 'Create Case', exact: true }).click();
+  await expect(page).toHaveURL(/\/support\/cases\/new\?emailMessageId=/);
   await page.locator('input[name="emailSource"]').evaluate(input => { (input as HTMLInputElement).value += 'forged'; });
   await page.getByRole('button', { name: 'Create case', exact: true }).click();
   await expect(page.getByRole('main').getByRole('alert')).toContainText('Invalid or expired Support email source');
@@ -285,7 +286,7 @@ test('forged file grant is rejected before saving; no selected file means no fil
 test('one optional file failure preserves the Case/email and other files, then retries without duplicates', async ({ page }) => {
   await signInAs(page, 'support');
   await page.goto('/support/inbox');
-  await page.getByRole('article').filter({ hasText: 'POC intake files-failure request' }).getByRole('link', { name: 'Create Case', exact: true }).click();
+  await page.getByRole('article', { name: 'POC intake files-failure request', exact: true }).getByRole('link', { name: 'Create Case', exact: true }).click();
   const files = page.getByRole('region', { name: 'Email attachments' });
   await files.getByRole('checkbox', { name: /error-log.txt/ }).check();
   await files.getByRole('checkbox', { name: /retry-log.txt/ }).check();

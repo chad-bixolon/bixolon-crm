@@ -1,10 +1,11 @@
+import { gmailWorkflow } from './support-gmail-runtime';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import type { Actor } from './authorization';
 import type { DocumentStorage } from './document-storage';
 import { assertInboxActor, assertEmailPersistenceAllowed, inboxMailboxIdentity } from './support-email';
 import { signEmailSource, validateEmailSource } from './support-email-source';
-import { supportMailbox, type GmailSupportMailbox, type SupportMailMessage } from './support-gmail';
+import { supportMailbox, type GmailSupportMailbox, type SupportMailMessage, type SupportMailReview } from './support-gmail';
 import type { SupportMailFile } from './support-gmail-files';
 import { assertSupportAttachmentAccess, uploadSupportAttachment } from './support-attachments';
 import { validateSupportAttachmentEnvelope } from './support-attachment-rules';
@@ -48,7 +49,10 @@ function safeFailure(error: unknown) {
   const message = error instanceof Error ? error.message : '';
   return /^(File |The selected file |Choose a file |Attachments cannot |Email file |Support Gmail )/.test(message) ? message : 'Could not copy this file. Please retry.';
 }
-export async function importSelectedEmailFiles(db: PrismaClient, storage: DocumentStorage, actor: Actor, caseId: number, sourceToken: string, tokens: string[], mailbox = supportMailbox()): Promise<EmailFileImportResult> {
+export async function importSelectedEmailFiles(...args: Parameters<typeof importEmailFiles>) {
+  return gmailWorkflow('file-import', () => importEmailFiles(...args));
+}
+async function importEmailFiles(db: PrismaClient, storage: DocumentStorage, actor: Actor, caseId: number, sourceToken: string, tokens: string[], mailbox = supportMailbox()): Promise<EmailFileImportResult> {
   assertInboxActor(actor); assertEmailPersistenceAllowed();
   const source = validateEmailSource(actor, sourceToken);
   const files = selectedEmailFiles(actor, sourceToken, tokens);
@@ -108,7 +112,10 @@ export async function emailFileRecovery(db: PrismaClient, caseId: number) {
 
 export type EmailFileUnavailable = { messageId: string; reason: string };
 const REVIEW_PAGE_SIZE = 50;
-export async function caseEmailFileContext(db: PrismaClient, actor: Actor, caseId: number, cursor?: number, mailbox: GmailSupportMailbox = supportMailbox(), retryPage = 0) {
+export async function caseEmailFileContext(...args: Parameters<typeof fileContext>) {
+  return gmailWorkflow('file-review', () => fileContext(...args));
+}
+async function fileContext(db: PrismaClient, actor: Actor, caseId: number, cursor?: number, mailbox: GmailSupportMailbox = supportMailbox(), retryPage = 0) {
   assertInboxActor(actor); await assertSupportAttachmentAccess(db, actor, caseId, true);
   if (!Number.isSafeInteger(retryPage) || retryPage < 0 || retryPage >= 50) throw new Error('Invalid email attachment retry page.');
   if (cursor !== undefined && (!Number.isSafeInteger(cursor) || cursor < 1)) throw new Error('Invalid email attachment page.');
@@ -131,14 +138,22 @@ export async function caseEmailFileContext(db: PrismaClient, actor: Actor, caseI
   const sources = [...new Map([...retrySources, ...linked, ...retryLinks, ...extraSources].filter(link => allowedThreads.has(link.gmailThreadId)).map(link => [link.gmailMessageId, link])).values()];
   const messages: SupportMailMessage[] = [];
   const unavailable: EmailFileUnavailable[] = [];
-  for (const link of sources) {
+  // Live review shares one token/profile verification, with per-source failures.
+  let reviewed: SupportMailReview[] | undefined;
+  if (mailbox.review && sources.length) {
+    try { reviewed = await mailbox.review(sources.map(link => link.gmailMessageId)); }
+    catch (error) { reviewed = sources.map(() => ({ message: null, error: safeFailure(error) })); }
+  }
+  for (const [index, link] of sources.entries()) {
     try {
-      const message = await mailbox.get(link.gmailMessageId);
+      if (reviewed?.[index].error) throw new Error(reviewed[index].error);
+      const message = reviewed ? reviewed[index].message : await mailbox.get(link.gmailMessageId);
       if (!message || message.id !== link.gmailMessageId || message.threadId !== link.gmailThreadId) {
         unavailable.push({ messageId: link.gmailMessageId, reason: 'Source email is missing or no longer matches its saved identity. Its files cannot be recovered here. Restore the original email if possible, then retry.' });
       } else messages.push(message);
-    } catch {
-      unavailable.push({ messageId: link.gmailMessageId, reason: 'Source email could not be read. Check the Gmail connection and retry; other available emails can still be reviewed.' });
+    } catch (error) {
+      const reason = error instanceof Error && /^Support Gmail /.test(error.message) ? error.message : 'Source email could not be read. Check the Gmail connection and retry; other available emails can still be reviewed.';
+      unavailable.push({ messageId: link.gmailMessageId, reason });
     }
   }
   // A missing origin may have a surviving reply in the existing bounded
@@ -148,7 +163,9 @@ export async function caseEmailFileContext(db: PrismaClient, actor: Actor, caseI
       const seen = new Set(messages.map(message => message.id));
       for (const message of (await mailbox.recent()).slice(0, REVIEW_PAGE_SIZE)) {
         if (allowedThreads.has(message.threadId) && !seen.has(message.id) && /^[A-Za-z0-9_-]{1,128}$/.test(message.id)) {
-          messages.push(message); seen.add(message.id);
+          // The inbox cache contains metadata only; file grants require a fresh full read.
+          const full = await mailbox.get(message.id);
+          if (full && full.id === message.id && full.threadId === message.threadId) { messages.push(full); seen.add(full.id); }
         }
       }
     } catch { /* Per-source retry messages remain visible if Gmail is unavailable. */ }
