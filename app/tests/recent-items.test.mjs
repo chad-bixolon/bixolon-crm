@@ -54,10 +54,10 @@ test('listing is private, bounded, batched and keeps history ordering after miss
   assert.equal((await listRecentItems(db, { ...actor, active: false })).length, 0);
 });
 
-test('permission gates skip forbidden entity queries and use operational plus sales scopes', async () => {
+test('permission gates skip forbidden entity queries and use operational read scopes', async () => {
   assert.deepEqual(await resolveRecentTargets({}, { ...actor, role: 'SUPPORT' }, 'OPPORTUNITY', [21]), []);
   assert.deepEqual(await resolveRecentTargets({}, { ...actor, role: 'SUPPORT' }, 'ACTIVITY', [21]), []);
-  const db = { opportunity: { findMany: async query => { assert.equal(query.where.AND[1].archivedAt, null); assert.deepEqual(query.where.AND[2], { ownerId: 7 }); return []; } }, contact: { findMany: async query => { assert.equal(query.where.AND[1].active, true); assert.equal(query.where.AND[1].archivedAt, null); return []; } } };
+  const db = { opportunity: { findMany: async query => { assert.equal(query.where.AND[1].archivedAt, null); assert.deepEqual(query.where.AND[2], {}); return []; } }, contact: { findMany: async query => { assert.equal(query.where.AND[1].active, true); assert.equal(query.where.AND[1].archivedAt, null); return []; } } };
   await resolveRecentTargets(db, { ...actor, role: 'SALES' }, 'OPPORTUNITY', [21]);
   await resolveRecentTargets(db, actor, 'CONTACT', [21]);
 });

@@ -10,7 +10,7 @@
 
 An unresolved Trade Show Lead stores its first-touch Lead Source. A linked Contact stores its own first-touch value. Linking a lead sets a blank Contact value but does not overwrite an existing one. A Marketing Manager or Admin can explicitly correct either value with a reason; `LeadSourceChange` retains old and new values, actor, and time. Campaign touches never change first touch.
 
-An Opportunity displays Lead Source from its originating Trade Show Lead and linked Contacts. Multiple different Contact sources can appear together, since choosing one would invent a precedence rule. Opportunity touches are queried from its direct touches, originating lead, linked Contacts, and those Contacts' linked leads. They are not copied during conversion. Opportunity owner scope remains enforced by its detail route. Attribution cards add no record access.
+An Opportunity displays Lead Source from its originating Trade Show Lead and linked Contacts. Multiple different Contact sources can appear together, since choosing one would invent a precedence rule. Opportunity touches are queried from its direct touches, originating lead, linked Contacts, and those Contacts' linked leads. They are not copied during conversion. Opportunity viewing follows the cross-owner Sales read policy; attribution does not grant edit access. Attribution cards add no record access.
 
 ## Trade Show automation
 

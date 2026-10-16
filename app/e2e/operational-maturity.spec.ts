@@ -54,11 +54,11 @@ test('global palette opens, searches core entities, selects with keyboard, and c
   await expect(page.getByRole('button', { name: 'Search SalesHub' })).toBeFocused();
 });
 
-test('global search respects Sales scope and works at phone width', async ({ page }) => {
+test('global search permits cross-owner Sales viewing and works at phone width', async ({ page }) => {
   await signInAs(page, 'sales');
   const response = await page.request.get('/api/global-search?q=E2E%20Picker%20Opportunity');
   expect(response.ok()).toBeTruthy();
-  expect((await response.json()).results.some((row: { group: string }) => row.group === 'Opportunities')).toBe(false);
+  expect((await response.json()).results.some((row: { group: string }) => row.group === 'Opportunities')).toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Search SalesHub' }).click();
   await page.getByRole('dialog', { name: 'Search SalesHub' }).getByRole('combobox').fill(names.account);

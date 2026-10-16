@@ -72,19 +72,14 @@ ALTER TYPE "UserRole" ADD VALUE 'MARKETING_MANAGER';
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ADMIN | Read/write | Read/write, company | Read/write, company | Read/write | Manage | Manage | Read |
 | SALES_MANAGER | Read/write | Read/write, company | Read/write, company | Read | No | No | Read |
-| SALES | Read/write | Read/write, own lists/dashboard | Read/write, assigned lists/dashboard | Read | No | No | Read |
+| SALES | Read/write | Read across Sales; edit own; Pipeline defaults to self | Read/write, assigned lists/dashboard | Read | No | No | Read |
 | MARKETING_MANAGER | Read/write | No | Read/write | Read | No | No | No |
 | READ_ONLY | Read | Read | Read | Read | No | No | No explicit pricing permission |
 
 Checks run in the request proxy and again in each mutating server action. The current user's active status and role are read from the CRM `User` record when a session is loaded. Future integrations and customer-specific pricing can use dedicated permission names in `lib/authorization.ts`.
 
-The standalone Pipeline applies the same Opportunity ownership scope as the
-Opportunity list and reports: Sales sees only owned Opportunities; Admin and
-Sales Manager retain team visibility. An Owner URL filter cannot widen that
-scope, including during Test as user. Pipeline still includes all open forecast
-categories, including Omitted; it is not the same population as Quarterly Forecast.
+Sales users may view other Sales reps’ Accounts, Opportunities, and Projects through lists, relationship tabs, search, recent items, and direct detail URLs. Ownership determines responsibility, revenue/commission attribution, and owner-specific actions; it is not a blanket read restriction. Existing edit and reassignment permissions are unchanged.
 
-Account Opportunity tabs retain their existing broader relationship context.
-Whether Sales should see cross-owner Opportunity names/links there remains an
-owner policy decision; this cleanup does not change that behavior or grant access
-to those Opportunity details.
+The standalone Pipeline defaults to **My pipeline** for the effective Sales user, including during Test as user. Selecting another active, unarchived Sales or Sales Manager owner explicitly replaces that default; all totals follow the selected owner. Clear returns to My pipeline. Invalid, inactive, archived, or ineligible owner selections return no matches rather than widening the selection. Admin and Sales Manager retain their all-owner default and existing owner filters. Pipeline still includes all open forecast categories, including Omitted; it is not the same population as Quarterly Forecast.
+
+`opportunityReadWhere` controls general Opportunity browsing. `opportunityScope` remains the ownership predicate for personal views, owner-specific actions, and financial attribution. Dashboard “My” views, forecast calculations, revenue, commission, ownership, and reassignment rules are unchanged.

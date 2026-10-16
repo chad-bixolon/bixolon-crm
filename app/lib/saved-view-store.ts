@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 import { projectReadWhere } from './projects';
-import { opportunityScope } from './authorization';
+import { opportunityReadWhere } from './authorization';
 import type { Actor } from './authorization';
 import { normalizeSavedQuery, type SavedQuery, type SavedViewRoute } from './saved-views';
 
@@ -34,7 +34,7 @@ export async function visibleSavedQuery(route: SavedViewRoute, state: unknown, a
     if (!category) { delete query.categoryId; omitted.push('Category'); }
   }
   if (query.opportunityId && /^\d+$/.test(query.opportunityId)) {
-    const opportunity = await prisma.opportunity.findFirst({ where: { id: Number(query.opportunityId), archivedAt: null, ...opportunityScope(actor) }, select: { id: true } });
+    const opportunity = await prisma.opportunity.findFirst({ where: { id: Number(query.opportunityId), archivedAt: null, ...opportunityReadWhere(actor) }, select: { id: true } });
     if (!opportunity) { delete query.opportunityId; omitted.push('Opportunity'); }
   }
   return { query, omitted };

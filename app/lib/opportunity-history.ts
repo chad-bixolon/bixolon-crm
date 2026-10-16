@@ -1,7 +1,7 @@
 import { recordMaintenance } from './admin-maintenance';
 import { randomUUID } from 'node:crypto';
 import { Prisma, type PrismaClient, type SalesQuarter } from '@prisma/client';
-import { can, opportunityScope, type Actor } from './authorization';
+import { can, opportunityReadWhere, type Actor } from './authorization';
 import { getSettings } from './configuration';
 import { forecastForRep, quarterBounds } from './forecast';
 
@@ -41,7 +41,7 @@ export function closeDateMovement(oldDate: Date | null, newDate: Date | null) {
 
 export async function opportunityHistory(client: PrismaClient, actor: Actor, opportunityId: number, page = 1) {
   if (!can(actor, 'opportunities.read')) throw new Error('Access denied');
-  const opportunity = await client.opportunity.findFirst({ where: { id: opportunityId, ...opportunityScope(actor) }, select: { id: true } });
+  const opportunity = await client.opportunity.findFirst({ where: { id: opportunityId, ...opportunityReadWhere(actor) }, select: { id: true } });
   if (!opportunity) throw new Error('Opportunity not found');
   const skip = (Math.max(1, Math.min(page, 10000)) - 1) * 20;
   const [rows, archived, total, archiveTotal] = await Promise.all([

@@ -79,5 +79,8 @@ export function routeAccess(path: string, actor: Actor | null): 'sign-in' | 'den
   }
   return 'allowed';
 }
+// Ownership scopes responsibility, attribution, personal views and owner-only actions.
+// It is not the read policy for Opportunity browsing or relationship context.
 export function opportunityScope(actor: Actor) { return actor.role === 'SALES' ? { ownerId: actor.id } : {}; }
+export function opportunityReadWhere(actor: Actor) { return can(actor, 'opportunities.read') ? {} : { id: -1 }; }
 export function taskScope(actor: Actor) { return actor.role === 'SALES' ? { assignedToId: actor.id } : {}; }

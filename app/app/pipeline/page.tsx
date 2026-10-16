@@ -4,7 +4,8 @@ import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import { operationalOpportunityWhere } from '@/lib/operational-where';
 import { currentUser } from '@/lib/current-user';
-import { opportunityScope } from '@/lib/authorization';
+import { pipelineScope } from '@/lib/pipeline-scope';
+import { activeSalesRepWhere } from '@/lib/assignment-eligibility';
 import { OptionalProjectFilter } from '@/components/optional-project-filter';
 import { projectReadWhere } from '@/lib/projects';
 import Link from 'next/link';
@@ -21,15 +22,15 @@ type Filters={ownerId?:string;stageId?:string;territory?:string;projectId?:strin
 
 export default async function Page({searchParams}:{searchParams:Promise<Filters>}) {
   const f=await searchParams;
-  const ownerId=positiveId(f.ownerId??''),stageId=positiveId(f.stageId??'');
+  const stageId=positiveId(f.stageId??'');
   const date=(v?:string)=>v&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v))?new Date(`${v}T00:00:00Z`):null;
   const from=date(f.closeFrom),to=date(f.closeTo);
   const actor = await currentUser();
   const selectedProjectId = positiveId(f.projectId ?? '');
   const selectedProject = selectedProjectId ? await prisma.project.findFirst({ where: { AND: [{ id: selectedProjectId }, projectReadWhere(actor)] }, select: { id: true, name: true } }) : null;
   const [rows,owners,stages,territories]=await Promise.all([
-    prisma.opportunity.findMany({where:{AND:[operationalOpportunityWhere,opportunityScope(actor)],stage:{isClosed:false},...(ownerId?{ownerId}:{}),...(stageId?{stageId}:{}),...pipelineProjectFilter(f.projectId),...(f.territory?{participants:{some:{account:{territory:f.territory}}}}:{}),...(from||to?{expectedCloseDate:{...(from?{gte:from}:{}),...(to?{lt:new Date(to.getTime()+86400000)}:{})}}:{})},include:{stage:true,products:{where:{archivedAt:null}}}}),
-    prisma.user.findMany({where:{active:true,archivedAt:null},orderBy:{lastName:'asc'}}),
+    prisma.opportunity.findMany({where:{AND:[operationalOpportunityWhere,pipelineScope(actor,f.ownerId)],stage:{isClosed:false},...(stageId?{stageId}:{}),...pipelineProjectFilter(f.projectId),...(f.territory?{participants:{some:{account:{territory:f.territory}}}}:{}),...(from||to?{expectedCloseDate:{...(from?{gte:from}:{}),...(to?{lt:new Date(to.getTime()+86400000)}:{})}}:{})},include:{stage:true,products:{where:{archivedAt:null}}}}),
+    prisma.user.findMany({where:actor.role==='SALES'?activeSalesRepWhere():{active:true,archivedAt:null},orderBy:{lastName:'asc'}}),
     prisma.salesStage.findMany({orderBy:{sortOrder:'asc'}}),
     prisma.territory.findMany({orderBy:{name:'asc'}}),
   ]);
@@ -39,10 +40,10 @@ export default async function Page({searchParams}:{searchParams:Promise<Filters>
   const control='field filter-control';
 
   return <Content>
-    <PageHeader title="Pipeline" eyebrow={NAV_CATEGORIES.sales} description="Open opportunities you can access, valued from active product line items. Includes Omitted deals."/>
+    <PageHeader title="Pipeline" eyebrow={NAV_CATEGORIES.sales} description={actor.role==='SALES'?"Your pipeline by default. Choose a salesperson to view their pipeline. Includes Omitted deals.":"Open opportunities valued from active product line items. Includes Omitted deals."}/>
     <SavedViews routeKey="pipeline" query={f}/>
     <form method="get" className="responsive-filter-form panel filter-panel filter-grid mb-5" aria-label="Filter pipeline"><FilterDisclosure initialCount={countActiveFilters(f, {})} defaults={{}} clearHref="/pipeline"/>
-      <label className="label">Owner<select className={control} name="ownerId" defaultValue={f.ownerId??''}><option value="">All</option>{owners.map(o=><option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select></label>
+      <label className="label">Owner<select className={control} name="ownerId" defaultValue={f.ownerId??''}><option value="">{actor.role==='SALES'?'My pipeline':'All'}</option>{owners.map(o=><option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select></label>
       <label className="label">Stage<select className={control} name="stageId" defaultValue={f.stageId??''}><option value="">All</option>{stages.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
       <OptionalProjectFilter key={f.projectId ?? ''} initial={selectedProject ? { ...selectedProject, context: null } : null} none={f.projectId === 'none'}/>
       <label className="label">Territory<select className={control} name="territory" defaultValue={f.territory??''}><option value="">All</option>{territories.map(t=><option key={t.code} value={t.code}>{t.name}</option>)}</select></label>

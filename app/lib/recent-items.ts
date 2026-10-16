@@ -1,5 +1,5 @@
 import { RecentEntityType, type Prisma, type PrismaClient } from '@prisma/client';
-import { can, opportunityScope, taskScope, type Actor } from './authorization';
+import { can, opportunityReadWhere, taskScope, type Actor } from './authorization';
 import { operationalAccountWhere, operationalContactWhere, operationalOpportunityWhere, operationalProjectWhere, operationalTaskWhere, operationalActivityWhere } from './operational-where';
 import { projectReadWhere } from './projects';
 import { supportCaseReadWhere } from './support-cases';
@@ -28,7 +28,7 @@ export async function resolveRecentTargets(db: Db, actor: Actor, type: RecentEnt
   switch (type) {
     case 'ACCOUNT': return can(actor, 'accounts.read') ? (await db.account.findMany({ where: { AND: [{ id }, operationalAccountWhere] }, select: { id: true, name: true }, take: RECENT_HISTORY_LIMIT })).map(row => ({ id: row.id, label: row.name })) : [];
     case 'CONTACT': return can(actor, 'contacts.read') ? (await db.contact.findMany({ where: { AND: [{ id }, operationalContactWhere] }, select: { id: true, firstName: true, lastName: true }, take: RECENT_HISTORY_LIMIT })).map(row => ({ id: row.id, label: `${row.firstName} ${row.lastName}` })) : [];
-    case 'OPPORTUNITY': return can(actor, 'opportunities.read') ? (await db.opportunity.findMany({ where: { AND: [{ id }, operationalOpportunityWhere, opportunityScope(actor)] }, select: { id: true, name: true }, take: RECENT_HISTORY_LIMIT })).map(row => ({ id: row.id, label: row.name })) : [];
+    case 'OPPORTUNITY': return can(actor, 'opportunities.read') ? (await db.opportunity.findMany({ where: { AND: [{ id }, operationalOpportunityWhere, opportunityReadWhere(actor)] }, select: { id: true, name: true }, take: RECENT_HISTORY_LIMIT })).map(row => ({ id: row.id, label: row.name })) : [];
     case 'PROJECT': return can(actor, 'projects.read') ? (await db.project.findMany({ where: { AND: [{ id }, operationalProjectWhere, projectReadWhere(actor)] }, select: { id: true, name: true }, take: RECENT_HISTORY_LIMIT })).map(row => ({ id: row.id, label: row.name })) : [];
     case 'SUPPORT_CASE': return can(actor, 'support-cases.read') && can(actor, 'accounts.read') ? (await db.supportCase.findMany({ where: { AND: [{ id }, supportCaseReadWhere(actor)] }, select: { id: true, caseNumber: true, subject: true }, take: RECENT_HISTORY_LIMIT })).map(row => ({ id: row.id, label: `${row.caseNumber} · ${row.subject}` })) : [];
     case 'PRICE_EXCEPTION': return can(actor, 'pricing.read') ? (await db.priceException.findMany({ where: scopedPriceExceptionWhere(actor, { id, archivedAt: null }), select: { id: true, peCode: true }, take: RECENT_HISTORY_LIMIT })).map(row => ({ id: row.id, label: row.peCode ?? 'Unnumbered Price Exception' })) : [];

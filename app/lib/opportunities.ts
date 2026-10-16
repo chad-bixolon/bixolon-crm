@@ -4,7 +4,7 @@ import { ForecastCategory, OpportunityPartyRole, OpportunityProductPriceSource, 
 import { field, optional, pageNumber, positiveId, required, type Errors } from "./crm-validation";
 import { archivedWhere, recordVisibility } from "./record-visibility";
 import { moqEligibility, priceExceptionSnapshot } from "./opportunity-price-exceptions";
-import { assertPermission, opportunityScope, type Actor } from "./authorization";
+import { assertPermission, opportunityReadWhere, type Actor } from "./authorization";
 import { notifyOpportunityAssignment, syncOpportunityNotifications } from './work-notification-evaluator';
 import { getSettings } from './configuration';
 import { canViewPriceException } from "./price-exception-visibility";
@@ -311,7 +311,7 @@ export function opportunityWhere(filters: OpportunityFilters, now = new Date()):
 }
 export async function listOpportunities(client: PrismaClient, filters: OpportunityFilters, actor: Actor) {
   assertPermission(actor, 'opportunities.read');
-  const where: Prisma.OpportunityWhereInput = { AND: [opportunityWhere(filters), opportunityScope(actor)] };
+  const where: Prisma.OpportunityWhereInput = { AND: [opportunityWhere(filters), opportunityReadWhere(actor)] };
   const count = await client.opportunity.count({ where }); const { page, pages } = pageNumber(filters.page, count);
   const opportunities = await client.opportunity.findMany({ where, include: { stage: true, competitor: true, owner: true, participants: { include: { account: true, roles: true } }, products: { where: { archivedAt: null } } }, orderBy: [{ expectedCloseDate: "asc" }, { id: "desc" }], skip: (page - 1) * 20, take: 20 });
   return { opportunities, count, page, pages };

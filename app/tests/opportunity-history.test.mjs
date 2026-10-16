@@ -196,8 +196,8 @@ test('weekly snapshot copies authoritative forecast result and prevents duplicat
   await assert.rejects(captureForecastWeek(client, actor('SALES'), input), /Access denied/);
 });
 
-test('history lookup enforces Opportunity ownership and read permission', async () => {
-  const client = { opportunity: { findFirst: async ({ where }) => where.ownerId === 7 ? { id: 2 } : null }, opportunityHistoryEvent: { findMany: async () => [], count: async () => 0 }, opportunityHistoryArchive: { findMany: async () => [], count: async () => 0 } };
+test('history lookup permits cross-owner reads and preserves read permission', async () => {
+  const client = { opportunity: { findFirst: async ({ where }) => (assert.equal(where.ownerId, undefined), { id: 2 }) }, opportunityHistoryEvent: { findMany: async () => [], count: async () => 0 }, opportunityHistoryArchive: { findMany: async () => [], count: async () => 0 } };
   assert.equal((await opportunityHistory(client, actor('SALES'), 2)).total, 0);
   assert.equal((await opportunityHistory({ ...client, opportunity: { findFirst: async () => ({ id: 2 }) } }, actor('MARKETING_MANAGER'), 2)).total, 0);
   await assert.rejects(opportunityHistory({ ...client, opportunity: { findFirst: async () => null } }, actor('SALES'), 2), /not found/);
@@ -205,7 +205,7 @@ test('history lookup enforces Opportunity ownership and read permission', async 
 
 test('archived Opportunity events remain readable under the same Opportunity scope', async () => {
   const archived = { id: 40, sourceId: 4, opportunityId: 2, opportunityName: 'Old deal', actorName: 'Former rep', eventType: 'ACCOUNT_ROLE_CHANGED', relatedRecordId: 8, relatedRecordName: 'BlueStar', oldRoles: ['VAR_RESELLER'], newRoles: ['DISTRIBUTOR'], occurredAt: new Date('2020-01-01') };
-  const client = { opportunity: { findFirst: async ({ where }) => where.ownerId === 7 ? { id: 2 } : null }, opportunityHistoryEvent: { findMany: async () => [], count: async () => 0 }, opportunityHistoryArchive: { findMany: async () => [archived], count: async () => 1 } };
+  const client = { opportunity: { findFirst: async ({ where }) => (assert.equal(where.ownerId, undefined), { id: 2 }) }, opportunityHistoryEvent: { findMany: async () => [], count: async () => 0 }, opportunityHistoryArchive: { findMany: async () => [archived], count: async () => 1 } };
   const result = await opportunityHistory(client, actor('SALES'), 2);
   assert.equal(result.total, 1); assert.equal(result.rows[0].actorName, 'Former rep'); assert.equal(result.rows[0].relatedRecordName, 'BlueStar'); assert.deepEqual(result.rows[0].newRoles, ['DISTRIBUTOR']);
 });

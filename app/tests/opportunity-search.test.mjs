@@ -72,7 +72,7 @@ test('list search applies the same permission scope to count and rows, including
   assert.equal(result.opportunities[0].stage.isClosed, true);
   assert.equal(result.opportunities[0].competitivePricing, '$425');
   assert.deepEqual(calls[0][1].where, calls[1][1].where);
-  assert.deepEqual(calls[0][1].where.AND[1], { ownerId: 7 });
+  assert.deepEqual(calls[0][1].where.AND[1], {});
   assert.equal(calls[0][1].where.AND[0].stageId, 4);
   assert.deepEqual(calls[0][1].where.AND[0].OR[1], { competitor: { is: { name: { contains: 'zEbRa', mode: 'insensitive' } } } });
   assert.deepEqual(calls[1][1].include.competitor, true);

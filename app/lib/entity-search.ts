@@ -1,5 +1,5 @@
 import { AccountBusinessRoleCode, Prisma, type PrismaClient } from '@prisma/client';
-import { assertPermission, can, opportunityScope, type Actor } from './authorization';
+import { assertPermission, can, opportunityReadWhere, type Actor } from './authorization';
 import { operationalAccountWhere, operationalContactWhere, operationalOpportunityWhere, operationalProjectWhere } from './operational-where';
 import { projectReadWhere } from './projects';
 
@@ -55,7 +55,7 @@ export async function searchEntities(db: PrismaClient, actor: Actor, entityType:
   }
   if (entityType === 'opportunity') {
     assertPermission(actor, 'opportunities.read');
-    const base: Prisma.OpportunityWhereInput = { AND: [operationalOpportunityWhere, opportunityScope(actor), ...(filters.accountId ? [{ participants: { some: { accountId: filters.accountId } } }] : []), ...(filters.projectId ? [{ projects: { some: { projectId: filters.projectId } } }] : []), ...(filters.excludeProjectId ? [{ projects: { none: { projectId: filters.excludeProjectId } } }] : []), ...(filters.openOnly ? [{ stage: { isClosed: false } }] : [])] };
+    const base: Prisma.OpportunityWhereInput = { AND: [operationalOpportunityWhere, opportunityReadWhere(actor), ...(filters.accountId ? [{ participants: { some: { accountId: filters.accountId } } }] : []), ...(filters.projectId ? [{ projects: { some: { projectId: filters.projectId } } }] : []), ...(filters.excludeProjectId ? [{ projects: { none: { projectId: filters.excludeProjectId } } }] : []), ...(filters.openOnly ? [{ stage: { isClosed: false } }] : [])] };
     const batches = await Promise.all([...(['equals', 'startsWith'] as const).map(mode => db.opportunity.findMany({
       where: { AND: [base, { name: { [mode]: query, mode: 'insensitive' } }] },
       select: { id: true, name: true, participants: { select: { accountId: true, account: { select: { name: true } } }, take: 10, orderBy: { account: { name: 'asc' as const } } }, projects: { select: { projectId: true }, take: 20 } }, orderBy: [{ name: 'asc' as const }, { id: 'asc' as const }], take,

@@ -1,5 +1,5 @@
 import { DocumentType, Prisma, type PrismaClient } from '@prisma/client';
-import { can, opportunityScope, type Actor } from './authorization';
+import { can, opportunityScope, opportunityReadWhere, type Actor } from './authorization';
 import { canEditProject, projectReadWhere } from './projects';
 import type { DocumentStorage } from './document-storage';
 import type { ValidatedDocumentFile } from './document-validation';
@@ -43,7 +43,7 @@ export async function assertDocumentParentAccess(client: ParentClient, actor: Ac
     return;
   }
   if (!can(actor, operation === 'read' ? 'sales.read' : 'sales.write')) throw new Error('Access denied');
-  const opportunity = await client.opportunity.findFirst({ where: { id: parent.id, ...opportunityScope(actor) }, select: { id: true, archivedAt: true } });
+  const opportunity = await client.opportunity.findFirst({ where: { id: parent.id, ...(operation === 'read' ? opportunityReadWhere(actor) : opportunityScope(actor)) }, select: { id: true, archivedAt: true } });
   if (!opportunity) throw new Error('Document parent not found.');
   if (operation === 'write' && opportunity.archivedAt) throw new Error('Documents cannot be changed on an archived record.');
 }

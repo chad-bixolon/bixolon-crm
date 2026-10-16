@@ -14,9 +14,9 @@ function load() {
   const loaded = { exports: {} };
   new Function('require', 'module', 'exports', source)(name => {
     if (name === '@prisma/client') return { AccountBusinessRoleCode: { DISTRIBUTOR: 'DISTRIBUTOR', VAR: 'VAR', ISV: 'ISV', OEM: 'OEM', PARTNER: 'PARTNER' } };
-    if (name === './authorization') return { assertPermission(actor, permission) { if (!actor.allowed?.includes(permission)) throw new Error('Access denied'); }, opportunityScope: actor => actor.role === 'SALES' ? { ownerId: actor.id } : {} };
+    if (name === './authorization') return { assertPermission(actor, permission) { if (!actor.allowed?.includes(permission)) throw new Error('Access denied'); }, opportunityReadWhere: () => ({}) };
     if (name === './operational-where') return { operationalAccountWhere: { status: 'ACTIVE' }, operationalContactWhere: { active: true }, operationalOpportunityWhere: { archivedAt: null }, operationalProjectWhere: { archivedAt: null } };
-    if (name === './projects') return { projectReadWhere: actor => ({ ownerId: actor.role === 'SALES' ? actor.id : undefined }) };
+    if (name === './projects') return { projectReadWhere: () => ({}) };
     return require(name);
   }, loaded, loaded.exports);
   return loaded.exports;
@@ -70,7 +70,7 @@ test('all entity searches use bounded database queries with relation context and
   const where = JSON.stringify(calls.map(call => call.args.where));
   assert.match(where, /accountId/);
   assert.match(where, /isClosed/);
-  assert.match(where, /ownerId/);
+  assert.doesNotMatch(where, /ownerId/);
   assert.match(where, /ACTIVE/);
 });
 

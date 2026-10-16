@@ -83,7 +83,8 @@ test('archived, inactive, deleted, changed ownership and unresolved cases are fi
     await db.opportunity.update({ where: { id: opportunity.id }, data: { ownerId: admin.id } });
     await db.priceException.update({ where: { id: pe.id }, data: { assignedSalesRepUserId: admin.id } });
     const items = await listRecentItems(db, sales);
-    expect(items.some(row => row.key === `OPPORTUNITY:${opportunity.id}` || row.key === `PRICE_EXCEPTION:${pe.id}`)).toBe(false);
+    expect(items.some(row => row.key === `OPPORTUNITY:${opportunity.id}`)).toBe(true);
+    expect(items.some(row => row.key === `PRICE_EXCEPTION:${pe.id}`)).toBe(false);
     await recordRecentView(db, reader, 'SUPPORT_CASE', supportCase.id);
     expect(await db.recentItem.count({ where: { userId: reader.id, entityType: 'SUPPORT_CASE', recordId: supportCase.id } })).toBe(0);
     expect(await resolveRecentTargets(db, { ...admin, role: 'SUPPORT' }, 'OPPORTUNITY', [opportunity.id])).toEqual([]);

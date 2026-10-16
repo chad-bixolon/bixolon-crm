@@ -138,14 +138,14 @@ test('summary, related Trade Show, influence context, voided state, and empty st
   assert.match(html, /No Opportunities are currently influenced by this Campaign/);
 });
 
-test('influence and related record queries are bounded and respect Sales scope', async () => {
+test('influence and related record queries preserve lead scope and allow cross-owner Opportunity reads', async () => {
   rows = [touch]; count = { lead: 1, contact: 0, opportunity: 0, active: 1 };
   await detail('SALES');
   const influence = queryLog.find(([name]) => name === 'influences')[1];
   assert.equal(influence.take, 21);
   assert.match(JSON.stringify(influence.where), /assignedSalesRepUserId/);
   assert.match(JSON.stringify(queryLog.find(([name]) => name === 'leadCount')[1]), /assignedSalesRepUserId/);
-  assert.match(JSON.stringify(queryLog.find(([name]) => name === 'opportunityCount')[1]), /ownerId/);
+  assert.doesNotMatch(JSON.stringify(queryLog.find(([name]) => name === 'opportunityCount')[1]), /ownerId/);
   await detail('READ_ONLY');
   assert.doesNotMatch(JSON.stringify(queryLog.find(([name]) => name === 'influences')[1]), /assignedSalesRepUserId/);
 });

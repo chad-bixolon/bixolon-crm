@@ -108,6 +108,18 @@ test('parent authorization preserves Account, Project, Opportunity and role scop
   await assert.rejects(documents.assertDocumentParentAccess(client({ opportunity: { findFirst: async () => null } }), actor('SALES'), { type: 'opportunity', id: 10 }, 'read'), /not found/);
 });
 
+test('Sales can read another owner’s Opportunity documents while writes stay owner-scoped', async () => {
+  const queries = [];
+  const db = client({ opportunity: { findFirst: async ({ where }) => {
+    queries.push(where);
+    return where.ownerId === undefined ? { id: 10, archivedAt: null } : null;
+  } } });
+  await documents.assertDocumentParentAccess(db, actor('SALES'), { type: 'opportunity', id: 10 }, 'read');
+  await assert.rejects(documents.assertDocumentParentAccess(db, actor('SALES'), { type: 'opportunity', id: 10 }, 'write'), /not found/);
+  assert.equal(queries[0].ownerId, undefined);
+  assert.equal(queries[1].ownerId, 7);
+});
+
 test('authorized download signs at request time and archived documents remain accessible', async () => {
   const objects = storage();
   const db = client({ document: { findUnique: async () => ({ accountId: 10, projectId: null, opportunityId: null, archivedAt: new Date(), storageKey: 'dev/documents/id', originalFileName: 'NDA.pdf', mimeType: 'application/pdf' }) } });

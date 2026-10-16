@@ -14,7 +14,7 @@ Module._extensions['.ts'] = compile;
 Module._extensions['.tsx'] = compile;
 const resolve = Module._resolveFilename, load = Module._load;
 Module._resolveFilename = function(request, parent, ...args) { return resolve.call(this, request.startsWith('@/') ? path.join(root, request.slice(2)) : request, parent, ...args); };
-const { opportunityScope } = require('../lib/authorization.ts');
+const { pipelineScope } = require('../lib/pipeline-scope.ts');
 const { operationalOpportunityWhere } = require('../lib/operational-where.ts');
 let actor = { id: 7, role: 'SALES', active: true }, query;
 const db = {
@@ -37,12 +37,12 @@ const Pipeline = require('../app/pipeline/page.tsx').default;
 const { RelatedWork } = require('../components/related-work.tsx');
 Module._load = load;
 
-test('standalone Pipeline combines canonical scope with filters without changing category eligibility', async () => {
+test('standalone Pipeline applies the selected rep scope without changing category eligibility', async () => {
   for (const role of ['SALES', 'SALES_MANAGER', 'ADMIN']) {
     actor = { id: 7, role, active: true };
     await Pipeline({ searchParams: Promise.resolve({ ownerId: '99', stageId: '3', closeFrom: '2026-10-01', closeTo: '2026-10-31' }) });
-    assert.deepEqual(query.where.AND, [operationalOpportunityWhere, opportunityScope(actor)]);
-    assert.equal(query.where.ownerId, 99);
+    assert.deepEqual(query.where.AND, [operationalOpportunityWhere, pipelineScope(actor, '99')]);
+    assert.equal(query.where.ownerId, undefined);
     assert.equal(query.where.stageId, 3);
     assert.deepEqual(query.where.stage, { isClosed: false });
     assert.equal(query.where.forecastCategory, undefined);

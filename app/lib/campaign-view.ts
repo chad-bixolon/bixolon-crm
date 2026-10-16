@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { can, opportunityScope, type Actor } from './authorization';
+import { can, opportunityReadWhere, type Actor } from './authorization';
 import { canManageAttribution } from './marketing-attribution';
 import { tradeShowLeadReadWhere } from './trade-shows';
 
@@ -14,7 +14,7 @@ export function campaignInfluenceReadWhere(actor: Actor, campaignId: number): Pr
   const visible: Prisma.CampaignInfluenceWhereInput[] = [];
   if (can(actor, 'trade-shows.read')) visible.push({ tradeShowLead: { is: tradeShowLeadReadWhere(actor) } });
   if (can(actor, 'contacts.read')) visible.push({ contactId: { not: null } });
-  if (can(actor, 'opportunities.read')) visible.push({ opportunity: { is: opportunityScope(actor) } });
+  if (can(actor, 'opportunities.read')) visible.push({ opportunity: { is: opportunityReadWhere(actor) } });
   return { campaignId, OR: visible.length ? visible : [{ id: -1 }] };
 }
 
@@ -29,7 +29,7 @@ export function campaignContactWhere(actor: Actor, campaignId: number): Prisma.C
 export function campaignOpportunityWhere(actor: Actor, campaignId: number): Prisma.OpportunityWhereInput {
   if (!can(actor, 'opportunities.read') && !canManageAttribution(actor)) return { id: -1 };
   const contactInfluence: Prisma.ContactWhereInput = campaignContactWhere(actor, campaignId);
-  return { AND: [opportunityScope(actor), { OR: [
+  return { AND: [opportunityReadWhere(actor), { OR: [
     { campaignInfluences: { some: { campaignId, voidedAt: null } } },
     { originatingTradeShowLead: { is: { campaignInfluences: { some: { campaignId, voidedAt: null } }, ...(actor.role === 'SALES' ? tradeShowLeadReadWhere(actor) : {}) } } },
     { contacts: { some: { contact: { is: contactInfluence } } } },

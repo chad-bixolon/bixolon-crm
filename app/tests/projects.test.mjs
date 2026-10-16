@@ -46,8 +46,8 @@ test('Project parser accepts no Primary Account with zero or more participants a
   assert.equal(failed.values.participantRoles, '');
 });
 
-test('SALES can read active Projects and edit only owned Project or Primary Account', () => {
-  assert.deepEqual(projects.projectReadWhere(actor('SALES')).OR[0], { archivedAt: null });
+test('SALES can read cross-owner Projects and edit only owned Project or Primary Account', () => {
+  assert.deepEqual(projects.projectReadWhere(actor('SALES')), {});
   assert.equal(projects.canEditProject(actor('SALES'), { ownerId: 7, primaryAccount: { ownerId: 8 } }), true);
   assert.equal(projects.canEditProject(actor('SALES'), { ownerId: 8, primaryAccount: { ownerId: 7 } }), true);
   assert.equal(projects.canEditProject(actor('SALES'), { ownerId: 8, primaryAccount: null }), false);

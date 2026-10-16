@@ -60,7 +60,7 @@ export function projectFailureState(form: FormData, errors: Errors, message = 'C
 }
 export function projectReadWhere(actor: Actor): Prisma.ProjectWhereInput {
   if (!can(actor, 'projects.read')) return { id: -1 };
-  return actor.role === 'SALES' ? { OR: [{ archivedAt: null }, { ownerId: actor.id }, { primaryAccount: { ownerId: actor.id } }] } : {};
+  return {};
 }
 export function canEditProject(actor: Actor, project: { ownerId: number | null; primaryAccount: { ownerId: number | null } | null }) {
   if (!can(actor, 'projects.write')) return false;

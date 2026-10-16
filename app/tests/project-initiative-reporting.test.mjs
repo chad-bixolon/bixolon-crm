@@ -97,8 +97,8 @@ test('Project start and target dates use Project fields and keep custom bounds',
   assert.ok(clauses.some(item=>item.startDate?.lt?.toISOString()==='2026-10-01T00:00:00.000Z'));
   assert.ok(clauses.some(item=>item.targetEndDate?.gte?.toISOString()==='2026-07-01T00:00:00.000Z'));
 });
-test('Project and Opportunity scope are both applied for SALES, including shared reports',async()=>{
-  await run([],config(),'SALES');assert.ok(run.where.AND.some(clause=>clause.OR?.some(part=>part.archivedAt===null)));
+test('Project reads stay cross-owner while SALES commercial totals retain ownership scope, including shared reports',async()=>{
+  await run([],config(),'SALES');assert.ok(run.where.AND.some(clause=>clause.archivedAt===null));
   assert.ok(run.include.opportunities.where.opportunity.AND.some(clause=>clause.ownerId===7));
   for(const role of ['ADMIN','SALES_MANAGER','READ_ONLY']){await run([],config(),role);assert.equal(run.include.opportunities.where.opportunity.AND.some(clause=>clause.ownerId===7),false);}
   assert.equal(reporting.canViewReportDefinition(actor('SALES'),{ownerId:99,visibility:'SHARED',reportType:'PROJECT_INITIATIVE',archivedAt:null}),true);
