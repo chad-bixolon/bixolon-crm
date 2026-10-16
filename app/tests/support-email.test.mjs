@@ -213,7 +213,7 @@ test('encrypted connection and Google adapter only call Gmail read endpoints wit
     assert.match(decodeURIComponent(calls[2].url), /after:\d+ -in:spam -in:trash/);
     const after = Number(decodeURIComponent(calls[2].url).match(/after:(\d+)/)[1]);
     assert.ok(Math.abs(after - Math.floor((Date.now() - 30 * 86400000) / 1000)) < 5);
-    for (const [status, message] of [[401, /expired/], [403, /permission/], [429, /rate limited/], [500, /read failed/]]) {
+    for (const [status, message] of [[401, /expired/], [403, /denied/], [429, /rate limited/], [500, /temporarily unavailable/]]) {
       global.fetch = async url => String(url).includes('/token') ? { ok: true, json: async () => ({ access_token: 'token', scope: SUPPORT_GMAIL_SCOPE }) } : String(url).endsWith('/profile') ? { ok: true, json: async () => ({ emailAddress: 'test@example.test' }) } : { ok: false, status };
       await assert.rejects(new GoogleGmailSupportMailbox().recent(), message);
     }

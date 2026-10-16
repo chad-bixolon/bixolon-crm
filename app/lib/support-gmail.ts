@@ -1,6 +1,7 @@
 import { discoverGmailFiles, gmailParts, isFilePart, decodeGmailFile, type GmailPart, type SupportMailFile } from './support-gmail-files';
 import { connectedRefreshToken, verifyReadOnlyScope, recordSupportGmailFetch } from './support-gmail-connection';
 import { assertLiveSupportGmailEnvironment, assertSupportGmailEnabled, supportGmailMockMode, supportGmailTestFixtureMode, supportGmailLookbackDays } from './support-gmail-config';
+import { logSupportGmailReadFailure, throwSupportGmailHttpError, type SupportGmailReadStage } from './support-gmail-errors';
 export * from './support-gmail-config';
 export type SupportMailMessage = { id: string; threadId: string; senderEmail: string; senderName: string | null; recipients: string; subject: string; snippet: string; bodyText: string; messageDate: Date; hasAttachments?: boolean; files?: SupportMailFile[] };
 export interface GmailSupportMailbox { recent(): Promise<SupportMailMessage[]>; get(id: string): Promise<SupportMailMessage | null>; attachment(messageId: string, partId: string): Promise<{ message: SupportMailMessage; file: SupportMailFile; body: Uint8Array }> }
@@ -131,9 +132,13 @@ function decodedText(part: GmailPart | undefined): string {
   return '';
 }
 function containsAttachment(part: GmailPart | undefined): boolean { return !!part && (!!part.body?.attachmentId || !!part.filename || (part.parts ?? []).some(containsAttachment)); }
-async function gmailFetch(url: string, options: RequestInit, fetcher: typeof fetch) {
+async function gmailFetch(url: string, options: RequestInit, fetcher: typeof fetch, stage: SupportGmailReadStage) {
   try { return await fetcher(url, { ...options, signal: AbortSignal.timeout(10000) }); }
-  catch (error) { if (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name)) throw new Error('Support Gmail request timed out. Try again.'); throw new Error('Support Gmail connection failed. Try again.'); }
+  catch (error) {
+    const timeout = error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name);
+    logSupportGmailReadFailure(stage, 'none', timeout ? 'timeout' : 'network');
+    throw new Error(timeout ? 'Support Gmail request timed out. Try again.' : 'Support Gmail connection failed. Try again.');
+  }
 }
 async function gmailJson<T>(response: Response): Promise<T> {
   try { return await response.json() as T; }
@@ -153,25 +158,26 @@ function normalize(message: GmailMessage): SupportMailMessage {
 
 export class GoogleGmailSupportMailbox implements GmailSupportMailbox {
   constructor(private readonly fetcher: typeof fetch = fetch) {}
-  private async request(url: string, options: RequestInit) { return gmailFetch(url, options, this.fetcher); }
+  private async request(url: string, options: RequestInit, stage: SupportGmailReadStage = 'read') { return gmailFetch(url, options, this.fetcher, stage); }
   private async token() {
     assertLiveSupportGmailEnvironment();
     const { SUPPORT_GMAIL_CLIENT_ID: clientId, SUPPORT_GMAIL_CLIENT_SECRET: clientSecret } = process.env;
     const { refreshToken, email: mailbox, scope } = await connectedRefreshToken();
     if (!clientId || !clientSecret) throw new Error('Dedicated Support Gmail OAuth client is required.');
-    const response = await this.request('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: 'refresh_token' }), cache: 'no-store' });
-    if (!response.ok) throw new Error(response.status === 400 || response.status === 401 ? 'Support Gmail connection expired. Reconnect Gmail.' : response.status === 429 ? 'Support Gmail is rate limited. Try again later.' : 'Support Gmail token refresh failed. Try reconnecting Gmail.');
+    const response = await this.request('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: 'refresh_token' }), cache: 'no-store' }, 'token-refresh');
+    if (!response.ok) await throwSupportGmailHttpError(response, 'token-refresh');
     const token = await gmailJson<{ access_token?: string; scope?: string }>(response);
     if (typeof token.access_token !== 'string' || !token.access_token) throw new Error('Support Gmail token refresh returned no access token.');
+    // Refresh responses may omit scope; retain the verified PostgreSQL grant.
     verifyReadOnlyScope(token.scope ?? scope);
-    const profile = await this.request('https://gmail.googleapis.com/gmail/v1/users/me/profile', { headers: { Authorization: `Bearer ${token.access_token}` }, cache: 'no-store' });
-    if (!profile.ok) throw new Error(profile.status === 401 ? 'Support Gmail connection expired. Reconnect Gmail.' : profile.status === 403 ? 'Support Gmail read permission is missing.' : profile.status === 429 ? 'Support Gmail is rate limited. Try again later.' : 'Could not verify the connected Support mailbox.');
+    const profile = await this.request('https://gmail.googleapis.com/gmail/v1/users/me/profile', { headers: { Authorization: `Bearer ${token.access_token}` }, cache: 'no-store' }, 'profile');
+    if (!profile.ok) await throwSupportGmailHttpError(profile, 'profile');
     if ((await gmailJson<{ emailAddress?: string }>(profile)).emailAddress?.toLowerCase() !== mailbox.toLowerCase()) throw new Error('Connected Gmail account does not match SUPPORT_GMAIL_MAILBOX.');
     return token.access_token;
   }
   private async gmail(path: string, token: string) {
     const response = await this.request(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
-    if (!response.ok) throw new Error(response.status === 401 ? 'Support Gmail connection expired. Reconnect Gmail.' : response.status === 403 ? 'Support Gmail read permission is missing.' : response.status === 429 ? 'Support Gmail is rate limited. Try again later.' : 'Support Gmail read failed.');
+    if (!response.ok) await throwSupportGmailHttpError(response, 'read');
     return gmailJson<unknown>(response);
   }
   async recent() {
@@ -191,7 +197,7 @@ export class GoogleGmailSupportMailbox implements GmailSupportMailbox {
     const token = await this.token();
     const response = await this.request(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=full`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
     if (response.status === 404) return null;
-    if (!response.ok) throw new Error('Support Gmail read failed.');
+    if (!response.ok) await throwSupportGmailHttpError(response, 'read');
     return normalize(await gmailJson<GmailMessage>(response));
   }
   async attachment(messageId: string, partId: string) {

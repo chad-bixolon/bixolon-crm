@@ -274,7 +274,7 @@ test('live adapter injection reads normalized messages without any Gmail mutatio
     assert.equal(calls.length,4);assert.equal(calls[0].method,'POST');for(const call of calls.slice(1)){assert.equal(call.method,'GET');assert.match(call.url,/users\/me\/(profile|messages)/);}
     assert.doesNotMatch(JSON.stringify(rows),/unit-access|unit-refresh/);
     await assert.rejects(new gmail.GoogleGmailSupportMailbox(async()=>new Response('private malformed token')).recent(),/^Error: Support Gmail returned an invalid response/);
-    for(const status of [401,403,429,500])await assert.rejects(new gmail.GoogleGmailSupportMailbox(async(url,init)=>String(url).includes('/token')?fetcher(url,init):new Response('',{status})).recent(),/expired|permission|rate limited|verify/);
+    for(const status of [401,403,429,500])await assert.rejects(new gmail.GoogleGmailSupportMailbox(async(url,init)=>String(url).includes('/token')?fetcher(url,init):new Response('',{status})).recent(),/expired|denied|rate limited|temporarily unavailable/);
   }finally{}
 });
 
