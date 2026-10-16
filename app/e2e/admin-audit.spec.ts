@@ -70,7 +70,7 @@ test('audit union supports date/actor/type/action filters, old/new, missing valu
   await expect(page.locator('main article')).toContainText('Discovery'); await expect(page.locator('main article')).toContainText('Qualified');
   await page.goto(`/administration/audit-history?${new URLSearchParams(f)}`);
   await expect(page.locator('main article')).toHaveCount(25);
-  await expect(page.locator('main')).toContainText('Not recorded / empty');
+  await expect(page.locator('main')).toContainText('Not recorded');
   await page.getByRole('link', { name: 'Next', exact: true }).click(); await expect(page.locator('main article')).toHaveCount(2);
   await page.goto('/administration/maintenance-history?entity=Task&action=Reassign'); await expect(page.locator('main h1')).toHaveText('Maintenance History');
 });

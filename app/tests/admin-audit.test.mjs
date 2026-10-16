@@ -48,7 +48,7 @@ test('date/actor/entity/action filters are parameterized and report pagination i
   assert.equal(result.page, 2); assert.equal(result.pages, 2);
   assert.match(queries[1].strings.join(' '), /LIMIT .* OFFSET /);
   assert.deepEqual(queries[1].values.slice(-2), [25, 25]);
-  assert.equal(auditValue(null), 'Not recorded / empty'); assert.equal(auditValue('0'), '0'); assert.equal(auditValue('Old owner'), 'Old owner');
+  assert.equal(auditValue(null), 'Not recorded'); assert.equal(auditValue('0'), '0'); assert.equal(auditValue('Old owner'), 'Old owner');
 });
 test('health statuses never return provider secrets or exceptions', async () => {
   const now = new Date(), base = { connectionStatus: 'CONNECTED', lastSuccessfulSyncAt: now, lastSyncStartedAt: now, lastSyncCompletedAt: now, lastError: null };

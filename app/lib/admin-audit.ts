@@ -75,7 +75,7 @@ export async function adminAudit(db: PrismaClient, actor: Actor, f: AuditFilters
     return { rows, count, page, pages };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
 }
-export function auditValue(value: string | null | undefined) { return value == null || value === '' ? 'Not recorded / empty' : value; }
+export function auditValue(value: string | null | undefined) { return value == null || value === '' ? 'Not recorded' : value; }
 export function auditHref(entity: string, id: number | null) {
   if (!id) return null;
   const path: Record<string, string> = { Opportunity: 'opportunities', 'Support Case': 'support/cases', Task: 'tasks', 'Price Exception': 'price-exceptions', Account: 'accounts', Contact: 'contacts', Activity: 'activities' };

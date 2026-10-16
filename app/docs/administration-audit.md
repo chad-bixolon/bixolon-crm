@@ -29,9 +29,9 @@ Raw job result/error summaries are omitted. No credentials, tokens, keys, provid
 | TaskAssignmentEvent | Previous/new assigned user and actor | No historical completion or due-date events exist. Names resolve against current users; deleted/missing references use an explicit fallback. |
 | PriceExceptionLifecycleEvent | Old/new lifecycle status | Existing PE tooling remains the full source. |
 | PriceExceptionFollowUpEvent | Changed follow-up status, owner and next follow-up date | Only curated JSON keys; notes/source metadata are excluded. General PE admin/source revisions remain in PE Cleanup. |
-| Account, Contact, Activity archive metadata | Current archive timestamp and archived-by actor, when preserved | Labeled **Current archive metadata**. Not an append-only lifecycle source; disappears after restore. Previous/new values are not inferred. |
+| Account, Contact, Activity archive metadata | Current archive timestamp and archived-by actor, when preserved | Displayed as **Archived record**. Not an append-only lifecycle source; disappears after restore. Previous/new values are not inferred. |
 
-Missing values display **Not recorded / empty**; null historical values cannot distinguish an explicitly cleared value from a value the source never recorded. Current editor or completion timestamps are not presented as past change events. Names from event snapshots remain snapshots; sources without name snapshots resolve current record/user labels. No existing historical rows are rewritten.
+Missing values display **Not recorded**; null historical values cannot distinguish an explicitly cleared value from a value the source never recorded. Current editor or completion timestamps are not presented as past change events. Names from event snapshots remain snapshots; sources without name snapshots resolve current record/user labels. No existing historical rows are rewritten.
 
 ## Maintenance History
 
