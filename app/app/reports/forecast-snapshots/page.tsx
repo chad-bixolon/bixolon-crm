@@ -72,7 +72,7 @@ export default async function ForecastSnapshotsReport({ searchParams }: { search
       <label className="text-sm">Currency<select className="field mt-1" name="currencyCode" aria-label="Currency" defaultValue={currencyCode ?? ''}><option value="">All (separate totals)</option>{currencies.map(row => <option key={row.currencyCode}>{row.currencyCode}</option>)}</select></label>
       <label className="text-sm">Snapshot date from (UTC)<input className="field mt-1" type="date" name="from" defaultValue={from?.toISOString().slice(0, 10)}/></label>
       <label className="text-sm">Snapshot date through (UTC)<input className="field mt-1" type="date" name="through" defaultValue={through?.toISOString().slice(0, 10)}/></label>
-      <div className="flex items-center gap-4"><button className="btn-primary">Compare forecasts</button><Link className="text-sm underline" href="/reports/forecast-snapshots">Reset</Link></div>
+      <div className="compact-action-row flex items-center gap-4"><button className="btn-primary">Compare forecasts</button><Link className="text-sm underline" href="/reports/forecast-snapshots">Reset</Link></div>
     </form>
     <p className="panel mb-5 p-4 text-sm">Pipeline includes Best Case and Commit; currencies stay separate. Closed Won uses the captured won stage and Expected Close Date in {year} {quarter}, rather than an actual booking date.</p>
     <p className="mb-4 text-sm text-slate-600">Up to 104 snapshots are shown for the selected dates (UTC). Use the period and date filters for older history.{owners.length > 200 && ' The salesperson list shows up to 201 names recorded in snapshots.'}</p>

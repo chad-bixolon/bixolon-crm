@@ -10,6 +10,20 @@ const smokeRoutes = [
   '/reports', '/notifications', '/my-day', '/administration',
 ];
 
+test('shared controls retain phone and desktop sizing', async ({ page }, info) => {
+  test.skip(page.viewportSize()!.width >= 640 && page.viewportSize()!.width < 1280);
+  await signInAs(page, 'admin');
+  await page.goto('/projects');
+  const toggle = page.getByRole('button', { name: /^Show filters/ });
+  if (await toggle.isVisible()) await toggle.click();
+  const expected = page.viewportSize()!.width < 640 ? 44 : 40;
+  for (const selector of ['input[name="q"]', 'select[name="status"]', '.saved-views-menu summary', '.filter-actions button']) {
+    const box = await page.locator(`main ${selector}`).first().boundingBox();
+    expect(box!.height, selector).toBe(expected);
+  }
+  await page.screenshot({ path: info.outputPath('project-controls.png'), caret: 'initial' });
+});
+
 async function expectNoPageOverflow(page: import('@playwright/test').Page, route: string) {
   const result = await page.evaluate(() => ({
     width: document.documentElement.clientWidth,
@@ -195,7 +209,12 @@ test('Support intake, history, and attachment work on a phone', async ({ page },
   const attachments = page.getByRole('region', { name: 'Attachments' });
   await attachments.getByRole('button', { name: 'Add Attachment' }).click();
   await attachments.getByLabel('File').setInputFiles(resolve(process.cwd(), 'e2e/fixtures/sample.txt'));
-  await attachments.getByRole('button', { name: 'Upload', exact: true }).click();
+  const [uploadResponse] = await Promise.all([
+    page.waitForResponse(response => /\/api\/support\/cases\/\d+\/attachments$/.test(new URL(response.url()).pathname) && response.request().method() === 'POST'),
+    attachments.getByRole('button', { name: 'Upload', exact: true }).click(),
+  ]);
+  expect(uploadResponse.ok()).toBe(true);
+  await uploadResponse.finished();
   await expect(attachments).toContainText('sample.txt');
   await expect(attachments.getByRole('link', { name: 'Download' })).toBeVisible();
   await expectNoPageOverflow(page, '/support/cases/detail attachment');

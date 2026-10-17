@@ -51,7 +51,7 @@ export function SavedViewControl({ routeKey, initialViews }: { routeKey: SavedVi
   const rename = async (view: View) => { const next = window.prompt('Rename saved view', view.name); if (next !== null) await request('PATCH', { id: view.id, action: 'rename', name: next }); };
   const remove = async (view: View) => { if (window.confirm(`Delete “${view.name}”?`)) { if (await request('DELETE', { id: view.id })) { if (selectedId === view.id) { sessionStorage.removeItem(`saved-view:${routeKey}`); window.dispatchEvent(new Event('saved-view-change')); } } } };
   return <div className="saved-views-row">
-    <details ref={details} className="saved-views-menu"><summary className="btn-secondary">{active} ▾</summary><div className="saved-views-options">
+    <details ref={details} className="saved-views-menu"><summary className="btn-secondary"><span className="saved-views-label" title={active}>{active}</span><span aria-hidden="true">▾</span></summary><div className="saved-views-options">
       {views.length ? views.map(view => <button key={view.id} type="button" onClick={() => apply(view)}>{view.name}{view.isDefault ? ' ★' : ''}</button>) : <p>No saved views yet</p>}
       <button type="button" onClick={() => { setMode('save'); details.current?.removeAttribute('open'); setError(''); }}>Save current view</button>
       <button type="button" onClick={() => { setMode('manage'); details.current?.removeAttribute('open'); setError(''); }}>Manage views</button>

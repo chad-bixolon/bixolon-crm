@@ -85,7 +85,7 @@ export default async function OpportunitySnapshotsPage({ searchParams }: { searc
       {filters.currencyCode && <input type="hidden" name="currencyCode" value={filters.currencyCode}/>}
       {filters.category && <input type="hidden" name="category" value={filters.category}/>}
       {filters.opportunityId && <input type="hidden" name="opportunityId" value={filters.opportunityId}/>}
-      <div className="flex flex-wrap items-end gap-3"><button className="btn-primary">Compare snapshots</button><Link className="text-sm text-orange-800 underline" href="/reports/opportunity-snapshots">Reset</Link></div>
+      <div className="compact-action-row flex flex-wrap items-end gap-3"><button className="btn-primary">Compare snapshots</button><Link className="text-sm text-orange-800 underline" href="/reports/opportunity-snapshots">Reset</Link></div>
     </form>
     <p className="mb-4 text-sm text-slate-600">Filters can match either snapshot; both captured values stay visible. The list shows up to 50 Opportunities per page and 104 snapshots for the selected dates (UTC). {Math.max(owners.length, stages.length, accounts.length) > 200 && 'Filter choices are limited to the first 201 historical names.'}</p>
     {forecastPeriod && <p className="panel mb-5 p-4 text-sm">Opportunities behind the forecast: {forecastPeriod.year} {forecastPeriod.quarter} · {filters.currencyCode ?? 'all currencies'} · {filters.category ?? 'open + won'}. Matches can come from either snapshot, and both captured values stay visible. Pipeline includes Best Case and Commit. <Link className="underline" href={`/reports/forecast-snapshots?year=${forecastPeriod.year}&quarter=${forecastPeriod.quarter}`}>Forecast Snapshot History</Link></p>}
