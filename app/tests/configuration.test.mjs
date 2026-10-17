@@ -71,7 +71,7 @@ test('sales stages validate bounds and closed/won invariants, retaining immutabl
   assert.throws(() => stages.parseStage(form([['name', 'Won'], ['probability', '100'], ['sortOrder', '0'], ['isWon', 'on']])), /must also be closed/);
   assert.throws(() => stages.parseStage(form([['name', 'Too high'], ['probability', '101'], ['sortOrder', '0']])), /0–100/);
   const calls = [];
-  const tx = { salesStage: { findUnique: async () => ({ isClosed: false, isWon: false }), update: async args => calls.push(args), create: async args => calls.push(args) }, opportunity: { updateMany: async args => calls.push(args) } };
+  const tx = { salesStage: { findUnique: async () => ({ isClosed: false, isWon: false }), update: async args => calls.push(args), create: async args => calls.push(args) }, opportunity: { count: async () => 0, updateMany: async args => calls.push(args) } };
   const client = { ...tx, $transaction: async fn => fn(tx) };
   await stages.saveStage(client, 3, valid);
   assert.deepEqual(calls[0].where, { id: 3 });

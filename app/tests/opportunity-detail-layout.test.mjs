@@ -120,8 +120,8 @@ test('Opportunity History uses business labels and local time after working sect
   const html = await render();
   assert.match(html, /<details(?![^>]*\bopen\b)[^>]*><summary[^>]*><h2[^>]*>Opportunity History<\/h2> <span[^>]*>\(21\)<\/span><\/summary>/);
   assert.match(html, /<summary[^>]*>.*?<\/summary><ul[^>]*>.*?Starting point.*?<\/ul>.*?<\/details>/);
-  assert.match(html, /Starting point<\/div><div>Demo \/ POC · Pipeline · \$126,000\.00/);
-  assert.match(html, /Forecast changed<\/div><div>Pipeline → Best Case/);
+  assert.match(html, /Starting point<\/div><div[^>]*>Demo \/ POC · Pipeline · \$126,000\.00/);
+  assert.match(html, /Forecast changed<\/div><div[^>]*>Pipeline → Best Case/);
   assert.match(html, /Oct 3, 2026 at 9:38 AM · Blaise Collura/);
   assert.ok(html.indexOf('Products</h2>') < html.indexOf('Opportunity History</h2>'));
   assert.ok(html.indexOf('Project Updates') < html.indexOf('Opportunity History</h2>'));

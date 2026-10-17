@@ -34,7 +34,7 @@ test('create and edit Customer Context uses a responsive two-column layout in fi
 test('admin competitor lifecycle trims, rejects blank and duplicate names, renames and deactivates without deleting', async () => {
   assert.throws(() => competitors.parseCompetitor(form([['name', '  '], ['sortOrder', '0']])), /Name is required/);
   const rows = [{ id: 1, name: 'Zebra', active: true, sortOrder: 0 }];
-  const client = { competitorOption: {
+  const client = { outcomeReason: { findMany: async () => [] }, competitorOption: {
     findFirst: async ({ where }) => rows.find(row => row.name.toLowerCase() === where.name.equals.toLowerCase() && row.id !== where.id?.not) ?? null,
     create: async ({ data }) => { const row = { ...data, id: rows.length + 1 }; rows.push(row); return row; },
     update: async ({ where, data }) => Object.assign(rows.find(row => row.id === where.id), data),
@@ -73,7 +73,7 @@ test('new Opportunity options request only active competitors', async () => {
   const client = {
     account: { findMany: async () => [] }, user: { findMany: async () => [] }, salesStage: { findMany: async query => { stageQuery = query; return []; } },
     currency: { findMany: async query => { currencyQuery = query; return []; } }, product: { count: async () => 0 }, project: { findMany: async () => [] },
-    productCategory: { findMany: async () => [] }, competitorOption: { findMany: async query => { competitorQuery = query; return [{ id: 1, name: 'Zebra', active: true }]; } },
+    productCategory: { findMany: async () => [] }, outcomeReason: { findMany: async () => [] }, competitorOption: { findMany: async query => { competitorQuery = query; return [{ id: 1, name: 'Zebra', active: true }]; } },
   };
   const options = await opportunities.opportunityOptions(client);
   assert.deepEqual(competitorQuery.where, { active: true });
@@ -87,7 +87,7 @@ test('new selection requires active competitor; an existing inactive selection c
   const existing = { id: 5, archivedAt: null, competitorId: 3, projects: [] };
   const tx = {
     opportunity: { findUnique: async () => existing, update: async ({ data }) => { saved = data; } },
-    competitorOption: { findUnique: async ({ where }) => ({ id: where.id, active: false }) },
+    outcomeReason: { findMany: async () => [] }, competitorOption: { findUnique: async ({ where }) => ({ id: where.id, active: false }) },
     salesStage: { findUnique: async () => ({ active: true, isClosed: false }) },
     currency: { findUnique: async () => ({ active: true }) },
     account: { findMany: async () => [{ id: 11 }] }, product: { findMany: async () => [] }, project: { findMany: async () => [] },

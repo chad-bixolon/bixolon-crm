@@ -87,7 +87,7 @@ export async function restoreHistoryBatch(client: PrismaClient, actor: Actor, ba
       snapshots.length ? tx.forecastSnapshot.count({ where: { OR: snapshots.map(row => ({ snapshotWeek: row.snapshotWeek, year: row.year, quarter: row.quarter, currencyCode: row.currencyCode, repId: row.repId })) } }) : 0,
     ]);
     if (eventConflicts || snapshotIdConflicts || scopeConflicts) throw new Error('Restore conflicts with active history. No rows were moved.');
-    const eventData = events.map(({ id: archiveId, sourceId, archivedAt, archiveBatchId, ...row }) => { void archiveId; void archivedAt; void archiveBatchId; return { ...row, id: sourceId }; });
+    const eventData = events.map(({ id: archiveId, sourceId, archivedAt, archiveBatchId, ...row }) => { void archiveId; void archivedAt; void archiveBatchId; return { ...row, oldOutcome: row.oldOutcome ?? Prisma.DbNull, newOutcome: row.newOutcome ?? Prisma.DbNull, id: sourceId }; });
     const snapshotData = snapshots.map(({ id: archiveId, sourceId, archivedAt, archiveBatchId, ...row }) => { void archiveId; void archivedAt; void archiveBatchId; return { ...row, id: sourceId }; });
     if (events.length) {
       const copied = await tx.opportunityHistoryEvent.createMany({ data: eventData });
@@ -136,7 +136,7 @@ export async function archiveHistoryBatch(client: PrismaClient, actor: Actor, cu
       tx.opportunityHistoryEvent.findMany({ where: { occurredAt: { lt: cutoff } }, orderBy: { id: 'asc' }, take: limit }),
       tx.forecastSnapshot.findMany({ where: { capturedAt: { lt: cutoff } }, orderBy: { id: 'asc' }, take: limit }),
     ]);
-    const eventData = events.map(({ id, ...row }) => ({ ...row, sourceId: id, archivedAt, archiveBatchId: batch }));
+    const eventData = events.map(({ id, ...row }) => ({ ...row, oldOutcome: row.oldOutcome ?? Prisma.DbNull, newOutcome: row.newOutcome ?? Prisma.DbNull, sourceId: id, archivedAt, archiveBatchId: batch }));
     const snapshotData = snapshots.map(({ id, ...row }) => ({ ...row, sourceId: id, archivedAt, archiveBatchId: batch }));
     if (events.length) {
       const inserted = await tx.opportunityHistoryArchive.createMany({ data: eventData });

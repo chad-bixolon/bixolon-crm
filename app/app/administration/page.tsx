@@ -17,6 +17,7 @@ const groups = [
   { title: "Sales Configuration", tools: [
     ["Sales Stages", "/administration/sales-stages", "Manage stage names and properties."],
     ["Sales Targets", "/administration/sales-targets", "Set quarterly targets by sales rep and currency."],
+    ["Outcome Reasons", "/administration/outcome-reasons", "Manage Closed Won and Closed Lost reasons."],
     ["Competitors", "/administration/competitors", "Manage competitor options available on Opportunities."],
     ["Territories", "/administration/lookups/territories", "Manage account territory choices."],
   ] },

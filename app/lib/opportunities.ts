@@ -1,4 +1,5 @@
-import { isPriceExceptionExpired } from './price-exception-dates';
+import { parseActualCloseDate, resolveOpportunityOutcome, outcomeHistoryValue, opportunityOutcomeWhere, type OutcomeFilters } from './opportunity-outcomes';
+import { businessToday, isPriceExceptionExpired } from './price-exception-dates';
 import { operationalProjectWhere, operationalOpportunityWhere } from './operational-where';
 import { ForecastCategory, OpportunityPartyRole, OpportunityProductPriceSource, Prisma, ProductPriceTier, type PrismaClient } from "@prisma/client";
 import { field, optional, pageNumber, positiveId, required, type Errors } from "./crm-validation";
@@ -15,7 +16,7 @@ import { closePeriodBounds } from './close-period';
 export type Participant = { accountId: number; roles: OpportunityPartyRole[] };
 export type OpportunityContactInput = { contactId: number; isPrimary: boolean };
 export type Line = { id?: number; productId: number; skuId?: number | null; quantity: number; price: string; priceSource?: OpportunityProductPriceSource; catalogPriceTier?: ProductPriceTier | null; priceExceptionLineId?: number | null; odmCustomerPriceId?: number | null; odmCustomerAccountId?: number | null };
-export type OpportunityInput = { name: string; description: string | null; competitorId?: number | null; currentProductBeingUsed?: string | null; competitivePricing?: string | null; customerPainPoints?: string | null; ownerId: number | null; projectIds: number[]; stageId: number; expectedCloseDate: Date | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: Participant[]; contacts: OpportunityContactInput[]; lines: Line[] };
+export type OpportunityInput = { name: string; description: string | null; competitorId?: number | null; currentProductBeingUsed?: string | null; competitivePricing?: string | null; customerPainPoints?: string | null; ownerId: number | null; projectIds: number[]; stageId: number; expectedCloseDate: Date | null; actualCloseDate?: Date | null; outcomeReasonId?: number | null; outcomeNotes?: string | null; probability: number | null; forecastCategory: ForecastCategory | null; currencyCode: string; participants: Participant[]; contacts: OpportunityContactInput[]; lines: Line[] };
 export function categoryForStage(stage: { isClosed: boolean; isWon: boolean }, requested: ForecastCategory | null, previous?: { stageId: number; forecastCategory: ForecastCategory } | null, stageId?: number): ForecastCategory {
   if (stage.isClosed) return stage.isWon ? ForecastCategory.CLOSED : ForecastCategory.OMITTED;
   if (requested === ForecastCategory.CLOSED) {
@@ -41,6 +42,11 @@ export function parseOpportunity(form: FormData) {
   const dateRaw = field(form, "expectedCloseDate");
   const expectedCloseDate = dateRaw && /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? new Date(`${dateRaw}T12:00:00.000Z`) : null;
   if (dateRaw && (!expectedCloseDate || Number.isNaN(expectedCloseDate.getTime()) || expectedCloseDate.toISOString().slice(0, 10) !== dateRaw)) errors.expectedCloseDate = "Choose a valid date.";
+  let actualCloseDate: Date | null = null;
+  try { actualCloseDate = parseActualCloseDate(field(form, "actualCloseDate")); } catch { errors.actualCloseDate = "Choose a valid Actual Close Date."; }
+  const reasonRaw = field(form, "outcomeReasonId"), outcomeReasonId = reasonRaw ? positiveId(reasonRaw) : null;
+  if (reasonRaw && !outcomeReasonId) errors.outcomeReasonId = "Choose a valid Outcome Reason.";
+  const outcomeNotes = optional(form, "outcomeNotes", 2000, errors);
   const probabilityRaw = field(form, "probability"); const probability = probabilityRaw === "" ? null : Number(probabilityRaw);
   if (probability !== null && (!Number.isInteger(probability) || probability < 0 || probability > 100)) errors.probability = "Use a whole percentage from 0 to 100.";
   const forecastRaw = field(form, "forecastCategory");
@@ -95,23 +101,25 @@ export function parseOpportunity(form: FormData) {
     lines.push({ id: id ?? undefined, productId, ...(skuId ? { skuId } : {}), quantity, price, ...(priceSources[i] ? { priceSource: priceSource!, catalogPriceTier, priceExceptionLineId: priceExceptionLineId ?? null, odmCustomerPriceId, odmCustomerAccountId } : {}) });
   }
   if (new Set(lines.map((line) => line.id).filter(Boolean)).size !== lines.filter((line) => line.id).length) errors.lines = "Duplicate line item.";
-  return { errors, value: Object.keys(errors).length ? undefined : { name, description, competitorId, currentProductBeingUsed, competitivePricing, customerPainPoints, ownerId, projectIds: projectIds as number[], stageId: stageId!, expectedCloseDate, probability, forecastCategory, currencyCode, participants, contacts, lines } satisfies OpportunityInput };
+  return { errors, value: Object.keys(errors).length ? undefined : { name, description, competitorId, currentProductBeingUsed, competitivePricing, customerPainPoints, ownerId, projectIds: projectIds as number[], stageId: stageId!, expectedCloseDate, actualCloseDate, outcomeReasonId, outcomeNotes, probability, forecastCategory, currencyCode, participants, contacts, lines } satisfies OpportunityInput };
 }
 export function lineTotal(line: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number }) { return new Prisma.Decimal(line.estimatedUnitPrice).mul(line.quantity); }
 export function opportunityTotal(lines: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number; archivedAt?: Date | null }[]) { return lines.reduce((sum, line) => line.archivedAt ? sum : sum.add(lineTotal(line)), new Prisma.Decimal(0)); }
 export function weightedValue(total: Prisma.Decimal, probability: number) { return total.mul(probability).div(100); }
 export async function opportunityOptions(client: PrismaClient) {
-  const [owners, stages, currencies, productCount, productCategories, competitors] = await Promise.all([
+  const [owners, stages, currencies, productCount, productCategories, competitors, outcomeReasons] = await Promise.all([
     client.user.findMany({ where: eligibleUserWhere('sales.write'), orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
     client.salesStage.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { id: true, name: true, probability: true, isClosed: true, isWon: true } }),
     client.currency.findMany({ where: { active: true }, orderBy: { code: "asc" }, select: { code: true, name: true } }),
     client.product.count({ where: { active: true, archivedAt: null } }),
     client.productCategory.findMany({ where: { OR: [{ active: true }, { products: { some: {} } }] }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
     client.competitorOption.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true, active: true } }),
+    client.outcomeReason.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true, isWon: true, active: true } }),
   ]);
-  return { accounts: [] as { id: number; name: string }[], contacts: [] as { id: number; firstName: string; lastName: string; email: string | null; accountId: number | null }[], owners, stages, currencies, productCount, projects: [] as { id: number; name: string }[], productCategories, competitors };
+  return { businessDate: businessToday().toISOString().slice(0, 10), outcomeReasons, accounts: [] as { id: number; name: string }[], contacts: [] as { id: number; firstName: string; lastName: string; email: string | null; accountId: number | null }[], owners, stages, currencies, productCount, projects: [] as { id: number; name: string }[], productCategories, competitors };
 }
 export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number, actor?: Actor) {
+  if (actor) assertPermission(actor, 'sales.write');
   input = { ...input, contacts: input.contacts ?? [], lines: input.lines.map(line => ({ ...line, priceSource: line.priceSource ?? "MANUAL", catalogPriceTier: line.catalogPriceTier ?? null, priceExceptionLineId: line.priceExceptionLineId ?? null, odmCustomerPriceId: line.odmCustomerPriceId ?? null, odmCustomerAccountId: line.odmCustomerAccountId ?? null })) };
   const run = async (tx: Prisma.TransactionClient) => {
     const existing = id ? await tx.opportunity.findUnique({ where: { id }, include: { projects: { include: { project: { select: { name: true } } } }, stage: true, owner: true, participants: { include: { account: true } } } }) : null;
@@ -181,8 +189,10 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
         if ((!retainingHistoricalSelection || !old.estimatedUnitPrice.equals(line.price)) && !selected!.approvedUnitPrice?.equals(line.price)) throw new Error('Changing a Price Exception unit price requires Manual price.');
       }
     }
-    const data = { name: input.name, description: input.description, competitorId: input.competitorId ?? null, currentProductBeingUsed: input.currentProductBeingUsed ?? null, competitivePricing: input.competitivePricing ?? null, customerPainPoints: input.customerPainPoints ?? null, ownerId: input.ownerId, stageId: input.stageId, expectedCloseDate: input.expectedCloseDate, probability: input.probability, forecastCategory: categoryForStage(stage, input.forecastCategory, existing, input.stageId), currencyCode: input.currencyCode };
-    if (id) { await tx.opportunity.update({ where: { id }, data }); }
+    const reason = input.outcomeReasonId ? await tx.outcomeReason.findUnique({ where: { id: input.outcomeReasonId } }) : null;
+    const outcome = resolveOpportunityOutcome(stage, input, existing, reason);
+    const data = { ...outcome, name: input.name, description: input.description, competitorId: input.competitorId ?? null, currentProductBeingUsed: input.currentProductBeingUsed ?? null, competitivePricing: input.competitivePricing ?? null, customerPainPoints: input.customerPainPoints ?? null, ownerId: input.ownerId, stageId: input.stageId, expectedCloseDate: input.expectedCloseDate, probability: input.probability, forecastCategory: categoryForStage(stage, input.forecastCategory, existing, input.stageId), currencyCode: input.currencyCode };
+    if (id) { await tx.opportunity.update({ where: { id, ...(existing?.updatedAt ? { updatedAt: existing.updatedAt } : {}) }, data }); }
     else { const created = await tx.opportunity.create({ data }); id = created.id; }
     const opportunityId = id;
     for (const link of existing?.projects ?? []) if (!input.projectIds.includes(link.projectId)) await tx.opportunityProject.delete({ where: { opportunityId_projectId: { opportunityId, projectId: link.projectId } } });
@@ -231,6 +241,11 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       const context = { opportunityId, opportunityName: input.name, actorId: actor.id, actorName: name(actorRow), accountName: accounts.find(account => account.id === input.participants[0]?.accountId)?.name ?? existing?.participants[0]?.account.name ?? null };
       const events: Prisma.OpportunityHistoryEventCreateManyInput[] = [];
       const add = (eventType: string, values: Partial<Prisma.OpportunityHistoryEventCreateManyInput>) => events.push({ ...context, eventType, ...values });
+      const oldOutcome = existing ? outcomeHistoryValue(existing, existing.stage) : undefined;
+      const newOutcome = outcomeHistoryValue(outcome, stage);
+      if (stage.isClosed && (!existing?.stage.isClosed || existing.stage.isWon !== stage.isWon)) add('CLOSED', { oldOutcome, newOutcome });
+      else if (existing?.stage.isClosed && !stage.isClosed) add('OUTCOME_REOPENED', { oldOutcome, newOutcome });
+      else if (existing && JSON.stringify(oldOutcome) !== JSON.stringify(newOutcome)) add('OUTCOME_UPDATED', { oldOutcome, newOutcome });
       if (!existing) add('BASELINE', { newStageId: input.stageId, newStageName: stage.name, newCategory: data.forecastCategory, newCloseDate: input.expectedCloseDate, newOwnerId: input.ownerId, newOwnerName: name(newOwner), newProbability: input.probability, newValue: opportunityTotal(currentLines), newCurrencyCode: input.currencyCode, newArchived: false });
       else {
         if (existing.stageId !== input.stageId) add('STAGE', { oldStageId: existing.stageId, oldStageName: existing.stage.name, newStageId: input.stageId, newStageName: stage.name });
@@ -290,10 +305,10 @@ export async function setOpportunityArchived(client: PrismaClient, id: number, a
     }
   });
 }
-export type OpportunityFilters = { q?: string; stageId?: string; ownerId?: string; competitorId?: string; projectId?: string; forecastCategory?: string; closePeriod?: string; closeFrom?: string; closeTo?: string; accountId?: string; page?: string; archived?: string };
+export type OpportunityFilters = OutcomeFilters & { q?: string; stageId?: string; ownerId?: string; competitorId?: string; projectId?: string; forecastCategory?: string; closePeriod?: string; closeFrom?: string; closeTo?: string; accountId?: string; page?: string; archived?: string };
 export function opportunityWhere(filters: OpportunityFilters, now = new Date()): Prisma.OpportunityWhereInput {
   const visibility = recordVisibility(filters.archived === "yes" ? "archived" : filters.archived === "all" ? "all" : "active");
-  const where: Prisma.OpportunityWhereInput = { ...archivedWhere(visibility), ...(visibility === 'active' ? { AND: [operationalOpportunityWhere] } : {}) };
+  const where: Prisma.OpportunityWhereInput = { ...opportunityOutcomeWhere(filters), ...archivedWhere(visibility), ...(visibility === 'active' ? { AND: [operationalOpportunityWhere] } : {}) };
   if (filters.q?.trim()) {
     const contains = { contains: filters.q.trim().slice(0, 100), mode: "insensitive" as const };
     where.OR = [{ name: contains }, { competitor: { is: { name: contains } } }, { currentProductBeingUsed: contains }];

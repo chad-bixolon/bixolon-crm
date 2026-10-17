@@ -21,6 +21,10 @@ export default async function EditOpportunityPage({ params }: { params: Promise<
     const currentCompetitor = await prisma.competitorOption.findUnique({ where: { id: opportunity.competitorId }, select: { id: true, name: true, active: true } });
     if (currentCompetitor) options.competitors.push(currentCompetitor);
   }
+  if (opportunity.outcomeReasonId) {
+    const reason = await prisma.outcomeReason.findUnique({ where: { id: opportunity.outcomeReasonId } });
+    if (reason) options.outcomeReasons = [...options.outcomeReasons.filter(item => item.id !== reason.id), { ...reason, name: opportunity.outcomeReasonName ?? reason.name }];
+  }
   const linkedAccountIds = opportunity.participants.map(participant => participant.accountId).filter(accountId => !options.accounts.some(account => account.id === accountId));
   if (linkedAccountIds.length) {
     const linkedAccounts = await prisma.account.findMany({ where: { id: { in: linkedAccountIds } }, select: { id: true, name: true } });

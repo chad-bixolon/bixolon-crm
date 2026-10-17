@@ -880,6 +880,20 @@ model CompetitorOption {
   @@index([active, sortOrder])
 }
 
+model OutcomeReason {
+  id Int @id @default(autoincrement())
+  name String @db.VarChar(200)
+  isWon Boolean
+  active Boolean @default(true)
+  sortOrder Int @default(0)
+  opportunities Opportunity[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([isWon, name])
+  @@index([isWon, active, sortOrder])
+}
+
 model Currency {
   salesPlans SalesPlan[]
   code          String        @id @db.Char(3)
@@ -913,6 +927,12 @@ model Opportunity {
   currentProductBeingUsed String?
   competitivePricing      String?
   customerPainPoints      String?              @db.Text
+  actualCloseDate         DateTime?            @db.Date
+  outcomeReasonId         Int?
+  outcomeReason           OutcomeReason?       @relation(fields: [outcomeReasonId], references: [id], onDelete: Restrict)
+  /// Label as selected; Admin renames must not rewrite historical meaning.
+  outcomeReasonName       String?              @db.VarChar(200)
+  outcomeNotes            String?              @db.VarChar(2000)
   expectedCloseDate       DateTime?
   probability             Int?
   forecastCategory        ForecastCategory     @default(PIPELINE)
@@ -939,6 +959,8 @@ model Opportunity {
   @@index([ownerId, stageId])
   @@index([ownerId, expectedCloseDate, currencyCode])
   @@index([stageId, expectedCloseDate])
+  @@index([actualCloseDate, ownerId])
+  @@index([outcomeReasonId, actualCloseDate])
   @@index([expectedCloseDate])
   @@index([currencyCode])
   @@index([competitorId])
@@ -1076,6 +1098,8 @@ model OpportunityHistoryEvent {
   newValue Decimal? @db.Decimal(18, 2)
   oldCurrencyCode String? @db.Char(3)
   newCurrencyCode String? @db.Char(3)
+  oldOutcome Json?
+  newOutcome Json?
   oldArchived Boolean?
   newArchived Boolean?
   createdAt DateTime @default(now())
@@ -1119,6 +1143,8 @@ model OpportunityHistoryArchive {
   newValue Decimal? @db.Decimal(18, 2)
   oldCurrencyCode String? @db.Char(3)
   newCurrencyCode String? @db.Char(3)
+  oldOutcome Json?
+  newOutcome Json?
   oldArchived Boolean?
   newArchived Boolean?
   createdAt DateTime

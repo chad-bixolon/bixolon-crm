@@ -18,6 +18,10 @@ type OpportunityForForm = {
   customerPainPoints: string | null;
   ownerId: number | null;
   stageId: number;
+  actualCloseDate?: Date | null;
+  outcomeReasonId?: number | null;
+  outcomeReasonName?: string | null;
+  outcomeNotes?: string | null;
   expectedCloseDate: Date | null;
   probability: number | null;
   forecastCategory: ForecastCategory | null;
@@ -66,6 +70,10 @@ export type OpportunityFormInitial = {
   ownerId: number | null;
   projectIds: number[];
   stageId: number;
+  actualCloseDate?: string | null;
+  outcomeReasonId?: number | null;
+  outcomeReasonName?: string | null;
+  outcomeNotes?: string | null;
   expectedCloseDate: string | null;
   probability: number | null;
   forecastCategory: ForecastCategory | null;
@@ -107,6 +115,10 @@ export function serializeOpportunityForForm(opportunity: OpportunityForForm, act
     ownerId: opportunity.ownerId,
     projectIds: opportunity.projects.map(link => link.projectId),
     stageId: opportunity.stageId,
+    actualCloseDate: opportunity.actualCloseDate?.toISOString().slice(0, 10) ?? null,
+    outcomeReasonId: opportunity.outcomeReasonId ?? null,
+    outcomeReasonName: opportunity.outcomeReasonName ?? null,
+    outcomeNotes: opportunity.outcomeNotes ?? null,
     expectedCloseDate: opportunity.expectedCloseDate?.toISOString().slice(0, 10) ?? null,
     probability: opportunity.probability,
     forecastCategory: opportunity.forecastCategory,

@@ -151,8 +151,10 @@ try:
       (1000, 1003, 'SERVICE_PROVIDER', CURRENT_TIMESTAMP),
       (1000, 1003, 'CONNECTIVITY_PROVIDER', CURRENT_TIMESTAMP);
     INSERT INTO "OpportunityProject" ("opportunityId", "projectId") VALUES (100, 1000);
-    INSERT INTO "Activity" ("id", "projectId", "type", "subject", "updatedAt")
-      VALUES (1000, 1000, 'OTHER', 'Project update', CURRENT_TIMESTAMP);
+    -- The current Activity parent constraint requires Account, Opportunity or Support Case.
+    -- Keep testing the Project link with the fixture Project's Account as context.
+    INSERT INTO "Activity" ("id", "accountId", "projectId", "type", "subject", "updatedAt")
+      VALUES (1000, 100, 1000, 'OTHER', 'Project update', CURRENT_TIMESTAMP);
     INSERT INTO "Note" ("id", "projectId", "body", "updatedAt")
       VALUES (1000, 1000, 'Project note', CURRENT_TIMESTAMP);
     SELECT count(*) AS project_roles FROM "ProjectAccountRole" WHERE "projectId" = 1000;''').stdout, flush=True)
@@ -361,7 +363,27 @@ try:
                       VALUES (9100,9100,'existing.log','prod/support-cases/fixture','text/plain',10,100);''')
                     support_before = {table: sql_values('backfill', f'''SELECT to_jsonb(t)::text FROM "{table}" t WHERE id=9100;''')[0] for table in ('SupportCase','SupportCaseAttachment')}
                 provenance_before = all_table_fingerprints('backfill') if directory.name == '20260927180000_opportunity_product_account_price_provenance' else None
+                outcomes_before = None
+                if directory.name == '20261016120000_opportunity_outcomes':
+                    sql('backfill', """INSERT INTO "SalesStage" (id,name,"sortOrder",probability,"isClosed","isWon","updatedAt") VALUES (95000,'Legacy outcome preservation',0,0,true,false,now());
+                      INSERT INTO "Opportunity" (id,name,"stageId","expectedCloseDate","forecastCategory","updatedAt") VALUES (95000,'Legacy unknown outcome',95000,'2027-03-31','OMITTED','2026-01-01');""")
+                    outcomes_before = all_table_fingerprints('backfill')
                 sql("backfill", (directory / "migration.sql").read_text())
+                if outcomes_before is not None:
+                    outcomes_after = all_table_fingerprints('backfill')
+                    for table, added in {'Opportunity': ['actualCloseDate','outcomeReasonId','outcomeReasonName','outcomeNotes'], 'OpportunityHistoryEvent': ['oldOutcome','newOutcome'], 'OpportunityHistoryArchive': ['oldOutcome','newOutcome']}.items():
+                        row = 'to_jsonb(t)' + ''.join(" - '" + column + "'" for column in added)
+                        outcomes_after[table] = sql_values('backfill', f'''SELECT count(*) || ':' || md5(COALESCE(jsonb_agg({row} ORDER BY ({row})::text)::text, '[]')) FROM "{table}" t;''')[0]
+                    if any(value != outcomes_after.get(table) for table, value in outcomes_before.items()):
+                        raise RuntimeError('Outcome migration changed preexisting data or snapshots')
+                    if sql_values('backfill', '''SELECT count(*) FROM "Opportunity" WHERE "actualCloseDate" IS NOT NULL OR "outcomeReasonId" IS NOT NULL OR "outcomeReasonName" IS NOT NULL OR "outcomeNotes" IS NOT NULL;''') != ['0']:
+                        raise RuntimeError('Outcome migration fabricated historical outcomes')
+                    if sql_values('backfill', '''SELECT "isWon"::text || ':' || count(*) FROM "OutcomeReason" GROUP BY "isWon" ORDER BY "isWon";''') != ['false:10', 'true:6']:
+                        raise RuntimeError('Outcome Reason defaults missing')
+                    sql('backfill', '''UPDATE "Opportunity" SET "outcomeReasonId"=(SELECT id FROM "OutcomeReason" WHERE "name"='Price' AND NOT "isWon") WHERE id=95000;''')
+                    if sql('backfill', '''DELETE FROM "OutcomeReason" WHERE "name"='Price' AND NOT "isWon";''', check=False).returncode == 0:
+                        raise RuntimeError('Used Outcome Reason was deletable')
+                    print('PASS: outcomes additive migration preserves every preexisting row and snapshot; legacy close dates remain unknown; 16 defaults and restrictive historical FK verified', flush=True)
                 if support_before is not None:
                     support_after = {table: sql_values('backfill', f'''SELECT (to_jsonb(t) - 'sourceMailbox' - 'sourceGmailMessageId' - 'sourceGmailThreadId' - 'sourceGmailAttachmentId' - 'sourceGmailPartId')::text FROM "{table}" t WHERE id=9100;''')[0] for table in ('SupportCase','SupportCaseAttachment')}
                     if support_before != support_after:

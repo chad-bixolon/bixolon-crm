@@ -23,6 +23,9 @@ export async function saveStage(client: PrismaClient, id: number | null, data: R
     await client.$transaction(async tx => {
       const previous = await tx.salesStage.findUnique({ where: { id } });
       if (!previous) throw new Error('Stage not found.');
+      if (previous.isClosed !== data.isClosed || previous.isWon !== data.isWon) {
+        if (await tx.opportunity.count({ where: { stageId: id } })) throw new Error('This stage is used by Opportunities. Add a new stage to change its open, won, or lost meaning; close or reopen each Opportunity with its outcome details.');
+      }
       await tx.salesStage.update({ where: { id }, data });
       if (previous.isClosed !== data.isClosed || (data.isClosed && previous.isWon !== data.isWon)) {
         const forecastCategory = data.isClosed ? (data.isWon ? ForecastCategory.CLOSED : ForecastCategory.OMITTED) : ForecastCategory.PIPELINE;

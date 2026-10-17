@@ -22,6 +22,8 @@ const value = fields => {
   return parsed.value;
 };
 try {
+  const responsible = await prisma.user.create({ data: { email: 'activity-history-smoke@example.invalid', firstName: 'Activity', lastName: 'Smoke', role: 'SALES' } });
+  base.push(['userId', String(responsible.id)]);
   const before = await prisma.activity.count();
   await assert.rejects(saveActivity(prisma, value([['accountId', '101'], ['opportunityId', '100']])), /Opportunity is not associated with the selected Account/);
   await assert.rejects(saveActivity(prisma, value([['accountId', '101'], ['projectId', '1000']])), /Project is not associated with the selected Account/);
