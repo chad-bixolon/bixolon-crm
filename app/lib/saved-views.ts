@@ -1,11 +1,12 @@
 import { can, permissionForPath, type Actor } from './authorization';
 import { selectedClosePeriod, validClosePeriod } from './close-period';
+import { validTaskDuePeriod } from './task-due-period';
 
 export const savedViewRoutes = {
   accounts: { path: '/accounts', keys: ['q','view','status','salesRepId','role','territory','industry','strategic'] },
   contacts: { path: '/contacts', keys: ['q','active','accountId','salesRepId','marketingPreference','title','primary','assignment','sort','dir'] },
   opportunities: { path: '/opportunities', keys: ['q','stageId','competitorId','ownerId','forecastCategory','closePeriod','closeFrom','closeTo','accountId','projectId','archived'] },
-  tasks: { path: '/tasks', keys: ['q','visibility','status','priority','assignedToId','accountId','opportunityId','dueFrom','dueTo'] },
+  tasks: { path: '/tasks', keys: ['q','visibility','status','priority','assignedToId','accountId','opportunityId','duePeriod','dueFrom','dueTo'] },
   projects: { path: '/projects', keys: ['q','status','ownerId','accountId','archived'] },
   'price-exceptions': { path: '/price-exceptions', keys: ['q','status','distributor','varName','endUser','expiration','unresolved','salesRep'] },
   demos: { path: '/demos', keys: ['q','status'] },
@@ -40,12 +41,20 @@ export function normalizeSavedQuery(route: SavedViewRoute, input: unknown): Save
     if (idKeys.has(key) && !/^[1-9]\d{0,9}$/.test(clean) && !(route === 'opportunities' && key === 'projectId' && clean === 'none') && !(route === 'contacts' && key === 'accountId' && clean === 'unassigned')) continue;
     if (dateKeys.has(key) && !/^\d{4}-\d{2}-\d{2}$/.test(clean)) continue;
     if (key === 'closePeriod' && !validClosePeriod(clean)) continue;
+    if (key === 'duePeriod' && !validTaskDuePeriod(clean)) continue;
     output[key] = clean;
   }
   if (route === 'opportunities') {
     const period = selectedClosePeriod(output);
     if (period) output.closePeriod = period;
     if (period !== 'custom') { delete output.closeFrom; delete output.closeTo; }
+  }
+  if (route === 'tasks') {
+    // Store only the meaning of a relative period. Never resolve it to dates.
+    // Legacy absolute views keep their original shape and dates.
+    if (record.duePeriod === '' || output.duePeriod && output.duePeriod !== 'custom') {
+      delete output.dueFrom; delete output.dueTo;
+    }
   }
   return output;
 }

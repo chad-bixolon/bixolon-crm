@@ -43,6 +43,7 @@ export function SavedViewControl({ routeKey, initialViews }: { routeKey: SavedVi
     if (view.omitted.length) setError(`${view.omitted.join(', ')} filter was omitted because it is no longer available.`);
     const href = savedQueryHref(routeKey, view.query);
     if (href !== `${pathname}${params.size ? `?${params}` : ''}`) router.push(href);
+    else if (routeKey === 'tasks' && view.query.duePeriod && view.query.duePeriod !== 'custom') router.refresh();
   };
   const save = async () => {
     if (!name.trim()) { setError('Enter a view name.'); return; }

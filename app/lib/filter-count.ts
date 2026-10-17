@@ -1,3 +1,5 @@
+import { selectedTaskDuePeriod } from './task-due-period';
+
 export type FilterDefaults = Record<string, string>;
 
 export function countActiveFilters(values: Record<string, string | undefined>, defaults: FilterDefaults = {}) {
@@ -12,3 +14,7 @@ export function countOpportunityFilters(values: Record<string, string | undefine
   return countActiveFilters(other) + (values.closePeriod || values.closeFrom || values.closeTo ? 1 : 0);
 }
 
+export function countTaskFilters(values: Record<string, string | undefined>) {
+  const other = Object.fromEntries(Object.entries(values).filter(([key]) => !['duePeriod', 'dueFrom', 'dueTo'].includes(key)));
+  return countActiveFilters(other, { visibility: 'active' }) + (selectedTaskDuePeriod(values) ? 1 : 0);
+}

@@ -8,6 +8,8 @@ import { notifyTaskAssignment, syncTaskNotifications, syncOpportunityNotificatio
 import { getSettings } from './configuration';
 import { lockCalendarEvent } from './calendar-event-lock';
 import { validateActivityOccurrence } from './activity-quality';
+import { businessDayBounds } from './business-date';
+import { selectedTaskDuePeriod, taskDuePeriodBounds } from './task-due-period';
 export const taskStatuses = Object.values(TaskStatus);
 export const taskPriorities = Object.values(TaskPriority);
 export function dateField(raw: string, key: string, errors: Errors) {
@@ -96,21 +98,28 @@ export async function saveTaskInTransaction(
   if (tx.notification) await syncTaskNotifications(tx, row.id);
   return row;
 }
-export type TaskFilters = { q?: string; status?: string; priority?: string; assignedToId?: string; accountId?: string; opportunityId?: string; dueFrom?: string; dueTo?: string; visibility?: string };
-export function taskWhere(f: TaskFilters): Prisma.TaskWhereInput {
+export type TaskFilters = { q?: string; status?: string; priority?: string; assignedToId?: string; accountId?: string; opportunityId?: string; duePeriod?: string; dueFrom?: string; dueTo?: string; visibility?: string };
+export function taskWhere(f: TaskFilters, now = new Date()): Prisma.TaskWhereInput {
   const where: Prisma.TaskWhereInput = { ...archivedWhere(recordVisibility(f.visibility)), ...(recordVisibility(f.visibility)==='active'?{AND:[operationalTaskWhere]}:{}) };
   if (f.q?.trim()) where.OR = [{ subject: { contains: f.q.trim().slice(0, 100), mode: 'insensitive' } }, { description: { contains: f.q.trim().slice(0, 100), mode: 'insensitive' } }];
   if (taskStatuses.includes(f.status as TaskStatus)) where.status = f.status as TaskStatus;
   if (taskPriorities.includes(f.priority as TaskPriority)) where.priority = f.priority as TaskPriority;
   for (const key of ['assignedToId', 'accountId', 'opportunityId'] as const) { const id = positiveId(f[key] ?? ''); if (id) where[key] = id; }
-  const errors: Errors = {}; const from = dateField(f.dueFrom ?? '', 'dueFrom', errors), to = dateField(f.dueTo ?? '', 'dueTo', errors);
-  if (from || to) where.dueDate = { ...(from ? { gte: new Date(`${f.dueFrom}T00:00:00Z`) } : {}), ...(to ? { lt: new Date(new Date(`${f.dueTo}T00:00:00Z`).getTime() + 86400000) } : {}) };
+  const relative = taskDuePeriodBounds(f, now);
+  if (relative) {
+    where.dueDate = relative;
+    // An explicit status remains authoritative, including Completed/Cancelled.
+    if (!where.status) where.status = { not: 'COMPLETED' };
+  } else if (selectedTaskDuePeriod(f) === 'custom') {
+    const errors: Errors = {}; const from = dateField(f.dueFrom ?? '', 'dueFrom', errors), to = dateField(f.dueTo ?? '', 'dueTo', errors);
+    if (from || to) where.dueDate = { ...(from ? { gte: new Date(`${f.dueFrom}T00:00:00Z`) } : {}), ...(to ? { lt: new Date(new Date(`${f.dueTo}T00:00:00Z`).getTime() + 86400000) } : {}) };
+  }
   return where;
 }
 export function dashboardOpenTaskWhere(): Prisma.TaskWhereInput {
   return { AND: [operationalTaskWhere], status: { in: ['OPEN', 'IN_PROGRESS'] } };
 }
-export function dayBounds(now = new Date()) { const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now); const read = (type: string) => Number(parts.find(p => p.type === type)?.value); const start = new Date(Date.UTC(read('year'), read('month') - 1, read('day'))); return { start, end: new Date(start.getTime() + 86400000) }; }
+export const dayBounds = businessDayBounds;
 export function taskTiming(task: { status: TaskStatus; dueDate: Date | null }, now = new Date()) { if (!task.dueDate || !['OPEN','IN_PROGRESS'].includes(task.status)) return null; const { start, end } = dayBounds(now); return task.dueDate < start ? 'Overdue' : task.dueDate < end ? 'Due today' : null; }
 export function parseActivity(form: FormData) {
   const errors: Errors = {}; const subject = required(form, 'subject', 'Subject', 200, errors), description = optional(form, 'description', 5000, errors);

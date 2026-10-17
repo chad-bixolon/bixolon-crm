@@ -4,6 +4,7 @@ import { Prisma, type PrismaClient, type OpportunitySnapshot } from '@prisma/cli
 import { can, opportunityScope, type Actor } from './authorization';
 import { operationalOpportunityWhere } from './operational-where';
 import { quarterBounds } from './business-quarter';
+import { businessWeekBounds } from './business-date';
 import { inSnapshotForecast, type ForecastPeriod } from './forecast-snapshot-rules';
 
 export const SNAPSHOT_SCOPE = 'OPEN_OPERATIONAL_V1';
@@ -23,10 +24,7 @@ export function assertSnapshotAdmin(actor: Actor) {
   if (actor.role !== 'ADMIN' || !can(actor, 'users.manage')) throw new Error('Access denied');
 }
 export function snapshotWeek(at: Date) {
-  const local = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
-  const day = new Date(`${local}T00:00:00Z`);
-  day.setUTCDate(day.getUTCDate() - (day.getUTCDay() + 6) % 7);
-  return day;
+  return businessWeekBounds(at).start;
 }
 
 async function readSnapshotSet(tx: Prisma.TransactionClient, forecastReady = false) {
