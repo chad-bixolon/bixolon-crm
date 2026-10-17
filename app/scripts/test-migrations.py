@@ -368,7 +368,28 @@ try:
                     sql('backfill', """INSERT INTO "SalesStage" (id,name,"sortOrder",probability,"isClosed","isWon","updatedAt") VALUES (95000,'Legacy outcome preservation',0,0,true,false,now());
                       INSERT INTO "Opportunity" (id,name,"stageId","expectedCloseDate","forecastCategory","updatedAt") VALUES (95000,'Legacy unknown outcome',95000,'2027-03-31','OMITTED','2026-01-01');""")
                     outcomes_before = all_table_fingerprints('backfill')
+                automation_before = None
+                if directory.name == '20261016230000_weekly_snapshot_automation':
+                    sql('backfill', '''INSERT INTO "OpportunitySnapshotRun" (id,"snapshotAt","snapshotWeek","createdById","createdByName","opportunityCount","scopeVersion")
+                      VALUES (96000,'2000-01-03 17:00:00','2000-01-03',100,'Original manual Admin',0,'FORECAST_OPERATIONAL_V1');
+                      INSERT INTO "ForecastSnapshotRun" (id,"sourceRunId","snapshotAt","createdById","createdByName",year,quarter,"opportunityCount","salespersonCount","rowCount")
+                      VALUES (96000,96000,'2000-01-03 17:00:00',100,'Original manual Admin',2000,'Q1',0,0,0);
+                      INSERT INTO "ScheduledJobRun" (id,"jobType",status,"resultSummary") VALUES (96000,'CALENDAR_SYNC','SUCCEEDED','Original job history');''')
+                    automation_before = all_table_fingerprints('backfill')
                 sql("backfill", (directory / "migration.sql").read_text())
+                if automation_before is not None:
+                    automation_after = all_table_fingerprints('backfill')
+                    for table, added in {'ForecastSnapshotRun': ['source'], 'ScheduledJobRun': ['snapshotWeek','opportunitySnapshotRunId','forecastSnapshotRunId','failureCategory']}.items():
+                        row = 'to_jsonb(t)' + ''.join(" - '" + column + "'" for column in added)
+                        automation_after[table] = sql_values('backfill', f'''SELECT count(*) || ':' || md5(COALESCE(jsonb_agg({row} ORDER BY ({row})::text)::text, '[]')) FROM "{table}" t;''')[0]
+                    if automation_before != automation_after:
+                        raise RuntimeError('Automation migration changed existing data or snapshot history')
+                    if sql_values('backfill', '''SELECT source || ':' || "createdById" FROM "ForecastSnapshotRun" WHERE id=96000;''') != ['MANUAL:100']:
+                        raise RuntimeError('Automation migration changed manual attribution')
+                    for table in ['OpportunitySnapshotRun', 'ForecastSnapshotRun']:
+                        if sql('backfill', f'''UPDATE "{table}" SET "createdByName"='Changed' WHERE id=96000;''', check=False).returncode == 0:
+                            raise RuntimeError('Automation migration weakened snapshot immutability')
+                    print('PASS: weekly automation preserves every existing row, manual attribution, immutable snapshots and job history', flush=True)
                 if outcomes_before is not None:
                     outcomes_after = all_table_fingerprints('backfill')
                     for table, added in {'Opportunity': ['actualCloseDate','outcomeReasonId','outcomeReasonName','outcomeNotes'], 'OpportunityHistoryEvent': ['oldOutcome','newOutcome'], 'OpportunityHistoryArchive': ['oldOutcome','newOutcome']}.items():

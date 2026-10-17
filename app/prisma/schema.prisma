@@ -454,6 +454,12 @@ model ScheduledJobRun {
   resultSummary String?
   errorSummary String?
   createdAt DateTime @default(now())
+  snapshotWeek DateTime? @db.Date
+  opportunitySnapshotRunId Int?
+  opportunitySnapshotRun OpportunitySnapshotRun? @relation(fields: [opportunitySnapshotRunId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  forecastSnapshotRunId Int?
+  forecastSnapshotRun ForecastSnapshotRun? @relation(fields: [forecastSnapshotRunId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  failureCategory String? @db.VarChar(40)
 
   @@index([jobType, startedAt(sort: Desc)])
 }
@@ -978,7 +984,7 @@ model OpportunitySnapshotRun {
   id               Int      @id @default(autoincrement())
   snapshotAt       DateTime
   snapshotWeek     DateTime @unique @db.Date
-  createdById      Int
+  createdById      Int?
   createdByName    String
   opportunityCount Int
   status           String   @default("COMPLETE") @db.VarChar(16)
@@ -986,6 +992,7 @@ model OpportunitySnapshotRun {
   scopeVersion     String   @default("OPEN_OPERATIONAL_V1") @db.VarChar(32)
   createdAt        DateTime @default(now())
   snapshots        OpportunitySnapshot[]
+  automationRuns   ScheduledJobRun[]
   forecastRuns     ForecastSnapshotRun[]
 
   @@index([snapshotAt, id])
@@ -1033,7 +1040,7 @@ model ForecastSnapshotRun {
   sourceRun             OpportunitySnapshotRun @relation(fields: [sourceRunId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   snapshotAt            DateTime
   createdAt             DateTime @default(now())
-  createdById           Int
+  createdById           Int?
   createdByName         String
   year                  Int
   quarter               SalesQuarter
@@ -1042,6 +1049,8 @@ model ForecastSnapshotRun {
   rowCount              Int
   status                String @default("COMPLETE") @db.VarChar(16)
   rulesVersion          String @default("QUARTERLY_V1") @db.VarChar(32)
+  source                String @default("MANUAL") @db.VarChar(16)
+  automationRuns        ScheduledJobRun[]
   rows                  ForecastSnapshotRollup[]
 
   @@unique([sourceRunId, year, quarter])

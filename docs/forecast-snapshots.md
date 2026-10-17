@@ -1,6 +1,6 @@
 # Forecast Snapshots v1
 
-A Forecast Snapshot preserves the quarterly sales forecast at an Opportunity Snapshot's capture time. Current Opportunities remain the source of truth for current sales work. This feature changes no Opportunity save, live forecast, stage, product valuation, target, coverage or dashboard calculation. It installs no schedule and fabricates no historical values.
+A Forecast Snapshot preserves the quarterly sales forecast at an Opportunity Snapshot's capture time. Current Opportunities remain the source of truth for current sales work. This feature changes no Opportunity save, live forecast, stage, product valuation, target, coverage or dashboard calculation. Weekly automation is available through the existing services; its production schedule must be configured separately. It fabricates no historical values.
 
 ## Inspected live forecast
 
@@ -44,7 +44,7 @@ Won status comes from captured stage `isClosed && isWon`, the authoritative stat
 
 Opportunity count means included open forecast **plus won** deal count, counted once each. Salesperson count means distinct owners with at least one included deal, including zero-value deals. Category counts are stored separately. Zero-value groups remain present; absent groups in a completed run mean zero. A nonexistent run means unavailable history, not zero.
 
-No actual closing/booking date exists in the current Opportunity model. **Closed Won means captured won-stage value assigned by Expected Close Date**, not realized revenue, recognized revenue, date of actual win, or an irrevocable final outcome. Won deals remain subject to the source's operational/archive rules. An absent deal cannot establish won/lost; in particular a later archive or inactive Account can remove a formerly won deal from scope.
+Actual Close Date now exists on live Opportunities, but is not an input to this historical forecast calculation. **Closed Won means captured won-stage value assigned by Expected Close Date**, not realized revenue, recognized revenue, date of actual win, or an irrevocable final outcome. Won deals remain subject to the source's operational/archive rules. An absent deal cannot establish won/lost; in particular a later archive or inactive Account can remove a formerly won deal from scope.
 
 No authoritative FX conversion exists. Every preview, comparison and salesperson history stays partitioned by original currency code. Currency names/rates and live active flags are not used to reinterpret historical values. No mixed-currency grand total is shown. Targets, weighted forecasts and coverage snapshots are not needed for this v1 rollup.
 
@@ -68,17 +68,11 @@ Select **Explain movement** (or **View Opportunities** when net change is zero) 
 
 Select a salesperson in Forecast Snapshot History for a compact latest-eight-run view of Commit, Best Case, Pipeline and Closed Won for the chosen period, separated by currency. The full comparison on that same report provides drill-through details. No dashboard forecast behavior changes.
 
-## Accuracy foundation and future automation
+## Accuracy foundation and weekly automation
 
 A future accuracy report can choose an earlier forecast run and a later, explicitly designated outcome cutoff for the same quarter/currency. The historical rollups give the earlier forecast values and later captured Closed Won totals. Joining the linked Opportunity Snapshot sources by Opportunity ID can measure how much of the **earlier cohort** was subsequently captured WON, distinguishing original forecast value from later won value, owner transfers, category changes, currency changes, exits and reentries. A future report must define original versus outcome owner attribution, freeze/cutoff policy, restatements and unknown exits before scoring. A reliable booking-date accuracy report additionally requires an authoritative actual-close/booking date and potentially a broader outcome scope. v1 does not label the latest snapshot “final actual” or calculate accuracy scores.
 
-There is no scheduler. Future weekly automation should:
-
-1. Capture a forecast-ready weekly Opportunity Snapshot using the shared `previewOpportunitySnapshot(..., true)` / `captureOpportunitySnapshot` service, with explicit authorization and a documented New York capture time.
-2. Call `previewForecastSnapshot` / `captureForecastSnapshot` for the required calendar quarters, always passing that source run ID. The rollup service itself never captures live deals. Treat source/period uniqueness as idempotent success only after verifying an existing complete run.
-3. Alert/report only on failure or a missed run. Do not send routine successful alerts. Add job identity/source attribution, retry state and operational logs when implementing scheduling.
-
-A source creation failure rolls back that source. A forecast failure leaves the complete source available for a safe retry; it leaves no partial Forecast Snapshot run. Reuse the same server services rather than introducing a separate forecast calculation in the job.
+[Weekly Snapshot Automation v1](weekly-snapshot-automation.md) now coordinates forecast-ready source capture followed by the exact source-linked Forecast Snapshot. Its default is Monday 05:00 America/New_York and the source’s calendar quarter. The guide defines duplicate/manual reuse, quarter rollover limitations, partial-failure recovery, service attribution, durable execution history, Admin visibility, DigitalOcean setup and troubleshooting. The schedule must be configured after deployment. Existing manual workflows and calculations remain available.
 
 ## Storage estimate and deployment
 
@@ -90,7 +84,7 @@ These are row estimates, not measured disk sizes. Text length, indexes and Postg
 
 Migration: `app/prisma/migrations/20261015160000_forecast_snapshot_runs/migration.sql`. Deploy forward using the existing migration procedure and regenerate the runtime Prisma client before using new source capture or Forecast Snapshot pages. No production migration or production snapshot is performed during implementation. Prior rows remain unknown/open-only. No backfill, commit or push is automatic.
 
-Deferred: scheduling, full accuracy scoring/cohort UI, actual booking dates, monthly/fiscal periods, FX, SALES self-history, dashboard integration, weighted/target historical reporting in this new layer, intentional revisions/reruns, retention/export and precise reasons for source scope exits.
+Deferred: full accuracy scoring/cohort UI, actual booking dates, monthly/fiscal periods, FX, SALES self-history, dashboard integration, weighted/target historical reporting in this new layer, intentional revisions/reruns, retention/export and precise reasons for source scope exits.
 
 
 ## Validation completed October 15, 2026

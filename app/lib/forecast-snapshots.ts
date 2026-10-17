@@ -1,6 +1,7 @@
+import { assertSnapshotCaptureActor, snapshotCreator, type SnapshotActor } from './snapshot-capture-identity';
 import { Prisma, type PrismaClient, type ForecastSnapshotRollup } from '@prisma/client';
 import type { Actor } from './authorization';
-import { assertSnapshotAdmin, canReadOpportunitySnapshots, FORECAST_SNAPSHOT_SCOPE, SNAPSHOT_LIMIT } from './opportunity-snapshots';
+import { canReadOpportunitySnapshots, FORECAST_SNAPSHOT_SCOPE, SNAPSHOT_LIMIT } from './opportunity-snapshots';
 import { quarterBounds } from './business-quarter';
 import { forecastChange, forecastMetrics, inSnapshotForecast, snapshotCategoryNames, type ForecastPeriod } from './forecast-snapshot-rules';
 
@@ -32,27 +33,27 @@ async function readRollup(tx: Prisma.TransactionClient, input: ForecastCaptureIn
   const rows = [...grouped.values()].sort((a, b) => a.ownerId - b.ownerId || a.currencyCode.localeCompare(b.currencyCode) || a.forecastCategory.localeCompare(b.forecastCategory));
   return { source, rows, opportunityCount: rows.reduce((n, row) => n + row.opportunityCount, 0), salespersonCount: new Set(rows.map(row => row.ownerId)).size };
 }
-export async function previewForecastSnapshot(client: PrismaClient, actor: Actor, input: ForecastCaptureInput) {
-  assertSnapshotAdmin(actor);
+export async function previewForecastSnapshot(client: PrismaClient, actor: SnapshotActor, input: ForecastCaptureInput) {
+  assertSnapshotCaptureActor(actor);
   return client.$transaction(async tx => {
     const result = await readRollup(tx, input);
     return { ...result, preview: { ...input, preparedAt: new Date().toISOString() } };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 60000 });
 }
-// Shared entry point for explicit manual confirmation and future automation.
+// Shared entry point for explicit manual confirmation and weekly automation.
 // The manual action authenticates this preview with a user-bound signed token.
-export async function captureForecastSnapshot(client: PrismaClient, actor: Actor, preview: ForecastPreview, confirmed: boolean) {
-  assertSnapshotAdmin(actor);
+export async function captureForecastSnapshot(client: PrismaClient, actor: SnapshotActor, preview: ForecastPreview, confirmed: boolean) {
+  assertSnapshotCaptureActor(actor);
   if (!confirmed) throw new Error('Explicit confirmation is required.');
   const age = Date.now() - new Date(preview.preparedAt).getTime();
   if (!Number.isFinite(age) || age < -60000 || age > 15 * 60000) throw new Error('Preview expired. Preview the snapshot again.');
   try {
     return await client.$transaction(async tx => {
       const result = await readRollup(tx, preview);
-      const creator = await tx.user.findUniqueOrThrow({ where: { id: actor.id }, select: { firstName: true, lastName: true } });
+      const creator = await snapshotCreator(tx, actor);
       const run = await tx.forecastSnapshotRun.create({ data: {
         sourceRunId: result.source.id, snapshotAt: result.source.snapshotAt,
-        createdById: actor.id, createdByName: `${creator.firstName} ${creator.lastName}`,
+        ...creator,
         year: preview.year, quarter: preview.quarter, opportunityCount: result.opportunityCount,
         salespersonCount: result.salespersonCount, rowCount: result.rows.length,
       } });

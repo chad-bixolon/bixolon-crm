@@ -1,6 +1,6 @@
 # Opportunity Snapshots v1
 
-An Opportunity Snapshot is an immutable copy of the pipeline at an actual capture time. It supports weekly comparisons without changing Opportunity saves, product pricing, pipeline calculations, forecasting, or existing change history. Live Opportunities remain the source of truth. No automatic capture is installed.
+An Opportunity Snapshot is an immutable copy of the pipeline at an actual capture time. It supports weekly comparisons without changing Opportunity saves, product pricing, pipeline calculations, forecasting, or existing change history. Live Opportunities remain the source of truth. Weekly automation is available through the shared services; production scheduling is configured separately. See [Weekly Snapshot Automation](weekly-snapshot-automation.md).
 
 ## Inspection and field meanings
 
@@ -82,9 +82,9 @@ Interpretation:
 
 Read-only production inventory on October 15, 2026: **7 total Opportunities, 6 eligible open, 1 archived**. At a steady six eligible deals, 52 weekly captures produce **312 snapshot rows and 52 run rows per year**. General growth is `52 × average eligible open Opportunity count`; 1,000 open deals means 52,000 rows/year. Display-name lengths and Account participant counts affect byte size; this is a row estimate, not a measured disk budget. No notes, descriptions, attachments, product rows, pricing provenance, contacts or large texts are copied.
 
-Deferred: automatic scheduling; intentional revisions/reruns; retention/export; Closed Lost capture and precise exit reasons; primary Account; realized revenue; actual closing date; detailed product snapshots. The forecast-ready extension supplies Closed Won capture and period-aware entry/exit labels; missing source endpoints still have unknown reasons. There is no automatic retention deletion.
+Deferred: intentional revisions/reruns; retention/export; Closed Lost capture and precise exit reasons; primary Account; realized revenue; actual closing date; detailed product snapshots. The forecast-ready extension supplies Closed Won capture and period-aware entry/exit labels; missing source endpoints still have unknown reasons. There is no automatic retention deletion.
 
-To enable weekly automation later, choose a documented New York weekly capture time, establish an active authorized service identity, and call the same `previewOpportunitySnapshot` / `captureOpportunitySnapshot` service. An automated caller may pass its trusted in-process preview without a browser token, but must explicitly authorize the scheduled capture, re-preview if data changed, handle weekly uniqueness as an idempotent outcome, and alert on failure or missed runs. Introduce explicit scheduled-source attribution and operational job logging as part of that change. Keep the same database transaction, limits, immutable tables, scope version and concurrency protections. Do not introduce scheduling through an HTTP GET or a user page visit.
+Weekly automation reuses the shared preview/capture service with explicit system attribution and durable execution history. See [Weekly Snapshot Automation](weekly-snapshot-automation.md) for cadence, forecast scope/quarter rules, manual reuse, retries, failure recovery, production configuration and troubleshooting. Manual capture and all immutable/unique-week protections remain available.
 
 ## Validation
 

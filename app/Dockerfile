@@ -60,6 +60,7 @@ COPY --from=production-build --chown=node:node /app/scripts/seed-activity-types.
 COPY --from=production-build --chown=node:node /app/scripts/operations/audit-production-cleanup.mjs ./scripts/operations/audit-production-cleanup.mjs
 COPY --from=production-build --chown=node:node /app/scripts/operations/reset-price-exceptions.mjs ./scripts/operations/reset-price-exceptions.mjs
 COPY --from=production-build --chown=node:node /app/scripts/operations/audit-opportunity-price-provenance.mjs ./scripts/operations/audit-opportunity-price-provenance.mjs
+COPY --from=production-build --chown=node:node /app/scripts/weekly-snapshots.mjs ./scripts/weekly-snapshots.mjs
 USER node
 EXPOSE 3000
 CMD ["npm", "start"]

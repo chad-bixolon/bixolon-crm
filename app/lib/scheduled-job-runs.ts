@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 
 export const JOB_CADENCE = {
   NOTIFICATION_EVALUATOR: { label: 'Notification Evaluator', staleAfterMs: 48 * 60 * 60 * 1000 },
+  WEEKLY_SNAPSHOTS: { label: 'Weekly Opportunity + Forecast Snapshots', staleAfterMs: 8 * 24 * 60 * 60 * 1000 },
   CALENDAR_SYNC: { label: 'Calendar Sync', staleAfterMs: 60 * 60 * 1000 },
 } as const;
 export type JobType = keyof typeof JOB_CADENCE;

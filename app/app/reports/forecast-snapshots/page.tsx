@@ -1,3 +1,4 @@
+import { snapshotAttribution } from '@/lib/snapshot-capture-identity';
 import { HelpLink } from '@/components/help-link';
 import { NAV_CATEGORIES } from '@/lib/navigation-categories';
 import Link from 'next/link';
@@ -67,7 +68,7 @@ export default async function ForecastSnapshotsReport({ searchParams }: { search
     <form className="panel mb-5 grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
       <label className="text-sm">Forecast year<input className="field mt-1" type="number" min="2000" max="2100" name="year" defaultValue={year}/></label>
       <label className="text-sm">Forecast quarter<select className="field mt-1" name="quarter" aria-label="Forecast quarter" defaultValue={quarter}>{quarters.map(q => <option key={q}>{q}</option>)}</select></label>
-      {([['before', 'Earlier Forecast Snapshot', beforeId], ['after', 'Later Forecast Snapshot', afterId]] as const).map(([name, label, selected]) => <label className="min-w-0 text-sm" key={name}>{label}<select className="field mt-1 w-full" name={name} aria-label={label} defaultValue={selected ?? ''}><option value="">Choose a snapshot</option>{choices.map(run => <option value={run.id} key={run.id}>#{run.id} · {run.snapshotAt.toISOString()} · Opportunity Snapshot #{run.sourceRunId}</option>)}</select></label>)}
+      {([['before', 'Earlier Forecast Snapshot', beforeId], ['after', 'Later Forecast Snapshot', afterId]] as const).map(([name, label, selected]) => <label className="min-w-0 text-sm" key={name}>{label}<select className="field mt-1 w-full" name={name} aria-label={label} defaultValue={selected ?? ''}><option value="">Choose a snapshot</option>{choices.map(run => <option value={run.id} key={run.id}>#{run.id} · {run.snapshotAt.toISOString()} · Opportunity Snapshot #{run.sourceRunId} · {snapshotAttribution(run)}</option>)}</select></label>)}
       <label className="min-w-0 text-sm">Salesperson<select className="field mt-1 w-full" name="ownerId" aria-label="Salesperson" defaultValue={ownerId ?? ''}><option value="">All salespeople</option>{owners.map(owner => <option value={owner.id} key={owner.id}>{owner.name}</option>)}</select></label>
       <label className="text-sm">Currency<select className="field mt-1" name="currencyCode" aria-label="Currency" defaultValue={currencyCode ?? ''}><option value="">All (separate totals)</option>{currencies.map(row => <option key={row.currencyCode}>{row.currencyCode}</option>)}</select></label>
       <label className="text-sm">Snapshot date from (UTC)<input className="field mt-1" type="date" name="from" defaultValue={from?.toISOString().slice(0, 10)}/></label>

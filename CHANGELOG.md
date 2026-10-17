@@ -12,6 +12,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added Weekly Opportunity + Forecast Snapshot Automation v1 through the shared capture services, protected internal trigger, safe weekly retries/manual reuse, explicit service attribution, durable execution history and compact Admin status. Default cadence: Monday 05:00 America/New_York; forecast quarter comes from the exact source timestamp. Forward-only migration: `20261016230000_weekly_snapshot_automation`. DigitalOcean setup and quarter-end limitations are documented in `docs/weekly-snapshot-automation.md`; no schedule or deployment is installed by this change.
+
 - Correctness Cleanup v1: scoped standalone Pipeline totals to the effective salesperson, aligned Price Exception selection/save/restore with New York expiration dates, corrected related Task/Note navigation, and distinguished Forecast Movement captures from Forecast Snapshot History. Sales record viewing is cross-owner; standalone Pipeline defaults to the effective Sales rep and allows an explicit eligible-rep filter. Owner-specific actions and financial/personal scopes are unchanged. No database changes.
 
 - Added Help & Onboarding v1 at `/help`, with practical, searchable guidance grouped by role and a Help & Guide entry in the account menu. Topics and editing instructions follow existing permissions, including Read Only access and the full Admin guide.

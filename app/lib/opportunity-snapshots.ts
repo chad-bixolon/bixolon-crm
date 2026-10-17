@@ -1,3 +1,4 @@
+import { assertSnapshotCaptureActor, snapshotCreator, type SnapshotActor } from './snapshot-capture-identity';
 import { createHash } from 'node:crypto';
 import { Prisma, type PrismaClient, type OpportunitySnapshot } from '@prisma/client';
 import { can, opportunityScope, type Actor } from './authorization';
@@ -62,8 +63,8 @@ function fingerprint(rows: Awaited<ReturnType<typeof readSnapshotSet>>) {
 }
 export type SnapshotPreview = { preparedAt: string; week: string; count: number; fingerprint: string; forecastReady?: boolean };
 
-export async function previewOpportunitySnapshot(client: PrismaClient, actor: Actor, forecastReady = false): Promise<SnapshotPreview> {
-  assertSnapshotAdmin(actor);
+export async function previewOpportunitySnapshot(client: PrismaClient, actor: SnapshotActor, forecastReady = false): Promise<SnapshotPreview> {
+  assertSnapshotCaptureActor(actor);
   return client.$transaction(async tx => {
     const [{ at }] = await tx.$queryRaw<{ at: Date }[]>`SELECT transaction_timestamp() AS at`;
     const week = snapshotWeek(at);
@@ -73,10 +74,10 @@ export async function previewOpportunitySnapshot(client: PrismaClient, actor: Ac
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 60000 });
 }
 
-// Both manual capture and a future weekly job use this atomic service. The
+// Manual capture and the weekly job use this atomic service. The
 // preview must be authenticated by the caller; the manual action signs it.
-export async function captureOpportunitySnapshot(client: PrismaClient, actor: Actor, preview: SnapshotPreview, confirmed: boolean) {
-  assertSnapshotAdmin(actor);
+export async function captureOpportunitySnapshot(client: PrismaClient, actor: SnapshotActor, preview: SnapshotPreview, confirmed: boolean) {
+  assertSnapshotCaptureActor(actor);
   if (!confirmed) throw new Error('Explicit confirmation is required.');
   const age = Date.now() - new Date(preview.preparedAt).getTime();
   if (!Number.isFinite(age) || age < -60000 || age > 15 * 60000) throw new Error('Preview expired. Preview the snapshot again.');
@@ -87,10 +88,9 @@ export async function captureOpportunitySnapshot(client: PrismaClient, actor: Ac
       if (week.toISOString().slice(0, 10) !== preview.week) throw new Error('Snapshot week changed. Preview again.');
       const rows = await readSnapshotSet(tx, preview.forecastReady === true);
       if (rows.length !== preview.count || fingerprint(rows) !== preview.fingerprint) throw new Error('Opportunity data changed. Preview again before confirming.');
-      const user = await tx.user.findUniqueOrThrow({ where: { id: actor.id }, select: { firstName: true, lastName: true } });
+      const creator = await snapshotCreator(tx, actor);
       const run = await tx.opportunitySnapshotRun.create({ data: {
-        snapshotAt: at, snapshotWeek: week, createdById: actor.id,
-        createdByName: `${user.firstName} ${user.lastName}`, opportunityCount: rows.length,
+        snapshotAt: at, snapshotWeek: week, ...creator, opportunityCount: rows.length,
         scopeVersion: preview.forecastReady ? FORECAST_SNAPSHOT_SCOPE : SNAPSHOT_SCOPE,
       } });
       // Bounded inserts avoid parameter limits without changing the point-in-time read.

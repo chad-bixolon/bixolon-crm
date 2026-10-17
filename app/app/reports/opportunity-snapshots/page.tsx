@@ -1,3 +1,4 @@
+import { snapshotAttribution } from '@/lib/snapshot-capture-identity';
 import { HelpLink } from '@/components/help-link';
 import { NAV_CATEGORIES } from '@/lib/navigation-categories';
 import Link from 'next/link';
@@ -79,7 +80,7 @@ export default async function OpportunitySnapshotsPage({ searchParams }: { searc
     <form className="panel mb-5 grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
       <label className="text-sm">Snapshot date from (UTC)<input className="field mt-1" type="date" name="from" defaultValue={from?.toISOString().slice(0, 10)}/></label>
       <label className="text-sm">Snapshot date through (UTC)<input className="field mt-1" type="date" name="through" defaultValue={through?.toISOString().slice(0, 10)}/></label>
-      {([['before', 'Earlier snapshot', beforeId], ['after', 'Later snapshot', afterId]] as const).map(([name, label, selected]) => <label className="min-w-0 text-sm" key={name}>{label}<select className="field mt-1 w-full" name={name} defaultValue={selected ?? ''}><option value="">Choose a snapshot</option>{options.map(run => <option key={run.id} value={run.id}>#{run.id} · {run.snapshotAt.toISOString()} · {run.opportunityCount} Opportunities</option>)}</select></label>)}
+      {([['before', 'Earlier snapshot', beforeId], ['after', 'Later snapshot', afterId]] as const).map(([name, label, selected]) => <label className="min-w-0 text-sm" key={name}>{label}<select className="field mt-1 w-full" name={name} defaultValue={selected ?? ''}><option value="">Choose a snapshot</option>{options.map(run => <option key={run.id} value={run.id}>#{run.id} · {run.snapshotAt.toISOString()} · {run.opportunityCount} Opportunities · {snapshotAttribution(run)}</option>)}</select></label>)}
       {([['ownerId', 'Salesperson', owners], ['stageId', 'Stage', stages], ['accountId', 'Account', accounts]] as const).map(([name, label, values]) => <label className="min-w-0 text-sm" key={name}>{label}<select className="field mt-1 w-full" name={name} defaultValue={scalar(params[name]) ?? ''}><option value="">All</option>{values.map(value => <option key={value.id} value={value.id}>{value.name}</option>)}</select></label>)}
       {forecastPeriod && <><input type="hidden" name="year" value={forecastPeriod.year}/><input type="hidden" name="quarter" value={forecastPeriod.quarter}/></>}
       {filters.currencyCode && <input type="hidden" name="currencyCode" value={filters.currencyCode}/>}

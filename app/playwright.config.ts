@@ -42,6 +42,7 @@ export default defineConfig({
       AUTH_GOOGLE_ID: 'unused-e2e-google-id',
       AUTH_GOOGLE_SECRET: 'unused-e2e-google-secret',
       E2E_AUTH_ENABLED: 'true',
+      WEEKLY_SNAPSHOT_SECRET: 'saleshub-weekly-snapshot-e2e-only-secret',
       SUPPORT_GMAIL_ENABLED: 'true',
       SUPPORT_GMAIL_MOCK: 'true',
       SUPPORT_GMAIL_TEST_FIXTURE: 'false',

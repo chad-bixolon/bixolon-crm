@@ -111,3 +111,7 @@ docker compose exec -T app npm run db:status
 ```
 
 Verify database health, `/api/health`, and real Google login afterward. Do not use `docker compose down -v` for this repair. The isolated port-3001 POC belongs to its own Compose project and must stay untouched. Main must not enable E2E authentication, Support Inbox mocks, or fixtures; those modes belong to the disposable `saleshub_e2e` database. A locally enabled Inbox route explains that live Gmail requires the configured production environment.
+
+## Weekly snapshot automation
+
+After the snapshot automation migration and application deployment, configure a scheduled Job separately. See [Weekly Snapshot Automation production configuration](../../docs/weekly-snapshot-automation.md#digitalocean-production-configuration-after-reviewed-deployment) for the Monday 05:00 America/New_York schedule, included trigger command, shared secret, HTTPS origin, verification and recovery. Code deployment alone does not install a schedule.
