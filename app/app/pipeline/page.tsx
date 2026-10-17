@@ -1,3 +1,4 @@
+import { HelpLink } from '@/components/help-link';
 import { SavedViews } from '@/components/saved-views';
 import { FilterDisclosure } from '../../components/filter-disclosure';
 import { countActiveFilters } from '../../lib/filter-count';
@@ -41,6 +42,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Filters>
 
   return <Content>
     <PageHeader title="Pipeline" eyebrow={NAV_CATEGORIES.sales} description={actor.role==='SALES'?"Your pipeline by default. Choose a salesperson to view their pipeline. Includes Omitted deals.":"Open opportunities valued from active product line items. Includes Omitted deals."}/>
+    <div className="mb-4"><HelpLink topic="forecasting">Help with Pipeline</HelpLink></div>
     <SavedViews routeKey="pipeline" query={f}/>
     <form method="get" className="responsive-filter-form panel filter-panel filter-grid mb-5" aria-label="Filter pipeline"><FilterDisclosure initialCount={countActiveFilters(f, {})} defaults={{}} clearHref="/pipeline"/>
       <label className="label">Owner<select className={control} name="ownerId" defaultValue={f.ownerId??''}><option value="">{actor.role==='SALES'?'My pipeline':'All'}</option>{owners.map(o=><option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select></label>

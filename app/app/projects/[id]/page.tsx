@@ -1,3 +1,4 @@
+import { HelpLink } from '@/components/help-link';
 import { RecentView } from '@/components/recent-view';
 import { RecoverableActionForm } from '@/components/recoverable-action-form';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
@@ -49,6 +50,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   const visibleTabs = tabs.filter(t => !(['Opportunities', 'Products'].includes(t) && !canSeeSales) && !(t === 'Demos' && !can(actor, 'sales.read')) && !(['Tasks', 'Activities', 'Notes'].includes(t) && !canSeeWork));
   const saveMessage = saveFeedbackMessage(query.saved, 'Project');
   return <Content><RecentView entityType="PROJECT" recordId={id}/><PageHeader eyebrow={NAV_CATEGORIES.programs} title={project.name} description={project.primaryAccount?.name ?? undefined} action={<div className="page-header-actions"><Link className="btn-secondary" href="/projects">All Projects</Link>{editable && !project.archivedAt && <Link className="btn-primary" href={`/projects/${id}/edit`}>Edit Project</Link>}</div>}/>
+    <div className="mb-4"><HelpLink topic="projects">Help with Projects</HelpLink></div>
     {saveMessage && <SaveSuccess message={saveMessage}/>}
     <QuickActions actions={editable && !project.archivedAt && can(actor, 'tasks.write') ? [
       { label: 'Log Activity', href: `/activities/new?projectId=${id}${project.primaryAccountId && project.primaryAccount?.status === 'ACTIVE' && !project.primaryAccount.archivedAt ? `&accountId=${project.primaryAccountId}` : ''}` },

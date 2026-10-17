@@ -59,3 +59,52 @@ existing event follow-up, and supported administration review. Deferred: WordPre
 inbound leads, automatic snapshot scheduling, full Gmail thread reconstruction,
 complete field history for all records, revenue attribution, and other proposed
 workflows without verified screens. No live functionality is claimed for them.
+
+## Sales visibility, outcomes, and Projects update
+
+The existing `accounts-contacts`, `opportunities`, `forecasting`,
+`forecast-categories`, and `forecast-snapshots` IDs remain stable. Shared Sales
+visibility is explained separately from responsibility and edit/reassignment
+rights. My pipeline and explicit salesperson selection live in Forecasting;
+Pipeline links there. The copy distinguishes the standalone Pipeline (includes
+open Omitted deals) from the forecast report's open Pipeline total (excludes
+them), and acknowledges deliberately saved salesperson filters. Clearing the Owner
+selection to My pipeline and applying it restores the effective Sales user’s
+scope. A default Saved View can reapply on the unfiltered Pipeline URL, including
+the Clear button; Help describes that exception. Changing the Clear/default-view
+interaction is a workflow decision intentionally deferred from this copy build.
+
+Opportunities explains Expected versus Actual Close Date, the December 15 /
+January 8 example, required close information, optional short notes, legacy
+Unknown values, reopening/history, and future analysis without promising new
+reports or accuracy scores. Closing/reopening instructions use the existing
+`sales.write` section gate; viewing guidance remains available to viewing roles.
+Snapshot explanations retain Expected Close Date quarter placement.
+
+The new `/help/projects` topic is in Sales and uses `projects.read`. Its action
+section uses `projects.write`; it does not grant any capability. Sources checked:
+Project forms/detail tabs, Project roles, Project Updates, relationship services,
+and the current schema. Participants are Accounts; there is no direct Project
+Contact list. Primary Account is optional, and Project/Opportunity links are
+optional and can involve several records. There is no separate milestone
+tracker: guidance uses Description, Project Updates, overall dates and Tasks.
+Do not add milestone automation, dependencies or reminders to the guide without
+corresponding application work.
+
+Contextual links use the existing HelpLink component on the Project list,
+detail, create/edit form, Pipeline, and Opportunity detail/form. Search,
+styling, topic filtering and Help route behavior are unchanged. The Help tests
+check concepts, accessible links, role-aware instructions and four viewport
+sizes (390, 768, 1024 and 1440 pixels).
+
+Deferred: forecast-accuracy scores and dedicated win/loss analytics; milestone
+tracking beyond the current Project tools; a direct Project Contact roster.
+The preexisting Project-only Activity constraint issue recorded in
+`opportunity-outcomes.md` is outside this copy update. Activity guidance keeps
+the appropriate Account context and makes no new Project-only logging claim.
+
+Validation for this update: lint, typecheck, nine relevant unit-test files,
+17 Help/Projects Playwright tests and targeted follow-up checks passed. Help was
+checked at 390, 768, 1024 and 1440 pixels. The production Webpack build and
+`git diff --check` passed. No schema, permission or workflow changes were made
+as part of this Help update.

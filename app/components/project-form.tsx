@@ -1,4 +1,5 @@
 'use client';
+import { HelpLink } from '@/components/help-link';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useActionState, useEffect, useState } from 'react';
@@ -35,6 +36,7 @@ export function ProjectForm({ id, initial, accounts, owners, currentOwner, prima
   const add = () => { const accountId = selectedAccount?.id; if (!accountId || accountId === primaryId || participants.some(p => p.accountId === accountId)) { setParticipantMessage('Choose an available Account.'); return; }
     setParticipants(old => [...old, { accountId, roles: [] }]); setSelectedAccount(null); setParticipantMessage(''); };
   return <form action={action} onSubmit={guard} className="panel max-w-5xl space-y-7 p-6" aria-label={id ? 'Edit project' : 'Create project'}>
+    <HelpLink topic="projects">Help with Projects</HelpLink>
     {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     <section className="grid gap-4 sm:grid-cols-2"><h2 className="sm:col-span-2 text-lg font-semibold">Overview</h2>
       <div className="sm:col-span-2"><label className="label" htmlFor="name">Project name *</label><input className="field" id="name" name="name" required maxLength={200} defaultValue={val('name', initial?.name ?? '')}/>{error('name')}</div>

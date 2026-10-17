@@ -1,3 +1,4 @@
+import { HelpLink } from '@/components/help-link';
 import { SavedViews } from '@/components/saved-views';
 import { FilterDisclosure } from '../../components/filter-disclosure';
 import { countActiveFilters } from '../../lib/filter-count';
@@ -28,6 +29,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     prisma.user.findMany({ where: { active: true, archivedAt: null }, select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }),
   ]);
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.programs} title="Projects" description="Programs and initiatives with optional Account relationships." action={can(actor, 'projects.write') ? <Link className="btn-primary" href="/projects/new">New Project</Link> : undefined}/>
+    <div className="mb-4"><HelpLink topic="projects">Help with Projects</HelpLink></div>
     <SavedViews routeKey="projects" query={filters}/>
     <form method="get" className="responsive-filter-form panel filter-panel filter-grid filter-grid-five mb-5" aria-label="Filter projects">
       <label className="filter-primary-search label">Search<input className="field filter-control" name="q" defaultValue={filters.q ?? ''} placeholder="Project name"/></label>

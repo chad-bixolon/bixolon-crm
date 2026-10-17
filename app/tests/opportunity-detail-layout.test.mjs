@@ -22,6 +22,7 @@ let demos = [];
 let demoOptions = [];
 let history = { rows: [], total: 0 };
 const pageMocks = {
+  '@/components/help-link': { HelpLink: ({ topic, children }) => React.createElement('a', { href: `/help/${topic}` }, children) },
   '@/components/recent-view': { RecentView: () => null },
   'next/link': Link,
   'next/navigation': { notFound: () => { throw new Error('Not found'); } },
