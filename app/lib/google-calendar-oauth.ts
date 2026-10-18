@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { decryptCalendarToken, encryptCalendarToken } from './calendar-crypto';
+import { calendarRequest, CalendarRequestFailure, calendarHttpFailure } from './calendar-request';
 
 export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events.readonly';
 export const CALENDAR_STATE_COOKIE = 'saleshub-calendar-oauth-state';
@@ -82,28 +83,32 @@ export async function disconnectCalendar(client: Pick<PrismaClient, 'googleCalen
 }
 
 // Server-only preparation for a later sync worker. Callers must never serialize the returned token.
-export async function refreshCalendarAccessToken(client: Pick<PrismaClient, 'googleCalendarConnection'>, realUserId: number, fetcher: typeof fetch = fetch) {
+export async function refreshCalendarAccessToken(client: Pick<PrismaClient, 'googleCalendarConnection'>, realUserId: number, fetcher: typeof fetch = fetch, operational = false, signal?: AbortSignal) {
   const connection = await client.googleCalendarConnection.findUnique({ where: { userId: realUserId }, select: { refreshTokenEncrypted: true, connectionStatus: true } });
   if (!connection || connection.connectionStatus !== 'CONNECTED') return null;
   let refreshToken: string;
   try { refreshToken = decryptCalendarToken(connection.refreshTokenEncrypted); }
   catch {
     await client.googleCalendarConnection.updateMany({ where: { userId: realUserId }, data: { connectionStatus: 'NEEDS_REAUTH', lastError: 'Stored credential could not be read.' } });
+    if (operational) throw new CalendarRequestFailure('CONFIGURATION');
     return null;
   }
   let response: Response;
   try {
-    response = await fetcher('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: process.env.AUTH_GOOGLE_ID ?? '', client_secret: process.env.AUTH_GOOGLE_SECRET ?? '', refresh_token: refreshToken, grant_type: 'refresh_token' }), cache: 'no-store' });
-  } catch { return null; }
+    response = await calendarRequest(fetcher, 'https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: process.env.AUTH_GOOGLE_ID ?? '', client_secret: process.env.AUTH_GOOGLE_SECRET ?? '', refresh_token: refreshToken, grant_type: 'refresh_token' }), cache: 'no-store', signal });
+  } catch (error) { if (operational) throw error; return null; }
   if (!response.ok) {
     const error = await response.json().catch(() => null) as { error?: string } | null;
     if (error?.error === 'invalid_grant') await client.googleCalendarConnection.updateMany({ where: { userId: realUserId }, data: { connectionStatus: 'NEEDS_REAUTH', lastError: 'Google authorization expired or was revoked.' } });
+    if (operational) throw new CalendarRequestFailure(error?.error === 'invalid_grant' ? 'AUTHENTICATION' : error?.error === 'invalid_client' || error?.error === 'unauthorized_client' ? 'CONFIGURATION' : calendarHttpFailure(response.status));
     return null;
   }
   let token: GoogleTokenResponse;
-  try { token = await response.json() as GoogleTokenResponse; } catch { return null; }
+  try { token = await response.json() as GoogleTokenResponse; }
+  catch (error) { if (operational) throw new CalendarRequestFailure(error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name) ? 'NETWORK' : 'PROVIDER'); return null; }
   if (!token.access_token || (token.scope && !token.scope.split(/\s+/).includes(CALENDAR_SCOPE))) {
     await client.googleCalendarConnection.updateMany({ where: { userId: realUserId }, data: { connectionStatus: 'NEEDS_REAUTH', lastError: 'Calendar read permission is unavailable.' } });
+    if (operational) throw new CalendarRequestFailure('PERMISSION');
     return null;
   }
   return token.access_token;

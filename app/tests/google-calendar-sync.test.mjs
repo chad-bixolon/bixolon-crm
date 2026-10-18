@@ -20,8 +20,10 @@ test.after(() => { for (const [key, value] of Object.entries(old)) { if (value =
 function fixture() {
   const connection = { id: 4, userId: 7, primaryCalendarId: 'primary', syncToken: null, connectionStatus: 'CONNECTED', syncLeaseUntil: null, refreshTokenEncrypted: encryptCalendarToken('refresh-secret') };
   const events = new Map();
+  const attempts = [];
   const key = where => where.connectionId_googleCalendarId_googleEventId.googleEventId;
   const client = {
+    scheduledJobRun: { create: async ({ data }) => { const row = { id: attempts.length + 1, ...data }; attempts.push(row); return row; }, update: async ({ where, data }) => Object.assign(attempts.find(row => row.id === where.id), data) },
     googleCalendarConnection: {
       findUnique: async ({ where }) => where.id === 4 || where.userId === 7 ? { ...connection } : null,
       findMany: async () => [{ id: 4 }],
@@ -55,7 +57,7 @@ function fixture() {
       },
     },
   };
-  return { client, connection, events };
+  return { client, connection, events, attempts };
 }
 function response(data, status = 200) { return { ok: status === 200, status, json: async () => data }; }
 function fetchPages(pages, urls) {
@@ -75,7 +77,7 @@ test('initial sync bounds window, pages through recurrence, stores attendees and
   const f = fixture(); const urls = [];
   const pages = [response({ items: [timed('series_20261008'), { id: 'all-day', start: { date: '2026-10-09' }, end: { date: '2026-10-10' } }], nextPageToken: 'page2' }), response({ items: [{ ...timed('series_20261009'), recurringEventId: 'series', originalStartTime: { dateTime: '2026-10-09T09:00:00-04:00' } }], nextSyncToken: 'token-a' })];
   const result = await sync.syncGoogleCalendarConnection(f.client, 4, fetchPages(pages, urls), new Date('2026-10-07T12:00:00Z'));
-  assert.equal(result.success, true); assert.equal(result.inserted, 3); assert.equal(f.connection.syncToken, 'token-a');
+  assert.equal(result.success, true); assert.equal(f.attempts[0].status, 'SUCCEEDED'); assert.equal(f.attempts[0].serviceIdentity, 'calendar-sync'); assert.equal(result.inserted, 3); assert.equal(f.connection.syncToken, 'token-a');
   assert.equal(urls.length, 2); assert.equal(urls[1].searchParams.get('pageToken'), 'page2');
   assert.equal(urls[0].searchParams.get('singleEvents'), 'true'); assert.equal(urls[0].searchParams.get('showDeleted'), 'true');
   assert.equal(urls[0].searchParams.get('timeMin'), '2026-08-08T12:00:00.000Z');
@@ -88,7 +90,7 @@ test('initial sync bounds window, pages through recurrence, stores attendees and
 test('failed later page keeps old token; repeat initial updates existing rows', async () => {
   const f = fixture(); const urls = [];
   const first = await sync.syncGoogleCalendarConnection(f.client, 4, fetchPages([response({ items: [timed('a')], nextPageToken: 'p' }), response({}, 503)], urls), new Date('2026-10-07T12:00:00Z'));
-  assert.equal(first.success, false); assert.equal(f.connection.syncToken, null); assert.equal(f.events.size, 1);
+  assert.equal(first.success, false); assert.equal(f.attempts[0].failureCategory, 'PROVIDER'); assert.equal(f.connection.syncToken, null); assert.equal(f.events.size, 1);
   const second = await sync.syncGoogleCalendarConnection(f.client, 4, fetchPages([response({ items: [timed('a', 'Changed')], nextSyncToken: 't' })], []), new Date('2026-10-07T12:00:00Z'));
   assert.equal(second.updated, 1); assert.equal(f.events.size, 1); assert.equal(f.events.get('a').summary, 'Changed');
 });
@@ -116,5 +118,79 @@ test('410 clears token and recovers with bounded scan without duplicates', async
 test('invalid_grant requires reauthorization and preserves events', async () => {
   const f = fixture(); f.events.set('a', { id: 1 });
   const result = await sync.syncGoogleCalendarConnection(f.client, 4, async () => response({ error: 'invalid_grant' }, 400), new Date('2026-10-07T12:00:00Z'));
-  assert.equal(result.reason, 'reauth'); assert.equal(f.connection.connectionStatus, 'NEEDS_REAUTH'); assert.equal(f.events.size, 1);
+  assert.equal(f.attempts[0].failureCategory, 'AUTHENTICATION'); assert.equal(result.reason, 'reauth'); assert.equal(f.connection.connectionStatus, 'NEEDS_REAUTH'); assert.equal(f.events.size, 1);
+});
+
+test('Calendar failures are classified without storing response text and requests carry deadlines', async () => {
+  for (const [status, category] of [[401, 'AUTHENTICATION'], [403, 'PERMISSION'], [429, 'RATE_LIMIT'], [503, 'PROVIDER']]) {
+    const f = fixture();
+    const result = await sync.syncGoogleCalendarConnection(f.client, 4, async (url, options) => {
+      assert.ok(options.signal instanceof AbortSignal); assert.equal(options.signal.aborted, false);
+      if (url.includes('oauth2')) return response({ access_token: 'private-access' });
+      return response({ error: { message: 'PRIVATE_PROVIDER_BODY' } }, status);
+    }, new Date(), 7);
+    assert.equal(result.success, false); assert.equal(f.attempts[0].failureCategory, category);
+    assert.equal(f.attempts[0].actorId, 7); assert.equal(f.attempts[0].serviceIdentity, undefined);
+    assert.doesNotMatch(JSON.stringify(f.attempts), /private-access|PRIVATE_PROVIDER_BODY|refresh-secret/);
+  }
+  const f = fixture();
+  await sync.syncGoogleCalendarConnection(f.client, 4, async () => { throw new DOMException('PRIVATE_NETWORK_DETAIL', 'TimeoutError'); });
+  assert.equal(f.attempts[0].failureCategory, 'NETWORK'); assert.doesNotMatch(JSON.stringify(f.attempts), /PRIVATE_NETWORK_DETAIL/);
+});
+
+test('Calendar token requests preserve operational failure categories and cap pagination', async () => {
+  const f = fixture();
+  await sync.syncGoogleCalendarConnection(f.client, 4, async () => response({ error: 'invalid_client', error_description: 'PRIVATE_CLIENT_DETAIL' }, 400));
+  assert.equal(f.attempts[0].failureCategory, 'CONFIGURATION'); assert.doesNotMatch(JSON.stringify(f.attempts), /PRIVATE_CLIENT_DETAIL/);
+  const pages = fixture(); let calls = 0;
+  await sync.syncGoogleCalendarConnection(pages.client, 4, async url => url.includes('oauth2') ? response({ access_token: 'access' }) : response({ items: [], nextPageToken: `page-${++calls}` }));
+  assert.equal(calls, sync.CALENDAR_MAX_PAGES); assert.equal(pages.attempts[0].failureCategory, 'LOCAL_THROTTLE');
+  assert.equal(pages.connection.syncToken, null);
+});
+
+test('Calendar busy and reconnect-required attempts are durable and do not contact Google', async () => {
+  const f = fixture(); f.connection.syncLeaseUntil = new Date('2100-01-01');
+  const noFetch = async () => { throw Error('must not poll provider'); };
+  const result = await sync.syncGoogleCalendarConnection(f.client, 4, noFetch);
+  assert.equal(result.reason, 'busy'); assert.equal(f.attempts[0].failureCategory, 'LOCAL_THROTTLE');
+  f.connection.connectionStatus = 'NEEDS_REAUTH';
+  assert.equal((await sync.syncGoogleCalendarConnection(f.client, 4, noFetch)).reason, 'reauth');
+  assert.equal(f.attempts[1].failureCategory, 'AUTHENTICATION');
+});
+
+test('an expired total sync deadline is recorded as a network/deadline failure', async t => {
+  const original = AbortSignal.timeout;
+  const deadlines = [];
+  t.mock.method(AbortSignal, 'timeout', ms => {
+    deadlines.push(ms);
+    return ms === sync.CALENDAR_SYNC_DEADLINE_MS ? AbortSignal.abort(new DOMException('private deadline detail', 'TimeoutError')) : original(ms);
+  });
+  const f = fixture();
+  const result = await sync.syncGoogleCalendarConnection(f.client, 4, async url => {
+    assert.match(url, /oauth2/); return response({ access_token: 'private access' });
+  });
+  assert.equal(result.success, false); assert.equal(f.attempts[0].failureCategory, 'NETWORK');
+  assert.ok(deadlines.includes(10000)); assert.ok(deadlines.includes(sync.CALENDAR_SYNC_DEADLINE_MS));
+  assert.doesNotMatch(JSON.stringify(f.attempts), /private/);
+});
+
+test('deadline reached after the final event write preserves partial events and refuses token advancement', async t => {
+  const original = AbortSignal.timeout, controller = new AbortController();
+  t.mock.method(AbortSignal, 'timeout', ms => ms === sync.CALENDAR_SYNC_DEADLINE_MS ? controller.signal : original(ms));
+  const f = fixture(), upsert = f.client.googleCalendarEvent.upsert;
+  f.client.googleCalendarEvent.upsert = async args => { await upsert(args); controller.abort(new DOMException('deadline', 'TimeoutError')); };
+  const result = await sync.syncGoogleCalendarConnection(f.client, 4, fetchPages([response({ items: [timed('last')], nextSyncToken: 'not-committed' })], []));
+  assert.equal(result.success, false); assert.equal(f.events.size, 1); assert.equal(f.connection.syncToken, null);
+  assert.equal(f.attempts[0].failureCategory, 'NETWORK');
+});
+
+test('token-body deadlines and local lease errors produce durable safe failures', async () => {
+  const token = fixture();
+  await sync.syncGoogleCalendarConnection(token.client, 4, async () => ({ ok: true, status: 200, json: async () => { throw new DOMException('private body timeout', 'AbortError'); } }));
+  assert.equal(token.attempts[0].failureCategory, 'NETWORK');
+  const lease = fixture(); let calls = 0;
+  lease.client.googleCalendarConnection.updateMany = async () => { if (++calls === 1) throw new Error('private lease detail'); return { count: 0 }; };
+  assert.equal((await sync.syncGoogleCalendarConnection(lease.client, 4)).success, false);
+  assert.equal(lease.attempts[0].status, 'FAILED'); assert.equal(lease.attempts[0].failureCategory, 'UNKNOWN');
+  assert.doesNotMatch(JSON.stringify([token.attempts, lease.attempts]), /private/);
 });

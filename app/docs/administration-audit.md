@@ -12,9 +12,9 @@ Tasks and Support Cases offer confirmed reassignment on the current page through
 
 ## System Health
 
-`/administration/system-health` reuses database/migration, Spaces HeadBucket and recorded scheduler checks. Adds paginated Calendar connections (25), successful/attempt/failed-sync timestamps when recorded, inactive-user indication, disconnected-user count and up to 10 currently unresolved connection errors. Errors use fixed business labels and never display provider text. A failed-sync timestamp is shown only if a completed attempt postdates the last successful sync; authorization failures without a trustworthy timestamp show Not recorded. Successful retries clear connection errors, so this is not a durable failed-attempt log.
+`/administration/system-health` reuses database/migration, Spaces HeadBucket and recorded scheduler checks. Adds paginated Calendar connections (25), successful/attempt/failed-sync timestamps when recorded, inactive-user indication, disconnected-user count and up to 10 currently unresolved connection errors. Errors use fixed business labels and never display provider text. A failed-sync timestamp is shown only if a completed attempt postdates the last successful sync; authorization failures without a trustworthy timestamp show Not recorded. Successful retries clear current connection errors. The separate Integration / job history section preserves durable failed attempts and their recovery evidence.
 
-Support Gmail shows disabled, fixture, connected, disconnected or unavailable based on existing configuration/status checks and persisted last successful fetch. A stored connection does not prove live authorization. Gmail only keeps transient fetch errors; durable failure reporting is deferred. Links go to Support Inbox and My Integrations; no setup controls are duplicated. Calendar credentials remain user-managed. Uninstrumented jobs are not represented as healthy. Applied/failed migration counts do not prove every expected migration is installed.
+Support Gmail shows disabled, fixture, connected, disconnected or unavailable based on existing configuration/status checks and persisted last successful fetch. A stored connection does not prove live authorization. Gmail actions now have durable attempt evidence in Integration / Job History; the inbox also retains its existing transient fetch status. Links go to Support Inbox and My Integrations; no setup controls are duplicated. Calendar credentials remain user-managed. Uninstrumented jobs are not represented as healthy. Applied/failed migration counts do not prove every expected migration is installed.
 
 Raw job result/error summaries are omitted. No credentials, tokens, keys, provider responses, connection strings or stack traces are rendered. All checks are read-only and bounded.
 
@@ -32,6 +32,10 @@ Raw job result/error summaries are omitted. No credentials, tokens, keys, provid
 | Account, Contact, Activity archive metadata | Current archive timestamp and archived-by actor, when preserved | Displayed as **Archived record**. Not an append-only lifecycle source; disappears after restore. Previous/new values are not inferred. |
 
 Missing values display **Not recorded**; null historical values cannot distinguish an explicitly cleared value from a value the source never recorded. Current editor or completion timestamps are not presented as past change events. Names from event snapshots remain snapshots; sources without name snapshots resolve current record/user labels. No existing historical rows are rewritten.
+
+## Integration / Job History
+
+Maintenance History now links to its Integration / Job History view. It extends `ScheduledJobRun`, including existing weekly snapshot rows without copying them. It records explicit Gmail actions and per-connection Calendar syncs, filters by integration/status/date/actor, and derives conservative matching recoveries. System Health reads the same stored evidence. See [Integration attempt history](integration-attempt-history.md) for the full privacy boundary, coverage, incomplete-attempt semantics and retention policy.
 
 ## Maintenance History
 
@@ -51,7 +55,7 @@ Migration `20261015210000_admin_maintenance_history` creates only this small led
 
 ## Deferred
 
-Full Account/Contact/Activity ownership or relationship timelines, restore-cycle reconstruction, Task completion/due-date events, general PE admin assignment/source-revision normalization, other import families, integration connect/disconnect and retry/recovery maintenance entries, durable integration attempt history, uninstrumented schedulers, and full expected-schema readiness checks. Existing module-specific revision/import tools remain authoritative for their preserved evidence. A generic all-model event log would need a separate design for capture, actor attribution, redaction, retention and transaction boundaries; v1 does not introduce one.
+Full Account/Contact/Activity ownership or relationship timelines, restore-cycle reconstruction, Task completion/due-date events, general PE admin assignment/source-revision normalization, other import families, uninstrumented schedulers, and full expected-schema readiness checks. Existing module-specific revision/import tools remain authoritative for their preserved evidence. A generic all-model event log would need a separate design for capture, actor attribution, redaction, retention and transaction boundaries; v1 does not introduce one.
 
 ## Validation
 

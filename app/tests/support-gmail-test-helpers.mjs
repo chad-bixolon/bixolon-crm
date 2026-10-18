@@ -10,7 +10,8 @@ export function productionEnv(mailbox = 'support@example.test') {
 }
 export function installConnectionDb() {
   let record = null;
-  const db = { supportGmailConnection: {
+  const attempts = [];
+  const db = { scheduledJobRun: { create: async ({data}) => { const row = {id: attempts.length + 1, ...data}; attempts.push(row); return row; }, update: async ({where, data}) => Object.assign(attempts.find(row => row.id === where.id), data) }, supportGmailConnection: {
     async findUnique({select} = {}) { return record && (select ? Object.fromEntries(Object.keys(select).map(key => [key, record[key]])) : {...record}); },
     async upsert({create, update}) { record = { ...(record ? {...record, ...update} : create), updatedAt: new Date() }; return {...record}; },
     async deleteMany() { record = null; return {count: 1}; },
@@ -18,7 +19,7 @@ export function installConnectionDb() {
   }};
   const filename = require.resolve(path.join(root, 'lib/prisma.ts'));
   require.cache[filename] = {id: filename, filename, loaded: true, exports: {prisma: db}};
-  return {db, get record() {return record;}, reset() {record = null;}};
+  return {db, attempts, get record() {return record;}, reset() {record = null; attempts.length = 0;}};
 }
 
 // Isolate process-local optimization state between independent provider scenarios.

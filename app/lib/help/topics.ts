@@ -168,7 +168,7 @@ export const helpTopics = {
   },
   'system-health': {
     title: 'System Health', group: 'Administration', summary: 'Check recorded service and connection status when something seems delayed.', permission: 'users.manage',
-    sections: [{ heading: 'Check what SalesHub has observed', paragraphs: ["Use System Health to check database, file storage, recorded scheduled jobs, Calendar connections, and Support Gmail status. If notifications or Calendar updates seem delayed, look for failed or stale checks and the latest recorded times.", "A connection marked Connected doesn’t prove that the next request will succeed. Missing or old evidence needs investigation; it isn’t a clean bill of health. This page reports status. Use the relevant integration page for connection settings."] }],
+    sections: [{ heading: 'Check what SalesHub has observed', paragraphs: ["Use System Health to check database, file storage, recorded scheduled jobs, Calendar connections, and Support Gmail status. If notifications or Calendar updates seem delayed, look for failed or stale checks and the latest recorded times.", "A connection marked Connected doesn’t prove that the next request will succeed. Missing or old evidence needs investigation; it isn’t a clean bill of health. The Integration / job history section shows stored successes and unresolved failures from real actions. Open Review history for safe failure details and recovery evidence. Use the relevant integration page for connection settings."] }],
   },
   'audit-history': {
     title: 'Audit History', group: 'Administration', summary: 'Check who changed something and the values recorded at the time.', permission: 'users.manage',
@@ -176,7 +176,7 @@ export const helpTopics = {
   },
   'maintenance-history': {
     title: 'Maintenance History', group: 'Administration', summary: 'Review recorded cleanup, import, archive, and bulk work.', permission: 'users.manage',
-    sections: [{ heading: 'Review a larger action', paragraphs: ["Use Maintenance History to check supported cleanup actions, confirmed imports, archive or restore work, and bulk changes. Entries show who acted, when, what kind of work was done, and how many records were affected. Open individual record links for context.", "Only supported actions are recorded here; older work isn’t filled in afterward. Use Audit History or the record’s own history for recorded field changes. Maintenance History is a review page, with no editing controls."] }],
+    sections: [{ heading: 'Review a larger action', paragraphs: ["Use Maintenance History to check supported cleanup actions, confirmed imports, archive or restore work, and bulk changes. Entries show who acted, when, what kind of work was done, and how many records were affected. Open individual record links for context.", "Only supported actions are recorded here; older work isn’t filled in afterward. Use Audit History or the record’s own history for recorded field changes. Open Integration / Job History for Gmail actions, Calendar syncs and weekly snapshot attempts. Filter by integration, status, date or actor. Recovered means a later matching operation succeeded; a reconnect alone does not recover a failed action. Maintenance History is a review page, with no editing controls."] }],
   },
   'bulk-actions': {
     title: 'Bulk Actions', group: 'Getting Started', summary: 'Review a small selection before applying the same change.', permission: 'support-work.write',

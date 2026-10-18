@@ -7,7 +7,8 @@ import { prisma } from '@/lib/prisma';
 import { archiveSupportCase, createSupportCase, restoreSupportCase, updateSupportCase, type SupportCaseInput, type SupportCasePatch } from '@/lib/support-cases';
 import { calendarLocalToUtc } from '@/lib/calendar-time';
 import { createCaseFromSupportEmail } from '@/lib/support-email';
-import { resolveEmailSource } from '@/lib/support-email-source';
+import { resolveEmailSource, validateEmailSource } from '@/lib/support-email-source';
+import { beginIntegrationAttempt, finishIntegrationAttempt, gmailContext, gmailFailure } from '@/lib/integration-attempts';
 import { documentStorage } from '@/lib/document-storage';
 import { selectedEmailFiles, importSelectedEmailFiles, recordEmailFileImport } from '@/lib/support-email-file-import';
 import { DEFAULT_USER_TIME_ZONE } from '@/lib/user-time-zone';
@@ -42,8 +43,13 @@ export async function saveSupportCase(id: number | null, _state: SupportFormStat
   let fileStatus = '';
   const emailSource = String(form.get('emailSource') ?? '');
   const fileTokens = form.getAll('emailFiles').map(String);
+  let attemptId: number | undefined;
   try {
     if (id && emailSource) throw new Error('Email intake can only create a new Case.');
+    if (emailSource) {
+      const source = validateEmailSource(actor, emailSource);
+      attemptId = (await beginIntegrationAttempt(prisma, gmailContext('CREATE_CASE', source.mailbox, source.threadId, actor.id))).id;
+    }
     const context = emailSource ? await resolveEmailSource(actor, emailSource) : null;
     if (fileTokens.length) { if (!context) throw new Error('Invalid email file selection.'); selectedEmailFiles(actor, emailSource, fileTokens); }
     const input = await readForm(form, actor.id);
@@ -61,7 +67,8 @@ export async function saveSupportCase(id: number | null, _state: SupportFormStat
       caseId = result.id; duplicate = result.duplicate;
     }
     else { const row = await createSupportCase(prisma, actor, input as SupportCaseInput); caseId = row.id; }
-  } catch (error) { const databaseError = error instanceof Prisma.PrismaClientKnownRequestError || error instanceof Prisma.PrismaClientUnknownRequestError; const message = form.get('emailSource') && databaseError ? 'Could not create and link the Case. No Case was saved. Please retry from this form.' : error instanceof Error ? error.message : 'Could not save Support Case.'; return { message, field: message.includes('Resolution Summary') ? 'resolutionSummary' : message.includes('customer/end user') ? 'customerNameText' : message.includes('product') || message.includes('Product') ? 'productSkuId' : message.includes('Support Rep') || message.includes('assignee') ? 'assignedToId' : message.includes('Contact') ? 'contactId' : message.includes('Purchased From Account') ? 'purchasedFromAccountId' : message.includes('Account') ? 'accountId' : message.includes('source') ? 'source' : message.includes('follow-up') ? 'nextFollowUpAt' : undefined }; }
+    if (attemptId) await finishIntegrationAttempt(prisma, attemptId, undefined, caseId);
+  } catch (error) { if (attemptId) await finishIntegrationAttempt(prisma, attemptId, gmailFailure(error)); const databaseError = error instanceof Prisma.PrismaClientKnownRequestError || error instanceof Prisma.PrismaClientUnknownRequestError; const message = form.get('emailSource') && databaseError ? 'Could not create and link the Case. No Case was saved. Please retry from this form.' : error instanceof Error ? error.message : 'Could not save Support Case.'; return { message, field: message.includes('Resolution Summary') ? 'resolutionSummary' : message.includes('customer/end user') ? 'customerNameText' : message.includes('product') || message.includes('Product') ? 'productSkuId' : message.includes('Support Rep') || message.includes('assignee') ? 'assignedToId' : message.includes('Contact') ? 'contactId' : message.includes('Purchased From Account') ? 'purchasedFromAccountId' : message.includes('Account') ? 'accountId' : message.includes('source') ? 'source' : message.includes('follow-up') ? 'nextFollowUpAt' : undefined }; }
   // Case and email link are committed. Optional file failures must not report
   // that the Case rolled back, and retries must never create a second Case.
   if (fileTokens.length) {

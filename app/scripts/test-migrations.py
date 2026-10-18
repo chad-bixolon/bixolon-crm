@@ -376,7 +376,18 @@ try:
                       VALUES (96000,96000,'2000-01-03 17:00:00',100,'Original manual Admin',2000,'Q1',0,0,0);
                       INSERT INTO "ScheduledJobRun" (id,"jobType",status,"resultSummary") VALUES (96000,'CALENDAR_SYNC','SUCCEEDED','Original job history');''')
                     automation_before = all_table_fingerprints('backfill')
+                integration_before = all_table_fingerprints('backfill') if directory.name == '20261018010000_integration_attempt_history' else None
                 sql("backfill", (directory / "migration.sql").read_text())
+                if integration_before is not None:
+                    integration_after = all_table_fingerprints('backfill')
+                    added = ['operation','contextKey','actorId','serviceIdentity','supportCaseId','calendarConnectionId','isTest']
+                    row = 'to_jsonb(t)' + ''.join(" - '" + column + "'" for column in added)
+                    integration_after['ScheduledJobRun'] = sql_values('backfill', f'''SELECT count(*) || ':' || md5(COALESCE(jsonb_agg({row} ORDER BY ({row})::text)::text, '[]')) FROM "ScheduledJobRun" t;''')[0]
+                    if integration_before != integration_after:
+                        raise RuntimeError('Integration history migration changed existing data or duplicated job rows')
+                    if sql_values('backfill', 'SELECT count(*) FROM "ScheduledJobRun" WHERE "isTest";') != ['0']:
+                        raise RuntimeError('Integration migration incorrectly relabeled historical evidence')
+                    print('PASS: integration ledger extension preserves all table fingerprints and existing job rows', flush=True)
                 if automation_before is not None:
                     automation_after = all_table_fingerprints('backfill')
                     for table, added in {'ForecastSnapshotRun': ['source'], 'ScheduledJobRun': ['snapshotWeek','opportunitySnapshotRunId','forecastSnapshotRunId','failureCategory']}.items():

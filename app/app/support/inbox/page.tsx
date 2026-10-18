@@ -15,6 +15,7 @@ import { InboxMessageActions } from './message-actions';
 import { LocalFetchTime } from './local-fetch-time';
 import { InboxDisclosure } from './disclosure';
 import { inboxMatchSummary, inboxAttachmentLabel } from '@/lib/support-inbox-display';
+import { trackIntegrationAttempt, gmailContext } from '@/lib/integration-attempts';
 
 export const dynamic = 'force-dynamic';
 export default async function SupportInboxPage({ searchParams }: { searchParams: Promise<{ connection?: string; showIgnored?: string }> }) {
@@ -64,7 +65,7 @@ export default async function SupportInboxPage({ searchParams }: { searchParams:
   };
   if (!mock && !status.connected) return <Content>{heading}{connectionPanel()}<p className="panel p-4 text-sm text-slate-600">Connect Support Gmail from Manage to view recent messages.</p></Content>;
   let messages;
-  try { messages = await recentSupportMail(); }
+  try { messages = await trackIntegrationAttempt(prisma, gmailContext('INBOX_FETCH', inboxMailboxIdentity(), 'inbox', actor.id), () => recentSupportMail()); }
   catch (error) { return <Content>{heading}{connectionPanel()}<p role="alert" className="panel p-5 text-red-700">{error instanceof Error ? error.message : 'Could not read Support mailbox.'}</p></Content>; }
   const mailbox = inboxMailboxIdentity();
   const dismissals = await prisma.supportInboxDismissal.findMany({ where: { mailbox, gmailMessageId: { in: messages.map(message => message.id) } }, select: { gmailMessageId: true } });

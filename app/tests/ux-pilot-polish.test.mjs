@@ -53,8 +53,9 @@ test('pilot filter copy and shared compact controls remain present',()=>{
   assert.match(source('app/opportunities/page.tsx'),/OpportunityClosePeriod/);
   assert.match(source('components/opportunity-close-period.tsx'),/Close Date From/);
   assert.match(source('components/opportunity-close-period.tsx'),/Close Date Through/);
-  assert.match(source('app/tasks/page.tsx'),/Due Date From/);
-  assert.match(source('app/tasks/page.tsx'),/Due Date Through/);
+  assert.match(source('app/tasks/page.tsx'),/TaskDuePeriod/);
+  assert.match(source('components/task-due-period.tsx'),/Due Date From/);
+  assert.match(source('components/task-due-period.tsx'),/Due Date Through/);
 });
 
 test('Trade Show list groups KPIs and no longer uses TableScroll',()=>{

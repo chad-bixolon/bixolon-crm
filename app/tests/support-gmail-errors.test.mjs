@@ -29,7 +29,7 @@ Module._load = function(request, parent, isMain) {
   if (request === 'next/navigation') return { redirect: () => { throw new Error('test redirect'); } };
   if (request === 'next/headers') return {};
   if (request === '@/lib/current-user') return { requireMutation: async () => actor };
-  if (request === '@/lib/prisma') return { prisma: { $transaction: async run => run(tx) } };
+  if (request === '@/lib/prisma') return { prisma: { ...credentials.db, $transaction: async run => run(tx) } };
   return load.call(this, request, parent, isMain);
 };
 const { ignoreInboxMessage } = require(path.join(root, 'app/support/inbox/actions.ts'));
@@ -73,6 +73,9 @@ test('real connect, repeated Ignore, refresh without scope and fresh adapters re
   assert.equal(await connection.completeSupportGmailAuthorization({actor, state:flow.state, cookie:flow.state, verifier:flow.verifier, code:'synthetic-code', error:null}), 'connected');
   for (const id of ['one', 'two', 'three', 'one']) await assert.rejects(ignoreInboxMessage({}, form(id)), /test redirect/);
   assert.deepEqual([...dismissed], ['one', 'two', 'three']);
+  assert.equal(credentials.attempts.filter(row => row.operation === 'IGNORE' && row.status === 'SUCCEEDED').length, 4);
+  assert.ok(credentials.attempts.every(row => row.actorId === actor.id && row.completedAt));
+  assert.doesNotMatch(JSON.stringify(credentials.attempts), /original-refresh|initial-access|synthetic-code|Printer jam/);
   assert.equal(google.refreshes, 4);
   assert.equal(credentials.record.grantedScope, SUPPORT_GMAIL_SCOPE);
   const fresh = new gmail.GoogleGmailSupportMailbox(google.fetcher, newRuntime());
@@ -129,6 +132,8 @@ test('Ignore does not persist on a Gmail failure; recovery needs no reconnect an
     t.mock.method(globalThis, 'fetch', google.fetcher);
     const result = await ignoreInboxMessage({}, form('one'));
     assert.match(result.message, expected); assert.equal(dismissed.size, 0);
+    assert.equal(credentials.attempts.at(-1).status, 'FAILED');
+    assert.equal(credentials.attempts.at(-1).failureCategory, status === 403 ? 'RATE_LIMIT' : status === 404 ? 'NOT_FOUND' : 'PROVIDER');
     assert.equal((await connection.connectionStatus()).connected, true);
   }
   resetGmailRuntime(supportGmailRuntime);

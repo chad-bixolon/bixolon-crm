@@ -1,11 +1,15 @@
 import type { PrismaClient } from '@prisma/client';
 import { refreshCalendarAccessToken } from './google-calendar-oauth';
+import { calendarRequest, calendarHttpFailure, calendarFailure, CalendarRequestFailure } from './calendar-request';
+import { attemptContext, beginIntegrationAttempt, finishIntegrationAttempt, failureMessages } from './integration-attempts';
 
 export const INITIAL_PAST_DAYS = 60;
 export const INITIAL_FUTURE_DAYS = 90;
 const PAGE_SIZE = 250;
 const LEASE_MS = 30 * 60 * 1000;
-type Client = Pick<PrismaClient, 'googleCalendarConnection' | 'googleCalendarEvent'>;
+type Client = Pick<PrismaClient, 'googleCalendarConnection' | 'googleCalendarEvent' | 'scheduledJobRun'>;
+export const CALENDAR_SYNC_DEADLINE_MS = 120000;
+export const CALENDAR_MAX_PAGES = 100;
 type GoogleTime = { date?: string; dateTime?: string; timeZone?: string };
 type GoogleEvent = {
   id?: string; status?: string; iCalUID?: string; summary?: string; location?: string; htmlLink?: string;
@@ -57,17 +61,18 @@ export async function upsertGoogleCalendarEvent(client: Client, connection: { id
 }
 
 class ExpiredSyncToken extends Error {}
-async function listPage(accessToken: string, calendarId: string, query: URLSearchParams, fetcher: typeof fetch) {
+async function listPage(accessToken: string, calendarId: string, query: URLSearchParams, fetcher: typeof fetch, signal: AbortSignal) {
   const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${query}`;
-  const response = await fetcher(url, { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' });
+  signal.throwIfAborted();
+  const response = await calendarRequest(fetcher, url, { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store', signal });
   if (response.status === 410) throw new ExpiredSyncToken();
-  if (!response.ok) throw new Error(`Google Calendar events.list returned HTTP ${response.status}.`);
+  if (!response.ok) throw new CalendarRequestFailure(calendarHttpFailure(response.status));
   const page = await response.json() as GooglePage;
   if (page.items !== undefined && !Array.isArray(page.items)) throw new Error('Google Calendar returned an invalid event page.');
   return page;
 }
 
-async function runPages(client: Client, connection: { id: number; userId: number; primaryCalendarId: string }, accessToken: string, mode: CalendarSyncResult['mode'], token: string | null, now: Date, fetcher: typeof fetch) {
+async function runPages(client: Client, connection: { id: number; userId: number; primaryCalendarId: string }, accessToken: string, mode: CalendarSyncResult['mode'], token: string | null, now: Date, fetcher: typeof fetch, signal: AbortSignal) {
   const query = new URLSearchParams({ singleEvents: 'true', showDeleted: 'true', maxResults: String(PAGE_SIZE) });
   if (token) query.set('syncToken', token);
   else { const window = initialCalendarWindow(now); query.set('timeMin', window.timeMin); query.set('timeMax', window.timeMax); }
@@ -75,9 +80,11 @@ async function runPages(client: Client, connection: { id: number; userId: number
   const seenPages = new Set<string>();
   const seenEvents = new Set<string>();
   let nextToken: string | undefined;
-  for (;;) {
-    const page = await listPage(accessToken, connection.primaryCalendarId, query, fetcher);
+  for (let pageCount = 0; ; pageCount++) {
+    if (pageCount >= CALENDAR_MAX_PAGES) throw new CalendarRequestFailure('LOCAL_THROTTLE');
+    const page = await listPage(accessToken, connection.primaryCalendarId, query, fetcher, signal);
     for (const event of page.items ?? []) {
+      signal.throwIfAborted();
       const applied = await upsertGoogleCalendarEvent(client, connection, event, now);
       seenEvents.add(event.id!);
       result.processed++;
@@ -98,25 +105,28 @@ async function runPages(client: Client, connection: { id: number; userId: number
   return { result, nextToken, seenEvents };
 }
 
-export async function syncGoogleCalendarConnection(client: Client, connectionId: number, fetcher: typeof fetch = fetch, now = new Date()): Promise<CalendarSyncResult> {
+export async function syncGoogleCalendarConnection(client: Client, connectionId: number, fetcher: typeof fetch = fetch, now = new Date(), actorId?: number): Promise<CalendarSyncResult> {
   const connection = await client.googleCalendarConnection.findUnique({ where: { id: connectionId }, select: { id: true, userId: true, primaryCalendarId: true, syncToken: true, connectionStatus: true } });
   const blank: CalendarSyncResult = { connectionId, mode: connection?.syncToken ? 'INCREMENTAL' : 'INITIAL', processed: 0, inserted: 0, updated: 0, cancelled: 0, success: false };
-  if (!connection || connection.connectionStatus !== 'CONNECTED') return { ...blank, reason: 'reauth' };
+  if (!connection) return { ...blank, reason: 'reauth' };
+  const attempt = await beginIntegrationAttempt(client, { jobType: 'CALENDAR_CONNECTION_SYNC', operation: 'SYNC', contextKey: attemptContext(connection.id, connection.userId, connection.primaryCalendarId), calendarConnectionId: connection.id, actorId, serviceIdentity: actorId ? undefined : 'calendar-sync' });
+  if (connection.connectionStatus !== 'CONNECTED') { await finishIntegrationAttempt(client, attempt.id, 'AUTHENTICATION'); return { ...blank, reason: 'reauth' }; }
   const startedAt = now;
-  const claimed = await client.googleCalendarConnection.updateMany({ where: { id: connectionId, connectionStatus: 'CONNECTED', OR: [{ syncLeaseUntil: null }, { syncLeaseUntil: { lt: now } }] }, data: { syncLeaseUntil: new Date(now.getTime() + LEASE_MS), lastSyncStartedAt: startedAt } });
-  if (!claimed.count) return { ...blank, reason: 'busy' };
   try {
-    const accessToken = await refreshCalendarAccessToken(client, connection.userId, fetcher);
+    const claimed = await client.googleCalendarConnection.updateMany({ where: { id: connectionId, connectionStatus: 'CONNECTED', OR: [{ syncLeaseUntil: null }, { syncLeaseUntil: { lt: now } }] }, data: { syncLeaseUntil: new Date(now.getTime() + LEASE_MS), lastSyncStartedAt: startedAt } });
+    if (!claimed.count) { await finishIntegrationAttempt(client, attempt.id, 'LOCAL_THROTTLE'); return { ...blank, reason: 'busy' }; }
+    const signal = AbortSignal.timeout(CALENDAR_SYNC_DEADLINE_MS);
+    const accessToken = await refreshCalendarAccessToken(client, connection.userId, fetcher, true, signal);
     if (!accessToken) {
       const current = await client.googleCalendarConnection.findUnique({ where: { id: connectionId }, select: { connectionStatus: true } });
-      throw new Error(current?.connectionStatus === 'NEEDS_REAUTH' ? 'reauth' : 'credential');
+      throw new CalendarRequestFailure(current?.connectionStatus === 'NEEDS_REAUTH' ? 'AUTHENTICATION' : 'CONFIGURATION');
     }
     let result: Awaited<ReturnType<typeof runPages>>;
-    try { result = await runPages(client, connection, accessToken, blank.mode, connection.syncToken, now, fetcher); }
+    try { result = await runPages(client, connection, accessToken, blank.mode, connection.syncToken, now, fetcher, signal); }
     catch (error) {
       if (!(error instanceof ExpiredSyncToken) || !connection.syncToken) throw error;
       await client.googleCalendarConnection.updateMany({ where: { id: connectionId, lastSyncStartedAt: startedAt }, data: { syncToken: null } });
-      result = await runPages(client, connection, accessToken, 'RECOVERY', null, now, fetcher);
+      result = await runPages(client, connection, accessToken, 'RECOVERY', null, now, fetcher, signal);
     }
     if (result.result.mode !== 'INCREMENTAL') {
       const window = initialCalendarWindow(now);
@@ -131,14 +141,18 @@ export async function syncGoogleCalendarConnection(client: Client, connectionId:
       }, data: { status: 'CANCELLED', cancelledAt: now, syncedAt: now } });
       result.result.cancelled += missing.count;
     }
+    signal.throwIfAborted();
     const completedAt = new Date();
     const saved = await client.googleCalendarConnection.updateMany({ where: { id: connectionId, lastSyncStartedAt: startedAt, connectionStatus: 'CONNECTED' }, data: { syncToken: result.nextToken, lastSuccessfulSyncAt: completedAt, lastSyncCompletedAt: completedAt, syncLeaseUntil: null, lastError: null } });
     if (!saved.count) throw new Error('Calendar connection changed while syncing.');
+    await finishIntegrationAttempt(client, attempt.id);
     return result.result;
   } catch (error) {
-    const reason = error instanceof Error && error.message === 'reauth' ? 'reauth' : 'failed';
-    const message = reason === 'reauth' ? 'Google authorization expired or was revoked.' : 'Calendar sync failed. Retry later.';
-    await client.googleCalendarConnection.updateMany({ where: { id: connectionId, lastSyncStartedAt: startedAt }, data: { syncLeaseUntil: null, lastSyncCompletedAt: new Date(), lastError: message } });
+    const category = calendarFailure(error);
+    const reason = category === 'AUTHENTICATION' || category === 'PERMISSION' || (error instanceof Error && error.message === 'reauth') ? 'reauth' : 'failed';
+    const message = category === 'AUTHENTICATION' ? 'Google authorization expired or was revoked.' : failureMessages[category];
+    try { await client.googleCalendarConnection.updateMany({ where: { id: connectionId, lastSyncStartedAt: startedAt }, data: { syncLeaseUntil: null, lastSyncCompletedAt: new Date(), lastError: message } }); }
+    finally { await finishIntegrationAttempt(client, attempt.id, category); }
     return { ...blank, reason };
   }
 }

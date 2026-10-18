@@ -113,3 +113,5 @@ Paths below are relative to the repository root.
 - Runtime/configuration: `app/scripts/weekly-snapshots.mjs`, `app/Dockerfile`, `.env.example`.
 - Tests: `app/tests/weekly-snapshots.test.mjs`, `app/tests/weekly-snapshot-route.test.mjs`, `app/tests/weekly-snapshot-command.test.mjs`, `app/e2e/weekly-snapshots.spec.ts`, `app/playwright.config.ts`, `app/scripts/test-migrations.py`.
 - Documentation/Help: this guide, `docs/opportunity-snapshots.md`, `docs/forecast-snapshots.md`, `app/docs/deployment.md`, `app/docs/system-health.md`, `app/lib/help/topics.ts`, `CHANGELOG.md`.
+
+The existing automation attempts also appear under Maintenance History → Integration / Job History and durable System Health. No additional attempt rows are written for this view. Recovery requires a later successful weekly invocation for the same intended week; another week’s success leaves the earlier failure unresolved. See [Integration attempt history](../app/docs/integration-attempt-history.md).

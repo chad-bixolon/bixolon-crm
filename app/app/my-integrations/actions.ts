@@ -34,6 +34,6 @@ export async function syncMyGoogleCalendar() {
   const userId = realCalendarUserId(real);
   const connection = await prisma.googleCalendarConnection.findUnique({ where: { userId }, select: { id: true } });
   if (!connection) redirect('/my-integrations?result=not-connected');
-  const result = await syncGoogleCalendarConnection(prisma, connection.id);
+  const result = await syncGoogleCalendarConnection(prisma, connection.id, undefined, undefined, userId);
   redirect(`/my-integrations?result=${result.success ? 'synced' : result.reason === 'reauth' ? 'reauth' : result.reason === 'busy' ? 'busy' : 'sync-failed'}`);
 }

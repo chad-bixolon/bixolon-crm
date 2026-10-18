@@ -66,7 +66,8 @@ function fixture() {
   let rows=[],events=[],objects=new Map(),sequence=0;
   let tail=Promise.resolve();
   const tx={ $executeRaw:async strings=>{assert.match(strings.join(''),/advisory_xact_lock/);return 1;},supportCase:{findFirst:async()=>({id:11,status:'OPEN',archivedAt:null})},supportCaseAttachment:{findFirst:async({where})=>rows.find(row=>Object.entries(where).every(([key,value])=>row[key]===value))??null,create:async({data})=>{const row={id:++sequence,...data,deletedAt:null};rows.push(row);return row;},findMany:async()=>rows},supportCaseEmail:{findFirst:async()=>({id:1}),findMany:async()=>[{gmailMessageId:message.id,gmailThreadId:message.threadId}]},supportCaseLifecycleEvent:{create:async({data})=>events.push(data),findMany:async()=>events}};
-  const db={...tx,$transaction(run){const job=tail.then(()=>run(tx));tail=job.catch(()=>{});return job;}};
+  const attempts=[];
+  const db={...tx,scheduledJobRun:{create:async({data})=>{const row={id:attempts.length+1,...data};attempts.push(row);return row;},update:async({where,data})=>Object.assign(attempts.find(r=>r.id===where.id),data)},$transaction(run){const job=tail.then(()=>run(tx));tail=job.catch(()=>{});return job;}};
   const storage={createSupportKey:()=>`e2e/support-cases/test-${sequence+1}`,createKey:()=>'',uploadDocumentObject:async({storageKey,body})=>objects.set(storageKey,body),deleteDocumentObject:async key=>objects.delete(key),createSignedDocumentUrl:async()=>''};
   return {db,storage,rows,events,objects};
 }

@@ -14,13 +14,14 @@ const existing = { id: 9, accountId: 11, customerNameText: 'ABC', contactId: 12,
 const prisma = { user: { findUnique: async () => ({ timeZone: 'America/New_York' }) }, supportCase: { findUnique: async () => existing } };
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
 Module._load = function(request, parent, isMain) {
+  if (request === '@/lib/integration-attempts') return originalLoad.call(this, path.join(root, 'lib/integration-attempts.ts'), parent, isMain);
   if (request === 'next/cache') return { revalidatePath: () => {} };
   if (request === 'next/navigation') return { redirect: () => { throw new Error('Unexpected redirect'); } };
   if (request === '@/lib/current-user') return { requireMutation: async () => ({ id: 2, role: 'SUPPORT' }) };
   if (request === '@/lib/prisma') return { prisma };
   if (request === '@/lib/support-cases') return { createSupportCase: async (_db, _actor, input) => { calls.push({ mode: 'create', input }); throw new Error(input.status === 'RESOLVED' && !input.resolutionSummary ? 'Resolution Summary is required when resolving or closing a Support Case.' : 'Unrelated validation error.'); }, updateSupportCase: async (_db, _actor, id, patch) => { calls.push({ mode: 'edit', id, input: patch }); throw new Error('Unrelated validation error.'); } };
   if (request === '@/lib/support-email') return { createCaseFromSupportEmail: async () => { throw new Error('Unexpected email intake'); } };
-  if (request === '@/lib/support-email-source') return { resolveEmailSource: async () => { throw new Error('Invalid or expired Support email source.'); } };
+  if (request === '@/lib/support-email-source') return { validateEmailSource: () => { throw new Error('Invalid or expired Support email source.'); }, resolveEmailSource: async () => { throw new Error('Invalid or expired Support email source.'); } };
   if (request === '@/lib/document-storage') return { documentStorage: {} };
   if (request === '@/lib/support-email-file-import') return { selectedEmailFiles: () => { throw new Error('Invalid email file selection.'); } };
   if (request === '@/lib/calendar-time') return { calendarLocalToUtc: value => new Date(value + ':00Z') };

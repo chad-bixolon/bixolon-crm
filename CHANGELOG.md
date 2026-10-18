@@ -12,6 +12,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added Durable Integration Attempt History & Failure Status v1 under Admin Maintenance History and System Health. The shared job ledger records explicit Support Gmail actions and per-connection Calendar syncs, reuses weekly snapshot attempts, and shows safe failures and conservative matching recoveries with filters, pagination and record links. Added bounded Calendar requests/syncs, privacy and retention guidance, and forward-only migration `20261018010000_integration_attempt_history`; no provider polling or automatic cleanup is introduced.
+
 - Added rolling Task due-date periods (Overdue, Due today, Next 7 days and This week) alongside fixed custom ranges. Personal Saved Views retain relative meaning and recalculate with Eastern business dates; existing absolute views and Task defaults remain compatible. No database migration.
 
 - Added Weekly Opportunity + Forecast Snapshot Automation v1 through the shared capture services, protected internal trigger, safe weekly retries/manual reuse, explicit service attribution, durable execution history and compact Admin status. Default cadence: Monday 05:00 America/New_York; forecast quarter comes from the exact source timestamp. Forward-only migration: `20261016230000_weekly_snapshot_automation`. DigitalOcean setup and quarter-end limitations are documented in `docs/weekly-snapshot-automation.md`; no schedule or deployment is installed by this change.

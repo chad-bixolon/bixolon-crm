@@ -26,7 +26,7 @@ Module._load = function(request, parent, isMain) {
   if (request === 'next/navigation') return {redirect: () => {throw new Error('test redirect');}};
   if (request === 'next/headers') return {};
   if (request === '@/lib/current-user') return {requireMutation: async () => actor};
-  if (request === '@/lib/prisma') return {prisma: {$transaction: async run => run(tx)}};
+  if (request === '@/lib/prisma') return {prisma: {...credentials.db, $transaction: async run => run(tx)}};
   return load.call(this, request, parent, isMain);
 };
 const actions = require(path.join(root, 'app/support/inbox/actions.ts'));

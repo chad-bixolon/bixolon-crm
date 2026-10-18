@@ -1,4 +1,5 @@
 import { gmailWorkflow } from './support-gmail-runtime';
+import { beginIntegrationAttempt, finishIntegrationAttempt, gmailContext, gmailFailure } from './integration-attempts';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import type { Actor } from './authorization';
@@ -60,12 +61,13 @@ async function importEmailFiles(db: PrismaClient, storage: DocumentStorage, acto
   const result: EmailFileImportResult = { imported: 0, duplicate: 0, failures: [] };
   for (const grant of files) {
     const identity = { supportCaseId: caseId, sourceMailbox: source.mailbox, sourceGmailMessageId: grant.messageId, sourceGmailPartId: grant.file.partId };
+    const attempt = await beginIntegrationAttempt(db, gmailContext('IMPORT_ATTACHMENT', source.mailbox, `${grant.messageId}:${grant.file.partId}`, actor.id, caseId));
     let uploadedKey: string | null = null;
     const trackedStorage: DocumentStorage = { ...storage, async uploadDocumentObject(input) { uploadedKey = input.storageKey; await storage.uploadDocumentObject(input); }, async deleteDocumentObject(key) { await storage.deleteDocumentObject(key); if (uploadedKey === key) uploadedKey = null; } };
     try {
       await assertSupportAttachmentAccess(db, actor, caseId, true);
       // Include removed metadata: a deliberate removal must not be undone by a retry.
-      if (await db.supportCaseAttachment.findFirst({ where: identity, select: { id: true } })) { result.duplicate++; continue; }
+      if (await db.supportCaseAttachment.findFirst({ where: identity, select: { id: true } })) { result.duplicate++; await finishIntegrationAttempt(db, attempt.id); continue; }
       const download = await mailbox.attachment(grant.messageId, grant.file.partId);
       if (download.message.id !== grant.messageId || download.message.threadId !== source.threadId || download.file.partId !== grant.file.partId || download.file.attachmentId !== grant.file.attachmentId || download.file.fileName !== grant.file.fileName || download.file.mimeType !== grant.file.mimeType || download.file.size !== grant.file.size) throw new Error('Email file metadata changed. Review the email files again.');
       const file = await validateSupportAttachment({ name: download.file.fileName, type: download.file.mimeType, size: download.file.size, arrayBuffer: async () => Uint8Array.from(download.body).buffer });
@@ -76,19 +78,21 @@ async function importEmailFiles(db: PrismaClient, storage: DocumentStorage, acto
         return true;
       }, { maxWait: 10000, timeout: 30000 });
       if (created) result.imported++; else result.duplicate++;
+      await finishIntegrationAttempt(db, attempt.id);
     } catch (error) {
       if (uploadedKey) {
         // A lost commit acknowledgement is ambiguous. Confirm metadata before
         // deleting an object that may already belong to a committed attachment.
         try {
           const committed = await db.supportCaseAttachment.findFirst({ where: { storageKey: uploadedKey }, select: { id: true } });
-          if (committed) { result.imported++; continue; }
+          if (committed) { result.imported++; await finishIntegrationAttempt(db, attempt.id); continue; }
           await storage.deleteDocumentObject(uploadedKey);
         } catch { console.error('Support email file object cleanup could not be confirmed.'); }
       }
       let name = grant.file.fileName;
       try { name = validateSupportAttachmentEnvelope(name, grant.file.mimeType, grant.file.size).originalFileName; } catch {}
       result.failures.push({ threadId: source.threadId, messageId: grant.messageId, partId: grant.file.partId, name, reason: safeFailure(error) });
+      await finishIntegrationAttempt(db, attempt.id, gmailFailure(error));
     }
   }
   return result;

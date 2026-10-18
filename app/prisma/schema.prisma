@@ -460,8 +460,17 @@ model ScheduledJobRun {
   forecastSnapshotRunId Int?
   forecastSnapshotRun ForecastSnapshotRun? @relation(fields: [forecastSnapshotRunId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   failureCategory String? @db.VarChar(40)
+  operation String? @db.VarChar(40)
+  contextKey String? @db.VarChar(64)
+  actorId Int?
+  serviceIdentity String? @db.VarChar(40)
+  supportCaseId Int?
+  calendarConnectionId Int?
+  isTest Boolean @default(false)
 
   @@index([jobType, startedAt(sort: Desc)])
+  @@index([jobType, operation, contextKey, status, startedAt], map: "ScheduledJobRun_jobType_operation_contextKey_status_startedAt_i")
+  @@index([startedAt(sort: Desc), id(sort: Desc)])
 }
 
 /// A saved, validated query against a curated BIXOLON report type. Results are never persisted.

@@ -8,6 +8,7 @@ import { resolveInboxSource } from '@/lib/support-email-source';
 import { gmailWorkflow } from '@/lib/support-gmail-runtime';
 import { cookies, headers } from 'next/headers';
 import { can } from '@/lib/authorization';
+import { trackIntegrationAttempt, gmailContext } from '@/lib/integration-attempts';
 import { assertLiveSupportGmailRequest } from '@/lib/support-gmail-config';
 import { SUPPORT_GMAIL_STATE_COOKIE, SUPPORT_GMAIL_VERIFIER_COOKIE, supportGmailCookieOptions, disconnectSupportGmail, beginSupportGmailAuthorization } from '@/lib/support-gmail-connection';
 
@@ -30,7 +31,7 @@ export async function disconnectInboxGmail() {
   assertLiveSupportGmailRequest((await headers()).get('host'));
   const real = await getRealAuthenticatedUser();
   if (!can(real, 'support-cases.write')) throw new Error('Access denied');
-  await disconnectSupportGmail(real!);
+  await trackIntegrationAttempt(prisma, gmailContext('DISCONNECT', inboxMailboxIdentity(), 'connection', real!.id), () => disconnectSupportGmail(real!));
   revalidatePath('/support/inbox');
   redirect('/support/inbox?connection=disconnected');
 }
@@ -56,8 +57,10 @@ export async function linkInboxMessage(_state: InboxActionState, form: FormData)
       caseId = row.id;
     }
     if (!caseId) throw new Error('Choose a Support Case or enter its exact case number.');
-    const message = await gmailWorkflow('link', () => resolveInboxSource(actor, String(form.get('emailSource') ?? ''), messageId));
-    await linkSupportEmail(prisma, actor, message, caseId);
+    await trackIntegrationAttempt(prisma, gmailContext('LINK_EMAIL', inboxMailboxIdentity(), messageId, actor.id, caseId), async () => {
+      const message = await gmailWorkflow('link', () => resolveInboxSource(actor, String(form.get('emailSource') ?? ''), messageId));
+      await linkSupportEmail(prisma, actor, message, caseId);
+    });
     linkedCaseId = caseId;
   } catch (error) {
     return { message: safeInboxError(error), caseId: String(form.get('caseId') ?? ''), caseNumber: String(form.get('caseNumber') ?? '') };
@@ -72,8 +75,10 @@ export async function ignoreInboxMessage(_state: InboxActionState, form: FormDat
   try {
     assertEmailPersistenceAllowed();
     const messageId = String(form.get('messageId') ?? '');
-    await gmailWorkflow('ignore', () => resolveInboxSource(actor, String(form.get('emailSource') ?? ''), messageId));
-    await ignoreSupportEmail(prisma, actor, inboxMailboxIdentity(), messageId);
+    await trackIntegrationAttempt(prisma, gmailContext('IGNORE', inboxMailboxIdentity(), messageId, actor.id), async () => {
+      await gmailWorkflow('ignore', () => resolveInboxSource(actor, String(form.get('emailSource') ?? ''), messageId));
+      await ignoreSupportEmail(prisma, actor, inboxMailboxIdentity(), messageId);
+    });
   } catch (error) { return { message: safeInboxError(error) }; }
   revalidatePath('/support/inbox');
   redirect('/support/inbox');
@@ -85,8 +90,10 @@ export async function restoreInboxMessage(_state: InboxActionState, form: FormDa
   try {
     assertEmailPersistenceAllowed();
     const messageId = String(form.get('messageId') ?? '');
-    await gmailWorkflow('restore', () => resolveInboxSource(actor, String(form.get('emailSource') ?? ''), messageId));
-    await restoreSupportEmail(prisma, actor, inboxMailboxIdentity(), messageId);
+    await trackIntegrationAttempt(prisma, gmailContext('RESTORE', inboxMailboxIdentity(), messageId, actor.id), async () => {
+      await gmailWorkflow('restore', () => resolveInboxSource(actor, String(form.get('emailSource') ?? ''), messageId));
+      await restoreSupportEmail(prisma, actor, inboxMailboxIdentity(), messageId);
+    });
   }
   catch (error) { return { message: safeInboxError(error) }; }
   revalidatePath('/support/inbox');

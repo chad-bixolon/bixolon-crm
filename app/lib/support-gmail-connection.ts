@@ -9,7 +9,7 @@ export const SUPPORT_GMAIL_VERIFIER_COOKIE = 'saleshub-support-gmail-oauth-verif
 export function supportGmailCookieOptions() { return { httpOnly: true, sameSite: 'lax' as const, secure: process.env.NODE_ENV === 'production', path: '/api/support-gmail/callback', maxAge: 600 }; }
 type StoredConnection = { email: string; connectedAt: string; refreshToken: string; scope: string };
 type ConnectionDb = Pick<PrismaClient, 'supportGmailConnection'>;
-const connectionDb = async (): Promise<ConnectionDb> => (await import('./prisma')).prisma;
+const connectionDb = async (): Promise<Pick<PrismaClient, 'supportGmailConnection' | 'scheduledJobRun'>> => (await import('./prisma')).prisma;
 const usedStates = new Map<string, number>();
 const lifetime = 600000;
 
@@ -161,6 +161,8 @@ function logSupportGmailAuthorizationFailure(stage: SupportGmailAuthorizationSta
 }
 export async function completeSupportGmailAuthorization(input: OAuthInput, dependencies = { exchange: exchangeSupportGmailCode, profile: lookupSupportGmailProfile, save: saveSupportGmailConnection }): Promise<SupportGmailConnectionResult> {
   let stage: SupportGmailAuthorizationStage = 'environment/config validation';
+  let history: { db: Awaited<ReturnType<typeof connectionDb>>; id: number } | undefined;
+  const { beginIntegrationAttempt, finishIntegrationAttempt, gmailContext, gmailFailure } = await import('./integration-attempts');
   try {
     assertOAuthAvailable();
     oauthSettings();
@@ -173,9 +175,13 @@ export async function completeSupportGmailAuthorization(input: OAuthInput, depen
       return 'invalid-state';
     }
     if (input.error) return 'declined';
+    const db = await connectionDb();
+    const attempt = await beginIntegrationAttempt(db, gmailContext('CONNECT', process.env.SUPPORT_GMAIL_MAILBOX!.trim().toLowerCase(), 'connection', input.actor!.id));
+    history = { db, id: attempt.id };
     stage = 'token exchange';
     if (!input.code) {
       logSupportGmailAuthorizationFailure(stage);
+      await finishIntegrationAttempt(db, attempt.id, 'AUTHENTICATION');
       return 'failed';
     }
     const token = await dependencies.exchange(input.code, input.verifier!);
@@ -185,9 +191,11 @@ export async function completeSupportGmailAuthorization(input: OAuthInput, depen
     assertExpectedMailbox(email);
     stage = 'encrypted credential save';
     await dependencies.save(email, token.refreshToken, input.actor!);
+    await finishIntegrationAttempt(db, attempt.id);
     return 'connected';
-  } catch {
+  } catch (error) {
     logSupportGmailAuthorizationFailure(stage);
+    if (history) await finishIntegrationAttempt(history.db, history.id, gmailFailure(error));
     return 'failed';
   }
 }
