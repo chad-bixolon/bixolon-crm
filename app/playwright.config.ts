@@ -29,6 +29,15 @@ export default defineConfig({
       testMatch: '**/tablet-controls.spec.ts',
       use: { ...devices[browserName === 'webkit' ? 'iPad Pro 11' : 'Desktop Chrome'], browserName, viewport, screen: viewport, isMobile: true, hasTouch: true },
     }))),
+    ...(['chromium', 'webkit'] as const).flatMap(browserName => [
+      { width: 768, height: 1024 }, { width: 820, height: 1180 }, { width: 1024, height: 768 },
+    ].map(viewport => ({
+      name: `pipeline-polish-${browserName}-${viewport.width}`,
+      testMatch: '**/pipeline-movement-ui.spec.ts',
+      grep: /responsive main and Advanced filters/,
+      use: { ...devices[browserName === 'webkit' ? 'iPad Pro 11' : 'Desktop Chrome'], browserName, viewport, screen: viewport, isMobile: true, hasTouch: true },
+    }))),
+    { name: 'pipeline-polish-phone', testMatch: '**/pipeline-movement-ui.spec.ts', grep: /responsive main and Advanced filters/, use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
   ],
   webServer: {
     command: 'npm run dev -- --hostname 127.0.0.1 --port 3100',

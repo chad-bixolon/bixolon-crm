@@ -93,7 +93,7 @@ test('snapshot, salesperson, quarter and currency filters change endpoint totals
   await page.goto(url()); await page.getByRole('combobox', { name: 'Currency', exact: true }).selectOption('CAD'); await page.getByRole('button', { name: 'Compare snapshots' }).click(); await assertReconciliation(page, '1000.00', '1200.00');
   await page.goto(url()); await page.getByRole('combobox', { name: 'Later snapshot', exact: true }).selectOption(String(beforeId)); await page.getByRole('combobox', { name: 'Earlier snapshot', exact: true }).selectOption(''); await page.getByRole('button', { name: 'Compare snapshots' }).click();
   await expect(page.getByRole('combobox', { name: 'Later snapshot', exact: true })).toHaveValue(String(beforeId)); await expect(page.getByRole('combobox', { name: 'Earlier snapshot', exact: true })).not.toHaveValue(String(beforeId));
-  await page.goto(`/reports/pipeline-movement?after=${earliestId}`); await expect(page.getByRole('status')).toContainText('No valid prior Opportunity Snapshot'); await expect(page.getByRole('region', { name: 'Pipeline reconciliation' })).toHaveCount(0);
+  await page.goto(`/reports/pipeline-movement?after=${earliestId}`); await expect(page.getByRole('status')).toContainText('No prior weekly snapshot available yet'); await expect(page.getByRole('region', { name: 'Pipeline reconciliation' })).toHaveCount(0);
 });
 test('Sales defaults own and deliberately selects another rep without changing ownership', async ({ page }) => {
   const beforeOwner = await db.opportunity.findUniqueOrThrow({ where: { id: dealIds['Owner transfer'] }, select: { ownerId: true } });

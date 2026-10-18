@@ -230,3 +230,9 @@ Business-policy follow-ups for later scope: whether snapshots should capture Los
 and actual stage ordering, and whether legacy unknown eligibility should be
 excluded in a future strict historical forecast mode. v1 reports their limits
 explicitly and does not require a migration or a policy decision to reconcile.
+
+## Historical trends and outcomes
+
+Pipeline Movement v2 extends this comparison at
+`/reports/pipeline-movement/history`. See [the v2 design and rules](pipeline-movement-v2.md).
+The v1 engine and its one-delta-per-Opportunity reconciliation are unchanged.
