@@ -25,6 +25,7 @@ const db = {
 };
 Module._load = function(request, parent, isMain) {
   if (request === 'next/link') return function Link({ href, children, ...props }) { return React.createElement('a', { href, ...props }, children); };
+  if (request === '@/lib/company-currency') return { reportingCurrencies: async () => [{code:'USD'}] };
   if (request === '@/lib/prisma') return { prisma: db };
   if (request === '@/lib/current-user') return { currentUser: async () => actor };
   if (request === '@/components/shell') return { Content: ({ children }) => React.createElement('main', null, children), PageHeader: () => null };

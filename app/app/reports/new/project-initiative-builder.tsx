@@ -1,3 +1,5 @@
+import { reportingCurrencies } from '@/lib/company-currency';
+import { CurrencyControl } from '@/components/currency-control';
 import { RecoverableActionForm } from '@/components/recoverable-action-form';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
@@ -21,7 +23,7 @@ export async function ProjectInitiativeBuilder({params,actor,saved}:{params:Para
     prisma.user.findMany({where:{active:true,archivedAt:null},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
     prisma.salesStage.findMany({orderBy:[{sortOrder:'asc'},{id:'asc'}]}),
     prisma.productCategory.findMany({where:{active:true},orderBy:{name:'asc'}}),
-    prisma.currency.findMany({where:{active:true},orderBy:{code:'asc'}}),
+    reportingCurrencies(),
     prisma.competitorOption.findMany({where:{OR:[{active:true},...(Number(filterValue(config,'competitorId'))?[{id:Number(filterValue(config,'competitorId'))}]:[])]},orderBy:[{sortOrder:'asc'},{name:'asc'}]}),
   ]);
   const selected=(field:string)=>String(filterValue(config,field)??'');
@@ -46,7 +48,7 @@ export async function ProjectInitiativeBuilder({params,actor,saved}:{params:Para
         {select('forecastCategory','Forecast Category',['PIPELINE','BEST_CASE','COMMIT','OMITTED','CLOSED'].map(x=>({value:x,label:x.replaceAll('_',' ')})))}
         {select('status','Opportunity Status',[{value:'OPEN',label:'Open'},{value:'WON',label:'Closed Won'},{value:'LOST',label:'Closed Lost'}],'Any')}
         {select('productCategoryId','Product Category',categories.map(x=>({value:x.id,label:x.name})))}
-        {select('currency','Currency',currencies.map(x=>({value:x.code,label:x.code})))}
+        <CurrencyControl name="currency" value={selected('currency')} historicalCodes={currencies.map(row => row.code)}>{select('currency','Currency',currencies.map(x=>({value:x.code,label:x.code})))}</CurrencyControl>
         {date('startDate','Project Start Date')}{date('targetEndDate','Target End Date')}{date('closeDate','Expected Close Date')}
       </div></fieldset>
       <fieldset className="report-section"><legend className="report-section-title">Display options</legend><div className="report-filter-grid"><label className="label">Group By<select className="field" name="groupBy" defaultValue={config.groupBy??''}><option value="">None</option>{Object.entries(definition.groupings).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label className="label">Sort<select className="field" name="sortField" defaultValue={config.sort[0]?.field??'pipeline'}>{Object.entries(definition.sorts).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label className="label">Direction<select className="field" name="sortDirection" defaultValue={config.sort[0]?.direction??'desc'}><option value="asc">Ascending</option><option value="desc">Descending</option></select></label></div></fieldset>

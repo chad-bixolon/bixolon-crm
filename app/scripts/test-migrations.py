@@ -45,7 +45,7 @@ def prisma(database, *args):
 
 
 def create_database(name):
-    assert name in {"fresh", "upgrade", "compatibility", "backfill", "bad_role", "bad_price", "bad_parent", "bad_stage"}
+    assert name in {"fresh", "upgrade", "currency", "compatibility", "backfill", "bad_role", "bad_price", "bad_parent", "bad_stage"}
     for attempt in range(30):
         result = sql("postgres", f'CREATE DATABASE "{name}";', check=False)
         if result.returncode == 0:
@@ -124,6 +124,33 @@ try:
     print(prisma("fresh", "migrate", "diff", "--from-schema-datasource", "prisma/schema.prisma",
                  "--to-schema-datamodel", "prisma/schema.prisma", "--exit-code"), flush=True)
     print("PASS: empty database replay and schema parity", flush=True)
+
+    # Currency configuration is additive even with nondefault historical data.
+    create_database("currency")
+    sql("currency", initial)
+    sql("currency", fixture)
+    currency_migration = "20261018180000_currency_configuration"
+    for migration in sorted((ROOT / "prisma/migrations").iterdir()):
+        if migration.is_dir() and migration.name not in {INITIAL, currency_migration}:
+            sql("currency", (migration / "migration.sql").read_text())
+    sql("currency", '''BEGIN; INSERT INTO "Currency" (code,name,active,"updatedAt") VALUES ('CAD','Canadian Dollar',true,now());
+      UPDATE "Opportunity" SET "currencyCode"='CAD' WHERE id=(SELECT min(id) FROM "Opportunity");
+      INSERT INTO "OpportunitySnapshotRun" (id,"snapshotAt","snapshotWeek","createdByName","opportunityCount",source,"scopeVersion") VALUES (9900,'2026-10-05','2026-10-05','Currency fixture',1,'SCHEDULED','FORECAST_OPERATIONAL_V1');
+      INSERT INTO "OpportunitySnapshot" ("runId","snapshotAt","opportunityId","opportunityName","accountIds",accounts,"stageId","stageName",amount,"currencyCode",probability,"stageProbability","forecastCategory",status,"productCount","ownerId","ownerName","ownerForecastEligible","expectedCloseDate")
+        VALUES (9900,'2026-10-05',9999,'Historical CAD',ARRAY[]::integer[],'[]',1,'Open',123.45,'CAD',20,20,'PIPELINE','OPEN',1,9999,'Historical rep',true,'2026-11-01');
+      INSERT INTO "ForecastSnapshotRun" (id,"sourceRunId","snapshotAt","createdByName",year,quarter,"opportunityCount","salespersonCount","rowCount",source) VALUES (9900,9900,'2026-10-05','Currency fixture',2026,'Q4',1,1,1,'SCHEDULED');
+      INSERT INTO "ForecastSnapshotRollup" ("runId","ownerId","ownerName","currencyCode","forecastCategory","categoryName",amount,"opportunityCount") VALUES (9900,9999,'Historical rep','CAD','PIPELINE','Pipeline',123.45,1); COMMIT;''')
+    currency_before = all_table_fingerprints("currency")
+    sql("currency", (ROOT / "prisma/migrations" / currency_migration / "migration.sql").read_text())
+    currency_after = all_table_fingerprints("currency")
+    assert {k:v for k,v in currency_before.items() if k != 'Currency'} == {k:v for k,v in currency_after.items() if k != 'Currency'}
+    assert sql_values("currency", '''SELECT code FROM "Currency" WHERE "isDefault" AND active''') == ['USD']
+    assert sql("currency", '''UPDATE "Currency" SET active=false WHERE code='USD';''', check=False).returncode != 0
+    assert sql("currency", '''UPDATE "Currency" SET "isDefault"=true WHERE code='CAD';''', check=False).returncode != 0
+    sql("currency", '''BEGIN; UPDATE "Currency" SET "isDefault"=false WHERE code='USD'; UPDATE "Currency" SET "isDefault"=true WHERE code='CAD'; UPDATE "Currency" SET active=false WHERE code='USD'; COMMIT;''')
+    assert sql_values("currency", '''SELECT "currencyCode" FROM "OpportunitySnapshot"''') == ['CAD']
+    assert sql_values("currency", '''SELECT "currencyCode" FROM "ForecastSnapshotRollup"''') == ['CAD']
+    print("PASS: currency migration preserves all transaction/history fingerprints, seeds USD default, enforces one active default and retains inactive definitions", flush=True)
 
     create_database("upgrade")
     sql("upgrade", initial)

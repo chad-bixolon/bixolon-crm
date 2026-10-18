@@ -13,9 +13,10 @@ const {previewTargetSync,confirmTargetSync,splitAnnualTarget,targetSyncStatus}=r
 const dec=s=>new Prisma.Decimal(s);
 const actor=(role='ADMIN')=>({id:1,role,active:true,archivedAt:null});
 const input={userId:7,year:2027,currencyCode:'USD'};
-function fixture({amount='12000000.00',targets=[],planId=5,failQuarter=null}={}) {
+function fixture({amount='12000000.00',targets=[],planId=5,failQuarter=null,currencyActive=true}={}) {
   const state={planId,amount,targets:targets.map((value,i)=>({id:i+1,quarter:`Q${i+1}`,targetAmount:dec(value),updatedAt:new Date('2026-10-01T00:00:00Z')})),audits:[],writes:0};
   const tx={
+    currency:{findUnique:async()=>({active:currencyActive})},
     salesPlan:{findMany:async({where})=>where.ownerId===7&&where.planYear===2027&&where.currencyCode==='USD'&&where.status==='ACTIVE'?[{id:state.planId,revision:state.planId,lines:[{annualPlannedRevenue:state.amount===null?null:dec(state.amount)},{annualPlannedRevenue:null}]}]:[]},
     salesTarget:{findMany:async({where})=>where.userId===7&&where.year===2027&&where.currencyCode==='USD'?state.targets:[],
       update:async({where,data})=>{const row=state.targets.find(r=>r.id===where.id);if(row.quarter===failQuarter)throw new Error('quarter failed');row.targetAmount=data.targetAmount;row.updatedAt=new Date('2026-10-02T00:00:00Z');state.writes++;return row;},
@@ -35,3 +36,13 @@ test('only management roles may preview or confirm',async()=>{const f=fixture();
 test('snapshot catches target changes and transaction rolls back a failed quarter',async()=>{const f=fixture({targets:['1','2','3','4']});const p=await previewTargetSync(f.client,actor(),input);f.state.targets[0].targetAmount=dec('99');await assert.rejects(confirmTargetSync(f.client,actor(),{...input,planId:p.planId,snapshot:p.snapshot}),/changed since preview/);const failure=fixture({targets:['1','2','3','4'],failQuarter:'Q3'});await assert.rejects(sync(failure),/quarter failed/);assert.deepEqual(failure.state.targets.map(x=>x.targetAmount.toFixed(2)),['1.00','2.00','3.00','4.00']);assert.equal(failure.state.audits.length,0);});
 test('queries isolate rep, year and currency and ignore quarterly allocations',async()=>{const f=fixture();const calls=[];const orig=f.client.salesPlan.findMany;f.client.salesPlan.findMany=async x=>{calls.push(x.where);return orig(x);};await previewTargetSync(f.client,actor(),input);assert.deepEqual(calls[0],{ownerId:7,planYear:2027,currencyCode:'USD',status:'ACTIVE'});for(const override of [{userId:8},{year:2028},{currencyCode:'EUR'}])await assert.rejects(previewTargetSync(f.client,actor(),{...input,...override}),/active official Sales Plan/);assert.equal(f.state.targets.length,0);});
 test('a newer official revision is out of sync until management confirms again',async()=>{const f=fixture();await sync(f);f.state.planId=6;f.state.amount='13000000.00';const p=await previewTargetSync(f.client,actor(),input);assert.equal(p.status,'Out of Sync');assert.equal(p.currentAnnual.toFixed(2),'12000000.00');assert.equal(p.difference.toFixed(2),'1000000.00');assert.equal(p.proposed.reduce((v,x)=>v.add(x),dec(0)).toFixed(2),'13000000.00');});
+test('inactive plan currency may retain existing targets but cannot create missing targets',async()=>{
+  for(const targets of [[],['1','2']]) {
+    const f=fixture({targets,currencyActive:false});
+    await assert.rejects(sync(f),/activate this currency/);
+    assert.equal(f.state.writes,0);
+  }
+  const existing=fixture({targets:['1','2','3','4'],currencyActive:false});
+  await sync(existing);
+  assert.equal(existing.state.writes,4);
+});

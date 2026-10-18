@@ -76,7 +76,7 @@ test('Opportunity form does not preload Contacts while its edit and detail views
   let where;
   const client = {
     account: { findMany: async () => [] }, contact: { findMany: async args => { where = args.where; return []; } },
-    user: { findMany: async () => [] }, salesStage: { findMany: async () => [] }, currency: { findMany: async () => [] },
+    user: { findMany: async () => [] }, salesStage: { findMany: async () => [] }, currency: { findMany: async () => [{code:"USD",name:"US Dollar",active:true,isDefault:true}] },
     product: { count: async () => 0 }, project: { findMany: async () => [] }, productCategory: { findMany: async () => [] }, outcomeReason: { findMany: async () => [] }, competitorOption: { findMany: async () => [] },
   };
   await opportunityOptions(client);

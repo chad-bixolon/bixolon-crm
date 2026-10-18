@@ -34,7 +34,7 @@ test('Account and Opportunity owner pickers include only active users with recor
     ...userClient(),
     industry: { findMany: async () => [] }, territory: { findMany: async () => [] },
     account: { findMany: async () => [] }, contact: { findMany: async () => [] },
-    salesStage: { findMany: async () => [] }, currency: { findMany: async () => [] },
+    salesStage: { findMany: async () => [] }, currency: { findMany: async () => [{code:"USD",name:"US Dollar",active:true,isDefault:true}] },
     product: { count: async () => 0 }, project: { findMany: async () => [] },
     productCategory: { findMany: async () => [] }, outcomeReason: { findMany: async () => [] }, competitorOption: { findMany: async () => [] },
   };

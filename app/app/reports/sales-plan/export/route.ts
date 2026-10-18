@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   try { selection = exportSelection(Object.fromEntries(request.nextUrl.searchParams)); }
   catch { return new NextResponse('Choose a valid year, currency, and sales rep.', { status: 400 }); }
   const currency = await prisma.currency.findUnique({ where: { code: selection.currencyCode }, select: { active: true } });
-  if (!currency?.active) return new NextResponse('Choose an active currency.', { status: 400 });
+  if (!currency) return new NextResponse('Choose a configured currency.', { status: 400 });
   const result = await buildSalesPlanManagementExport(prisma, actor, selection);
   const buffer = writeSalesPlanWorkbook(result.workbook);
   return new NextResponse(new Uint8Array(buffer), { headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${result.filename}"`, 'Cache-Control': 'private, no-store' } });

@@ -54,7 +54,7 @@ test('default lists hide archived records while explicit historical views retain
 
 test('operational pickers and audience membership reject archived parent relationships',async()=>{
   const calls={};const find=key=>async args=>{calls[key]=args.where;return []};
-  await opportunityOptions({account:{findMany:find('account')},contact:{findMany:find('contact')},user:{findMany:find('user')},salesStage:{findMany:find('stage')},currency:{findMany:find('currency')},product:{count:async()=>0},project:{findMany:find('project')},productCategory:{findMany:find('category')},outcomeReason: { findMany: async () => [] }, competitorOption:{findMany:find('competitor')}});
+  await opportunityOptions({account:{findMany:find('account')},contact:{findMany:find('contact')},user:{findMany:find('user')},salesStage:{findMany:find('stage')},currency:{findMany:async()=>[{code:"USD",name:"US Dollar",active:true,isDefault:true}]},product:{count:async()=>0},project:{findMany:find('project')},productCategory:{findMany:find('category')},outcomeReason: { findMany: async () => [] }, competitorOption:{findMany:find('competitor')}});
   assert.equal(calls.account,undefined);
   assert.equal(calls.contact,undefined);
   assert.equal(calls.project,undefined);

@@ -1,3 +1,4 @@
+import { canRetainCurrency } from './currency-rules';
 import { Prisma, SalesQuarter, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 
@@ -21,7 +22,7 @@ export async function saveSalesTarget(client: PrismaClient, actor: Actor, form: 
     id ? client.salesTarget.findUnique({ where: { id } }) : null,
   ]);
   if (!user?.active || user.archivedAt || !['SALES', 'SALES_MANAGER'].includes(user.role)) throw new Error('Choose an active sales rep.');
-  if (!currency?.active) throw new Error('Choose an active currency.');
+  if (!canRetainCurrency(currency, data.currencyCode, old?.currencyCode)) throw new Error('Choose an active currency.');
   if (id && (!old || old.archivedAt)) throw new Error('Active target not found.');
   return id ? client.salesTarget.update({ where: { id }, data: { ...data, updatedById: actor.id } }) : client.salesTarget.create({ data: { ...data, createdById: actor.id } });
 }

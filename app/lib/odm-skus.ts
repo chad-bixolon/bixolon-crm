@@ -1,3 +1,4 @@
+import { canRetainCurrency } from './currency-rules';
 import { ProductCatalogSource, OdmCustomizationSubtype, type PrismaClient, type Prisma } from '@prisma/client';
 import { normalizePartNumber, normalizeAccountName } from './product-import';
 import { calculateOdmCustomerPrice, parseOdmPriceForm, type SubmittedOdmPrice } from './odm-customer-pricing';
@@ -98,6 +99,8 @@ export async function saveSkuMetadataInTransaction(tx: Prisma.TransactionClient,
     for (const price of calculatedPrices) {
       const active = await tx.productSkuOdmCustomerPrice.findFirst({ where: { skuId: sku.id, accountId: price.accountId, archivedAt: null } });
       const { accountId, ...terms } = price;
+      const currency = await tx.currency.findUnique({ where: { code: terms.currencyCode } });
+      if (!canRetainCurrency(currency, terms.currencyCode, active?.currencyCode)) throw new Error('Choose an active currency for new customer pricing.');
       if (active && active.currencyCode === terms.currencyCode && active.customerPrice.equals(terms.customerPrice) && (active.previousPrice?.toFixed(2) ?? null) === terms.previousPrice && active.tariffPercent.equals(terms.tariffPercent) && active.tariffAmount.equals(terms.tariffAmount) && active.finalUnitPrice.equals(terms.finalUnitPrice) && (active.effectiveDate?.toISOString().slice(0,10) ?? null) === (terms.effectiveDate?.toISOString().slice(0,10) ?? null) && active.notes === terms.notes) continue;
       if (active) await tx.productSkuOdmCustomerPrice.update({ where: { id: active.id }, data: { archivedAt: new Date() } });
       await tx.productSkuOdmCustomerPrice.create({ data: { skuId: sku.id, accountId, ...terms, sourceType: 'MANUAL' } });

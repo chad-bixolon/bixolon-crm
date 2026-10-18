@@ -62,6 +62,10 @@ export async function confirmTargetSync(client: PrismaClient, actor: Actor, inpu
     const preview = await previewTargetSync(tx as PrismaClient,actor,input);
     if (preview.planId !== input.planId || preview.snapshot !== input.snapshot) throw new Error('The active Sales Plan or targets changed since preview. Refresh and review again.');
     if (!preview.proposed || preview.status === 'Conflict') throw new Error(preview.status === 'Conflict' ? 'Duplicate active targets must be resolved before syncing.' : 'The official plan has no Annual Planned Revenue.');
+    if (preview.current.some(rows => !rows.length)) {
+      const currency = await tx.currency.findUnique({ where: { code: input.currencyCode } });
+      if (!currency?.active) throw new Error('An Admin must activate this currency before new Sales Targets can be created.');
+    }
     const prior = preview.current.flat().map(row => ({id:row.id,quarter:row.quarter,amount:row.targetAmount.toFixed(2)}));
     const resulting: {id:number;quarter:SalesQuarter;amount:string}[] = [];
     for (let i=0; i<4; i++) {

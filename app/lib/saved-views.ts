@@ -5,7 +5,7 @@ import { validTaskDuePeriod } from './task-due-period';
 export const savedViewRoutes = {
   accounts: { path: '/accounts', keys: ['q','view','status','salesRepId','role','territory','industry','strategic'] },
   contacts: { path: '/contacts', keys: ['q','active','accountId','salesRepId','marketingPreference','title','primary','assignment','sort','dir'] },
-  opportunities: { path: '/opportunities', keys: ['q','stageId','competitorId','ownerId','forecastCategory','closePeriod','closeFrom','closeTo','accountId','projectId','archived'] },
+  opportunities: { path: '/opportunities', keys: ['currencyCode','q','stageId','competitorId','ownerId','forecastCategory','closePeriod','closeFrom','closeTo','accountId','projectId','archived'] },
   tasks: { path: '/tasks', keys: ['q','visibility','status','priority','assignedToId','accountId','opportunityId','duePeriod','dueFrom','dueTo'] },
   projects: { path: '/projects', keys: ['q','status','ownerId','accountId','archived'] },
   'price-exceptions': { path: '/price-exceptions', keys: ['q','status','distributor','varName','endUser','expiration','unresolved','salesRep'] },
@@ -13,7 +13,7 @@ export const savedViewRoutes = {
   'support-cases': { path: '/support/cases', keys: ['q','assignedToId','status','priority','account','categoryId','product','openedFrom','openedTo','archive','sort'] },
   products: { path: '/products', keys: ['q','active','catalogSource','category','priceException'] },
   campaigns: { path: '/marketing/campaigns', keys: ['q','status','year','archived'] },
-  pipeline: { path: '/pipeline', keys: ['ownerId','stageId','territory','closeFrom','closeTo'] },
+  pipeline: { path: '/pipeline', keys: ['currencyCode','ownerId','stageId','territory','closeFrom','closeTo'] },
   'calendar-matches': { path: '/calendar-matches', keys: ['status','q','from','to','accountId'] },
 } as const;
 
@@ -40,6 +40,7 @@ export function normalizeSavedQuery(route: SavedViewRoute, input: unknown): Save
     if (!clean || clean === defaults[route]?.[key] || clean.length > (key === 'q' ? 120 : 100)) continue;
     if (idKeys.has(key) && !/^[1-9]\d{0,9}$/.test(clean) && !(route === 'opportunities' && key === 'projectId' && clean === 'none') && !(route === 'contacts' && key === 'accountId' && clean === 'unassigned')) continue;
     if (dateKeys.has(key) && !/^\d{4}-\d{2}-\d{2}$/.test(clean)) continue;
+    if (key === 'currencyCode' && !/^[A-Z]{3}$/.test(clean)) continue;
     if (key === 'closePeriod' && !validClosePeriod(clean)) continue;
     if (key === 'duePeriod' && !validTaskDuePeriod(clean)) continue;
     output[key] = clean;

@@ -1,3 +1,5 @@
+import { reportingCurrencies } from '@/lib/company-currency';
+import { CurrencyControl } from '@/components/currency-control';
 import { RecoverableActionForm } from '@/components/recoverable-action-form';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
@@ -22,7 +24,7 @@ export async function ChannelPartnerBuilder({params,actor,saved}:{params:Params;
     prisma.user.findMany({where:{active:true,archivedAt:null,...(actor.role==='SALES'?{id:actor.id}:{})},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
     prisma.salesStage.findMany({orderBy:[{sortOrder:'asc'},{id:'asc'}]}),prisma.industry.findMany({orderBy:{name:'asc'}}),prisma.territory.findMany({orderBy:{name:'asc'}}),
     prisma.productCategory.findMany({orderBy:{name:'asc'}}),
-    prisma.currency.findMany({where:{active:true},orderBy:{code:'asc'}}),
+    reportingCurrencies(),
   ]);
   const selected=(field:string)=>String(filterValue(config,field)??'');
   const preset=String(config.filters.find(x=>x.field==='closeDate'&&x.operator==='preset')?.value??'');
@@ -45,7 +47,7 @@ export async function ChannelPartnerBuilder({params,actor,saved}:{params:Params;
         {select('strategicAccount','Strategic Account',[{value:'true',label:'Yes'},{value:'false',label:'No'}])}
         {select('productCategoryId','Product Category',categories.map(x=>({value:x.id,label:x.name})))}
         <ReportEntityFilter type="project" name="projectId" label="Project" selected={selected('projectId')} actor={actor}/>
-        {select('currency','Currency',currencies.map(x=>({value:x.code,label:x.code})),'All currencies')}
+        <CurrencyControl name="currency" value={selected('currency')} historicalCodes={currencies.map(row => row.code)}>{select('currency','Currency',currencies.map(x=>({value:x.code,label:x.code})),'All currencies')}</CurrencyControl>
         <ReportCloseDateFields initialChoice={between?'CUSTOM':preset||'ANY'} initialFrom={between?.from} initialTo={between?.to}/>
       </div></fieldset>
       <fieldset className="report-section"><legend className="report-section-title">Display options</legend><div className="report-filter-grid">

@@ -121,7 +121,7 @@ function saveDb({ existingLine = null, selectedLines = [], catalogPrices = [], o
     opportunityProject: { delete: async () => ({}), create: async () => ({}) }, opportunityAccount: { findMany: async () => [], delete: async () => ({}), upsert: async () => ({}) }, opportunityAccountRole: { deleteMany: async () => ({}), create: async () => ({}) },
     opportunityHistoryEvent: { createMany: async () => ({ count: 1 }) },
   };
-  return { writes, client: { $transaction: async fn => fn(tx) } };
+  return { writes, tx, client: { $transaction: async fn => fn(tx) } };
 }
 const input = lineInput => ({ name: 'Deal', description: null, ownerId: null, projectIds: [], stageId: 1, expectedCloseDate: null, probability: null, forecastCategory: null, currencyCode: 'USD', participants, lines: [lineInput] });
 const selectedLine = (overrides = {}) => ({ id: 102, productSkuId: 9, approvedUnitPrice: new Prisma.Decimal('189.00'), currencyCode: 'USD', sourceQuantity: new Prisma.Decimal('1000'), sourceQuantityRaw: '1000', sourceUnit: null, priceException: parent(), ...overrides });
@@ -344,4 +344,13 @@ test('schema, importer, detail UI, and authorization encode historical and read-
   assert.doesNotMatch(peDetail, />Source quantity</);
   for (const role of ['ADMIN', 'SALES_MANAGER', 'SALES']) assert.equal(can({ id: 1, role, active: true }, 'sales.write'), true);
   assert.equal(can({ id: 1, role: 'READ_ONLY', active: true }, 'sales.write'), false);
+});
+
+test('inactive transaction currency rejects new Opportunities and remains editable on the existing record', async () => {
+  const create = saveDb();
+  create.tx.currency.findUnique = async () => ({code:'USD',active:false});
+  await assert.rejects(saveOpportunity(create.client, {...input({productId:3,quantity:1,price:'10.00'}), lines:[]}), /available currency/);
+  const edit = saveDb({existingLine:{id:40,quantity:1,estimatedUnitPrice:new Prisma.Decimal('10'),productId:3}});
+  edit.tx.currency.findUnique = async () => ({code:'USD',active:false});
+  await saveOpportunity(edit.client, input({id:40,productId:3,quantity:1,price:'10.00',priceSource:'MANUAL'}),5);
 });

@@ -1,3 +1,6 @@
+import { MultiCurrencyOnly } from '@/components/currency-control';
+import { companyCurrency } from '@/lib/company-currency';
+import { CurrencyControl } from '@/components/currency-control';
 import { snapshotAttribution } from '@/lib/snapshot-capture-identity';
 import { HelpLink } from '@/components/help-link';
 import { NAV_CATEGORIES } from '@/lib/navigation-categories';
@@ -21,6 +24,7 @@ function date(value: string | string[] | undefined) {
 }
 export default async function ForecastSnapshotsReport({ searchParams }: { searchParams: Promise<Params> }) {
   const actor = await currentUser(); if (!canReadOpportunitySnapshots(actor)) notFound();
+  const currencyConfig = await companyCurrency();
   const params = await searchParams, current = businessQuarter();
   const yearParam = Number(scalar(params.year)), quarterParam = scalar(params.quarter) as SalesQuarter;
   const year = Number.isInteger(yearParam) && yearParam >= 2000 && yearParam <= 2100 ? yearParam : current.year;
@@ -32,10 +36,11 @@ export default async function ForecastSnapshotsReport({ searchParams }: { search
   const extraIds = [beforeId, afterId].filter((key): key is number => !!key && !runs.some(run => run.id === key));
   const extraRuns = extraIds.length ? await prisma.forecastSnapshotRun.findMany({ where: { id: { in: extraIds }, year, quarter }, take: 2 }) : [];
   const choices = [...runs, ...extraRuns];
-  const [owners, currencies] = await Promise.all([
+  const [owners, capturedCurrencies] = await Promise.all([
     prisma.$queryRaw<{ id: number; name: string }[]>(Prisma.sql`SELECT r."ownerId" AS id, (array_agg(r."ownerName" ORDER BY f."snapshotAt" DESC, f.id DESC))[1] AS name FROM "ForecastSnapshotRollup" r JOIN "ForecastSnapshotRun" f ON f.id = r."runId" WHERE f.year = ${year} AND f.quarter = ${quarter}::"SalesQuarter" GROUP BY r."ownerId" ORDER BY name LIMIT 201`),
     prisma.forecastSnapshotRollup.groupBy({ by: ['currencyCode'], where: { run: { year, quarter } }, orderBy: { currencyCode: 'asc' } }),
   ]);
+  const currencies = [...new Set([...currencyConfig.activeCurrencies.map(row => row.code), ...capturedCurrencies.map(row => row.currencyCode)])].sort().map(currencyCode => ({currencyCode}));
   let result: Awaited<ReturnType<typeof compareForecastSnapshotRuns>> | undefined, error = '';
   if (beforeId && afterId) {
     try {
@@ -70,12 +75,12 @@ export default async function ForecastSnapshotsReport({ searchParams }: { search
       <label className="text-sm">Forecast quarter<select className="field mt-1" name="quarter" aria-label="Forecast quarter" defaultValue={quarter}>{quarters.map(q => <option key={q}>{q}</option>)}</select></label>
       {([['before', 'Earlier Forecast Snapshot', beforeId], ['after', 'Later Forecast Snapshot', afterId]] as const).map(([name, label, selected]) => <label className="min-w-0 text-sm" key={name}>{label}<select className="field mt-1 w-full" name={name} aria-label={label} defaultValue={selected ?? ''}><option value="">Choose a snapshot</option>{choices.map(run => <option value={run.id} key={run.id}>#{run.id} · {run.snapshotAt.toISOString()} · Opportunity Snapshot #{run.sourceRunId} · {snapshotAttribution(run)}</option>)}</select></label>)}
       <label className="min-w-0 text-sm">Salesperson<select className="field mt-1 w-full" name="ownerId" aria-label="Salesperson" defaultValue={ownerId ?? ''}><option value="">All salespeople</option>{owners.map(owner => <option value={owner.id} key={owner.id}>{owner.name}</option>)}</select></label>
-      <label className="text-sm">Currency<select className="field mt-1" name="currencyCode" aria-label="Currency" defaultValue={currencyCode ?? ''}><option value="">All (separate totals)</option>{currencies.map(row => <option key={row.currencyCode}>{row.currencyCode}</option>)}</select></label>
+      <CurrencyControl name="currencyCode" value={currencyCode ?? ''} historicalCodes={currencies.map(row => row.currencyCode)}><label className="text-sm">Currency<select className="field mt-1" name="currencyCode" aria-label="Currency" defaultValue={currencyCode ?? ''}><option value="">All (separate totals)</option>{currencies.map(row => <option key={row.currencyCode}>{row.currencyCode}</option>)}</select></label></CurrencyControl>
       <label className="text-sm">Snapshot date from (UTC)<input className="field mt-1" type="date" name="from" defaultValue={from?.toISOString().slice(0, 10)}/></label>
       <label className="text-sm">Snapshot date through (UTC)<input className="field mt-1" type="date" name="through" defaultValue={through?.toISOString().slice(0, 10)}/></label>
       <div className="compact-action-row flex items-center gap-4"><button className="btn-primary">Compare forecasts</button><Link className="text-sm underline" href="/reports/forecast-snapshots">Reset</Link></div>
     </form>
-    <p className="panel mb-5 p-4 text-sm">Pipeline includes Best Case and Commit; currencies stay separate. Closed Won uses the captured won stage and Expected Close Date in {year} {quarter}, rather than an actual booking date.</p>
+    <p className="panel mb-5 p-4 text-sm">Pipeline includes Best Case and Commit<MultiCurrencyOnly>; currencies stay separate</MultiCurrencyOnly>. Closed Won uses the captured won stage and Expected Close Date in {year} {quarter}, rather than an actual booking date.</p>
     <p className="mb-4 text-sm text-slate-600">Up to 104 snapshots are shown for the selected dates (UTC). Use the period and date filters for older history.{owners.length > 200 && ' The salesperson list shows up to 201 names recorded in snapshots.'}</p>
     {error && <p role="alert" className="panel mb-5 p-4 text-red-700">{error}</p>}
     {!result && !error && <p className="panel mb-5 p-5">{runs.length < 2 ? 'Create two Forecast Snapshots from different Opportunity capture dates for this period to compare. History begins with the first capture.' : 'Choose two Forecast Snapshots.'}</p>}

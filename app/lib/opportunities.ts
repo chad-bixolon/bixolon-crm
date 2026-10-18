@@ -1,3 +1,4 @@
+import { getCurrencyConfiguration, canRetainCurrency } from './currency-configuration';
 import { parseActualCloseDate, resolveOpportunityOutcome, outcomeHistoryValue, opportunityOutcomeWhere, type OutcomeFilters } from './opportunity-outcomes';
 import { businessToday, isPriceExceptionExpired } from './price-exception-dates';
 import { operationalProjectWhere, operationalOpportunityWhere } from './operational-where';
@@ -107,16 +108,16 @@ export function lineTotal(line: { quantity: number; estimatedUnitPrice: Prisma.D
 export function opportunityTotal(lines: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number; archivedAt?: Date | null }[]) { return lines.reduce((sum, line) => line.archivedAt ? sum : sum.add(lineTotal(line)), new Prisma.Decimal(0)); }
 export function weightedValue(total: Prisma.Decimal, probability: number) { return total.mul(probability).div(100); }
 export async function opportunityOptions(client: PrismaClient) {
-  const [owners, stages, currencies, productCount, productCategories, competitors, outcomeReasons] = await Promise.all([
+  const [owners, stages, currencyConfig, productCount, productCategories, competitors, outcomeReasons] = await Promise.all([
     client.user.findMany({ where: eligibleUserWhere('sales.write'), orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
     client.salesStage.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { id: true, name: true, probability: true, isClosed: true, isWon: true } }),
-    client.currency.findMany({ where: { active: true }, orderBy: { code: "asc" }, select: { code: true, name: true } }),
+    getCurrencyConfiguration(client),
     client.product.count({ where: { active: true, archivedAt: null } }),
     client.productCategory.findMany({ where: { OR: [{ active: true }, { products: { some: {} } }] }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
     client.competitorOption.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true, active: true } }),
     client.outcomeReason.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true, isWon: true, active: true } }),
   ]);
-  return { businessDate: businessToday().toISOString().slice(0, 10), outcomeReasons, accounts: [] as { id: number; name: string }[], contacts: [] as { id: number; firstName: string; lastName: string; email: string | null; accountId: number | null }[], owners, stages, currencies, productCount, projects: [] as { id: number; name: string }[], productCategories, competitors };
+  return { defaultCurrency: currencyConfig.defaultCurrency, businessDate: businessToday().toISOString().slice(0, 10), outcomeReasons, accounts: [] as { id: number; name: string }[], contacts: [] as { id: number; firstName: string; lastName: string; email: string | null; accountId: number | null }[], owners, stages, currencies: currencyConfig.activeCurrencies, productCount, projects: [] as { id: number; name: string }[], productCategories, competitors };
 }
 export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number, actor?: Actor) {
   if (actor) assertPermission(actor, 'sales.write');
@@ -145,7 +146,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       if (!competitor || (!competitor.active && existing?.competitorId !== input.competitorId)) throw new Error("Choose an available competitor.");
     }
     if (actor?.role === 'SALES' && (input.ownerId !== actor.id || (existing && existing.ownerId !== actor.id))) throw new Error('Sales users may edit only their own Opportunities.');
-    if (!currency?.active) throw new Error("Choose an available currency.");
+    if (!canRetainCurrency(currency, input.currencyCode, existing?.currencyCode)) throw new Error("Choose an available currency.");
     if (input.ownerId && input.ownerId !== existing?.ownerId && !eligibleUser(owner, 'sales.write')) throw new Error("Choose an eligible owner.");
     if (new Set(input.projectIds).size !== input.projectIds.length || projects.length !== input.projectIds.length || projects.some(project => project.archivedAt && !existing?.projects.some(link => link.projectId === project.id))) throw new Error("Choose each active Project only once.");
     if (accounts.length !== input.participants.length) throw new Error("Choose active accounts for all participants.");
@@ -305,7 +306,7 @@ export async function setOpportunityArchived(client: PrismaClient, id: number, a
     }
   });
 }
-export type OpportunityFilters = OutcomeFilters & { q?: string; stageId?: string; ownerId?: string; competitorId?: string; projectId?: string; forecastCategory?: string; closePeriod?: string; closeFrom?: string; closeTo?: string; accountId?: string; page?: string; archived?: string };
+export type OpportunityFilters = OutcomeFilters & { currencyCode?: string; q?: string; stageId?: string; ownerId?: string; competitorId?: string; projectId?: string; forecastCategory?: string; closePeriod?: string; closeFrom?: string; closeTo?: string; accountId?: string; page?: string; archived?: string };
 export function opportunityWhere(filters: OpportunityFilters, now = new Date()): Prisma.OpportunityWhereInput {
   const visibility = recordVisibility(filters.archived === "yes" ? "archived" : filters.archived === "all" ? "all" : "active");
   const where: Prisma.OpportunityWhereInput = { ...opportunityOutcomeWhere(filters), ...archivedWhere(visibility), ...(visibility === 'active' ? { AND: [operationalOpportunityWhere] } : {}) };
@@ -313,6 +314,7 @@ export function opportunityWhere(filters: OpportunityFilters, now = new Date()):
     const contains = { contains: filters.q.trim().slice(0, 100), mode: "insensitive" as const };
     where.OR = [{ name: contains }, { competitor: { is: { name: contains } } }, { currentProductBeingUsed: contains }];
   }
+  if (/^[A-Z]{3}$/.test(filters.currencyCode ?? '')) where.currencyCode = filters.currencyCode;
   const stageId = positiveId(filters.stageId ?? ""); if (stageId) where.stageId = stageId;
   const competitorId = positiveId(filters.competitorId ?? ""); if (competitorId) where.competitorId = competitorId;
   const ownerId = positiveId(filters.ownerId ?? ""); if (ownerId) where.ownerId = ownerId;

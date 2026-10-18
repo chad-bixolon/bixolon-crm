@@ -25,6 +25,7 @@ function harness(filename, props, overrides = {}) {
     const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText;
     new Function('require', 'module', 'exports', code)(name => {
       if (name === 'react') return hooks;
+      if (name === './currency-control') return { CurrencyControl: ({children}) => children };
       if (name in overrides) return overrides[name];
       if (name.startsWith('./')) {
         const base = path.resolve(path.dirname(file), name);

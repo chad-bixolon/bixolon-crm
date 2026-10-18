@@ -1,3 +1,5 @@
+import { reportingCurrencies } from '@/lib/company-currency';
+import { CurrencyControl } from '@/components/currency-control';
 import { SavedViews } from '@/components/saved-views';
 import { FilterDisclosure } from '../../components/filter-disclosure';
 import { countOpportunityFilters } from '../../lib/filter-count';
@@ -24,6 +26,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
   const [{ opportunities, count, page, pages }, options] = await Promise.all([listOpportunities(prisma, filters, actor), opportunityOptions(prisma)]);
   const selectedProjectId = Number(filters.projectId);
   const selectedProject = Number.isSafeInteger(selectedProjectId) && selectedProjectId > 0 ? await prisma.project.findFirst({ where: { AND: [{ id: selectedProjectId }, projectReadWhere(actor)] }, select: { id: true, name: true } }) : null;
+  const currencies = await reportingCurrencies();
   const search = filters.q?.trim().slice(0, 100) ?? "";
   const mixedCurrencies = new Set(opportunities.map(o => o.currencyCode)).size > 1;
   const linkFor = (target: number) => {
@@ -44,6 +47,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
       <div><label className="label" htmlFor="competitorId">Competitor</label><select className={control} id="competitorId" name="competitorId" defaultValue={filters.competitorId ?? ""}><option value="">All competitors</option>{options.competitors.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}{filters.competitorId && !options.competitors.some(option => String(option.id) === filters.competitorId) && <option value={filters.competitorId}>Selected inactive competitor</option>}</select></div>
       <div><label className="label" htmlFor="ownerId">Owner</label><select className={control} id="ownerId" name="ownerId" defaultValue={filters.ownerId ?? ""}><option value="">All owners</option>{options.owners.map(o => <option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select></div>
       <div><label className="label" htmlFor="forecastCategory">Forecast</label><select className={control} id="forecastCategory" name="forecastCategory" defaultValue={filters.forecastCategory ?? ""}><option value="">All categories</option>{Object.entries(forecastLabels).map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></div>
+<CurrencyControl value={filters.currencyCode ?? ""} historicalCodes={currencies.map(row => row.code)}><label className="label">Currency<select className={control} name="currencyCode" defaultValue={filters.currencyCode ?? ""}><option value="">All currencies</option>{currencies.map(row => <option key={row.code}>{row.code}</option>)}</select></label></CurrencyControl>
       <OpportunityClosePeriod key={`${filters.closePeriod ?? ''}:${filters.closeFrom ?? ''}:${filters.closeTo ?? ''}`} initial={filters} nearby={nearbyCloseQuarters()}/>
       <ReportEntityFilter type="account" name="accountId" label="Participating Account" selected={filters.accountId ?? ''} actor={actor}/>
       <OptionalProjectFilter key={filters.projectId ?? ''} initial={selectedProject ? { ...selectedProject, context: null } : null} none={filters.projectId === 'none'}/>

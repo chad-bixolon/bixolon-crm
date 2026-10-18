@@ -13,6 +13,10 @@ export default async function EditOpportunityPage({ params }: { params: Promise<
   const actor = await requirePermission('sales.write');
   const [opportunity, options, labels] = await Promise.all([prisma.opportunity.findUnique({ where: { id }, include: { owner: { select: { firstName: true, lastName: true } }, projects: true, contacts: true, participants: { include: { roles: true } }, products: { where: { archivedAt: null }, include: { priceExceptionLine: { select: { priceException: { select: { distributorAccountId: true, varAccountId: true, endUserAccountId: true, assignedSalesRepUserId:true, sourceType:true } } } } } } } }), opportunityOptions(prisma), getLabels(prisma)]);
   if (!opportunity || (actor.role === 'SALES' && opportunity.ownerId !== actor.id)) notFound();
+  if (!options.currencies.some(currency => currency.code === opportunity.currencyCode)) {
+    const stored = await prisma.currency.findUnique({ where: { code: opportunity.currencyCode } });
+    if (stored) options.currencies.push(stored);
+  }
   if (!options.stages.some(stage => stage.id === opportunity.stageId)) {
     const currentStage = await prisma.salesStage.findUnique({ where: { id: opportunity.stageId }, select: { id: true, name: true, probability: true, isClosed: true, isWon: true } });
     if (currentStage) options.stages.push(currentStage);

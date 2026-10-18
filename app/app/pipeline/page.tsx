@@ -1,3 +1,5 @@
+import { reportingCurrencies } from '@/lib/company-currency';
+import { CurrencyControl } from '@/components/currency-control';
 import { HelpLink } from '@/components/help-link';
 import { SavedViews } from '@/components/saved-views';
 import { FilterDisclosure } from '../../components/filter-disclosure';
@@ -19,7 +21,7 @@ import { positiveId, forecastLabels } from '@/lib/crm-validation';
 import { pipelineProjectFilter } from '@/lib/projects';
 
 export const dynamic='force-dynamic';
-type Filters={ownerId?:string;stageId?:string;territory?:string;projectId?:string;closeFrom?:string;closeTo?:string};
+type Filters={currencyCode?:string;ownerId?:string;stageId?:string;territory?:string;projectId?:string;closeFrom?:string;closeTo?:string};
 
 export default async function Page({searchParams}:{searchParams:Promise<Filters>}) {
   const f=await searchParams;
@@ -30,11 +32,12 @@ export default async function Page({searchParams}:{searchParams:Promise<Filters>
   const selectedProjectId = positiveId(f.projectId ?? '');
   const selectedProject = selectedProjectId ? await prisma.project.findFirst({ where: { AND: [{ id: selectedProjectId }, projectReadWhere(actor)] }, select: { id: true, name: true } }) : null;
   const [rows,owners,stages,territories]=await Promise.all([
-    prisma.opportunity.findMany({where:{AND:[operationalOpportunityWhere,pipelineScope(actor,f.ownerId)],stage:{isClosed:false},...(stageId?{stageId}:{}),...pipelineProjectFilter(f.projectId),...(f.territory?{participants:{some:{account:{territory:f.territory}}}}:{}),...(from||to?{expectedCloseDate:{...(from?{gte:from}:{}),...(to?{lt:new Date(to.getTime()+86400000)}:{})}}:{})},include:{stage:true,products:{where:{archivedAt:null}}}}),
+    prisma.opportunity.findMany({where:{AND:[operationalOpportunityWhere,pipelineScope(actor,f.ownerId)],stage:{isClosed:false},...(/^[A-Z]{3}$/.test(f.currencyCode??'')?{currencyCode:f.currencyCode}:{}),...(stageId?{stageId}:{}),...pipelineProjectFilter(f.projectId),...(f.territory?{participants:{some:{account:{territory:f.territory}}}}:{}),...(from||to?{expectedCloseDate:{...(from?{gte:from}:{}),...(to?{lt:new Date(to.getTime()+86400000)}:{})}}:{})},include:{stage:true,products:{where:{archivedAt:null}}}}),
     prisma.user.findMany({where:actor.role==='SALES'?activeSalesRepWhere():{active:true,archivedAt:null},orderBy:{lastName:'asc'}}),
     prisma.salesStage.findMany({orderBy:{sortOrder:'asc'}}),
     prisma.territory.findMany({orderBy:{name:'asc'}}),
   ]);
+  const currencyOptions = await reportingCurrencies();
   const currencies=[...new Set(rows.map(r=>r.currencyCode))].sort();
   type Row=Pick<Opportunity,'id'|'currencyCode'|'probability'|'expectedCloseDate'|'forecastCategory'> & {stage:Pick<SalesStage,'id'|'name'|'probability'>;products:Pick<OpportunityProduct,'quantity'|'estimatedUnitPrice'|'archivedAt'>[]};
   const sections: [string,(r:Row)=>string][]=[['Stage',r=>r.stage.name],['Expected close month',closeMonth],['Forecast category',r=>r.forecastCategory?forecastLabels[r.forecastCategory]:'Unspecified']];
@@ -47,6 +50,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Filters>
     <form method="get" className="responsive-filter-form panel filter-panel filter-grid mb-5" aria-label="Filter pipeline"><FilterDisclosure initialCount={countActiveFilters(f, {})} defaults={{}} clearHref="/pipeline"/>
       <label className="label">Owner<select className={control} name="ownerId" defaultValue={f.ownerId??''}><option value="">{actor.role==='SALES'?'My pipeline':'All'}</option>{owners.map(o=><option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select></label>
       <label className="label">Stage<select className={control} name="stageId" defaultValue={f.stageId??''}><option value="">All</option>{stages.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      <CurrencyControl value={f.currencyCode ?? ""} historicalCodes={currencyOptions.map(row => row.code)}><label className="label">Currency<select className={control} name="currencyCode" defaultValue={f.currencyCode ?? ""}><option value="">All currencies</option>{currencyOptions.map(row => <option key={row.code}>{row.code}</option>)}</select></label></CurrencyControl>
       <OptionalProjectFilter key={f.projectId ?? ''} initial={selectedProject ? { ...selectedProject, context: null } : null} none={f.projectId === 'none'}/>
       <label className="label">Territory<select className={control} name="territory" defaultValue={f.territory??''}><option value="">All</option>{territories.map(t=><option key={t.code} value={t.code}>{t.name}</option>)}</select></label>
       <label className="label">Close Date From<input className={control} type="date" name="closeFrom" defaultValue={f.closeFrom??''}/></label>
@@ -54,7 +58,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Filters>
       <div className="filter-actions"><button className="btn-filter-primary">Apply</button><Link href="/pipeline" className="btn-filter-secondary">Clear</Link></div>
     </form>
     <p className="mb-4 text-sm text-slate-600">{rows.length} open opportunities. {currencies.length > 1 ? "Values are shown separately by currency." : "Values reflect the selected opportunities."}</p>
-    {currencies.map(currency=><div key={currency}><h2 className="mb-3 mt-6 text-xl font-semibold">{currency === "USD" && currencies.length === 1 ? "Pipeline" : currency === "USD" ? "USD Pipeline" : `${currency} Pipeline`}</h2>{sections.map(([title,key])=><section className="panel mb-5 overflow-x-auto" key={title}><h3 className="p-5 font-semibold">{title}</h3><table className="w-full min-w-[720px] table-fixed text-sm"><colgroup><col className="w-[40%]"/><col className="w-[16%]"/><col className="w-[22%]"/><col className="w-[22%]"/></colgroup><thead className="border-b bg-slate-50"><tr><th scope="col" className="p-3 text-left">Group</th><th scope="col" className="p-3 text-center">Opportunities</th><th scope="col" className="p-3 text-right">Estimated value</th><th scope="col" className="p-3 text-right">Weighted value</th></tr></thead><tbody className="divide-y">{summarizePipeline(rows.filter(r=>r.currencyCode===currency),key).map(g=><tr className="even:bg-slate-50/60 hover:bg-orange-50/50" key={g.label}><td className="p-4 text-left">{title === "Expected close month" ? formatCloseMonth(g.label) : g.label}</td><td className="p-4 text-center tabular-nums">{g.count}</td><td className="p-4 text-right tabular-nums whitespace-nowrap">{formatCurrency(g.estimated, currency)}</td><td className="p-4 text-right tabular-nums whitespace-nowrap">{formatCurrency(g.weighted, currency)}</td></tr>)}</tbody></table></section>)}</div>)}
+    {currencies.map(currency=><div key={currency}><h2 className="mb-3 mt-6 text-xl font-semibold">{currencies.length === 1 ? "Pipeline" : `${currency} Pipeline`}</h2>{sections.map(([title,key])=><section className="panel mb-5 overflow-x-auto" key={title}><h3 className="p-5 font-semibold">{title}</h3><table className="w-full min-w-[720px] table-fixed text-sm"><colgroup><col className="w-[40%]"/><col className="w-[16%]"/><col className="w-[22%]"/><col className="w-[22%]"/></colgroup><thead className="border-b bg-slate-50"><tr><th scope="col" className="p-3 text-left">Group</th><th scope="col" className="p-3 text-center">Opportunities</th><th scope="col" className="p-3 text-right">Estimated value</th><th scope="col" className="p-3 text-right">Weighted value</th></tr></thead><tbody className="divide-y">{summarizePipeline(rows.filter(r=>r.currencyCode===currency),key).map(g=><tr className="even:bg-slate-50/60 hover:bg-orange-50/50" key={g.label}><td className="p-4 text-left">{title === "Expected close month" ? formatCloseMonth(g.label) : g.label}</td><td className="p-4 text-center tabular-nums">{g.count}</td><td className="p-4 text-right tabular-nums whitespace-nowrap">{formatCurrency(g.estimated, currency)}</td><td className="p-4 text-right tabular-nums whitespace-nowrap">{formatCurrency(g.weighted, currency)}</td></tr>)}</tbody></table></section>)}</div>)}
     {!rows.length&&<div className="panel p-8 text-sm text-slate-500">No open opportunities match these filters.</div>}
   </Content>;
 }

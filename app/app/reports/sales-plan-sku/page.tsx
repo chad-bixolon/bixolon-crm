@@ -1,3 +1,6 @@
+import { companyCurrency } from '@/lib/company-currency';
+import { reportingCurrencies } from '@/lib/company-currency';
+import { CurrencyControl } from '@/components/currency-control';
 import { FilterDisclosure } from '../../../components/filter-disclosure';
 import { countActiveFilters } from '../../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
@@ -16,16 +19,16 @@ type Params={year?:string;currencyCode?:string;userId?:string;productId?:string;
 const id=(s?:string)=>s&&/^\d+$/.test(s)&&Number.isSafeInteger(Number(s))&&Number(s)>0?Number(s):null;
 const shown=(v:{toString():string}|null,code?:string)=>v===null?'—':code?formatPlanCurrency(v,code):formatPlanNumber(v);
 export default async function Page({searchParams}:{searchParams:Promise<Params>}) {
-  const actor=await currentUser();if(!rollupAccess(actor))return <Content>Access denied.</Content>;
+  const actor=await currentUser();const currencyConfig = await companyCurrency();if(!rollupAccess(actor))return <Content>Access denied.</Content>;
   const raw=await searchParams,nowYear=Number(new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',year:'numeric'}).format(new Date()));
   const year=/^\d{4}$/.test(raw.year??'')&&Number(raw.year)>=2000&&Number(raw.year)<=2100?Number(raw.year):nowYear;
-  const currencyCode=/^[A-Z]{3}$/.test(raw.currencyCode??'')?raw.currencyCode!:'USD';
+  const currencyCode=/^[A-Z]{3}$/.test(raw.currencyCode??'')?raw.currencyCode!:currencyConfig.defaultCurrency;
   const selection={year,currencyCode,userId:id(raw.userId),productId:id(raw.productId),skuId:id(raw.skuId),accountId:id(raw.accountId),search:(raw.search??'').slice(0,100)};
   const planWhere={planYear:year,currencyCode,status:'ACTIVE' as const,owner:activeSalesRepWhere()};
   const [report,reps,currencies,skus]=await Promise.all([
     salesPlanSkuRollup(prisma,actor,selection),
     prisma.user.findMany({where:activeSalesRepWhere(),select:{id:true,firstName:true,lastName:true},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
-    prisma.currency.findMany({where:{active:true},select:{code:true},orderBy:{code:'asc'}}),
+    reportingCurrencies(),
     prisma.productSku.findMany({where:{salesPlanLines:{some:{plan:planWhere}}},select:{id:true,partNumber:true,productId:true,product:{select:{name:true}}},orderBy:{partNumber:'asc'}}),
   ]);
   const {rows,lines,unresolved,summary}=report;
@@ -38,12 +41,12 @@ export default async function Page({searchParams}:{searchParams:Promise<Params>}
   return <Content><PageHeader eyebrow={`${NAV_CATEGORIES.reports} / Sales Plan`} title="Sales Plan SKU Rollup" description="Approved Sales Plan demand by exact SKU. Quarterly values reflect rep-entered allocation, not actual orders, shipments, revenue, or inventory." action={<div className="page-header-actions"><Link className="btn-primary" href={exportHref}>Export Excel</Link><Link className="btn-secondary" href="/reports/sales-plan">Sales Plan report</Link></div>}/>
     <form method="get" className="responsive-filter-form panel filter-panel filter-grid filter-row mb-5">
       <label className="label">Plan Year<input className="field filter-control" name="year" type="number" min="2000" max="2100" defaultValue={year}/></label>
-      <label className="label">Currency<select className="field filter-control" name="currencyCode" defaultValue={currencyCode}>{currencies.map(c=><option key={c.code} value={c.code}>{c.code}</option>)}</select></label>
+      <CurrencyControl name="currencyCode" value={currencyCode} historicalCodes={currencies.map(row => row.code)}><label className="label">Currency<select className="field filter-control" name="currencyCode" defaultValue={currencyCode}>{currencies.map(c=><option key={c.code} value={c.code}>{c.code}</option>)}</select></label></CurrencyControl>
       <label className="label">Sales Rep<select className="field filter-control" name="userId" defaultValue={selection.userId??''}><option value="">All planned reps</option>{reps.map(r=><option key={r.id} value={r.id}>{r.firstName} {r.lastName}</option>)}</select></label>
       <label className="label">Product / Model<select className="field filter-control" name="productId" defaultValue={selection.productId??''}><option value="">All products</option>{[...new Map(skus.map(s=>[s.productId,s.product])).entries()].sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([id,p])=><option key={id} value={id}>{p.name}</option>)}</select></label>
       <label className="label">Exact SKU<select className="field filter-control" name="skuId" defaultValue={selection.skuId??''}><option value="">All SKUs</option>{skus.map(s=><option key={s.id} value={s.id}>{s.partNumber}</option>)}</select></label>
       <ReportEntityFilter type="account" name="accountId" label="Account" selected={raw.accountId??''} actor={actor}/>
-      <label className="filter-primary-search label">Search<input className="field filter-control" name="search" maxLength={100} defaultValue={selection.search} placeholder="SKU, Account, Plan Item"/></label><button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(raw, { year: String(nowYear), currencyCode: 'USD' })} defaults={{ year: String(nowYear), currencyCode: 'USD' }} clearHref="/reports/sales-plan-sku"/>
+      <label className="filter-primary-search label">Search<input className="field filter-control" name="search" maxLength={100} defaultValue={selection.search} placeholder="SKU, Account, Plan Item"/></label><button type="submit" className="filter-mobile-search-submit">Search</button><FilterDisclosure initialCount={countActiveFilters(raw, { year: String(nowYear), currencyCode: currencyConfig.defaultCurrency })} defaults={{ year: String(nowYear), currencyCode: currencyConfig.defaultCurrency }} clearHref="/reports/sales-plan-sku"/>
       <div className="filter-actions"><button className="btn-primary w-full sm:w-auto">View report</button></div>
     </form>
     <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">{[['Exact SKUs in Plan',String(summary.skuCount)],['Planned Units',shown(summary.units)],['Planned Revenue',shown(summary.revenue,currencyCode)],['Accounts',String(summary.accountCount)],['Unresolved SKU Lines',String(summary.unresolvedLines)],['Quarterly Allocation',`${completion(summary.units,summary.allocated.units)} units / ${completion(summary.revenue,summary.allocated.revenue)} revenue`]].map(([label,value])=><div key={label} className="panel p-3"><div className="text-xs text-slate-600">{label}</div><div className="mt-1 text-lg font-semibold">{value}</div></div>)}</section>

@@ -15,7 +15,7 @@ export async function GET(request:NextRequest) {
   const productId=optionalId(request.nextUrl.searchParams.get('productId')),skuId=optionalId(request.nextUrl.searchParams.get('skuId')),accountId=optionalId(request.nextUrl.searchParams.get('accountId'));
   if([productId,skuId,accountId].some(Number.isNaN))return new NextResponse('Choose valid filters.',{status:400});
   const currency=await prisma.currency.findUnique({where:{code:selection.currencyCode},select:{active:true}});
-  if(!currency?.active)return new NextResponse('Choose an active currency.',{status:400});
+  if(!currency)return new NextResponse('Choose a configured currency.',{status:400});
   const report=await salesPlanSkuRollup(prisma,actor,{...selection,productId,skuId,accountId,search:request.nextUrl.searchParams.get('search')?.slice(0,100)});
   const rep=selection.userId===null?null:await prisma.user.findUnique({where:{id:selection.userId},select:{firstName:true,lastName:true}});
   const filename=skuRollupFilename(selection.year,selection.currencyCode,rep?`${rep.firstName} ${rep.lastName}`:undefined);

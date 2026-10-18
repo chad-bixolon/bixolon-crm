@@ -1,3 +1,5 @@
+import { reportingCurrencies } from '@/lib/company-currency';
+import { CurrencyControl } from '@/components/currency-control';
 import { RecoverableActionForm } from '@/components/recoverable-action-form';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
@@ -25,7 +27,7 @@ export async function ProductPerformanceBuilder({params,actor,saved}:{params:Par
     prisma.productCategory.findMany({orderBy:{name:'asc'}}),
     prisma.product.findMany({where:{archivedAt:null},select:{id:true,name:true},orderBy:{name:'asc'}}),
     prisma.productSku.findMany({where:{active:true,product:{active:true,archivedAt:null}},select:{id:true,partNumber:true},orderBy:{partNumber:'asc'}}),
-    prisma.currency.findMany({where:{active:true},orderBy:{code:'asc'}}),
+    reportingCurrencies(),
   ]);
   const selected=(field:string)=>String(filterValue(config,field)??'');
   const preset=String(config.filters.find(x=>x.field==='closeDate'&&x.operator==='preset')?.value??'');
@@ -53,7 +55,7 @@ export async function ProductPerformanceBuilder({params,actor,saved}:{params:Par
         {select('strategicAccount','Strategic Account',[{value:'true',label:'Yes'},{value:'false',label:'No'}])}
         <ReportEntityFilter type="project" name="projectId" label="Project" selected={selected('projectId')} actor={actor}/>
         {select('priceSource','Pricing Source',[{value:'MANUAL',label:'Manual price'},{value:'CATALOG',label:'Price List'},{value:'PRICE_EXCEPTION',label:'Price Exception'},{value:'ODM_CUSTOMER',label:'Customer Pricing'}])}
-        {select('currency','Currency',currencies.map(x=>({value:x.code,label:x.code})),'All currencies')}
+        <CurrencyControl name="currency" value={selected('currency')} historicalCodes={currencies.map(row => row.code)}>{select('currency','Currency',currencies.map(x=>({value:x.code,label:x.code})),'All currencies')}</CurrencyControl>
         <ReportCloseDateFields initialChoice={between?'CUSTOM':preset||'ANY'} initialFrom={between?.from} initialTo={between?.to}/>
       </div></fieldset>
       <fieldset className="report-section"><legend className="report-section-title">Display options</legend><div className="report-filter-grid">

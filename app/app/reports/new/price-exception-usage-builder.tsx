@@ -1,3 +1,5 @@
+import { reportingCurrencies } from '@/lib/company-currency';
+import { CurrencyControl } from '@/components/currency-control';
 import { RecoverableActionForm } from '@/components/recoverable-action-form';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
@@ -25,7 +27,7 @@ export async function PriceExceptionUsageBuilder({params,actor,saved}:{params:Pa
     prisma.productSku.findMany({where:{active:true,product:{active:true,archivedAt:null}},select:{id:true,partNumber:true},orderBy:{partNumber:'asc'}}),
     prisma.priceException.findMany({where:{lines:{some:{opportunityProducts:{some:{archivedAt:null,opportunity:{archivedAt:null,...(actor.role==='SALES'?{ownerId:actor.id}:{})}}}}}},select:{id:true,peCode:true},orderBy:{peCode:'asc'}}),
     prisma.user.findMany({where:{assignedPriceExceptions:{some:{lines:{some:{opportunityProducts:{some:{archivedAt:null,opportunity:{archivedAt:null,...(actor.role==='SALES'?{ownerId:actor.id}:{})}}}}}}}},select:{id:true,firstName:true,lastName:true},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
-    prisma.currency.findMany({where:{active:true},orderBy:{code:'asc'}}),
+    reportingCurrencies(),
     prisma.competitorOption.findMany({where:{OR:[{active:true},...(Number(filterValue(config,'competitorId'))?[{id:Number(filterValue(config,'competitorId'))}]:[])]},orderBy:[{sortOrder:'asc'},{name:'asc'}]}),
   ]);
   const selected=(field:string)=>String(filterValue(config,field)??'');
@@ -53,7 +55,7 @@ export async function PriceExceptionUsageBuilder({params,actor,saved}:{params:Pa
         {select('peSalespersonId','Price Exception Sales Rep',peSalespeople.map(x=>({value:x.id,label:`${x.firstName} ${x.lastName}`})))}
         {select('moqStatus','MOQ Status',[{value:'MET',label:'MOQ Met'},{value:'NOT_MET',label:'MOQ Not Met'},{value:'UNKNOWN',label:'Unknown'}])}
         {select('overrideStatus','Override Status',[{value:'APPLIED',label:'Override Applied'},{value:'NONE',label:'No Override'}])}
-        {select('currency','Currency',currencies.map(x=>({value:x.code,label:x.code})),'All currencies')}
+        <CurrencyControl name="currency" value={selected('currency')} historicalCodes={currencies.map(row => row.code)}>{select('currency','Currency',currencies.map(x=>({value:x.code,label:x.code})),'All currencies')}</CurrencyControl>
         <ReportCloseDateFields initialChoice={between?'CUSTOM':preset||'ANY'} initialFrom={between?.from} initialTo={between?.to}/>
       </div></fieldset>
       <fieldset className="report-section"><legend className="report-section-title">Display options</legend><div className="report-filter-grid">

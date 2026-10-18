@@ -16,6 +16,7 @@ let redirects = 0;
 
 for (const ext of ['.ts', '.tsx']) Module._extensions[ext] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText, filename);
 Module._load = function(request, parent, isMain) {
+  if (request === './currency-control') return { CurrencyControl: ({children}) => children, useCurrencyConfiguration: () => ({defaultCurrency:'USD',activeCurrencies:[{code:'USD'}]}) };
   if (request === 'next/cache') return { revalidatePath: () => {} };
   if (request === 'next/navigation') return { redirect: () => { redirects++; throw new Error('Unexpected redirect'); } };
   if (request === '@/lib/prisma') return { prisma: {} };

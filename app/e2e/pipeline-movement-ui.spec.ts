@@ -48,7 +48,10 @@ test('business labels, main filters and Advanced filter values survive collapse 
   await expect(page.getByRole('heading', { name: 'Pipeline Movement', exact: true })).toBeVisible();
   const advanced = page.locator('details').filter({ has: page.locator('summary').filter({ hasText: /^Advanced filters$/ }) });
   await expect(advanced).not.toHaveAttribute('open');
-  for (const label of ['Quarter', 'Comparison window', 'Salesperson', 'Currency', 'Forecast Category']) await expect(page.getByRole('combobox', { name: label, exact: true })).toBeVisible();
+  for (const label of ['Quarter', 'Comparison window', 'Salesperson', 'Forecast Category']) await expect(page.getByRole('combobox', { name: label, exact: true })).toBeVisible();
+  const currency = page.getByRole('combobox', {name:'Currency',exact:true});
+  if (await db.currency.count({where:{active:true}}) > 1) await expect(currency).toBeVisible();
+  else await expect(currency).toHaveCount(0);
   await expect(page.getByLabel('Year', { exact: true })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Account', exact: true })).toBeHidden();
   await advanced.locator('summary').focus(); await page.keyboard.press('Enter');

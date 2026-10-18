@@ -1,3 +1,5 @@
+import { CurrencyControl } from '@/components/currency-control';
+import { companyCurrency } from '@/lib/company-currency';
 import { ConfirmMaintenanceForm } from '@/components/confirm-maintenance-form';
 import { RecoverableActionForm } from '@/components/recoverable-action-form';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
@@ -15,7 +17,7 @@ import { archiveHistoryAction, captureSnapshotAction, restoreHistoryAction } fro
 export const dynamic = 'force-dynamic';
 
 export default async function HistoryAdministration({ searchParams }: { searchParams: Promise<{ restore?: string }> }) {
-  const actor = await currentUser(); if (actor.role !== 'ADMIN') notFound();
+  const actor = await currentUser();const currencyConfig = await companyCurrency(); if (actor.role !== 'ADMIN') notFound();
   const feedback = await searchParams;
   const preview = await previewHistoryArchive(prisma, actor);
   const [currencies, recentActive, recentArchived, archivedEvents, archivedSnapshots] = await Promise.all([
@@ -41,7 +43,7 @@ export default async function HistoryAdministration({ searchParams }: { searchPa
   const currentWeek = formatCalendarDate(snapshotWeek);
   const forecastYear = value('year');
   const forecastQuarter = `Q${Math.floor((value('month')-1)/3)+1}` as SalesQuarter;
-  const forecastCurrency = currencies.some(currency => currency.code === 'USD') ? 'USD' : currencies[0]?.code;
+  const forecastCurrency = currencyConfig.defaultCurrency;
   const currentSnapshots = forecastCurrency ? await prisma.forecastSnapshot.aggregate({
     where: { snapshotWeek, year: forecastYear, quarter: forecastQuarter, currencyCode: forecastCurrency },
     _count: { _all: true }, _max: { capturedAt: true },
@@ -62,7 +64,7 @@ export default async function HistoryAdministration({ searchParams }: { searchPa
       <RecoverableActionForm action={captureSnapshotAction} failureMessage="Could not capture snapshot. Try again." refreshOnSuccess className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4">
         <div className="w-24"><label className="label" htmlFor="snapshot-year">Year</label><input className="field" id="snapshot-year" type="number" name="year" min="2000" max="2100" defaultValue={forecastYear}/></div>
         <div className="w-28"><label className="label" htmlFor="snapshot-quarter">Quarter</label><select className="field" id="snapshot-quarter" name="quarter" defaultValue={forecastQuarter}>{Object.values(SalesQuarter).map(q=><option key={q}>{q}</option>)}</select></div>
-        <div className="w-28"><label className="label" htmlFor="snapshot-currency">Currency</label><select className="field" id="snapshot-currency" name="currencyCode" defaultValue={forecastCurrency}>{currencies.map(currency=><option key={currency.code}>{currency.code}</option>)}</select></div>
+        <CurrencyControl value={forecastCurrency}><div className="w-28"><label className="label" htmlFor="snapshot-currency">Currency</label><select className="field" id="snapshot-currency" name="currencyCode" defaultValue={forecastCurrency}>{currencies.map(currency=><option key={currency.code}>{currency.code}</option>)}</select></div></CurrencyControl>
         <button className="btn-primary self-end">Capture Forecast</button>
       </RecoverableActionForm>
       <p className="mt-2 text-xs text-slate-600">Captures the current forecast for each eligible sales rep for the selected quarter and currency. Only one snapshot per rep, quarter, and currency is kept per calendar week in New York time.</p>

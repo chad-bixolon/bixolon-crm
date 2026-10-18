@@ -150,7 +150,7 @@ function fakeReport({ prior = true, scope = 'FORECAST_OPERATIONAL_V1', source = 
   const after = { id: 2, snapshotAt: new Date('2026-11-09T10:00:00Z'), snapshotWeek: new Date('2026-11-09'), scopeVersion: scope, source, status: 'COMPLETE', opportunityCount: 1 };
   const before = { ...after, id: 1, snapshotAt: new Date('2026-11-02T10:00:00Z') };
   const calls = [];
-  const client = {
+  const client = { currency: { findMany: async () => [{code:"USD",name:"US Dollar",active:true,isDefault:true}] },
     user: { findMany: async () => [{ id: 7 }, { id: 8 }] },
     opportunitySnapshotRun: { findMany: async query => { calls.push(query); return prior ? [after, before] : [after]; }, findFirst: async () => prior ? before : null },
     opportunitySnapshot: { findMany: async query => { calls.push(query); return query.distinct ? [{ currencyCode: 'USD' }] : [{ ...state(), runId: 1 }, { ...state({ amount: '150000' }), runId: 2 }]; } },

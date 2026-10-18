@@ -1,3 +1,4 @@
+import { getCurrencyConfiguration } from './currency-configuration';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { type Actor, opportunityReadWhere } from './authorization';
 import { listSalesReps } from './assignment-eligibility';
@@ -10,6 +11,7 @@ export type HistoryQuery = { year?: string; quarter?: string; window?: string; o
 const positiveId = (value: string) => /^[1-9]\d*$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : null;
 export async function loadMovementHistory(client: PrismaClient, actor: Actor, query: HistoryQuery) {
   if (!canReadPipelineMovement(actor)) throw new Error('Access denied');
+  const currencyConfig = await getCurrencyConfiguration(client);
   const defaults = businessQuarter();
   const year = query.year === undefined ? defaults.year : Number(query.year);
   const quarter = quarters.find(q => q === (query.quarter ?? defaults.quarter));
@@ -49,8 +51,8 @@ export async function loadMovementHistory(client: PrismaClient, actor: Actor, qu
   // Metadata first: no snapshot rows outside the bounded selected windows.
   const rawRows = allRuns.length ? await client.opportunitySnapshot.findMany({ where: { runId: { in: allRuns.map(r => r.id) } }, orderBy: [{ runId: 'asc' }, { opportunityId: 'asc' }], take: SNAPSHOT_LIMIT * allRuns.length + 1 }) : [];
   if (rawRows.length > SNAPSHOT_LIMIT * allRuns.length || allRuns.some(r => rawRows.filter(row => row.runId === r.id).length !== r.opportunityCount)) throw new MovementInputError('Snapshot rows are incomplete or exceed the supported size.');
-  const currencies = [...new Set(rawRows.map(r => r.currencyCode))].sort();
-  const currencyCode = query.currencyCode ?? (currencies.includes('USD') ? 'USD' : currencies[0] ?? 'USD');
+  const currencies = [...new Set([...currencyConfig.activeCurrencies.map(row => row.code), ...rawRows.map(r => r.currencyCode)])].sort();
+  const currencyCode = query.currencyCode ?? currencyConfig.defaultCurrency;
   if (!/^[A-Z]{3}$/.test(currencyCode) || currencies.length && !currencies.includes(currencyCode)) throw new MovementInputError('Choose a captured currency.');
   const accounts = [...new Map(rawRows.flatMap(capturedAccounts).map(a => [a.id, a])).values()].sort((a, b) => a.name.localeCompare(b.name));
   if (accountId !== undefined && !accounts.some(a => a.id === accountId)) throw new MovementInputError('Choose a captured Account.');

@@ -22,6 +22,7 @@ let demos = [];
 let demoOptions = [];
 let history = { rows: [], total: 0 };
 const pageMocks = {
+  '@/lib/company-currency': { companyCurrency: async () => ({ defaultCurrency: 'USD', multiCurrencyEnabled: false }) },
   '@/components/help-link': { HelpLink: ({ topic, children }) => React.createElement('a', { href: `/help/${topic}` }, children) },
   '@/components/recent-view': { RecentView: () => null },
   'next/link': Link,

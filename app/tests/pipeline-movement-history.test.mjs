@@ -98,7 +98,7 @@ test('generic history works without forecasting, company labels or category orde
 function fakeClient() {
   const runs = Array.from({ length: 13 }, (_, i) => ({ ...capture(i), opportunityCount: 1, status: 'COMPLETE' }));
   const calls = [];
-  const client = { user: { findMany: async () => [{ id: 7 }, { id: 8 }] }, opportunitySnapshotRun: { findMany: async q => { calls.push(q); return runs; } }, opportunitySnapshot: { findMany: async q => { calls.push(q); return runs.filter(r => q.where.runId.in.includes(r.id)).map(r => ({ ...state(), runId: r.id })); } }, opportunity: { findMany: async () => [{ ...current(), stage: { isClosed: true, isWon: true } }] }, opportunityHistoryEvent: { findMany: async () => [] }, opportunityHistoryArchive: { findMany: async () => [] }, forecastSnapshotRun: { findMany: async () => [] } };
+  const client = { currency: { findMany: async () => [{code:"USD",name:"US Dollar",active:true,isDefault:true}] }, user: { findMany: async () => [{ id: 7 }, { id: 8 }] }, opportunitySnapshotRun: { findMany: async q => { calls.push(q); return runs; } }, opportunitySnapshot: { findMany: async q => { calls.push(q); return runs.filter(r => q.where.runId.in.includes(r.id)).map(r => ({ ...state(), runId: r.id })); } }, opportunity: { findMany: async () => [{ ...current(), stage: { isClosed: true, isWon: true } }] }, opportunityHistoryEvent: { findMany: async () => [] }, opportunityHistoryArchive: { findMany: async () => [] }, forecastSnapshotRun: { findMany: async () => [] } };
   client.$transaction = async fn => fn(client);
   return { client, calls };
 }

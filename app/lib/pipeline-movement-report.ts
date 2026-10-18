@@ -1,3 +1,4 @@
+import { getCurrencyConfiguration } from './currency-configuration';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { listSalesReps } from './assignment-eligibility';
@@ -30,6 +31,7 @@ export function movementOwner(actor: Actor, requested: string | undefined, reps:
 }
 export async function loadPipelineMovement(client: PrismaClient, actor: Actor, query: MovementQuery) {
   if (!canReadPipelineMovement(actor)) throw new Error('Access denied');
+  const currencyConfig = await getCurrencyConfiguration(client);
   // A bounded selector, with explicitly requested older runs fetched separately.
   const [recent, reps] = await Promise.all([
     client.opportunitySnapshotRun.findMany({ where: validMovementRunWhere, orderBy: [{ snapshotAt: 'desc' }, { id: 'desc' }], take: 104 }),
@@ -53,11 +55,10 @@ export async function loadPipelineMovement(client: PrismaClient, actor: Actor, q
   const ownerId = movementOwner(actor, query.ownerId, reps);
   const runIds = [before?.id, after?.id].filter((n): n is number => n !== undefined);
   const currencies = runIds.length ? await client.opportunitySnapshot.findMany({ where: { runId: { in: runIds } }, distinct: ['currencyCode'], select: { currencyCode: true }, take: 200 }) : [];
-  const codes = currencies.map(row => row.currencyCode).sort();
-  if (!codes.length) codes.push('USD');
-  const currencyCode = query.currencyCode ?? (codes.includes('USD') ? 'USD' : codes[0] ?? 'USD');
+  const codes = [...new Set([...currencyConfig.activeCurrencies.map(row => row.code), ...currencies.map(row => row.currencyCode)])].sort();
+  const currencyCode = query.currencyCode ?? currencyConfig.defaultCurrency;
   if (!/^[A-Z]{3}$/.test(currencyCode) || query.currencyCode && !codes.includes(currencyCode)) throw new MovementInputError('Choose a captured currency.');
-  const context = { runs, before, after, reps, ownerId, year, quarter, currencyCode, currencies: codes.length ? codes : ['USD'] };
+  const context = { runs, before, after, reps, ownerId, year, quarter, currencyCode, currencies: codes };
   if (!before || !after) return { ...context, result: null };
   const period = quarterBounds(year, quarter);
   // Select keys matching the chosen scope at either endpoint, then load BOTH

@@ -35,7 +35,7 @@ test('snapshot capture shows one outcome and refreshes the current-week status',
   const snapshotWeek = new Date(`${new Date(weekText).toISOString().slice(0, 10)}T00:00:00.000Z`);
   const year = Number(await form.getByLabel('Year').inputValue());
   const quarter = await form.getByLabel('Quarter').inputValue() as SalesQuarter;
-  const currencyCode = await form.getByLabel('Currency').inputValue();
+  const currencyCode = await form.locator('[name="currencyCode"]').inputValue();
   const db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
   try {
     await db.forecastSnapshot.deleteMany({ where: { snapshotWeek, year, quarter, currencyCode } });

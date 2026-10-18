@@ -15,6 +15,7 @@ const groups = [
     ["Dashboard Views", "/administration/dashboard-views", "Configure the default Dashboard for each role."],
   ] },
   { title: "Sales Configuration", tools: [
+    ["Currency Settings", "/administration/currencies", "Manage active currencies and the company default."],
     ["Sales Stages", "/administration/sales-stages", "Manage stage names and properties."],
     ["Sales Targets", "/administration/sales-targets", "Set quarterly targets by sales rep and currency."],
     ["Outcome Reasons", "/administration/outcome-reasons", "Manage Closed Won and Closed Lost reasons."],

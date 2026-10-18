@@ -1,3 +1,4 @@
+import { CurrencyControl } from '@/components/currency-control';
 import Link from 'next/link';
 import { Prisma } from '@prisma/client';
 import { notFound } from 'next/navigation';
@@ -55,7 +56,7 @@ export default async function PipelineHistoryPage({ searchParams }: { searchPara
       <label className="label">Quarter<select className="field filter-control" name="quarter" defaultValue={r.quarter}>{quarters.map(q => <option key={q}>{q}</option>)}</select></label>
       <label className="label">Comparison window<select className="field filter-control" name="window" defaultValue={r.window}>{['4', '8', '12', 'quarter'].map(w => <option key={w} value={w}>{w === 'quarter' ? 'Full selected quarter' : `${w} weeks`}</option>)}</select></label>
       <label className="label">Salesperson<select className="field filter-control" name="ownerId" defaultValue={r.ownerId ?? 'team'}>{actor.role !== 'SALES' && <option value="team">All eligible reps</option>}{r.reps.map(rep => <option key={rep.id} value={rep.id}>{rep.firstName} {rep.lastName}</option>)}</select></label>
-      <label className="label">Currency<select className="field filter-control" name="currencyCode" defaultValue={r.currencyCode}>{r.currencies.map(c => <option key={c}>{c}</option>)}</select></label>
+      <CurrencyControl name="currencyCode" value={r.currencyCode} historicalCodes={r.currencies}><label className="label">Currency<select className="field filter-control" name="currencyCode" defaultValue={r.currencyCode}>{r.currencies.map(c => <option key={c}>{c}</option>)}</select></label></CurrencyControl>
       <label className="label">Forecast Category<select className="field filter-control" name="category" defaultValue={r.category ?? ''}><option value="">All open categories</option>{['PIPELINE', 'BEST_CASE', 'COMMIT'].map(c => <option value={c} key={c}>{categoryName(c)}</option>)}</select></label>
       </div>
       <details className="mt-4 border-t border-orange-200 pt-2" open={Boolean(f.accountId || f.reasonView && f.reasonView !== 'all' || f.reason || f.compareYear || f.compareQuarter || f.cohortCategory && f.cohortCategory !== 'COMMIT')}>
@@ -72,7 +73,7 @@ export default async function PipelineHistoryPage({ searchParams }: { searchPara
       </details>
       <div className="filter-actions mt-4"><button className="btn-filter-primary">Update history</button></div>
     </form>
-    <p className="mb-4 text-sm text-slate-600">Outcome status is current; values use snapshots, not current bookings. Each view uses one currency.</p>
+    <p className="mb-4 text-sm text-slate-600">Outcome status is current; values use snapshots, not current bookings.</p>
     {!points.length ? <p className="panel p-4" role="status">No weekly snapshots are available for this quarter yet. Choose another quarter or return as more weekly history becomes available.</p> : <>
       <section className="panel mb-5 min-w-0 p-4" aria-label="Quarter progression"><h2 className="mb-3 text-lg font-semibold">{r.window === 'quarter' ? 'Quarter progression' : `${r.window}-week progression`}</h2><p className="mb-4 text-sm">Pipeline includes Best Case and Commit. Starting values use the first snapshot; current values use the latest snapshot in this period.</p>
         <dl className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[['Starting Pipeline', first!.pipeline], ['Current Pipeline', last!.pipeline], ['Starting Commit', first!.commit], ['Current Commit', last!.commit], ['Closed Won at Latest Snapshot', last!.closedWon]].map(([label, value]) => <div key={label!}><dt className="text-sm">{label}</dt><dd className="font-semibold">{money(value)}</dd></div>)}</dl>

@@ -1,3 +1,4 @@
+import { CurrencyControl } from '@/components/currency-control';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Content } from '@/components/shell';
@@ -38,7 +39,7 @@ export default async function PipelineMovementPage({ searchParams }: { searchPar
       <label className="label">Salesperson<select className="field filter-control" name="ownerId" defaultValue={ownerId ?? 'team'}>{actor.role !== 'SALES' && <option value="team">All eligible reps</option>}{reps.map(rep => <option key={rep.id} value={rep.id}>{rep.firstName} {rep.lastName}{rep.id === actor.id ? ' (you)' : ''}</option>)}</select></label>
       <label className="label">Year<input className="field filter-control" type="number" min="2000" max="2100" name="year" defaultValue={year}/></label>
       <label className="label">Quarter<select className="field filter-control" name="quarter" defaultValue={quarter}>{quarters.map(q => <option key={q}>{q}</option>)}</select></label>
-      <label className="label">Currency<select className="field filter-control" name="currencyCode" defaultValue={currencyCode}>{currencies.map(code => <option key={code}>{code}</option>)}</select></label>
+      <CurrencyControl name="currencyCode" value={currencyCode} historicalCodes={currencies}><label className="label">Currency<select className="field filter-control" name="currencyCode" defaultValue={currencyCode}>{currencies.map(code => <option key={code}>{code}</option>)}</select></label></CurrencyControl>
       <div className="filter-actions col-span-full flex-wrap"><button className="btn-primary">Compare snapshots</button><Link href="/reports/pipeline-movement" className="text-sm text-orange-800 underline">Latest comparison</Link></div>
     </form>
     {!result ? <p className="panel p-5" role="status">{after ? 'No prior weekly snapshot available yet. Two weekly snapshots are needed to show movement.' : 'No weekly snapshots are available yet. Weekly Comparison will be available after two snapshots.'}</p> : <>

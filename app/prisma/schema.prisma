@@ -910,6 +910,7 @@ model OutcomeReason {
 }
 
 model Currency {
+  isDefault     Boolean       @default(false)
   salesPlans SalesPlan[]
   code          String        @id @db.Char(3)
   name          String

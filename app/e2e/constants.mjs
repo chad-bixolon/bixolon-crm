@@ -1,4 +1,8 @@
-export const databaseUrl = 'postgresql://saleshub_e2e:saleshub_e2e_local_only@127.0.0.1:55432/saleshub_e2e';
+// Feature suites may use a separate local database; never accept arbitrary URLs.
+const databaseName = process.env.E2E_DATABASE_NAME ?? 'saleshub_e2e';
+if (!/^saleshub_e2e(?:_[a-z0-9_]+)?$/.test(databaseName)) throw new Error('Use a saleshub_e2e database name.');
+export const baseDatabaseUrl = 'postgresql://saleshub_e2e:saleshub_e2e_local_only@127.0.0.1:55432/saleshub_e2e';
+export const databaseUrl = baseDatabaseUrl.replace(/saleshub_e2e$/, databaseName);
 export const baseURL = 'http://127.0.0.1:3100';
 export const authToken = 'saleshub-local-e2e-only';
 export const emails = {

@@ -19,3 +19,8 @@ test('E2E credentials cannot activate in production or on another database host/
   assert.equal(e2eAuthEnabled({ ...allowed, DATABASE_URL: 'postgresql://user:pass@127.0.0.1:5432/saleshub_dev' }), false);
   assert.equal(e2eAuthEnabled({ ...allowed, DATABASE_URL: 'postgresql://user:pass@db:5432/saleshub_e2e' }), false);
 });
+
+test('feature databases require an explicit safe local test name', () => {
+  assert.equal(e2eAuthEnabled({...allowed, E2E_DATABASE_NAME:'saleshub_e2e_currency_v1', DATABASE_URL:'postgresql://user:pass@127.0.0.1:55432/saleshub_e2e_currency_v1'}),true);
+  assert.equal(e2eAuthEnabled({...allowed,E2E_DATABASE_NAME:'production'}),false);
+});
