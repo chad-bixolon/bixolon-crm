@@ -1,3 +1,4 @@
+import { nextUpdatedAt } from './stale-edit';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { assertAdmin, recordMaintenance } from './admin-maintenance';
 import type { Actor } from './authorization';
@@ -37,7 +38,7 @@ export async function bulkQualityOwners(db: PrismaClient, actor: Actor, scope: Q
     const visible = await qualityRows(tx as PrismaClient, issue, scope.q.trim(), scope.page);
     if (ids.some(id => !visible.rows.some(row => row.id === id))) throw new Error('The current page changed. No records changed. Refresh the list and select again.');
     for (const row of rows) {
-      if (account) await tx.account.update({ where: { id: row.id }, data: { ownerId, updatedById: actor.id } });
+      if (account) await tx.account.update({ where: { id: row.id, updatedAt: row.updatedAt }, data: { ownerId, updatedById: actor.id, updatedAt: nextUpdatedAt(row.updatedAt) } });
       else await assignOpportunityOwnerInTransaction(tx, row.id, owner, currentActor);
     }
     await recordMaintenance(tx, actor.id, account ? 'Account' : 'Opportunity', 'Assign owner', ids, ids.length, { id: owner.id, name: `${owner.firstName} ${owner.lastName}` });

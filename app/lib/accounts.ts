@@ -1,3 +1,4 @@
+import { assertEditToken, nextUpdatedAt } from './stale-edit';
 import { recordMaintenance } from './admin-maintenance';
 import { AccountBusinessRoleCode, AccountStatus, Prisma, type PrismaClient, type UserRole } from "@prisma/client";
 import type { AccountFields } from "./account-validation";
@@ -115,15 +116,17 @@ export function accountWriteData(input: AccountFields) {
     city: input.city, stateProvince: input.stateProvince, postalCode: input.postalCode, country: input.country,
     accountType: input.roles[0] ?? null };
 }
-export async function saveAccount(client: PrismaClient, input: AccountFields, id?: number, actorId?: number) {
+/** Form actions must supply the form-open editToken; trusted programmatic changes use the current record predicate. */
+export async function saveAccount(client: PrismaClient, input: AccountFields, id?: number, actorId?: number, editToken?: string) {
   const data = accountWriteData(input);
   return client.$transaction(async (tx) => {
-    const existing = id ? await tx.account.findUnique({ where: { id }, select: { status: true, ownerId: true } }) : null;
+    const existing = id ? await tx.account.findUnique({ where: { id }, select: { status: true, ownerId: true, updatedAt: true } }) : null;
     if (id && !existing) throw new Error("Account not found.");
+    if (id && editToken !== undefined) assertEditToken(existing!.updatedAt, editToken);
     if (input.ownerId && input.ownerId !== existing?.ownerId && !(await tx.user.findFirst({ where: { id: input.ownerId, ...eligibleUserWhere('accounts.write') } }))) throw new Error("Choose an eligible owner.");
     if (id) {
       if (existing?.status === "ARCHIVED") throw new Error("Reactivate this account before editing it.");
-      await tx.account.update({ where: { id }, data: { ...data, updatedById: actorId } });
+      await tx.account.update({ where: { id, updatedAt: editToken !== undefined ? new Date(editToken) : existing!.updatedAt }, data: { ...data, updatedById: actorId, updatedAt: nextUpdatedAt(existing!.updatedAt) } });
       await tx.accountBusinessRole.deleteMany({ where: { accountId: id } });
       if (input.roles.length) await tx.accountBusinessRole.createMany({ data: input.roles.map((role) => ({ accountId: id, role })) });
       return id;
@@ -135,11 +138,11 @@ export async function saveAccount(client: PrismaClient, input: AccountFields, id
 
 export async function setAccountArchived(client: PrismaClient, id: number, archive: boolean, actorId?: number) {
   return client.$transaction(async (tx) => {
-    const account = await tx.account.findUnique({ where: { id }, select: { status: true } });
+    const account = await tx.account.findUnique({ where: { id }, select: { status: true, updatedAt: true } });
     if (!account) throw new Error("Account not found.");
     if (archive && account.status === "ARCHIVED") throw new Error("Account is already archived.");
     if (!archive && account.status !== "ARCHIVED") throw new Error("Account is already active.");
-    await tx.account.update({ where: { id }, data: { status: archive ? "ARCHIVED" : "ACTIVE", archivedAt: archive ? new Date() : null, archivedById: archive ? actorId : null, updatedById: actorId } });
+    await tx.account.update({ where: { id, updatedAt: account.updatedAt }, data: { updatedAt: nextUpdatedAt(account.updatedAt), status: archive ? "ARCHIVED" : "ACTIVE", archivedAt: archive ? new Date() : null, archivedById: archive ? actorId : null, updatedById: actorId } });
     if (actorId) await recordMaintenance(tx, actorId, 'Account', archive ? 'Archive' : 'Restore', [id]);
   });
 }

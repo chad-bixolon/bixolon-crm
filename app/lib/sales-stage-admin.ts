@@ -1,3 +1,4 @@
+import { nextUpdatedAt } from './stale-edit';
 import { ForecastCategory, type PrismaClient } from "@prisma/client";
 import type { Actor } from './authorization';
 import { syncOpportunityNotifications } from './work-notification-evaluator';
@@ -31,7 +32,8 @@ export async function saveStage(client: PrismaClient, id: number | null, data: R
         const forecastCategory = data.isClosed ? (data.isWon ? ForecastCategory.CLOSED : ForecastCategory.OMITTED) : ForecastCategory.PIPELINE;
         const changed = actor ? await tx.opportunity.findMany({ where: { stageId: id, forecastCategory: { not: forecastCategory } }, select: { id: true, name: true, forecastCategory: true, participants: { include: { account: { select: { name: true } } }, take: 1 } } }) : [];
         const user = actor ? await tx.user.findUnique({ where: { id: actor.id }, select: { firstName: true, lastName: true } }) : null;
-        await tx.opportunity.updateMany({ where: { stageId: id }, data: { forecastCategory } });
+        const affectedRows = await tx.opportunity.findMany({ where: { stageId: id }, select: { id: true, updatedAt: true } });
+        for (const row of affectedRows) await tx.opportunity.update({ where: { id: row.id, updatedAt: row.updatedAt }, data: { forecastCategory, updatedAt: nextUpdatedAt(row.updatedAt) } });
         if (tx.notification) {
           const affected = await tx.opportunity.findMany({ where: { stageId: id }, select: { id: true } });
           const days = (await getSettings(tx as PrismaClient)).COMMIT_FOLLOW_UP_DAYS;

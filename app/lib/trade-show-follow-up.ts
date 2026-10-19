@@ -1,3 +1,4 @@
+import { nextUpdatedAt } from './stale-edit';
 import type { Prisma, TradeShowLeadRouting } from '@prisma/client';
 import { eligibleUserWhere } from './assignment-eligibility';
 import { notifyTaskAssignment, syncTaskNotifications } from './work-notification-evaluator';
@@ -44,7 +45,7 @@ export async function syncTradeShowFollowUp(tx: Client, before: Pick<FollowUpLea
   if (previousRep === nextRep) return;
   const active = await tx.task.findFirst({ where: { source: TRADE_SHOW_FOLLOW_UP_SOURCE, tradeShowLeadId: after.id, archivedAt: null, status: { in: ['OPEN', 'IN_PROGRESS'] } }, orderBy: { id: 'desc' } });
   if (!nextRep) {
-    if (active) { await tx.task.update({ where: { id: active.id }, data: { status: 'CANCELLED', updatedById: actorId } }); if (tx.notification) await syncTaskNotifications(tx, active.id); }
+    if (active) { await tx.task.update({ where: { id: active.id, updatedAt: active.updatedAt }, data: { updatedAt: nextUpdatedAt(active.updatedAt), status: 'CANCELLED', updatedById: actorId } }); if (tx.notification) await syncTaskNotifications(tx, active.id); }
     return;
   }
   const eligible = await tx.user.findFirst({ where: { id: nextRep, ...eligibleUserWhere('tasks.write') }, select: { id: true } });
@@ -52,7 +53,7 @@ export async function syncTradeShowFollowUp(tx: Client, before: Pick<FollowUpLea
   if (active) {
     if (active.assignedToId !== nextRep) {
       const fromUserId = active.assignedToId;
-      await tx.task.update({ where: { id: active.id }, data: { assignedToId: nextRep, updatedById: actorId } });
+      await tx.task.update({ where: { id: active.id, updatedAt: active.updatedAt }, data: { updatedAt: nextUpdatedAt(active.updatedAt), assignedToId: nextRep, updatedById: actorId } });
       const event = await tx.taskAssignmentEvent.create({ data: { taskId: active.id, fromUserId, toUserId: nextRep, actorId } });
       if (tx.notification) { await notifyTaskAssignment(tx, active.id, nextRep, event.id); await syncTaskNotifications(tx, active.id); }
     }

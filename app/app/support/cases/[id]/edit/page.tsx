@@ -13,5 +13,5 @@ export default async function EditSupportCasePage({ params }: { params: Promise<
   if (!Number.isSafeInteger(id) || id < 1) notFound();
   const [row, options] = await Promise.all([getSupportCaseById(prisma, actor, id, true), supportFormOptions(actor)]);
   if (!row || row.archivedAt) notFound();
-  return <Content><PageHeader eyebrow={NAV_CATEGORIES.support} title={`Edit ${row.caseNumber}`} description={row.subject}/><SupportCaseForm {...options} initial={{ ...row, nextFollowUpAt: row.nextFollowUpAt ? calendarLocalInput(row.nextFollowUpAt, options.zone) : null }}/></Content>;
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.support} title={`Edit ${row.caseNumber}`} description={row.subject}/><SupportCaseForm {...options} initial={{ ...row, editToken: row.updatedAt.toISOString(), nextFollowUpAt: row.nextFollowUpAt ? calendarLocalInput(row.nextFollowUpAt, options.zone) : null }}/></Content>;
 }

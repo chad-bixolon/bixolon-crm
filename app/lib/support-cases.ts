@@ -1,3 +1,4 @@
+import { assertEditToken, nextUpdatedAt } from './stale-edit';
 import { Prisma, SupportCasePriority, SupportCaseSource, SupportCaseStatus, type PrismaClient } from '@prisma/client';
 import { assertPermission, can, type Actor } from './authorization';
 import { eligibleUserWhere } from './assignment-eligibility';
@@ -156,11 +157,12 @@ export async function createSupportCaseInTransaction(tx: Prisma.TransactionClien
   await syncSupportNotifications(tx, row.id, openedAt);
   return row;
 }
-export async function updateSupportCase(db: PrismaClient, actor: Actor, caseId: number, patch: SupportCasePatch) {
-  return db.$transaction(tx => updateSupportCaseInTransaction(tx, actor, caseId, patch));
+/** Form actions must supply the form-open editToken; trusted programmatic changes use the current record predicate. */
+export async function updateSupportCase(db: PrismaClient, actor: Actor, caseId: number, patch: SupportCasePatch, editToken?: string) {
+  return db.$transaction(tx => updateSupportCaseInTransaction(tx, actor, caseId, patch, editToken));
 }
 /** Retains lifecycle history, notifications, and validation inside a caller's transaction. */
-export async function updateSupportCaseInTransaction(tx: Prisma.TransactionClient, actor: Actor, caseId: number, patch: SupportCasePatch) {
+export async function updateSupportCaseInTransaction(tx: Prisma.TransactionClient, actor: Actor, caseId: number, patch: SupportCasePatch, editToken?: string) {
   assertPermission(actor, 'support-cases.write');
   assertPermission(actor, 'accounts.read');
   id(caseId, 'case');
@@ -171,6 +173,7 @@ export async function updateSupportCaseInTransaction(tx: Prisma.TransactionClien
   const before = await tx.supportCase.findUnique({ where: { id: caseId } });
   if (!before) throw new Error('Case not found.');
   if (before.archivedAt) throw new Error('Restore the case before editing.');
+  if (editToken !== undefined) assertEditToken(before.updatedAt, editToken);
   if (!(patch.customerNameText === undefined ? before.customerNameText : patch.customerNameText) && !(patch.accountId === undefined ? before.accountId : patch.accountId)) throw new Error('Enter a customer/end user or link a CRM Account.');
   if (patch.status !== undefined && !validSupportTransition(before.status, patch.status)) throw new Error('Invalid status transition.');
   validateResolution(patch.status ?? before.status, patch.resolutionSummary === undefined ? before.resolutionSummary : patch.resolutionSummary);
@@ -182,8 +185,8 @@ export async function updateSupportCaseInTransaction(tx: Prisma.TransactionClien
     else { next.resolvedAt = null; next.closedAt = null; }
   }
   const changed = Object.entries(next).some(([key, value]) => auditValue(value) !== auditValue((before as unknown as Record<string, unknown>)[key]));
-  if (!changed) return before;
-  const after = await tx.supportCase.update({ where: { id: caseId }, data: { ...next, updatedById: actor.id } });
+  if (!changed && editToken === undefined) return before;
+  const after = await tx.supportCase.update({ where: { id: caseId, updatedAt: editToken !== undefined ? new Date(editToken) : before.updatedAt }, data: { ...next, updatedById: actor.id, updatedAt: nextUpdatedAt(before.updatedAt) } });
   const events = await appendChanges(tx, caseId, actor.id, before as unknown as Record<string, unknown>, after as unknown as Record<string, unknown>);
   const critical = after.priority === 'CRITICAL' && (before.priority !== 'CRITICAL' || before.assignedToId !== after.assignedToId);
   if (critical) await notifySupportEvent(tx, caseId, after.assignedToId, events.get(before.priority !== 'CRITICAL' ? 'priority' : 'assignedToId') ?? 0, 'CRITICAL', after.caseNumber);
@@ -203,7 +206,7 @@ async function setArchived(db: PrismaClient, actor: Actor, caseId: number, archi
     const before = await tx.supportCase.findUnique({ where: { id: caseId } });
     if (!before) throw new Error('Case not found.');
     if (Boolean(before.archivedAt) === archived) return before;
-    const after = await tx.supportCase.update({ where: { id: caseId }, data: { archivedAt: archived ? new Date() : null, updatedById: actor.id } });
+    const after = await tx.supportCase.update({ where: { id: caseId, updatedAt: before.updatedAt }, data: { updatedAt: nextUpdatedAt(before.updatedAt), archivedAt: archived ? new Date() : null, updatedById: actor.id } });
     await appendChanges(tx, caseId, actor.id, before as unknown as Record<string, unknown>, after as unknown as Record<string, unknown>, archived ? 'ARCHIVE' : 'RESTORE');
     await syncSupportNotifications(tx, caseId);
     return after;

@@ -1,4 +1,5 @@
 'use server';
+import { requireEditToken, isRecordChanged, recordChangedMessage } from '../../../lib/stale-edit';
 import { Prisma, SupportCasePriority, SupportCaseSource, SupportCaseStatus } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -13,7 +14,7 @@ import { documentStorage } from '@/lib/document-storage';
 import { selectedEmailFiles, importSelectedEmailFiles, recordEmailFileImport } from '@/lib/support-email-file-import';
 import { DEFAULT_USER_TIME_ZONE } from '@/lib/user-time-zone';
 
-export type SupportFormState = { message?: string; field?: string; savedCaseId?: number; fileFailures?: { name: string; reason: string }[] };
+export type SupportFormState = { recordChanged?: boolean; message?: string; field?: string; savedCaseId?: number; fileFailures?: { name: string; reason: string }[] };
 function optionalId(form: FormData, key: string) { const value = String(form.get(key) ?? ''); if (!value) return null; const number = Number(value); if (!Number.isSafeInteger(number) || number < 1) throw new Error(`Choose a valid ${key}.`); return number; }
 async function readForm(form: FormData, actorId: number) {
   const zone = (await prisma.user.findUnique({ where: { id: actorId }, select: { timeZone: true } }))?.timeZone ?? DEFAULT_USER_TIME_ZONE;
@@ -60,7 +61,7 @@ export async function saveSupportCase(id: number | null, _state: SupportFormStat
         const old = before[key as keyof typeof before];
         return (value instanceof Date ? value.toISOString() : value) !== (old instanceof Date ? old.toISOString() : old);
       })) as SupportCasePatch;
-      await updateSupportCase(prisma, actor, id, patch); caseId = id;
+      await updateSupportCase(prisma, actor, id, patch, requireEditToken(form)); caseId = id;
     }
     else if (context) {
       const result = await createCaseFromSupportEmail(prisma, actor, input as SupportCaseInput, context.message, context.firstMessage);
@@ -68,7 +69,7 @@ export async function saveSupportCase(id: number | null, _state: SupportFormStat
     }
     else { const row = await createSupportCase(prisma, actor, input as SupportCaseInput); caseId = row.id; }
     if (attemptId) await finishIntegrationAttempt(prisma, attemptId, undefined, caseId);
-  } catch (error) { if (attemptId) await finishIntegrationAttempt(prisma, attemptId, gmailFailure(error)); const databaseError = error instanceof Prisma.PrismaClientKnownRequestError || error instanceof Prisma.PrismaClientUnknownRequestError; const message = form.get('emailSource') && databaseError ? 'Could not create and link the Case. No Case was saved. Please retry from this form.' : error instanceof Error ? error.message : 'Could not save Support Case.'; return { message, field: message.includes('Resolution Summary') ? 'resolutionSummary' : message.includes('customer/end user') ? 'customerNameText' : message.includes('product') || message.includes('Product') ? 'productSkuId' : message.includes('Support Rep') || message.includes('assignee') ? 'assignedToId' : message.includes('Contact') ? 'contactId' : message.includes('Purchased From Account') ? 'purchasedFromAccountId' : message.includes('Account') ? 'accountId' : message.includes('source') ? 'source' : message.includes('follow-up') ? 'nextFollowUpAt' : undefined }; }
+  } catch (error) { if (isRecordChanged(error)) return { message: recordChangedMessage, recordChanged: true }; if (attemptId) await finishIntegrationAttempt(prisma, attemptId, gmailFailure(error)); const databaseError = error instanceof Prisma.PrismaClientKnownRequestError || error instanceof Prisma.PrismaClientUnknownRequestError; const message = form.get('emailSource') && databaseError ? 'Could not create and link the Case. No Case was saved. Please retry from this form.' : error instanceof Error ? error.message : 'Could not save Support Case.'; return { message, field: message.includes('Resolution Summary') ? 'resolutionSummary' : message.includes('customer/end user') ? 'customerNameText' : message.includes('product') || message.includes('Product') ? 'productSkuId' : message.includes('Support Rep') || message.includes('assignee') ? 'assignedToId' : message.includes('Contact') ? 'contactId' : message.includes('Purchased From Account') ? 'purchasedFromAccountId' : message.includes('Account') ? 'accountId' : message.includes('source') ? 'source' : message.includes('follow-up') ? 'nextFollowUpAt' : undefined }; }
   // Case and email link are committed. Optional file failures must not report
   // that the Case rolled back, and retries must never create a second Case.
   if (fileTokens.length) {

@@ -10,6 +10,7 @@ import { canViewPriceException, type PriceExceptionVisibilityRecord } from './pr
 import type { PriceExceptionAccounts } from './price-exception-account-match';
 
 type OpportunityForForm = {
+  updatedAt?: Date;
   name: string;
   description: string | null;
   competitorId: number | null;
@@ -61,6 +62,7 @@ type OpportunityProductForForm = {
 };
 
 export type OpportunityFormInitial = {
+  editToken?: string;
   name: string;
   description: string | null;
   competitorId: number | null;
@@ -106,6 +108,7 @@ export type OpportunityFormInitial = {
 
 export function serializeOpportunityForForm(opportunity: OpportunityForForm, actor: Actor): OpportunityFormInitial {
   return {
+    ...(opportunity.updatedAt ? { editToken: opportunity.updatedAt.toISOString() } : {}),
     name: opportunity.name,
     description: opportunity.description,
     competitorId: opportunity.competitorId,

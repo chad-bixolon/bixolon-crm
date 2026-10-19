@@ -1,3 +1,4 @@
+import { assertEditToken, nextUpdatedAt } from './stale-edit';
 import { getCurrencyConfiguration, canRetainCurrency } from './currency-configuration';
 import { parseActualCloseDate, resolveOpportunityOutcome, outcomeHistoryValue, opportunityOutcomeWhere, type OutcomeFilters } from './opportunity-outcomes';
 import { businessToday, isPriceExceptionExpired } from './price-exception-dates';
@@ -119,12 +120,15 @@ export async function opportunityOptions(client: PrismaClient) {
   ]);
   return { defaultCurrency: currencyConfig.defaultCurrency, businessDate: businessToday().toISOString().slice(0, 10), outcomeReasons, accounts: [] as { id: number; name: string }[], contacts: [] as { id: number; firstName: string; lastName: string; email: string | null; accountId: number | null }[], owners, stages, currencies: currencyConfig.activeCurrencies, productCount, projects: [] as { id: number; name: string }[], productCategories, competitors };
 }
-export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number, actor?: Actor) {
+/** Form actions must supply the form-open editToken; trusted programmatic changes use the current record predicate. */
+export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number, actor?: Actor, editToken?: string) {
   if (actor) assertPermission(actor, 'sales.write');
   input = { ...input, contacts: input.contacts ?? [], lines: input.lines.map(line => ({ ...line, priceSource: line.priceSource ?? "MANUAL", catalogPriceTier: line.catalogPriceTier ?? null, priceExceptionLineId: line.priceExceptionLineId ?? null, odmCustomerPriceId: line.odmCustomerPriceId ?? null, odmCustomerAccountId: line.odmCustomerAccountId ?? null })) };
   const run = async (tx: Prisma.TransactionClient) => {
     const existing = id ? await tx.opportunity.findUnique({ where: { id }, include: { projects: { include: { project: { select: { name: true } } } }, stage: true, owner: true, participants: { include: { account: true } } } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Opportunity not found or archived.');
+    if (actor?.role === 'SALES' && (input.ownerId !== actor.id || (existing && existing.ownerId !== actor.id))) throw new Error('Sales users may edit only their own Opportunities.');
+    if (id && editToken !== undefined) assertEditToken(existing!.updatedAt, editToken);
     const existingContacts = id && tx.opportunityContact ? await tx.opportunityContact.findMany({ where: { opportunityId: id }, include: { contact: { select: { firstName: true, lastName: true } } } }) : [];
     const existingContactIds = new Set(existingContacts.map(link => link.contactId));
     const existingLines = id ? await tx.opportunityProduct.findMany({ where: { opportunityId: id, archivedAt: null } }) : [];
@@ -145,7 +149,6 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       const competitor = await tx.competitorOption.findUnique({ where: { id: input.competitorId } });
       if (!competitor || (!competitor.active && existing?.competitorId !== input.competitorId)) throw new Error("Choose an available competitor.");
     }
-    if (actor?.role === 'SALES' && (input.ownerId !== actor.id || (existing && existing.ownerId !== actor.id))) throw new Error('Sales users may edit only their own Opportunities.');
     if (!canRetainCurrency(currency, input.currencyCode, existing?.currencyCode)) throw new Error("Choose an available currency.");
     if (input.ownerId && input.ownerId !== existing?.ownerId && !eligibleUser(owner, 'sales.write')) throw new Error("Choose an eligible owner.");
     if (new Set(input.projectIds).size !== input.projectIds.length || projects.length !== input.projectIds.length || projects.some(project => project.archivedAt && !existing?.projects.some(link => link.projectId === project.id))) throw new Error("Choose each active Project only once.");
@@ -193,7 +196,9 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
     const reason = input.outcomeReasonId ? await tx.outcomeReason.findUnique({ where: { id: input.outcomeReasonId } }) : null;
     const outcome = resolveOpportunityOutcome(stage, input, existing, reason);
     const data = { ...outcome, name: input.name, description: input.description, competitorId: input.competitorId ?? null, currentProductBeingUsed: input.currentProductBeingUsed ?? null, competitivePricing: input.competitivePricing ?? null, customerPainPoints: input.customerPainPoints ?? null, ownerId: input.ownerId, stageId: input.stageId, expectedCloseDate: input.expectedCloseDate, probability: input.probability, forecastCategory: categoryForStage(stage, input.forecastCategory, existing, input.stageId), currencyCode: input.currencyCode };
-    if (id) { await tx.opportunity.update({ where: { id, ...(existing?.updatedAt ? { updatedAt: existing.updatedAt } : {}) }, data }); }
+    if (id) {
+      await tx.opportunity.update({ where: { id, ...(editToken !== undefined ? { updatedAt: new Date(editToken) } : existing?.updatedAt ? { updatedAt: existing.updatedAt } : {}) }, data: { ...data, updatedAt: nextUpdatedAt(existing?.updatedAt) } });
+    }
     else { const created = await tx.opportunity.create({ data }); id = created.id; }
     const opportunityId = id;
     for (const link of existing?.projects ?? []) if (!input.projectIds.includes(link.projectId)) await tx.opportunityProject.delete({ where: { opportunityId_projectId: { opportunityId, projectId: link.projectId } } });
@@ -296,7 +301,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
 /** Narrow owner correction: retain ordinary attribution, OWNER history and notifications. */
 export async function assignOpportunityOwnerInTransaction(tx: Prisma.TransactionClient, id: number, owner: { id: number; firstName: string; lastName: string }, actor: Actor & { firstName: string; lastName: string }) {
   const row = await tx.opportunity.findUniqueOrThrow({ where: { id }, include: { owner: true, participants: { include: { account: true } } } });
-  await tx.opportunity.update({ where: { id }, data: { ownerId: owner.id, updatedById: actor.id } });
+  await tx.opportunity.update({ where: { id, updatedAt: row.updatedAt }, data: { ownerId: owner.id, updatedById: actor.id, updatedAt: nextUpdatedAt(row.updatedAt) } });
   const event = await tx.opportunityHistoryEvent.create({ data: {
     opportunityId: id, opportunityName: row.name, actorId: actor.id, actorName: `${actor.firstName} ${actor.lastName}`,
     accountName: row.participants[0]?.account.name ?? null, eventType: 'OWNER', oldOwnerId: row.ownerId,
@@ -312,7 +317,7 @@ export async function setOpportunityArchived(client: PrismaClient, id: number, a
     const row = await tx.opportunity.findUnique({ where: { id }, include: { participants: { include: { account: true } } } }); if (!row) throw new Error("Opportunity not found.");
     if (actor?.role === 'SALES' && row.ownerId !== actor.id) throw new Error('Sales users may edit only their own Opportunities.');
     if (!!row.archivedAt === archived) throw new Error(archived ? "Opportunity is already archived." : "Opportunity is already active.");
-    await tx.opportunity.update({ where: { id }, data: { archivedAt: archived ? new Date() : null } });
+    await tx.opportunity.update({ where: { id, updatedAt: row.updatedAt }, data: { updatedAt: nextUpdatedAt(row.updatedAt), archivedAt: archived ? new Date() : null } });
     if (tx.notification) await syncOpportunityNotifications(tx, id, (await getSettings(tx as PrismaClient)).COMMIT_FOLLOW_UP_DAYS);
     if (actor) {
       const user = await tx.user.findUnique({ where: { id: actor.id }, select: { firstName: true, lastName: true } });

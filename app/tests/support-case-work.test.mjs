@@ -22,9 +22,9 @@ const policy=require(path.join(root,'lib/support-work.ts'));
 const {routeAccess,can}=require(path.join(root,'lib/authorization.ts'));
 const {resolveUserContext}=require(path.join(root,'lib/dev-impersonation.ts'));
 const actor=role=>({id:7,role,active:true,archivedAt:null});
-const form=values=>{const f=new FormData();for(const [k,v] of Object.entries(values))f.set(k,v==null?'':String(v));return f;};
+const form=values=>{const f=new FormData();f.set('editToken',activeFixture?.row.updatedAt?.toISOString()??'2026-10-19T12:00:00.000Z');for(const [k,v] of Object.entries(values))f.set(k,v==null?'':String(v));return f;};
 function fixture(overrides={}) {
-  let row={id:12,supportCaseId:3,accountId:null,opportunityId:null,projectId:null,tradeShowLeadId:null,contactId:null,assignedToId:7,createdById:8,archivedAt:null,subject:'Check logs',description:'Review diagnostics',priority:'NORMAL',status:'OPEN',dueDate:null,completedAt:null,...overrides};
+  let row={updatedAt:new Date('2026-10-19T12:00:00.000Z'),id:12,supportCaseId:3,accountId:null,opportunityId:null,projectId:null,tradeShowLeadId:null,contactId:null,assignedToId:7,createdById:8,archivedAt:null,subject:'Check logs',description:'Review diagnostics',priority:'NORMAL',status:'OPEN',dueDate:null,completedAt:null,...overrides};
   let user=actor('SUPPORT');
   const caseRow={id:3,accountId:null,archivedAt:null,status:'OPEN'};
   const events=[],locks=[];
@@ -172,4 +172,12 @@ test('impersonated Admin uses effective Support permissions for pages, mutations
   activeFixture.row={...activeFixture.row,supportCaseId:null};
   await assert.rejects(edit(params),/not found/);
   assert.match((await actions.submitTask(12,{errors:{}},form({...input(activeFixture),supportCaseId:3}))).message,/unavailable/);
+});
+
+test('Support Case Task protects entered work and records no lifecycle event after another editor saves',async()=>{
+  const f=fixture(); const token=f.row.updatedAt.toISOString(); const entered={...input(f),subject:'My entered subject'};
+  await policy.saveSupportCaseTask(f.db,actor('SUPPORT'),{...input(f),status:'IN_PROGRESS',dueDate:new Date('2026-12-01T12:00:00Z')},12,token);
+  const count=f.events.length;
+  for(let n=0;n<2;n++) await assert.rejects(policy.saveSupportCaseTask(f.db,actor('SUPPORT'),entered,12,token),/This record changed after you opened it/);
+  assert.equal(f.row.status,'IN_PROGRESS');assert.equal(f.row.dueDate.toISOString().slice(0,10),'2026-12-01');assert.equal(f.events.length,count);assert.equal(entered.subject,'My entered subject');
 });

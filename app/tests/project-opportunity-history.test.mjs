@@ -18,7 +18,7 @@ const prisma = { $transaction: async fn => {
   const pending = [];
   const tx = {
     project: { findUnique: async () => ({ id: 20, name: 'SRP-S300II Deployment', archivedAt: null, primaryAccount: { ownerId: 7 } }) },
-    opportunity: { findUnique: async () => ({ id: 5, name: 'Deal', archivedAt: null }) },
+    opportunity: { findUnique: async () => ({ id: 5, name: 'Deal', archivedAt: null, updatedAt: new Date('2026-10-19T12:00:00.000Z') }), update: async () => ({}) },
     opportunityProject: {
       create: async () => { if (working) throw new Error('already linked'); working = true; },
       delete: async () => { if (!working) throw new Error('link missing'); working = false; },

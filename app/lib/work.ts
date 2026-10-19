@@ -1,3 +1,4 @@
+import { assertEditToken, nextUpdatedAt } from './stale-edit';
 import { operationalProjectWhere, operationalAccountWhere } from './operational-where';
 import { operationalOpportunityWhere, operationalTaskWhere } from './operational-where';
 import { ActivityDirection, Prisma, TaskPriority, TaskStatus, type PrismaClient } from '@prisma/client';
@@ -48,19 +49,21 @@ async function checkSupportCaseRelation(client: PrismaClient | Prisma.Transactio
   if (!row || (!retainedCaseOnly && row.accountId !== accountId)) throw new Error('Support Case Account does not match the selected Account.');
   if (!historical && (row.archivedAt || row.status === 'CLOSED')) throw new Error('Reopen or restore the Support Case before adding work.');
 }
+/** Form actions must supply the form-open editToken; trusted programmatic changes use the current record predicate. */
 export async function saveTask(
   client: PrismaClient,
   value: TaskInput,
   id?: number,
   createKey?: string,
   actorId?: number,
+  editToken?: string,
 ) {
   if (!id && createKey) {
     const existing = await client.task.findUnique({ where: { createKey } });
     if (existing) return existing;
   }
   try { return await client.$transaction(async tx => {
-    return saveTaskInTransaction(tx, value, id, createKey, actorId);
+    return saveTaskInTransaction(tx, value, id, createKey, actorId, editToken);
   }); } catch (error) {
     // A concurrent request may have won the unique-key race.
     if (!id && createKey && typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
@@ -72,11 +75,12 @@ export async function saveTask(
 }
 /** Shared mutation path for individual saves and atomic bulk work. */
 export async function saveTaskInTransaction(
-  tx: Prisma.TransactionClient, value: TaskInput, id?: number, createKey?: string, actorId?: number,
+  tx: Prisma.TransactionClient, value: TaskInput, id?: number, createKey?: string, actorId?: number, editToken?: string,
 ) {
   await checkRelations(tx, value.accountId, value.opportunityId, value.projectId);
   const existing = id ? await tx.task.findUnique({ where: { id } }) : null;
   if (id && (!existing || existing.archivedAt)) throw new Error('Task not found or archived.');
+  if (id && editToken !== undefined) assertEditToken(existing!.updatedAt, editToken);
   await checkSupportCaseRelation(tx, value.supportCaseId, value.accountId, !!id && existing?.supportCaseId === value.supportCaseId, !!existing && existing.supportCaseId === value.supportCaseId && existing.accountId === null && value.accountId === null);
   if (value.contactId && value.contactId !== existing?.contactId) {
     const contact = await tx.contact.findFirst({ where: { id: value.contactId, archivedAt: null, active: true }, select: { accountId: true } });
@@ -90,7 +94,7 @@ export async function saveTaskInTransaction(
     ...(!id && createKey ? { createKey } : {}),
     ...(actorId ? { updatedById: actorId, ...(!id ? { createdById: actorId } : {}) } : {}),
   };
-  const row = id ? await tx.task.update({ where: { id }, data }) : await tx.task.create({ data });
+  const row = id ? await tx.task.update({ where: { id, updatedAt: editToken !== undefined ? new Date(editToken) : existing!.updatedAt }, data: { ...data, updatedAt: nextUpdatedAt(existing!.updatedAt) } }) : await tx.task.create({ data });
   if (existing && row.supportCaseId && actorId && tx.supportCaseLifecycleEvent) {
     const changed = (['subject', 'description', 'dueDate', 'status', 'priority'] as const).filter(key => {
       const before = existing[key], after = row[key];

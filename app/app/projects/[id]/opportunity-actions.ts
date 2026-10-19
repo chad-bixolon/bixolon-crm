@@ -1,4 +1,5 @@
 "use server";
+import { nextUpdatedAt } from '../../../lib/stale-edit';
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireMutation } from "@/lib/current-user";
@@ -19,6 +20,8 @@ export async function changeProjectOpportunity(projectId: number, _state: LinkSt
       ]);
       if (!project || project.archivedAt || !canEditProject(actor, project)) throw new Error("Access denied to this Project.");
       if (!opportunity || (operation === "link" && opportunity.archivedAt)) throw new Error("Choose an active Opportunity.");
+      // Claim the parent before changing the collection, so an older full edit cannot restore it.
+      await tx.opportunity.update({ where: { id: opportunityId, updatedAt: opportunity.updatedAt }, data: { updatedAt: nextUpdatedAt(opportunity.updatedAt) } });
       if (operation === "link") {
         await tx.opportunityProject.create({ data: { projectId, opportunityId } });
       } else {

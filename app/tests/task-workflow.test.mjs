@@ -39,7 +39,7 @@ Module._load=function(name,parent,isMain){
 const actions=require(path.join(root,'app/tasks/actions.ts'));
 const detail=require(path.join(root,'app/tasks/[id]/edit/page.tsx'));
 const taskPage=require(path.join(root,'app/tasks/[id]/page.tsx'));
-function form(entries){const data=new FormData();for(const [key,value] of entries)data.set(key,value);return data;}
+function form(entries){const data=new FormData();data.set('editToken',row?.updatedAt?.toISOString()??'2026-10-19T12:00:00.000Z');for(const [key,value] of entries)data.set(key,value);return data;}
 
 test('successful create redirects to Task detail with visible success feedback',async()=>{
  let creates=0;row=null;
@@ -73,7 +73,7 @@ test('repeated Task submission with the same create key produces one Task',async
  assert.equal(creates,1);
 });
 test('editing an existing Task still returns to its edit page',async()=>{
- row={id:7,subject:'Before',status:'OPEN',priority:'NORMAL',archivedAt:null,completedAt:null,projectId:null,accountId:null,opportunityId:null};
+ row={updatedAt:new Date('2026-10-19T12:00:00.000Z'),id:7,subject:'Before',status:'OPEN',priority:'NORMAL',archivedAt:null,completedAt:null,projectId:null,accountId:null,opportunityId:null};
  prisma.task.findUnique=async({where})=>where.id===7?row:null;
  prisma.task.update=async({data})=>(row={...row,...data});
  prisma.$transaction=async(fn)=>fn({task:prisma.task,adminMaintenanceEvent:prisma.adminMaintenanceEvent});
@@ -94,4 +94,16 @@ test('archive redirects to tasks, and direct archived detail renders reactivatio
  assert.match(html,/href="\/tasks\?visibility=archived"/);
  await assert.rejects(actions.reactivateTask(7,{errors:{}}),error=>error.destination==='/tasks/7/edit');
  assert.equal(row.archivedAt,null);
+});
+
+test('direct Task action rejects missing tokens and stale Admin-independent data without discarding entries', async () => {
+ row={id:7,subject:'Newer saved subject',status:'IN_PROGRESS',priority:'NORMAL',archivedAt:null,completedAt:null,projectId:null,accountId:null,opportunityId:null,updatedAt:new Date('2026-10-19T12:01:00.000Z')};
+ prisma.task.findUnique=async()=>row;
+ const data=form([['subject','My entered subject'],['description','Keep my details'],['status','OPEN'],['priority','NORMAL'],['dueDate','2026-11-20']]);
+ data.delete('editToken');
+ let result=await actions.submitTask(7,{errors:{}},data);
+ assert.equal(result.recordChanged,true);assert.equal(result.values.subject,'My entered subject');assert.equal(result.values.description,'Keep my details');
+ data.set('editToken','2026-10-19T12:00:00.000Z');
+ result=await actions.submitTask(7,{errors:{}},data);
+ assert.equal(result.recordChanged,true);assert.equal(result.values.dueDate,'2026-11-20');assert.equal(row.subject,'Newer saved subject');assert.equal(row.status,'IN_PROGRESS');
 });

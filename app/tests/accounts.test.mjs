@@ -265,5 +265,6 @@ test('archive and reactivate update status and timestamp; repeated action fails'
   assert.equal(row.status, 'ARCHIVED'); assert.ok(row.archivedAt instanceof Date);
   await assert.rejects(setAccountArchived(client, 7, true), /already archived/);
   await setAccountArchived(client, 7, false);
-  assert.deepEqual(row, { status: 'ACTIVE', archivedAt: null, archivedById: null, updatedById: undefined });
+  assert.ok(row.updatedAt instanceof Date);
+  assert.deepEqual({ ...row, updatedAt: undefined }, { status: 'ACTIVE', archivedAt: null, archivedById: null, updatedById: undefined, updatedAt: undefined });
 });

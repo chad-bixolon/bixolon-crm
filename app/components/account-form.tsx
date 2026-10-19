@@ -1,6 +1,7 @@
 "use client";
+import { RecordChangedNotice } from './record-changed-notice';
 import { useSubmitGuard } from "@/lib/submit-guard";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { AccountBusinessRoleCode, AccountStatus } from "@prisma/client";
 import { roleLabels } from "@/lib/account-validation";
@@ -12,15 +13,18 @@ import { createAccountForTradeShowLead } from "@/app/trade-shows/[id]/leads/[lea
 
 type Option = { code: string; name: string; active?: boolean };
 type Owner = { id: number; firstName: string; lastName: string };
-type Initial = Address & { name: string; status: AccountStatus; strategicAccount: boolean; industry: string | null; territory: string | null; ownerId: number | null; website: string | null; phone: string | null; roles: AccountBusinessRoleCode[] };
+type Initial = Address & { editToken?: string; name: string; status: AccountStatus; strategicAccount: boolean; industry: string | null; territory: string | null; ownerId: number | null; website: string | null; phone: string | null; roles: AccountBusinessRoleCode[] };
 export function AccountForm({ id, initial, industries, territories, owners, currentOwner, labels, leadContext, defaultOwnerId }: { id?: number; initial?: Initial; industries: Option[]; territories: Option[]; owners: Owner[]; currentOwner?: {firstName:string;lastName:string}|null; labels?: LabelMap; leadContext?: {tradeShowId:number;leadId:number}; defaultOwnerId?: number | null }) {
   const submit = leadContext ? createAccountForTradeShowLead.bind(null,leadContext.tradeShowId,leadContext.leadId) : submitAccount.bind(null, id ?? null);
   const [state, action, pending] = useActionState(submit, { errors: {} } as FormState);
   const guard = useSubmitGuard(state, action);
+  const [editToken] = useState(initial?.editToken ?? '');
   const values = state.values ?? initial;
   const error = (key: string) => state.errors[key] && <p id={`${key}-error`} className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
   return <form action={action} onSubmit={guard} className="panel max-w-4xl p-6 lg:p-8" aria-label={id ? "Edit account" : "Create account"}>
-    {state.message && <p role="alert" className="mb-6 rounded-md bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
+    {id && <input type="hidden" name="editToken" value={editToken}/>}
+    {state.recordChanged && id && <RecordChangedNotice result={state} href={`/accounts/${id}`}/>}
+    {state.message && !state.recordChanged && <p role="alert" className="mb-6 rounded-md bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     {state.matches?.length ? <section className="mb-6 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm" role="alert">
       <h2 className="font-semibold">{state.matches.length === 1 ? 'Possible duplicate Account found' : 'Possible duplicate Accounts found'}</h2>
       <p className="mt-1">{state.matches.length === 1 ? 'We found an existing Account with the same name. Please review it before creating a new one.' : 'We found existing Accounts that may match this company. Review them before creating a new Account.'}</p>

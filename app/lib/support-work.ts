@@ -20,7 +20,7 @@ export async function assertTaskRead(db: PrismaClient | Prisma.TransactionClient
 }
 
 /** Uses the effective actor and persisted relationships; never grants rights from form fields. */
-export async function saveSupportCaseTask(db: PrismaClient, actor: Actor, value: TaskInput, id: number) {
+export async function saveSupportCaseTask(db: PrismaClient, actor: Actor, value: TaskInput, id: number, editToken?: string) {
   assertPermission(actor, 'support-work.write');
   return db.$transaction(async tx => {
     // Keep eligibility stable until the mutation and its history commit together.
@@ -36,7 +36,7 @@ export async function saveSupportCaseTask(db: PrismaClient, actor: Actor, value:
     }
     await tx.$queryRaw`SELECT id FROM "SupportCase" WHERE id = ${task.supportCaseId} FOR SHARE`;
     await caseWorkContext(tx, user, task.supportCaseId!);
-    return saveTaskInTransaction(tx, value, id, undefined, user.id);
+    return saveTaskInTransaction(tx, value, id, undefined, user.id, editToken);
   });
 }
 

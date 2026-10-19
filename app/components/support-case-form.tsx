@@ -1,4 +1,5 @@
 'use client';
+import { RecordChangedNotice } from './record-changed-notice';
 import Link from 'next/link';
 import { EmailFileSelection } from './email-file-selection';
 import type { EmailFileOption } from '@/lib/support-email-file-import';
@@ -10,8 +11,9 @@ import { SupportCasePicker } from './support-case-picker';
 import { supportPriorityLabels, supportSourceLabels, supportStatusLabels } from '@/lib/support-cases';
 
 type Option = { id: number; name: string; active?: boolean };
-type Case = { id: number; account: Option | null; customerNameText: string | null; purchasedFromAccount: Option | null; purchaseSourceText: string | null; contact: { id: number; firstName: string; lastName: string } | null; productSku: { id: number; partNumber: string } | null; assignedTo: { id: number; firstName: string; lastName: string } | null; accountId: number | null; subject: string; description: string; status: SupportCaseStatus; priority: SupportCasePriority; source: SupportCaseSource; categoryId: number | null; assignedToId: number | null; serialNumber: string | null; nextFollowUpAt: string | null; resolutionSummary: string | null };
+type Case = { editToken?: string; id: number; account: Option | null; customerNameText: string | null; purchasedFromAccount: Option | null; purchaseSourceText: string | null; contact: { id: number; firstName: string; lastName: string } | null; productSku: { id: number; partNumber: string } | null; assignedTo: { id: number; firstName: string; lastName: string } | null; accountId: number | null; subject: string; description: string; status: SupportCaseStatus; priority: SupportCasePriority; source: SupportCaseSource; categoryId: number | null; assignedToId: number | null; serialNumber: string | null; nextFollowUpAt: string | null; resolutionSummary: string | null };
 export function SupportCaseForm({ initial, categories, assignees, defaultAssigneeId, zone, emailPrefill, emailSource, emailFiles = [] }: { initial?: Case; emailPrefill?: Partial<Omit<Case, 'id'>>; emailSource?: string; emailFiles?: EmailFileOption[]; categories: Option[]; assignees: Option[]; defaultAssigneeId: number | null; zone: string }) {
+  const [editToken] = useState(initial?.editToken ?? '');
   const values = initial ?? emailPrefill;
   const [state, action, pending] = useActionState(saveSupportCase.bind(null, initial?.id ?? null), {});
   const guard = useSubmitGuard(state, action);
@@ -21,6 +23,8 @@ export function SupportCaseForm({ initial, categories, assignees, defaultAssigne
   const categoryOptions = categories.filter(c => c.active || c.id === values?.categoryId);
   const assigneeOptions = initial?.assignedTo && !assignees.some(a => a.id === initial.assignedToId) ? [...assignees, { id: initial.assignedTo.id, name: `${initial.assignedTo.firstName} ${initial.assignedTo.lastName} (historical)` }] : assignees;
   return <form onSubmit={guard} className="panel space-y-6 p-5">
+    {initial && <input type="hidden" name="editToken" value={editToken}/>}
+    {state.recordChanged && initial && <RecordChangedNotice result={state} href={`/support/cases/${initial.id}`}/>}
     {emailSource && <input type="hidden" name="emailSource" value={emailSource}/>}
     {emailSource && <EmailFileSelection files={emailFiles} zone={zone} disabled={pending}/>}
     <div className="grid gap-4 md:grid-cols-2"><label className="label">Customer / End User<input className="field mt-1" name="customerNameText" maxLength={500} defaultValue={values?.customerNameText ?? ''} aria-invalid={state.field === 'customerNameText'}/><span className="mt-1 block font-normal text-slate-600">Enter the end user or company requesting support.</span>{state.field === 'customerNameText' && <span role="alert" className="text-sm text-red-700">{state.message}</span>}</label><div><SupportCasePicker kind="account" name="accountId" label="Linked CRM Account (optional)" initial={values?.account} onPick={setAccountId} error={state.field === 'accountId' ? state.message : undefined}/><p className="mt-1 text-sm text-slate-600">Link the customer to an existing SalesHub Account when available.</p></div><SupportCasePicker key={accountId ?? 'none'} kind="contact" name="contactId" label="Contact" accountId={accountId} initial={accountId === values?.accountId && values?.contact ? { id: values.contact.id, name: `${values.contact.firstName} ${values.contact.lastName}` } : null} error={state.field === 'contactId' ? state.message : undefined}/>
@@ -42,7 +46,7 @@ export function SupportCaseForm({ initial, categories, assignees, defaultAssigne
     <label className="label">{emailSource ? 'Description / Email Thread' : 'Description'}<textarea className={`field mt-1 ${emailSource ? 'email-thread-description' : 'min-h-36'}`} name="description" required maxLength={20000} defaultValue={values?.description}/></label>
     {state.savedCaseId && <p className="text-sm"><Link className="text-orange-800 underline" href={`/support/cases/${state.savedCaseId}`}>Open saved Case</Link> · <Link className="text-orange-800 underline" href={`/support/cases/${state.savedCaseId}/email-attachments`}>Review email files</Link></p>}
     {state.fileFailures?.map(file => <p key={file.name} role="alert" className="text-sm text-red-700">{file.name}: {file.reason}</p>)}
-    {state.message && !state.field && <p role="alert" className="text-sm text-red-700">{state.message}</p>}
+    {state.message && !state.field && !state.recordChanged && <p role="alert" className="text-sm text-red-700">{state.message}</p>}
     <div className="form-action-row"><button className="btn-primary" type="submit" disabled={pending}>{pending ? 'Saving…' : initial ? 'Save changes' : 'Create case'}</button><Link className="btn-secondary" href={initial ? `/support/cases/${initial.id}` : emailSource ? '/support/inbox' : '/support/cases'}>Cancel</Link></div>
   </form>;
 }

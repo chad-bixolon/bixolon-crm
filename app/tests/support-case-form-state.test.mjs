@@ -30,7 +30,7 @@ Module._load = function(request, parent, isMain) {
 };
 const { saveSupportCase } = require(path.join(root, 'app/support/cases/actions.ts'));
 Module._load = originalLoad;
-const form = (overrides = {}) => { const data = new FormData(); for (const [key, value] of Object.entries({ customerNameText: 'ABC', accountId: '11', accountIdLabel: 'Customer', contactId: '12', contactIdLabel: 'Jane Smith', subject: 'Printer issue', description: 'Details', status: 'NEW', priority: 'HIGH', categoryId: '13', assignedToId: '2', productSkuId: '14', productSkuIdLabel: 'SKU-14', productSkuIdQuery: '', serialNumber: 'SN', purchaseSourceText: 'CDW', purchasedFromAccountId: '21', purchasedFromAccountIdLabel: 'CDW Corporation', source: 'PHONE', nextFollowUpAt: '2026-10-10T10:00', resolutionSummary: '', ...overrides })) data.set(key, value); return data; };
+const form = (overrides = {}) => { const data = new FormData(); for (const [key, value] of Object.entries({ editToken: '2026-10-19T12:00:00.000Z', customerNameText: 'ABC', accountId: '11', accountIdLabel: 'Customer', contactId: '12', contactIdLabel: 'Jane Smith', subject: 'Printer issue', description: 'Details', status: 'NEW', priority: 'HIGH', categoryId: '13', assignedToId: '2', productSkuId: '14', productSkuIdLabel: 'SKU-14', productSkuIdQuery: '', serialNumber: 'SN', purchaseSourceText: 'CDW', purchasedFromAccountId: '21', purchasedFromAccountIdLabel: 'CDW Corporation', source: 'PHONE', nextFollowUpAt: '2026-10-10T10:00', resolutionSummary: '', ...overrides })) data.set(key, value); return data; };
 
 test('unrelated save error retains selected Support case values for create and edit', async () => {
   for (const id of [null, 9]) {

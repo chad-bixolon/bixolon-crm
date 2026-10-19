@@ -122,3 +122,13 @@ test('Account launches preselect only the Account and use isolated, explicit dra
   assert.match(form, /Discard draft/);
   assert.match(source('app/opportunities/new/page.tsx'), /key=\{accountContextId \? `new-account-\$\{accountContextId\}` : "new"\}/);
 });
+
+test('edit draft recovery retains its form-open token and never adopts a newer record token', () => {
+  const store=storage(), key=drafts.draftKey(7,12);
+  const old={...blank,name:'My old draft',editToken:'2026-10-19T12:00:00.000Z'};
+  const latest={...blank,editToken:'2026-10-19T12:01:00.000Z'};
+  drafts.persistDraft(store,key,old,key);
+  assert.equal(drafts.readStoredDraft(store,key,latest).draft.editToken,old.editToken);
+  drafts.persistDraft(store,key,{...blank,name:'Legacy edit draft'},key);
+  assert.equal(drafts.readStoredDraft(store,key,latest).draft.editToken,undefined);
+});

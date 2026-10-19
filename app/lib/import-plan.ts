@@ -1,3 +1,4 @@
+import { nextUpdatedAt } from './stale-edit';
 import { recordMaintenance } from './admin-maintenance';
 import { AccountBusinessRoleCode, AccountStatus, Prisma, type PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
@@ -132,7 +133,8 @@ export async function applyImport(db:PrismaClient,csv:string,expectedDigest:stri
     for (const item of plan.items.filter(i=>i.type==='Account' && i.status!=='UNCHANGED')) {
       const {name,...other} = item.data;
       const data = {name:String(name),...other,updatedById:actorId} as Prisma.AccountUncheckedCreateInput;
-      const record = item.id ? await tx.account.update({where:{id:item.id},data:{...item.data,updatedById:actorId} as Prisma.AccountUncheckedUpdateInput}) : await tx.account.create({data:{...data,createdById:actorId}});
+      const previous = item.id ? await tx.account.findUniqueOrThrow({ where: { id: item.id }, select: { updatedAt: true } }) : null;
+      const record = item.id ? await tx.account.update({where:{id:item.id,updatedAt:previous!.updatedAt},data:{...item.data,updatedById:actorId,updatedAt:nextUpdatedAt(previous!.updatedAt)} as Prisma.AccountUncheckedUpdateInput}) : await tx.account.create({data:{...data,createdById:actorId}});
       if (!item.id) created.set(norm(String(name)),record.id);
       if (item.roles) { await tx.accountBusinessRole.deleteMany({where:{accountId:record.id}}); if (item.roles.length) await tx.accountBusinessRole.createMany({data:item.roles.map(role=>({accountId:record.id,role}))}); }
     }
