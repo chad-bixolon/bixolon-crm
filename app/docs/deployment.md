@@ -1,5 +1,7 @@
 # Deployment preparation
 
+Start each candidate review with the [maintainer release checklist](release-checklist.md) and `npm run release:check` from `app/`.
+
 ## Local development
 
 Run `docker compose up --build` from the repository root. Compose explicitly builds the

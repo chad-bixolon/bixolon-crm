@@ -44,6 +44,10 @@ The suite is representative. Seed data does not yet support Demo and Trade Show 
 
 Run one module with `npm run test:e2e -- e2e/support.spec.ts` (or another `e2e/*.spec.ts` file). The picker spec also runs at 900×700. All browser mutations use the dedicated E2E database, and fixtures use unique names or an idempotent seed. Do not aim the Playwright server at a normal development or production database.
 
+## Release smoke
+
+The [release checklist](release-checklist.md) uses `release-smoke.spec.ts` for three representative tests, one worker and isolated fixtures in `saleshub_e2e_release`. It does not run the full suite. Run `npm run release:check -- --base <last-deployed-commit>` from `app/` for the complete local release gate.
+
 ## When to run
 
 Codex and developers should run the relevant focused Playwright spec for any meaningful UI, form, picker, or dialog change, then run the full browser smoke suite before commit. Backend-only changes with no browser behavior need their focused unit/server tests instead. The suite provides representative regression coverage and does not replace the full unit suite.

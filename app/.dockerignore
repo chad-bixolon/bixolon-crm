@@ -9,3 +9,6 @@ test-results
 .env
 .env.*
 npm-debug.log
+
+# Local release/validation evidence is never part of an application image.
+/reports

@@ -71,16 +71,25 @@ test('sales stages validate bounds and closed/won invariants, retaining immutabl
   assert.throws(() => stages.parseStage(form([['name', 'Won'], ['probability', '100'], ['sortOrder', '0'], ['isWon', 'on']])), /must also be closed/);
   assert.throws(() => stages.parseStage(form([['name', 'Too high'], ['probability', '101'], ['sortOrder', '0']])), /0–100/);
   const calls = [];
-  const tx = { salesStage: { findUnique: async () => ({ isClosed: false, isWon: false }), update: async args => calls.push(args), create: async args => calls.push(args) }, opportunity: { count: async () => 0, updateMany: async args => calls.push(args) } };
+  const opened = new Date('2026-10-19T12:00:00.000Z');
+  // A row arriving after the in-use check must also advance its edit token.
+  const tx = { salesStage: { findUnique: async () => ({ isClosed: false, isWon: false }), update: async args => calls.push(args), create: async args => calls.push(args) }, opportunity: { count: async () => 0, findMany: async () => [{ id: 9, updatedAt: opened }], update: async args => calls.push(args) } };
   const client = { ...tx, $transaction: async fn => fn(tx) };
   await stages.saveStage(client, 3, valid);
   assert.deepEqual(calls[0].where, { id: 3 });
   assert.equal(calls[0].data.id, undefined);
-  assert.deepEqual(calls[1], { where: { stageId: 3 }, data: { forecastCategory: 'CLOSED' } });
+  assert.deepEqual(calls[1].where, { id: 9, updatedAt: opened });
+  assert.equal(calls[1].data.forecastCategory, 'CLOSED');
+  assert.ok(calls[1].data.updatedAt > opened);
   calls.length = 0;
   tx.salesStage.findUnique = async () => ({ isClosed: true, isWon: true });
   await stages.saveStage(client, 3, { ...valid, isClosed: false, isWon: false });
-  assert.deepEqual(calls[1], { where: { stageId: 3 }, data: { forecastCategory: 'PIPELINE' } });
+  assert.deepEqual(calls[1].where, { id: 9, updatedAt: opened });
+  assert.equal(calls[1].data.forecastCategory, 'PIPELINE');
+  assert.ok(calls[1].data.updatedAt > opened);
+  tx.opportunity.count = async () => 1;
+  tx.salesStage.findUnique = async () => ({ isClosed: false, isWon: false });
+  await assert.rejects(stages.saveStage(client, 3, valid), /stage is used by Opportunities/);
 });
 
 test('settings reject unknown keys and unsafe ranges', () => {
