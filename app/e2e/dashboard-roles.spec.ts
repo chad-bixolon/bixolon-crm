@@ -51,7 +51,7 @@ for(const audience of compositions)test(`${audience.role} composition and deskto
       expect((await page.request.get('/administration',{maxRedirects:0})).headers().location).toContain('/access-denied');
     }
     if(audience.role==='ADMIN'){
-      await expect(page.getByRole('main').getByRole('link',{name:'View Data Quality / Cleanup'})).toHaveAttribute('href','/administration/data-quality');
+      await expect(page.getByRole('main').getByRole('link',{name:'View Data Quality'})).toHaveAttribute('href','/administration/data-quality');
       await expect(page.getByRole('main').getByRole('link',{name:'View System Health'})).toHaveAttribute('href','/administration/system-health');
     }
     if(audience.role==='MARKETING_MANAGER'){

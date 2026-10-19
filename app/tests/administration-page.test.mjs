@@ -40,12 +40,12 @@ finally {
 }
 
 const expected = [
-  ['Data & Imports', [['Imports', '/administration/imports'], ['PE Cleanup', '/administration/price-exceptions'], ['Data Quality / Cleanup', '/administration/data-quality']]],
+  ['Data & Imports', [['Imports', '/administration/imports'], ['Price Exception Cleanup', '/administration/price-exceptions'], ['Data Quality', '/administration/data-quality']]],
   ['Users & Access', [['Ownership & Reassignment', '/administration/ownership'], ['Users', '/administration/users'], ['Dashboard Views', '/administration/dashboard-views']]],
   ['Sales Configuration', [['Currency Settings', '/administration/currencies'], ['Sales Stages', '/administration/sales-stages'], ['Sales Targets', '/administration/sales-targets'], ['Outcome Reasons', '/administration/outcome-reasons'], ['Competitors', '/administration/competitors'], ['Territories', '/administration/lookups/territories']]],
   ['CRM Configuration', [['Support Case Categories', '/administration/support-case-categories'], ['Industries', '/administration/lookups/industries'], ['Activity Types', '/administration/lookups/activity-types'], ['Labels & Terminology', '/administration/labels']]],
   ['Product Configuration', [['Product Categories', '/administration/lookups/product-categories']]],
-  ['System & History', [['Audit History', '/administration/audit-history'], ['Maintenance History', '/administration/maintenance-history'], ['System Health', '/administration/system-health'], ['System Settings', '/administration/settings'], ['Opportunity & Forecast History', '/administration/history'], ['Forecast Snapshots', '/administration/forecast-snapshots'], ['Opportunity Snapshots', '/administration/opportunity-snapshots']]],
+  ['System & History', [['Audit History', '/administration/audit-history'], ['Integration & Job History', '/administration/maintenance-history?view=integrations'], ['Maintenance History', '/administration/maintenance-history'], ['System Health', '/administration/system-health'], ['System Settings', '/administration/settings'], ['Opportunity & Forecast History', '/administration/history'], ['Forecast Snapshots', '/administration/forecast-snapshots'], ['Opportunity Snapshots', '/administration/opportunity-snapshots']]],
 ];
 
 test('Administration renders every existing tool in its intended group and destination', async () => {
@@ -68,7 +68,7 @@ test('Administration renders every existing tool in its intended group and desti
     return [heading, links];
   });
   assert.deepEqual(actual, expected);
-  assert.equal(actual.flatMap(([, links]) => links).length, 24);
+  assert.equal(actual.flatMap(([, links]) => links).length, 25);
 });
 
 test('Administration keeps the effective-user management permission gate', async () => {

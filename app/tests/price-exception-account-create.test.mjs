@@ -61,8 +61,8 @@ test('inactive exact Account blocks creation and cannot be used until reactivate
 test('Account creation from import requires Account write permission',async()=>{
   const client=db('VAR');await assert.rejects(createPeReviewAccount(client,{id:1,role:'READ_ONLY',active:true},form('New Partner','VAR'),true,true),/Access denied/);assert.equal(client.created.length,0);
 });
-test('Administration landing restores PE Cleanup as ongoing maintenance',()=>{
+test('Administration landing keeps Price Exception Cleanup as ongoing maintenance',()=>{
   const page=fs.readFileSync(path.join(root,'app/administration/page.tsx'),'utf8');
-  assert.match(page,/\["Imports"/);assert.match(page,/\["PE Cleanup", "\/administration\/price-exceptions", "Review imported Price Exceptions and correct data issues\."\]/);
+  assert.match(page,/\["Imports"/);assert.match(page,/\["Price Exception Cleanup", "\/administration\/price-exceptions", "Review imported Price Exceptions and correct data issues\."\]/);
   assert.doesNotMatch(page,/legacy cleanup/i);
 });

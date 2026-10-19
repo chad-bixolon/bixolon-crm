@@ -129,7 +129,7 @@ test('desktop, tablet and mobile keep details usable and tables within scrolling
     await page.setViewportSize({ width, height }); await page.goto(url());
     await expect(page.getByRole('heading', { name: 'Pipeline Movement', exact: true })).toBeVisible(); await assertReconciliation(page, '875.00', '835.00');
     const row = page.locator(`[data-opportunity-id="${dealIds['Multi-change slip']}"]`); await row.locator('summary').click();
-    await expect(row.getByText('Expected close (previous → current)', { exact: true })).toBeVisible();
+    await expect(row.getByText('Expected close date (previous → current)', { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
     const table = page.getByRole('region', { name: 'Deal movement', exact: true });
     if (width < 1100) expect(await table.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);

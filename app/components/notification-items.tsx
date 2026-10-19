@@ -3,7 +3,7 @@ import type { NotificationItem } from '@/lib/notifications';
 import { notificationDisplayMessage, notificationEntityLabels } from '@/lib/notification-presentation';
 
 const severityStyle = { INFO: 'bg-sky-50 text-sky-800', WARNING: 'bg-amber-50 text-amber-900', CRITICAL: 'bg-red-50 text-red-800' };
-const severityLabels = { INFO: 'Info', WARNING: 'Warning', CRITICAL: 'Critical' };
+const severityLabels = { INFO: 'Information', WARNING: 'Warning', CRITICAL: 'Critical' };
 function friendlyNotificationTime(date: Date) { const days = Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 86400000)); return days === 0 ? 'Today' : days === 1 ? 'Yesterday' : `${days} days ago`; }
 export function NotificationItems({ rows, compact = false, timeZone = 'America/New_York' }: { rows: NotificationItem[]; compact?: boolean; timeZone?: string }) {
   return <div className="divide-y divide-slate-100">{rows.map(row => <article key={row.id} className={`min-w-0 px-4 py-3 ${row.readAt ? '' : 'bg-orange-50/40'}`}>

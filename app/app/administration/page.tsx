@@ -6,8 +6,8 @@ import { requirePermission } from "@/lib/current-user";
 const groups = [
   { title: "Data & Imports", tools: [
     ["Imports", "/administration/imports", "Preview and confirm CRM, Product, and Price Exception imports."],
-    ["PE Cleanup", "/administration/price-exceptions", "Review imported Price Exceptions and correct data issues."],
-    ["Data Quality / Cleanup", "/administration/data-quality", "Review CRM records that may need cleanup or follow-up."],
+    ["Price Exception Cleanup", "/administration/price-exceptions", "Review imported Price Exceptions and correct data issues."],
+    ["Data Quality", "/administration/data-quality", "Review CRM records that may need cleanup or follow-up."],
   ] },
   { title: "Users & Access", tools: [
     ["Ownership & Reassignment", "/administration/ownership", "Review records assigned to inactive or ineligible users and safely reassign work."],
@@ -32,9 +32,10 @@ const groups = [
     ["Product Categories", "/administration/lookups/product-categories", "Manage Product category choices and order."],
   ] },
   { title: "System & History", tools: [
-    ["Audit History", "/administration/audit-history", "Review business changes across existing history sources."],
+    ["Audit History", "/administration/audit-history", "See who changed key records and compare before and after values."],
+    ["Integration & Job History", "/administration/maintenance-history?view=integrations", "Review connection actions and scheduled job results."],
     ["Maintenance History", "/administration/maintenance-history", "See who performed supported maintenance actions and when."],
-    ["System Health", "/administration/system-health", "Review database, object storage, and scheduled job status."],
+    ["System Health", "/administration/system-health", "Check services, connections, and scheduled jobs."],
     ["System Settings", "/administration/settings", "Set safe reporting and warning defaults."],
     ["Opportunity & Forecast History", "/administration/history", "Manage Opportunity changes and separate weekly Forecast Movement captures."],
     ["Forecast Snapshots", "/administration/forecast-snapshots", "Create quarterly forecast history from Opportunity Snapshots."],

@@ -6,15 +6,15 @@ export const qualityIssues = [
   { key: 'contact-account', label: 'Contacts without an Account', entity: 'Contacts', explanation: 'Active Contacts that are not linked to an Account.' },
   { key: 'contact-account-inactive', label: 'Contacts linked to an inactive Account', entity: 'Contacts', explanation: 'Active Contacts linked to an inactive or archived Account.' },
   { key: 'opportunity-owner', label: 'Open Opportunities without an owner', entity: 'Opportunities', explanation: 'Open Opportunities with no owner, or an inactive or archived owner.' },
-  { key: 'opportunity-account', label: 'Open Opportunities without an Account', entity: 'Opportunities', explanation: 'Open Opportunities without a participating Account. Legacy Account links alone do not count.' },
+  { key: 'opportunity-account', label: 'Open Opportunities without an Account', entity: 'Opportunities', explanation: 'Open Opportunities with no Accounts in their participant list. An older Account link by itself does not count.' },
   { key: 'opportunity-account-inactive', label: 'Open Opportunities linked to an inactive Account', entity: 'Opportunities', explanation: 'Open Opportunities with a participating Account that is inactive or archived.' },
   { key: 'opportunity-close', label: 'Open Opportunities without an expected close date', entity: 'Opportunities', explanation: 'Open Opportunities with no expected close date.' },
   { key: 'project-account', label: 'Projects without a primary Account', entity: 'Projects', explanation: 'Active Projects without a primary Account.' },
   { key: 'project-account-inactive', label: 'Projects linked to an inactive Account', entity: 'Projects', explanation: 'Active Projects whose primary Account is inactive or archived.' },
   { key: 'task-archived-link', label: 'Open Tasks linked to archived records', entity: 'Tasks', explanation: 'Open Tasks linked to an archived Account, Opportunity, Project, or Contact.' },
   { key: 'activity-archived-link', label: 'Activities linked to archived records', entity: 'Activities', explanation: 'Unarchived Activities linked to an archived Account, Opportunity, or Project.' },
-  { key: 'duplicate-account', label: 'Possible duplicate Accounts', entity: 'Accounts', explanation: 'Active Accounts sharing the same name after case, spacing, and surrounding whitespace are normalized.' },
-  { key: 'duplicate-contact', label: 'Possible duplicate Contacts', entity: 'Contacts', explanation: 'Active Contacts sharing the same nonblank email address, ignoring case and surrounding whitespace.' },
+  { key: 'duplicate-account', label: 'Possible duplicate Accounts', entity: 'Accounts', explanation: 'Active Accounts with the same name, ignoring capitalization and extra spaces.' },
+  { key: 'duplicate-contact', label: 'Possible duplicate Contacts', entity: 'Contacts', explanation: 'Active Contacts with the same email address, ignoring capitalization and spaces at either end. Contacts without an email are excluded.' },
 ] as const;
 export type QualityIssueKey = typeof qualityIssues[number]['key'];
 export const qualityPageSize = 25;

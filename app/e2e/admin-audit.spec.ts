@@ -92,7 +92,7 @@ test('Admin reports deny other roles and an impersonated Sales user', async ({ p
 
 for (const width of [1440, 768, 390]) test(`Administration tools fit ${width}px and preserve clear navigation`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 }); await signInAs(page, 'admin');
-  for (const [route, title] of [['ownership', 'Ownership & Reassignment'], ['audit-history', 'Audit History'], ['maintenance-history', 'Maintenance History'], ['system-health', 'System health']]) {
+  for (const [route, title] of [['ownership', 'Ownership & Reassignment'], ['audit-history', 'Audit History'], ['maintenance-history', 'Maintenance History'], ['system-health', 'System Health']]) {
     await page.goto(`/administration/${route}`); await page.waitForLoadState('networkidle'); await expect(page.locator('main h1')).toHaveText(title);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     if (route === 'system-health') { await expect(page.locator('main')).toContainText('Support Gmail'); await expect(page.locator('main')).toContainText('Calendar integration'); }
@@ -112,7 +112,7 @@ test('ownership UI confirms reassignment and removes the resolved issue', async 
   await dialog.getByLabel('Assignee').selectOption(String(sales.id));
   await dialog.getByRole('button', { name: /^Confirm 1 updates$/  }).click();
   await expect(dialog).not.toBeVisible();
-  await expect(page.locator('main')).toContainText('No ownership issues match these filters.');
+  await expect(page.locator('main')).toContainText('No records assigned to this user need reassignment for the selected record type.');
   expect((await db.task.findUniqueOrThrow({ where: { id: task.id } })).assignedToId).toBe(sales.id);
 });
 

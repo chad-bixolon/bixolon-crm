@@ -56,9 +56,9 @@ test('business labels, main filters and Advanced filter values survive collapse 
   await expect(page.getByRole('combobox', { name: 'Account', exact: true })).toBeHidden();
   await advanced.locator('summary').focus(); await page.keyboard.press('Enter');
   await expect(advanced).toHaveAttribute('open', '');
-  await page.getByRole('combobox', { name: 'Reference Snapshot', exact: true }).selectOption(String(runs.Q2[0]));
-  await page.getByRole('combobox', { name: 'Outcome View', exact: true }).selectOption('lost-commit');
-  await advanced.locator('summary').click(); await page.getByRole('button', { name: 'Update history' }).click();
+  await page.getByRole('combobox', { name: 'Reference snapshot', exact: true }).selectOption(String(runs.Q2[0]));
+  await page.getByRole('combobox', { name: 'Show outcomes', exact: true }).selectOption('lost-commit');
+  await advanced.locator('summary').click(); await page.getByRole('button', { name: 'Apply filters' }).click();
   await expect(page).toHaveURL(new RegExp(`cohortRun=${runs.Q2[0]}`)); await expect(page).toHaveURL(/reasonView=lost-commit/);
   await expect(advanced).toHaveAttribute('open', '');
   await expect(page.locator('[data-history-measure="Pipeline change"]')).toHaveAttribute('data-value', '50.00');
@@ -108,7 +108,7 @@ test('responsive main and Advanced filters, 44px tablet controls and readable ch
   await expectBounded(page, width >= 640 && width < 1280);
   await expect(page.getByRole('combobox', { name: 'Comparison window', exact: true })).toBeVisible();
   await page.locator('summary').filter({ hasText: /^Advanced filters$/ }).click();
-  await expect(page.getByRole('combobox', { name: 'Reference Snapshot', exact: true })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Reference snapshot', exact: true })).toBeVisible();
   await expectBounded(page, width >= 640 && width < 1280);
   const disclosureHeight = await page.locator('summary').filter({ hasText: /^Advanced filters$/ }).evaluate(node => node.getBoundingClientRect().height); expect(disclosureHeight).toBeGreaterThanOrEqual(44);
   await page.getByRole('form', { name: 'Pipeline history filters' }).screenshot({ path: info.outputPath('advanced-filters.png'), caret: 'initial' });

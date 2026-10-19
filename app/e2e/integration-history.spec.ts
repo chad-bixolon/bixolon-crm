@@ -82,17 +82,17 @@ test('Admin history filters, pagination, failed/recovered states and linked case
   await expect(region.locator('article')).toHaveCount(1); await expect(region).toContainText('Authentication required'); await expect(region).toContainText(`Recovered by attempt #${recoveryId}`);
   await region.getByRole('link', { name: `Support Case #${caseId}` }).click(); await expect(page.locator('main')).toContainText('Integration history linked case');
   await page.goto(`${base}&${new URLSearchParams({ ...filters(), status: 'Failed' })}`); await expect(region.locator('article')).toHaveCount(1); await expect(region).toContainText('Permission issue');
-  await page.getByLabel('Integration / job', { exact: true }).selectOption('CALENDAR_CONNECTION_SYNC'); await page.getByRole('button', { name: 'Apply filters' }).click(); await expect(region).toContainText('No attempts match');
+  await page.getByLabel('Integration or job', { exact: true }).selectOption('CALENDAR_CONNECTION_SYNC'); await page.getByRole('button', { name: 'Apply filters' }).click(); await expect(region).toContainText('No connection actions or jobs match');
 });
 
 for (const width of [1440, 768, 390]) test(`history and durable System Health fit ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 }); await signInAs(page, 'admin');
-  await page.goto(`${base}&${new URLSearchParams({ ...filters(), status: 'Recovered' })}`); await expect(page.getByRole('heading', { name: 'Integration / Job History' })).toBeVisible();
+  await page.goto(`${base}&${new URLSearchParams({ ...filters(), status: 'Recovered' })}`); await expect(page.getByRole('heading', { name: 'Integration & Job History' })).toBeVisible();
   await expect(page.locator(`#attempt-${recoveredId}`)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.waitForLoadState('networkidle');
   await page.screenshot({ path: `reports/integration-history/history-${width}.png`, fullPage: true, caret: 'initial' });
-  await page.goto('/administration/system-health'); const region = page.getByRole('region', { name: 'Durable integration status' }); await expect(region).toContainText('Last successful action'); await expect(region).toContainText('Most recent unresolved failure'); await expect(region).not.toContainText('NEVER_SAVE');
+  await page.goto('/administration/system-health'); const region = page.getByRole('region', { name: 'Recorded integration status' }); await expect(region).toContainText('Last successful action'); await expect(region).toContainText('Most recent unresolved failure'); await expect(region).not.toContainText('NEVER_SAVE');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.waitForLoadState('networkidle');
   await page.screenshot({ path: `reports/integration-history/health-${width}.png`, fullPage: true, caret: 'initial' });

@@ -1,6 +1,6 @@
 # Durable integration and job history v1
 
-Admins open **Maintenance History → Integration / Job History**, or **System Health → Integration / job history → Review history**. This is stored operational evidence from real actions. Opening these sections never polls Google or starts jobs. `/api/health` remains a basic web-service check and does not verify provider health. Existing database/storage health checks remain unchanged.
+Admins open **Maintenance History → Integration & Job History**, or **System Health → Integration & Job History → Review history**. This is stored operational evidence from real actions. Opening these sections never polls Google or starts jobs. `/api/health` remains a basic web-service check and does not verify provider health. Existing database/storage health checks remain unchanged.
 
 ## Ledger and deployment
 
@@ -119,3 +119,7 @@ Review actual table growth at **250,000 rows, 250 MiB of table/index storage, or
 The earlier broad test run exposed a stale Task-filter source assertion; it now checks the existing extracted `TaskDuePeriod` component. Updated integration test fixtures provide the real attempt delegate rather than bypassing history writes. No Task behavior changed. The first browser pass exposed an out-of-range historical fixture year and screenshot caret changes before hydration; corrected fixtures and stable screenshot capture passed the reruns. Two unrelated test files that failed under the initial concurrent validation load passed independently and in the bounded full run.
 
 Screenshots remain in `app/reports/integration-history/` for history and System Health at all three sizes. Validation used the isolated E2E database and synthetic provider fixtures. Production schema/data, provider connections, OAuth configuration, DigitalOcean, commits and pushes were not changed. The production migration still requires the normal reviewed deployment process.
+
+## Presentation and diagnostics
+
+System Health summarizes recorded actions and jobs; fixture attempts remain excluded from its durable status. Test fixtures are shown only where the existing history policy permits them and cannot recover live failures. The UI keeps database diagnostics and capture timestamps in disclosures. Snapshot links use the existing Administration list with a selected snapshot parameter, so captures older than the twelve recent entries can still be reviewed. This presentation change does not write, recapture, backfill, or reinterpret history.

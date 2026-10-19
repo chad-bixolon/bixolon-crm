@@ -32,6 +32,8 @@ test('single currency hides redundant controls across desktop, tablets and phone
     for (const route of routes) {
       await page.goto(route);
       await expect(page.locator('main h1')).toBeVisible();
+      // Finish this dev page's hydration before moving through the next route.
+      await page.waitForLoadState('networkidle');
       await expect(page.locator('main select[name="currencyCode"], main select[name="currency"], main input.field[name="currencyCode"]')).toHaveCount(0);
       await expect(page.locator('main')).not.toContainText(/one currency per view|each view uses one currency|Values are shown in one currency/i);
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1), `${width}px ${route}`).toBe(true);

@@ -25,7 +25,7 @@ const navSections = [
   { label: NAV_CATEGORIES.reports, items: ["Reports"] },
   { label: NAV_CATEGORIES.administration, items: ["Administration", "Integrations"] },
 ] as const;
-const hrefFor = (item: string) => item === "Dashboard" ? "/" : item === "Support Cases" ? "/support/cases" : item === "Sales Plan" ? "/sales-plan" : item === "Calendar Matches" ? "/calendar-matches" : item === "Price Exceptions" ? "/price-exceptions" : item === "Trade Shows" ? "/trade-shows" : item === "Campaigns" ? "/marketing/campaigns" : item === "Marketing Audiences" ? "/marketing/audiences" : `/${item.toLowerCase()}`;
+const hrefFor = (item: string) => item === "Integrations" ? "/administration/maintenance-history?view=integrations" : item === "Dashboard" ? "/" : item === "Support Cases" ? "/support/cases" : item === "Sales Plan" ? "/sales-plan" : item === "Calendar Matches" ? "/calendar-matches" : item === "Price Exceptions" ? "/price-exceptions" : item === "Trade Shows" ? "/trade-shows" : item === "Campaigns" ? "/marketing/campaigns" : item === "Marketing Audiences" ? "/marketing/audiences" : `/${item.toLowerCase()}`;
 const navLabelKeys: Partial<Record<string, keyof LabelMap>> = { Accounts: "ACCOUNT", Contacts: "CONTACT", Projects: "PROJECT", Opportunities: "OPPORTUNITY", Tasks: "TASK" };
 type ShellUser = { id: number; name: string; role: UserRole; canManageUsers: boolean; canViewReports: boolean; canViewMarketing:boolean; canViewSales:boolean; canViewOpportunities:boolean; canViewSupport:boolean; canCreateAccount:boolean; canCreateContact:boolean; canCreateOpportunity:boolean; canCreateTask:boolean };
 type NavItem = (typeof navSections)[number]["items"][number];

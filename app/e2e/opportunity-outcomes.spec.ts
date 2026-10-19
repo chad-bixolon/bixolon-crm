@@ -127,7 +127,7 @@ test('Admin reason management UI and effective-role access remain restricted',as
   test.setTimeout(120_000);
   await signInAs(page,'admin'); await page.goto('/administration/outcome-reasons');
   const add=page.locator('form').first(), name=uniqueName('Admin outcome');
-  await add.getByLabel('Name',{exact:true}).fill(name); await add.getByLabel('Close state').selectOption('lost'); await add.getByLabel('Sort order').fill('50'); await add.getByRole('button',{name:'Add',exact:true}).click(); await expect(add.getByRole('status')).toContainText('added');
+  await add.getByLabel('Name',{exact:true}).fill(name); await add.getByLabel('Applies to').selectOption('lost'); await add.getByLabel('Display order').fill('50'); await add.getByRole('button',{name:'Add reason',exact:true}).click(); await expect(add.getByRole('status')).toContainText('added');
   for(const width of [1440,768,390]) {await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);}
   const added = await db.outcomeReason.findFirstOrThrow({where:{name}}); const form=page.locator('form').filter({has:page.locator(`#outcomeReason-${added.id}-name`)}); await form.getByLabel('Name',{exact:true}).fill(`${name} revised`); await form.getByLabel('Active',{exact:true}).uncheck(); await form.getByRole('button',{name:'Save',exact:true}).click(); await expect(form.getByRole('status')).toContainText('updated');
   for(const role of ['sales','salesManager','marketing','readOnly','support'] as const) {await signInAs(page,role); await page.goto('/administration/outcome-reasons'); await expect(page).toHaveURL(/access-denied/);}

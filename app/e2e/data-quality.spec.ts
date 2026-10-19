@@ -6,10 +6,10 @@ import { databaseUrl, emails } from './constants.mjs';
 test('Admin can open a Data Quality issue and return to its record', async ({ page }) => {
   await signInAs(page, 'admin');
   await page.goto('/administration');
-  await page.getByRole('link', { name: /Data Quality \/ Cleanup/ }).click();
+  await page.getByRole('link', { name: /Data Quality/ }).click();
   await expect(page).toHaveURL('/administration/data-quality', { timeout: 30000 });
-  await expect(page.getByRole('heading', { name: 'Data Quality / Cleanup', level: 1 })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Issue groups' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Data Quality', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Checks' })).toBeVisible();
   await page.getByRole('link', { name: /Accounts without a sales owner/ }).click();
   await expect(page).toHaveURL(/issue=account-owner/);
   await expect(page.getByRole('search')).toBeVisible();
@@ -18,7 +18,7 @@ test('Admin can open a Data Quality issue and return to its record', async ({ pa
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Open record' })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole('heading', { name: 'Data Quality / Cleanup' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Data Quality' })).toBeVisible();
   await expect(page.getByRole('search')).toBeVisible();
   await page.getByRole('link', { name: 'Open record' }).click();
   await expect(page).toHaveURL(/\/accounts\/\d+$/);

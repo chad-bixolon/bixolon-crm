@@ -12,7 +12,7 @@ const { helpHref } = require('../lib/help/links.ts');
 const { can, routeAccess } = require('../lib/authorization.ts');
 const actor = role => ({ id: 7, role, active: true });
 const ids = role => visibleHelpTopics(actor(role)).map(topic => topic.id);
-const adminOnly = ['data-quality', 'ownership-reassignment', 'system-health', 'audit-history', 'maintenance-history'];
+const adminOnly = ['data-quality', 'ownership-reassignment', 'system-health', 'audit-history', 'maintenance-history', 'currency-settings', 'manage-choices'];
 
 test('Help visibility follows the effective actor and existing read/write checks for all roles', () => {
   assert.deepEqual(new Set(ids('ADMIN')), new Set(Object.keys(helpTopics)));
@@ -71,7 +71,7 @@ test('guide copy has unique titles, valid groups, concise paragraphs and no inte
 const topicText = topic => topic.sections.flatMap(section => section.paragraphs).join(' ');
 const sectionText = (topic, heading) => topic.sections.find(section => section.heading === heading)?.paragraphs.join(' ') ?? '';
 
-test('Opportunities explains distinct dates, outcome context, history and future analysis', () => {
+test('Opportunities explains distinct dates, outcome context, history and available outcome analysis', () => {
   const text = topicText(helpTopics.opportunities);
   for (const concept of [/Expected Close Date/, /Actual Close Date/, /December 15/, /January 8/, /Closed Won/, /Closed Lost/, /Outcome Reason/, /Outcome Notes/, /optional/, /Unknown/, /Opportunity History/]) assert.match(text, concept);
   const close = sectionText(helpTopics.opportunities, 'Closing an Opportunity');
@@ -79,7 +79,8 @@ test('Opportunities explains distinct dates, outcome context, history and future
   const reopen = sectionText(helpTopics.opportunities, 'Reopening an Opportunity');
   for (const concept of [/permission/, /Actual Close Date, Outcome Reason, and Outcome Notes.*cleared/, /previous close event.*remain/, /fresh Actual Close Date and Outcome Reason/]) assert.match(reopen, concept);
   const analysis = sectionText(helpTopics.opportunities, 'Why outcome information matters');
-  assert.match(analysis, /foundation.*future.*win.loss.*forecast.accuracy/);
+  assert.match(analysis, /Pipeline Movement.*History & Outcomes/);
+  assert.match(analysis, /do not provide a forecast-accuracy score/);
 });
 
 test('shared Sales information and My pipeline guidance keep attribution and filters distinct', () => {

@@ -19,12 +19,12 @@ export type MovementFilters = { period: ReportingPeriod; currencyCode: string; o
 export const financialLabels = {
   additions: 'Additions', increases: 'Value Increases', decreases: 'Value Decreases',
   entered: 'Entered Quarter', slipped: 'Slipped Out', won: 'Closed Won', lost: 'Closed Lost',
-  removed: 'Removed / Scope Exits', scopeEntries: 'Scope Entries / Reopened',
+  removed: 'Other removals from this view', scopeEntries: 'Other additions or reopened deals',
 } as const;
 export type FinancialBucket = keyof typeof financialLabels;
 export const movementLabels = {
   WON: 'Closed Won', LOST: 'Closed Lost', SLIPPED: 'Slipped out of quarter', ENTERED: 'Entered quarter',
-  NEW: 'New Opportunity', DECREASE: 'Value decreased', INCREASE: 'Value increased',
+  NEW: 'Newly included', DECREASE: 'Value decreased', INCREASE: 'Value increased',
   FORECAST_DOWN: 'Forecast downgraded', FORECAST_UP: 'Forecast upgraded', FORECAST_CHANGED: 'Forecast category changed',
   STAGE_DOWN: 'Stage regressed', STAGE_UP: 'Stage advanced', STAGE_CHANGED: 'Stage changed',
   REMOVED: 'Removed from active pipeline', REOPENED: 'Reopened', OWNER: 'Owner changed',

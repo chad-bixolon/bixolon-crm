@@ -30,7 +30,7 @@ export default async function SupportInboxPage({ searchParams }: { searchParams:
   if (environmentIssue) return <Content>{heading}<p role="alert" className="panel p-4">{environmentIssue}</p></Content>;
   let status;
   try { status = mock || fixture ? { connected: fixture, email: fixture ? process.env.SUPPORT_GMAIL_MAILBOX ?? null : null, connectedAt: null } : await connectionStatus(); }
-  catch { return <Content>{heading}<p role="alert" className="panel p-4">Support Gmail connection could not be loaded. Ask an administrator to check the mailbox settings and database migrations.</p></Content>; }
+  catch { return <Content>{heading}<p role="alert" className="panel p-4">The mailbox connection could not be loaded. Ask an administrator to check the Support mailbox connection.</p></Content>; }
   const params = await searchParams;
   const result = params.connection;
   const connectionPanel = () => {
@@ -52,14 +52,14 @@ export default async function SupportInboxPage({ searchParams }: { searchParams:
             <div><dt className="inline font-medium">Last successful fetch: </dt><dd className="inline">{synced ? <LocalFetchTime iso={synced.toISOString()}/> : 'Not yet'}</dd></div>
             <div><dt className="inline font-medium">Last fetch result: </dt><dd className="inline">{fetch.result}</dd></div>
           </dl>
-          {!mock && !status.connected && !supportGmailClientConfigured() && <p className="mt-2 text-sm">Configure the dedicated Support Google OAuth client in the SalesHub environment.</p>}
+          {!mock && !status.connected && !supportGmailClientConfigured() && <p className="mt-2 text-sm">Ask the system administrator to complete the Support mailbox setup before connecting.</p>}
           {!mock && !fixture && <div key="gmail-actions" className="mt-3 flex flex-wrap gap-2">
             <form key="connect" action={connectSupportGmail}><button className="btn-secondary" disabled={!supportGmailClientConfigured()} type="submit">{status.connected ? 'Reconnect Support Gmail' : 'Connect Support Gmail'}</button></form>
             {status.connected && <form key="disconnect" action={disconnectInboxGmail}><button className="btn-secondary" type="submit">Disconnect Gmail</button></form>}
           </div>}
         </div>
       </InboxDisclosure>
-      {result && result !== 'connected' && <p role="alert" className="mt-2 text-sm text-red-700">{result === 'declined' ? 'Google access was declined.' : result === 'invalid-state' ? 'Connection expired. Try again.' : result === 'disconnected' ? 'Mailbox disconnected from SalesHub.' : 'Connection failed. Check OAuth settings and mailbox access.'}</p>}
+      {result && result !== 'connected' && <p role="alert" className="mt-2 text-sm text-red-700">{result === 'declined' ? 'Google access was declined.' : result === 'invalid-state' ? 'Connection expired. Try again.' : result === 'disconnected' ? 'Mailbox disconnected from SalesHub.' : 'Connection failed. Ask an administrator to check the mailbox connection and access.'}</p>}
       <p className="mt-1 text-xs text-slate-500" role="note">Gmail is read-only. SalesHub actions do not modify the mailbox.</p>
     </section>;
   };
@@ -110,7 +110,7 @@ export default async function SupportInboxPage({ searchParams }: { searchParams:
         </InboxDisclosure>
         <InboxMessageActions emailSource={signEmailSource(actor, message)} messageId={message.id} suggestedCases={suggestion.suggestedCases} linked={!!suggestion.alreadyLinkedCaseId}/>
       </article>;
-    })}{!rows.length && <p className="panel p-5">No unignored recent messages.</p>}</div>
+    })}{!rows.length && <p className="panel p-5">No messages match this inbox view. Show ignored messages or check Gmail for older mail.</p>}</div>
     {params.showIgnored === '1' && <section className="mt-6 space-y-3" aria-label="Ignored messages"><h2 className="text-lg font-semibold">Ignored messages</h2>{ignored.map(message => <article className="panel p-4" key={message.id} data-message-state="ignored"><p className="break-words font-medium">{message.subject}</p><p className="break-all text-sm text-slate-600">{message.senderEmail}</p><InboxMessageActions emailSource={signEmailSource(actor, message)} messageId={message.id} suggestedCases={[]} ignored/></article>)}{!ignored.length && <p className="panel p-4 text-sm">No ignored messages in this recent window.</p>}</section>}
   </Content>;
 }

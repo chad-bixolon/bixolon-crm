@@ -70,7 +70,7 @@ test('Admin health displays conservative recorded states without secrets; non-Ad
   test.setTimeout(120_000);
   await signInAs(page, 'admin');
   await page.goto('/administration/system-health', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: 'System health' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'System Health' })).toBeVisible();
   const evaluator = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Notification Evaluator', exact: true }) }).first();
   await expect(evaluator.getByText('Stale', { exact: true })).toBeVisible();
   expect(await page.locator('body').innerText()).not.toMatch(/DATABASE_URL|saleshub_e2e_local_only|AUTH_SECRET|SPACES_SECRET/);

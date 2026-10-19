@@ -64,8 +64,10 @@ test('bulk actions reflect eligible state, and selected filters preserve server 
   assert.match(html, /href="\/notifications\?view=unread&amp;category=tasks&amp;severity=WARNING&amp;page=1"[^>]*aria-current="page"/);
   assert.match(html, /name="view" value="unread"/);
   assert.match(html, /name="category" value="tasks"/);
-  assert.match(html, /<option value="WARNING" selected="">WARNING<\/option>/);
-  assert.match(html, /No unread notifications/);
+  assert.match(html, /<option value="WARNING" selected="">Warning<\/option>/);
+  assert.match(html, /No notifications match these filters/);
+  assert.doesNotMatch(html, /You&#x27;re caught up/);
+  assert.match(html, /href="\/notifications\?view=unread"[^>]*>Clear filters/);
   assert.deepEqual(requested, ['unread', 2, 20, 'tasks', 'WARNING']);
   availability = { canMarkAllRead: false, canDismissRead: true };
   const readHtml = await render({ view: 'resolved' });
