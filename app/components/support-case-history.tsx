@@ -27,7 +27,7 @@ export function SupportCaseHistory({ events, caseCreatedAt, viewerId, zone, case
       {events.length ? <ol className="divide-y divide-slate-100">{items.map(item => {
         const event = item.event;
         return <li key={event.id} className="min-w-0 py-3 text-sm">
-          <h3 className="font-semibold">{item.kind === 'creation' ? 'Case created · Initial values' : event.field === 'CREATED' ? 'Case created' : event.source === 'ARCHIVE' ? 'Case archived' : event.source === 'RESTORE' ? 'Case restored' : `${label(event.field)} changed`}</h3>
+          <h3 className="font-semibold">{item.kind === 'creation' ? 'Case created · Initial values' : event.field === 'CREATED' ? 'Case created' : event.field.startsWith('TASK_') ? label(event.field) : event.source === 'ARCHIVE' ? 'Case archived' : event.source === 'RESTORE' ? 'Case restored' : `${label(event.field)} changed`}</h3>
           <p className="mt-1 text-xs text-slate-500">{formatDateTimeForUser(event.createdAt, zone)} · {event.actorId === viewerId ? 'You' : `${event.actor.firstName} ${event.actor.lastName}`}</p>
           {item.kind === 'creation' ? <dl className="mt-2 space-y-1">{item.fields.map(field => {
             const value = supportEventValue(field.field, field.newValue, field.newLabel, zone);

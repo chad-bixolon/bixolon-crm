@@ -4,6 +4,9 @@ import { notFound } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
 import { WorkForm, ReactivateTask } from '@/components/work-form';
 import { workOptions } from '@/lib/work-options';
+import { currentUser } from '@/lib/current-user';
+import { can } from '@/lib/authorization';
+import { canEditCaseTask, caseWorkContext } from '@/lib/support-work';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +16,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   if (!Number.isSafeInteger(id) || id < 1) notFound();
   const row = await prisma.task.findUnique({ where: { id }, include: { account: true, opportunity: true, assignedTo: true, supportCase: true } });
   if (!row) notFound();
+  const actor = await currentUser();
+  const caseTaskOnly = actor.role === 'SUPPORT';
+  if (!can(actor, 'tasks.write')) {
+    if (!caseTaskOnly || !canEditCaseTask(actor, row)) notFound();
+    try { await caseWorkContext(prisma, actor, row.supportCaseId!); } catch { notFound(); }
+  }
 
   if (row.archivedAt) {
     const details = [
@@ -36,5 +45,5 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   }
 
   const options = await workOptions({ accountId: row.accountId, opportunityId: row.opportunityId, projectId: row.projectId, userId: row.assignedToId, supportCaseId: row.supportCaseId, contactIds: row.contactId ? [row.contactId] : [] });
-  return <Content><PageHeader title={`Edit task: ${row.subject}`} eyebrow={NAV_CATEGORIES.sales}/><WorkForm kind="task" id={id} {...options} supportCase={row.supportCase ? { id: row.supportCase.id, caseNumber: row.supportCase.caseNumber } : undefined} initial={{ subject: row.subject, description: row.description, accountId: row.accountId, opportunityId: row.opportunityId, projectId: row.projectId, assignedToId: row.assignedToId, contactId: row.contactId, status: row.status, priority: row.priority, dueDate: row.dueDate?.toISOString().slice(0, 10) ?? '' }}/></Content>;
+  return <Content><PageHeader title={`Edit task: ${row.subject}`} eyebrow={caseTaskOnly ? NAV_CATEGORIES.support : NAV_CATEGORIES.sales}/><WorkForm kind="task" id={id} caseTaskOnly={caseTaskOnly} cancelHref={caseTaskOnly ? `/support/cases/${row.supportCaseId}` : `/tasks/${id}`} {...options} supportCase={row.supportCase ? { id: row.supportCase.id, caseNumber: row.supportCase.caseNumber } : undefined} initial={{ subject: row.subject, description: row.description, accountId: row.accountId, opportunityId: row.opportunityId, projectId: row.projectId, assignedToId: row.assignedToId, contactId: row.contactId, status: row.status, priority: row.priority, dueDate: row.dueDate?.toISOString().slice(0, 10) ?? '' }}/></Content>;
 }

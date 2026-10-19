@@ -41,10 +41,11 @@ export async function checkRelations(client: PrismaClient | Prisma.TransactionCl
     if (!link) throw new Error('Opportunity is not linked to this Project.');
   }
 }
-async function checkSupportCaseRelation(client: PrismaClient | Prisma.TransactionClient, supportCaseId: number | null, accountId: number | null, historical = false) {
+async function checkSupportCaseRelation(client: PrismaClient | Prisma.TransactionClient, supportCaseId: number | null, accountId: number | null, historical = false, retainedCaseOnly = false) {
   if (!supportCaseId) return;
   const row = await client.supportCase.findUnique({ where: { id: supportCaseId }, select: { accountId: true, archivedAt: true, status: true } });
-  if (!row || row.accountId !== accountId) throw new Error('Support Case Account does not match the selected Account.');
+  // A retained Case-only record keeps its original NULL Account after Case linking.
+  if (!row || (!retainedCaseOnly && row.accountId !== accountId)) throw new Error('Support Case Account does not match the selected Account.');
   if (!historical && (row.archivedAt || row.status === 'CLOSED')) throw new Error('Reopen or restore the Support Case before adding work.');
 }
 export async function saveTask(
@@ -76,7 +77,7 @@ export async function saveTaskInTransaction(
   await checkRelations(tx, value.accountId, value.opportunityId, value.projectId);
   const existing = id ? await tx.task.findUnique({ where: { id } }) : null;
   if (id && (!existing || existing.archivedAt)) throw new Error('Task not found or archived.');
-  await checkSupportCaseRelation(tx, value.supportCaseId, value.accountId, !!id && existing?.supportCaseId === value.supportCaseId);
+  await checkSupportCaseRelation(tx, value.supportCaseId, value.accountId, !!id && existing?.supportCaseId === value.supportCaseId, !!existing && existing.supportCaseId === value.supportCaseId && existing.accountId === null && value.accountId === null);
   if (value.contactId && value.contactId !== existing?.contactId) {
     const contact = await tx.contact.findFirst({ where: { id: value.contactId, archivedAt: null, active: true }, select: { accountId: true } });
     if (!contact || contact.accountId && value.accountId && contact.accountId !== value.accountId) throw new Error('Contact does not match the selected Account.');
@@ -90,6 +91,28 @@ export async function saveTaskInTransaction(
     ...(actorId ? { updatedById: actorId, ...(!id ? { createdById: actorId } : {}) } : {}),
   };
   const row = id ? await tx.task.update({ where: { id }, data }) : await tx.task.create({ data });
+  if (existing && row.supportCaseId && actorId && tx.supportCaseLifecycleEvent) {
+    const changed = (['subject', 'description', 'dueDate', 'status', 'priority'] as const).filter(key => {
+      const before = existing[key], after = row[key];
+      return before instanceof Date && after instanceof Date ? before.getTime() !== after.getTime() : before !== after;
+    });
+    if (changed.length) {
+      const field = existing.status !== row.status && row.status === 'COMPLETED' ? 'TASK_COMPLETED'
+        : existing.status === 'COMPLETED' && ['OPEN', 'IN_PROGRESS'].includes(row.status) ? 'TASK_REOPENED' : 'TASK_UPDATED';
+      const snapshot = (task: typeof row) => JSON.stringify(Object.fromEntries(changed.map(key => [key, task[key]])));
+      const labels = { subject: 'Subject', description: 'Description', dueDate: 'Due date', status: 'Status', priority: 'Priority' };
+      const summary = (task: typeof row) => [task.subject, ...changed.map(key => {
+        const value = task[key];
+        return `${labels[key]}: ${value instanceof Date ? value.toISOString().slice(0, 10) : value ?? 'None'}`;
+      })].join('\n');
+      await tx.supportCaseLifecycleEvent.create({ data: {
+        supportCaseId: row.supportCaseId, actorId, source: `TASK:${row.id}`, field,
+        oldValue: snapshot(existing), newValue: snapshot(row),
+        oldLabel: summary(existing), newLabel: summary(row),
+        ...(field === 'TASK_COMPLETED' ? { createdAt: row.completedAt! } : {}),
+      } });
+    }
+  }
   // Partial Prisma clients used by existing domain tests omit Notification.
   if (tx.notification && value.assignedToId && value.assignedToId !== existing?.assignedToId) {
     const event = await tx.taskAssignmentEvent.create({ data: { taskId: row.id, fromUserId: existing?.assignedToId ?? null, toUserId: value.assignedToId, actorId } });
@@ -239,7 +262,7 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
 export function parseNote(form: FormData) {
   const errors: Errors = {}; const body = required(form, 'body', 'Note', 10000, errors);
   const accountId = relation(form, 'accountId', errors), opportunityId = relation(form, 'opportunityId', errors), projectId = relation(form, 'projectId', errors), supportCaseId = relation(form, 'supportCaseId', errors);
-  if (!accountId && !opportunityId && !projectId) errors.accountId = 'Choose an Account, Opportunity, or Project.';
+  if (!accountId && !opportunityId && !projectId && !supportCaseId) errors.accountId = 'Choose an Account, Opportunity, Project, or Support Case.';
   const createdById = relation(form, 'createdById', errors);
   return { errors, value: Object.keys(errors).length ? undefined : { body, accountId, opportunityId, projectId, supportCaseId, createdById } };
 }
@@ -250,10 +273,11 @@ export async function saveNote(
   actorId?: number,
 ) {
   return client.$transaction(async tx => {
+    if (!value.accountId && !value.opportunityId && !value.projectId && !value.supportCaseId) throw new Error('Choose an Account, Opportunity, Project, or Support Case.');
     await checkRelations(tx, value.accountId, value.opportunityId, value.projectId);
     const existing = id ? await tx.note.findFirst({ where: { id, archivedAt: null } }) : null;
     if (id && !existing) throw new Error('Note not found or archived.');
-    await checkSupportCaseRelation(tx, value.supportCaseId, value.accountId, !!id && existing?.supportCaseId === value.supportCaseId);
+    await checkSupportCaseRelation(tx, value.supportCaseId, value.accountId, !!id && existing?.supportCaseId === value.supportCaseId, !!existing && existing.supportCaseId === value.supportCaseId && existing.accountId === null && value.accountId === null);
     const createdById = actorId ?? value.createdById;
 
 if (!id && !actorId && createdById && !(await tx.user.findFirst({

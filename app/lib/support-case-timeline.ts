@@ -53,6 +53,10 @@ export function classifySupportLifecycle(events: readonly SupportHistoryEvent[],
   for (const item of grouped) {
     if (item.kind === 'creation') continue;
     const event = item.event;
+    if (['TASK_COMPLETED', 'TASK_REOPENED', 'TASK_UPDATED'].includes(event.field) && /^TASK:\d+$/.test(event.source)) {
+      items.push({ key: `history-${event.id}`, at: event.createdAt, source: 'Task', title: supportEventFields[event.field], detail: event.newLabel ? preview(event.newLabel, 240) : undefined, actor: actorName(event), href: `/tasks/${event.source.slice(5)}` });
+      continue;
+    }
     if (event.field === 'CREATED') {
       items.push({ key: `history-${event.id}`, at: event.createdAt, source: 'Case', title: 'Case created', actor: actorName(event) });
       continue;
@@ -107,7 +111,8 @@ export async function caseHistoryView(db: PrismaClient, caseId: number, createdA
   const activityItems: CaseTimelineItem[] = activities.map(supportActivityTimelineItem);
   const taskItems: CaseTimelineItem[] = tasks.flatMap(row => {
     const detail = [row.subject, row.dueDate ? `Due ${row.dueDate.toISOString().slice(0, 10)}` : null, row.assignedTo ? `Assigned to ${row.assignedTo.firstName} ${row.assignedTo.lastName}` : null].filter(Boolean).join(' · ');
-    return [{ key: `task-created-${row.id}`, at: row.createdAt, source: 'Task', title: 'Task created', detail, href: `/tasks/${row.id}` }, ...(row.completedAt ? [{ key: `task-completed-${row.id}`, at: row.completedAt, source: 'Task' as const, title: 'Task completed', detail: row.subject, href: `/tasks/${row.id}` }] : [])];
+    const recordedCompletion = lifecycle.some(event => event.field === 'TASK_COMPLETED' && event.source === `TASK:${row.id}` && event.createdAt.getTime() === row.completedAt?.getTime());
+    return [{ key: `task-created-${row.id}`, at: row.createdAt, source: 'Task', title: 'Task created', detail, href: `/tasks/${row.id}` }, ...(row.completedAt && !recordedCompletion ? [{ key: `task-completed-${row.id}`, at: row.completedAt, source: 'Task' as const, title: 'Task completed', detail: row.subject, href: `/tasks/${row.id}` }] : [])];
   });
   const noteItems: CaseTimelineItem[] = notes.map(row => ({ key: `note-${row.id}`, at: row.createdAt, source: 'Note', title: 'Note added', detail: preview(row.body, 240), actor: row.createdBy ? `${row.createdBy.firstName} ${row.createdBy.lastName}` : undefined }));
   const attachmentItems: CaseTimelineItem[] = attachments.flatMap(row => [

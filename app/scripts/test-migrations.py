@@ -410,7 +410,27 @@ try:
                       (97000,'2026-10-01',100,'Account','Archive',ARRAY[100],1),
                       (97001,'2026-10-02',100,'Task','Reassign',ARRAY[100,101],2);''')
                     owner_history_before = all_table_fingerprints('backfill')
+                case_notes_before = None
+                if directory.name == '20261019180000_support_case_only_notes':
+                    sql('backfill', '''INSERT INTO "SupportCase" (id,"caseNumber","customerNameText",subject,description,"source","createdById","updatedById","updatedAt")
+                      VALUES (98000,'BXS-2026-098000','No CRM Account','Case work fixture','Unlinked customer','PHONE',100,100,now());
+                      INSERT INTO "Note" (id,"accountId","supportCaseId",body,"updatedAt") VALUES (98000,100,98000,'Existing Account Note',now());''')
+                    case_notes_before = all_table_fingerprints('backfill')
+                    case_notes_keys = foreign_keys('backfill')
                 sql("backfill", (directory / "migration.sql").read_text())
+                if case_notes_before is not None:
+                    assert case_notes_before == all_table_fingerprints('backfill'), 'Case Note constraint changed existing data'
+                    assert case_notes_keys == foreign_keys('backfill'), 'Case Note constraint changed foreign keys'
+                    sql('backfill', '''INSERT INTO "Note" (id,"supportCaseId",body,"updatedAt") VALUES (98001,98000,'Case-only Note',now());
+                      UPDATE "SupportCase" SET "accountId"=100 WHERE id=98000;
+                      DO $$ BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM "Note" WHERE id=98001 AND "accountId" IS NULL AND "supportCaseId"=98000) THEN
+                          RAISE EXCEPTION 'Case-only Note changed after Account link';
+                        END IF;
+                      END $$;''')
+                    assert sql('backfill', '''INSERT INTO "Note" (body,"updatedAt") VALUES ('Orphan',now());''', check=False).returncode != 0, 'Orphan Note accepted'
+                    assert sql('backfill', '''INSERT INTO "Note" ("supportCaseId",body,"updatedAt") VALUES (99999999,'Missing Case',now());''', check=False).returncode != 0, 'Missing Case accepted'
+                    print('PASS: Case-only Notes accepted, orphan/missing-Case Notes rejected, all table fingerprints and foreign keys preserved; later Account link leaves Note unchanged', flush=True)
                 if owner_history_before is not None:
                     owner_history_after = all_table_fingerprints('backfill')
                     row = "to_jsonb(t) - 'newOwnerId' - 'newOwnerName'"

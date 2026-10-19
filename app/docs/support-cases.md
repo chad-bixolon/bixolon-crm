@@ -75,3 +75,92 @@ Anyone who can read a Support Case can download its active attachments. Support/
 If object deletion fails, removal stops and leaves the attachment active; the server logs the storage error. If object deletion succeeds but the metadata update fails, the server logs the case, attachment, key, and actor and returns an explicit error that the file was deleted but its record could not be updated. A subsequent Remove request retries idempotent object deletion and reconciles the metadata. Operators can also use the logged identifiers to reconcile the row. The download endpoint may temporarily offer a signed link in this rare state, but the deleted object cannot be fetched. Upload database failures use the same storage deletion helper to clean up their newly uploaded object. Automated retention is future policy work. Attachment reports, Excel export, search, and notifications are unchanged.
 
 The isolated `saleshub_e2e` browser suite uses a local temporary object store enabled only by `E2E_AUTH_ENABLED=true` and `E2E_STORAGE_ENABLED=true` in a nonproduction server. Signed local URLs expire after five minutes. Production uses DigitalOcean Spaces.
+
+## Complete Support Case Work v1
+
+A Note must have at least one parent: Account, Opportunity, Project, or Support
+Case. A Case alone supplies sufficient context, including when its Account is
+NULL. Existing single-parent and multiple-parent combinations remain supported.
+No-context Notes are rejected by the parser, service, and `Note_parent_check`.
+Foreign keys and Account/Opportunity membership and Project/Opportunity link
+validation still apply. On creation or relationship changes, a Note's Account
+must match its Case's Account when a Case is selected. A retained Case-only Note
+can keep its NULL Account after the Case gains an Account; no historical
+relationships are backfilled or rewritten.
+
+Migration `20261019180000_support_case_only_notes` replaces only the parent check
+constraint. It changes no rows, columns, indexes, or foreign keys. The migration
+harness covers fresh replay/schema parity, every-table preservation fingerprints,
+Case-only inserts, orphan and missing-Case rejection, and later Account linking.
+
+Support retains its existing Case read access. Task detail checks the persisted
+Case's visibility even for direct URLs. Support can edit an unarchived Task
+assigned to them, or an unassigned Task they created, if it belongs to an
+accessible, unarchived Case that is not Closed. A Task with Opportunity, Project,
+or Trade Show Lead context does not receive these expanded edit rights.
+Permitted fields are Subject, Description, Due date, and Status, including
+Complete and reopen to Open/In progress. Cancelled remains an existing Task
+status. Assignment, priority, Contact, and parent relationships stay fixed on
+this edit path. Existing Case Task creation and assignee eligibility are
+unchanged. Broader reassignment policy remains an owner decision.
+
+The normal Task detail/edit pages and WorkForm are reused. Case detail lists up
+to 40 Tasks and exposes Edit / complete task only when eligible. Support has no
+general Task list, bulk, archive/restore, or unrelated Sales Task edit rights.
+Admin keeps its broader existing Task workflow.
+
+On Support submit, a transaction locks and re-reads the persisted Task, effective
+user, and Case; it checks active role, assignment, unchanged relationships, and
+Case accessibility before using the shared Task save service. Impersonation
+uses the effective user's authorization and attribution. A changed assignment,
+removed Case link, closure, archive, or revoked user permission invalidates a
+stale form.
+
+Note added continues to be represented once by the existing Note timeline entry.
+Changed Case Tasks write one append-only event per save to the existing Case
+lifecycle ledger: Task completed, Task reopened, or Task updated. Events capture
+the effective actor and before/after changed fields in the same transaction.
+No-op saves create no events. Completion history survives reopening, and the
+legacy completedAt timeline fallback is suppressed when its completion event
+already exists. Existing Task assignment events and notifications are retained.
+
+### Files changed for v1
+
+- Note parsing/shared work saves and history: `app/lib/work.ts`.
+- Case Task policy and transaction checks: `app/lib/support-work.ts`.
+- Narrow route exception: `app/lib/authorization.ts`.
+- Task actions and normal pages: `app/app/tasks/actions.ts`,
+  `app/app/tasks/[id]/page.tsx`, `app/app/tasks/[id]/edit/page.tsx`,
+  `app/app/tasks/new/page.tsx`.
+- Note creation context: `app/app/notes/new/page.tsx`.
+- Shared form and Case Task list: `app/components/work-form.tsx`,
+  `app/app/support/cases/[id]/page.tsx`.
+- Case history presentation: `app/lib/support-case-timeline.ts`,
+  `app/lib/support-case-display.ts`, `app/components/support-case-history.tsx`.
+- Help and contract documentation: `app/lib/help/topics.ts`,
+  `app/docs/support-cases.md`.
+- Constraint migration:
+  `app/prisma/migrations/20261019180000_support_case_only_notes/migration.sql`.
+- Validation: `app/scripts/test-migrations.py`,
+  `app/tests/support-case-work.test.mjs`, `app/tests/support-integration.test.mjs`,
+  `app/tests/task-workflow.test.mjs`, `app/e2e/support-case-work.spec.ts`.
+
+### v1 validation (2026-10-19)
+
+| Check | Result |
+| --- | --- |
+| Lint | Passed `npm run lint`. |
+| Typecheck | Passed `npm run typecheck` and final `tsc --noEmit --incremental false`; production build also passed TypeScript. |
+| Unit and Support/Task regressions | Node 22.23.3: 1,364 passed, one pre-existing optional SQL fixture test skipped. Includes authorization, direct pages/actions, impersonation, Note contract, and history coverage. |
+| Migration | `python3 app/scripts/test-migrations.py`: all passed; fresh/populated replay, preservation, restrictive relationships, repeat deployment, and schema parity. Disposable database/network removed. |
+| Playwright | 11 existing Support/Task regressions passed; final new Case-work suite passed all three viewports (1440×900, 768×1024, 390×844). Screenshots inspected and no horizontal overflow found. |
+| Production build | Passed with Node 22.23.3 using `npm run build -- --webpack` and synthetic local database settings. Default Turbopack attempts hit the host worker-port binding restriction (`EPERM`); no compiler configuration was changed. |
+| Diff | Passed `git diff --check`. |
+
+The new browser suite covers Case-only Note creation, Task creation/edit/completion/
+reopening, one completion entry after reopening, denied unrelated Task URLs,
+and unchanged Case-only Notes after a later Account link. Temporary validation
+logs, panic logs, and the production Webpack validation cache were cleaned.
+No commit, push, deployment, Gmail connection, DigitalOcean change, or production
+data mutation was performed. No policy decision blocks v1; expanding Support
+reassignment or cross-linked Sales Task editing would require an owner policy.

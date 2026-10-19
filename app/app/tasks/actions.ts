@@ -8,7 +8,7 @@ import { parseTask, saveTask } from '@/lib/work';
 import { currentUser } from '@/lib/current-user';
 import { assertProjectWorkEdit } from '@/lib/projects';
 import { saveFeedbackPath } from '../../lib/save-feedback';
-import { assertWorkPermission, caseWorkContext } from '@/lib/support-work';
+import { assertWorkPermission, caseWorkContext, saveSupportCaseTask } from '@/lib/support-work';
 import { assertPermission } from '@/lib/authorization';
 export type WorkState = { errors: Record<string,string>; message?: string; values?: Record<string,string> };
 const taskFields = ['subject', 'description', 'accountId', 'opportunityId', 'projectId', 'assignedToId', 'supportCaseId', 'contactId', 'status', 'priority', 'dueDate'] as const;
@@ -18,7 +18,27 @@ export async function submitTask(id: number | null, _old: WorkState, form: FormD
   const createKey = form.get('createKey');
   if (!id && (typeof createKey !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(createKey))) return { errors: {}, message: 'Reload the form and try again.', values: submittedValues(form) };
   let destination: string;
-  try { const actor = await currentUser(); assertWorkPermission(actor, parsed.value.supportCaseId); const existing = id ? await prisma.task.findUnique({ where: { id }, select: { projectId: true, supportCaseId: true } }) : null; if (actor.role === 'SUPPORT' && id) throw new Error('Access denied'); if (actor.role === 'SUPPORT' && (parsed.value.opportunityId || parsed.value.projectId)) throw new Error('Access denied to Sales relationships.'); if (parsed.value.supportCaseId) await caseWorkContext(prisma, actor, parsed.value.supportCaseId, parsed.value.accountId, parsed.value.contactId ? [parsed.value.contactId] : [], !!id && existing?.supportCaseId === parsed.value.supportCaseId); await assertProjectWorkEdit(prisma, actor, existing?.projectId); await assertProjectWorkEdit(prisma, actor, parsed.value.projectId); const row = await saveTask(prisma, parsed.value, id ?? undefined, id ? undefined : createKey as string, actor.id); if (row.supportCaseId) revalidatePath(`/support/cases/${row.supportCaseId}`); revalidatePath('/tasks'); revalidatePath('/'); if (row.accountId) revalidatePath(`/accounts/${row.accountId}`); if (row.opportunityId) revalidatePath(`/opportunities/${row.opportunityId}`); if (row.projectId) revalidatePath(`/projects/${row.projectId}`); destination = saveFeedbackPath(id ? `/tasks/${row.id}/edit` : `/tasks/${row.id}`, id ? 'updated' : 'created'); }
+  try {
+    const actor = await currentUser();
+    let row;
+    if (actor.role === 'SUPPORT' && id) {
+      row = await saveSupportCaseTask(prisma, actor, parsed.value, id);
+    } else {
+      assertWorkPermission(actor, parsed.value.supportCaseId);
+      const existing = id ? await prisma.task.findUnique({ where: { id }, select: { projectId: true, supportCaseId: true } }) : null;
+      if (actor.role === 'SUPPORT' && (parsed.value.opportunityId || parsed.value.projectId)) throw new Error('Access denied to Sales relationships.');
+      if (parsed.value.supportCaseId) await caseWorkContext(prisma, actor, parsed.value.supportCaseId, parsed.value.accountId, parsed.value.contactId ? [parsed.value.contactId] : [], !!id && existing?.supportCaseId === parsed.value.supportCaseId);
+      await assertProjectWorkEdit(prisma, actor, existing?.projectId);
+      await assertProjectWorkEdit(prisma, actor, parsed.value.projectId);
+      row = await saveTask(prisma, parsed.value, id ?? undefined, id ? undefined : createKey as string, actor.id);
+    }
+    if (row.supportCaseId) revalidatePath(`/support/cases/${row.supportCaseId}`);
+    revalidatePath(`/tasks/${row.id}`); revalidatePath('/tasks'); revalidatePath('/');
+    if (row.accountId) revalidatePath(`/accounts/${row.accountId}`);
+    if (row.opportunityId) revalidatePath(`/opportunities/${row.opportunityId}`);
+    if (row.projectId) revalidatePath(`/projects/${row.projectId}`);
+    destination = saveFeedbackPath(id ? `/tasks/${row.id}/edit` : `/tasks/${row.id}`, id ? 'updated' : 'created');
+  }
   catch (e) { const message = e instanceof Error ? e.message : 'Task could not be saved.'; return { errors: message.startsWith('Contact ') ? { contactId: message } : {}, message, values: submittedValues(form) }; }
   redirect(destination);
 }

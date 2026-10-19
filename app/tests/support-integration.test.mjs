@@ -192,3 +192,19 @@ test('case quick actions open existing create flows with case, Account, and Cont
     }
   } finally {Module._load=original;}
 });
+
+test('recorded Task completion appears once and remains after reopening, with business labels',async()=>{
+  const at=new Date('2026-10-19T12:00:00Z'), actor={firstName:'Sam',lastName:'Support'};
+  const base={supportCaseId:12,oldValue:'{}',newValue:'{}',oldLabel:'Open',newLabel:'Check firmware',actorId:7,actor};
+  const events=[{...base,id:1,field:'TASK_COMPLETED',source:'TASK:3',createdAt:at}];
+  const task={id:3,createdAt:new Date('2026-10-18T12:00:00Z'),subject:'Check firmware',completedAt:at,dueDate:null,assignedTo:null};
+  const db={supportCaseLifecycleEvent:{findMany:async()=>events},activity:{findMany:async()=>[]},task:{findMany:async()=>[task]},note:{findMany:async()=>[]},supportCaseAttachment:{findMany:async()=>[]}};
+  let view=await caseHistoryView(db,12,new Date('2026-10-17T12:00:00Z'),'UTC');
+  assert.equal(view.timeline.filter(item=>item.title==='Task completed').length,1);
+  assert.equal(view.timeline.find(item=>item.title==='Task completed').actor,'Sam Support');
+  task.completedAt=null;
+  events.push({...base,id:2,field:'TASK_REOPENED',source:'TASK:3',createdAt:new Date('2026-10-19T13:00:00Z')});
+  view=await caseHistoryView(db,12,new Date('2026-10-17T12:00:00Z'),'UTC');
+  assert.deepEqual(view.timeline.map(item=>item.title),['Task reopened','Task completed','Task created']);
+  assert.equal(view.auditEvents.length,2);
+});
