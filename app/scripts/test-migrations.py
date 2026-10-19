@@ -404,7 +404,32 @@ try:
                       INSERT INTO "ScheduledJobRun" (id,"jobType",status,"resultSummary") VALUES (96000,'CALENDAR_SYNC','SUCCEEDED','Original job history');''')
                     automation_before = all_table_fingerprints('backfill')
                 integration_before = all_table_fingerprints('backfill') if directory.name == '20261018010000_integration_attempt_history' else None
+                owner_history_before = None
+                if directory.name == '20261019120000_data_quality_owner_history':
+                    sql('backfill', '''INSERT INTO "AdminMaintenanceEvent" (id,"occurredAt","actorId","entityType",action,"recordIds","recordCount") VALUES
+                      (97000,'2026-10-01',100,'Account','Archive',ARRAY[100],1),
+                      (97001,'2026-10-02',100,'Task','Reassign',ARRAY[100,101],2);''')
+                    owner_history_before = all_table_fingerprints('backfill')
                 sql("backfill", (directory / "migration.sql").read_text())
+                if owner_history_before is not None:
+                    owner_history_after = all_table_fingerprints('backfill')
+                    row = "to_jsonb(t) - 'newOwnerId' - 'newOwnerName'"
+                    owner_history_after['AdminMaintenanceEvent'] = sql_values('backfill', f'''SELECT count(*) || ':' || md5(COALESCE(jsonb_agg({row} ORDER BY ({row})::text)::text, '[]')) FROM "AdminMaintenanceEvent" t;''')[0]
+                    assert owner_history_before == owner_history_after, 'Owner history migration changed existing data'
+                    assert sql_values('backfill', '''SELECT count(*) FROM "AdminMaintenanceEvent" WHERE "newOwnerId" IS NOT NULL OR "newOwnerName" IS NOT NULL;''') == ['0']
+                    assert sql_values('backfill', '''SELECT column_name || ':' || is_nullable FROM information_schema.columns WHERE table_name='AdminMaintenanceEvent' AND column_name IN ('newOwnerId','newOwnerName') ORDER BY column_name;''') == ['newOwnerId:YES', 'newOwnerName:YES']
+                    sql('backfill', '''INSERT INTO "AdminMaintenanceEvent" ("actorId","entityType",action,"recordIds","recordCount","newOwnerId","newOwnerName") VALUES (100,'Account','Assign owner',ARRAY[100],1,100,'Original owner display name');''')
+                    for statement in [
+                        '''INSERT INTO "AdminMaintenanceEvent" ("actorId","entityType",action,"recordIds","recordCount","newOwnerId") VALUES (100,'Account','Assign owner',ARRAY[100],1,2147483647);''',
+                        '''UPDATE "AdminMaintenanceEvent" SET "newOwnerName"='Changed' WHERE id=97000;''',
+                        '''DELETE FROM "AdminMaintenanceEvent" WHERE id=97000;''',
+                        '''TRUNCATE "AdminMaintenanceEvent";''',
+                        '''DELETE FROM "User" WHERE id=100;''',
+                    ]:
+                        assert sql('backfill', statement, check=False).returncode != 0, 'History integrity rule was weakened'
+                    sql('backfill', '''UPDATE "User" SET "firstName"='Renamed owner' WHERE id=100;''')
+                    assert sql_values('backfill', '''SELECT "newOwnerName" FROM "AdminMaintenanceEvent" WHERE action='Assign owner';''') == ['Original owner display name']
+                    print('PASS: nullable owner history preserves every table fingerprint, leaves old events NULL, enforces FK and append-only history, and retains owner name snapshots', flush=True)
                 if integration_before is not None:
                     integration_after = all_table_fingerprints('backfill')
                     added = ['operation','contextKey','actorId','serviceIdentity','supportCaseId','calendarConnectionId','isTest']

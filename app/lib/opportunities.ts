@@ -293,6 +293,20 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
   if ('$transaction' in client && typeof client.$transaction === 'function') return client.$transaction(run);
   return run(client as unknown as Prisma.TransactionClient);
 }
+/** Narrow owner correction: retain ordinary attribution, OWNER history and notifications. */
+export async function assignOpportunityOwnerInTransaction(tx: Prisma.TransactionClient, id: number, owner: { id: number; firstName: string; lastName: string }, actor: Actor & { firstName: string; lastName: string }) {
+  const row = await tx.opportunity.findUniqueOrThrow({ where: { id }, include: { owner: true, participants: { include: { account: true } } } });
+  await tx.opportunity.update({ where: { id }, data: { ownerId: owner.id, updatedById: actor.id } });
+  const event = await tx.opportunityHistoryEvent.create({ data: {
+    opportunityId: id, opportunityName: row.name, actorId: actor.id, actorName: `${actor.firstName} ${actor.lastName}`,
+    accountName: row.participants[0]?.account.name ?? null, eventType: 'OWNER', oldOwnerId: row.ownerId,
+    oldOwnerName: row.owner ? `${row.owner.firstName} ${row.owner.lastName}` : null,
+    newOwnerId: owner.id, newOwnerName: `${owner.firstName} ${owner.lastName}`,
+  } });
+  await notifyOpportunityAssignment(tx, id, owner.id, event.id);
+  await syncOpportunityNotifications(tx, id, (await getSettings(tx as PrismaClient)).COMMIT_FOLLOW_UP_DAYS);
+}
+
 export async function setOpportunityArchived(client: PrismaClient, id: number, archived: boolean, actor?: Actor) {
   await client.$transaction(async tx => {
     const row = await tx.opportunity.findUnique({ where: { id }, include: { participants: { include: { account: true } } } }); if (!row) throw new Error("Opportunity not found.");

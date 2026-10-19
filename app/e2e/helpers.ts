@@ -7,7 +7,7 @@ export async function signInAs(page: Page, role: keyof typeof emails) {
   await page.goto('about:blank');
   let csrfToken = '';
   await expect.poll(async () => {
-    const response = await page.request.get('/api/auth/csrf');
+    const response = await page.request.get('/api/auth/csrf', { maxRetries: 2 });
     if (!response.ok()) return response.status();
     csrfToken = (await response.json() as { csrfToken: string }).csrfToken;
     return csrfToken ? response.status() : 0;

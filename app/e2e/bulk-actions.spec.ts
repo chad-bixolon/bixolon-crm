@@ -179,6 +179,8 @@ test('Case UI assignment/priority and role filtering, including Test as user', a
   if (process.env.ENABLE_DEV_IMPERSONATION === 'true') {
     await signInAs(page, 'admin'); await page.goto('/dev/impersonation');
     await page.locator('main li').filter({ hasText: emails.sales }).getByRole('button', { name: 'Test as user' }).click();
+    await expect(page).toHaveURL('/');
+    await expect(page.getByRole('button', { name: 'Return to Admin' })).toBeVisible();
     await page.goto(`/tasks?q=${encodeURIComponent(t.subject)}`);
     await page.getByRole('checkbox', { name: `Select ${t.rows[0].subject}`, exact: true }).check();
     await page.getByRole('button', { name: 'Mark complete', exact: true }).click();

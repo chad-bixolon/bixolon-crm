@@ -66,6 +66,8 @@ test('maintenance stores only curated metadata and propagates failure so the tra
   await recordMaintenance(tx, 9, 'Task', 'Reassign', [1, 2]);
   assert.deepEqual(entries[0], { actorId: 9, entityType: 'Task', action: 'Reassign', recordIds: [1, 2], recordCount: 2 });
   await recordMaintenance(tx, 9, 'Task', 'Reassign', []); assert.equal(entries.length, 1);
+  await recordMaintenance(tx, 9, 'Account', 'Assign owner', [3, 4], 2, { id: 12, name: 'Jane Smith with a display name longer than forty characters' });
+  assert.deepEqual(entries[1], { actorId: 9, entityType: 'Account', action: 'Assign owner', recordIds: [3, 4], recordCount: 2, newOwnerId: 12, newOwnerName: 'Jane Smith with a display name longer than forty characters' });
   await assert.rejects(recordMaintenance({ adminMaintenanceEvent: { create: async () => { throw Error('write failed'); } } }, 9, 'Task', 'Reassign', [1]), /write failed/);
 });
 

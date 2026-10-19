@@ -3,6 +3,8 @@ import { HelpLink } from './help-link';
 
 import { createContext, useContext, useId, useRef, useState, useTransition, type ReactNode } from 'react';
 import { changeTasks } from '@/app/tasks/bulk-actions';
+import { assignQualityOwner } from '@/app/administration/data-quality/bulk-actions';
+import type { QualityBulkScope } from '@/lib/data-quality-bulk';
 import { changeCases } from '@/app/support/cases/bulk-actions';
 import { BULK_SELECTION_LIMIT, type BulkRecord } from '@/lib/bulk-action-contract';
 
@@ -13,8 +15,8 @@ const taskActions: Action[] = [{ value: 'assign', label: 'Assign' }, { value: 'd
 const caseActions: Action[] = [{ value: 'assign', label: 'Assign' }, { value: 'priority', label: 'Change priority' }];
 const priorities = [{ value: 'LOW', label: 'Low' }, { value: 'NORMAL', label: 'Normal' }, { value: 'HIGH', label: 'High' }, { value: 'CRITICAL', label: 'Critical' }];
 
-export function BulkSelection({ kind, records, assignees, enabled, children, allowedActions }: {
-  kind: 'tasks' | 'cases'; records: BulkRecord[]; assignees: { id: number; name: string }[]; enabled: boolean; children: ReactNode; allowedActions?: string[];
+export function BulkSelection({ kind, records, assignees, enabled, children, allowedActions, qualityScope }: {
+  kind: 'tasks' | 'cases' | 'quality'; qualityScope?: QualityBulkScope; records: BulkRecord[]; assignees: { id: number; name: string }[]; enabled: boolean; children: ReactNode; allowedActions?: string[];
 }) {
   const [selected, setSelected] = useState<BulkRecord[]>([]), [action, setAction] = useState<Action | null>(null);
   const [review, setReview] = useState<BulkRecord[]>([]);
@@ -23,6 +25,8 @@ export function BulkSelection({ kind, records, assignees, enabled, children, all
   const busy = submitting || refreshing;
   const dialog = useRef<HTMLDialogElement>(null), gate = useRef(false), trigger = useRef<HTMLButtonElement | null>(null);
   const targetId = useId();
+  const quality = kind === 'quality';
+  const entity = quality ? (qualityScope?.issue === 'account-owner' ? 'Accounts' : 'Opportunities') : kind === 'tasks' ? 'Tasks' : 'Cases';
   const eligible = records.slice(0, BULK_SELECTION_LIMIT);
   const current = selected.filter(row => eligible.some(record => record.id === row.id && record.updatedAt === row.updatedAt));
   const ids = current.map(row => row.id);
@@ -30,14 +34,15 @@ export function BulkSelection({ kind, records, assignees, enabled, children, all
   const all = () => { if (!busy) { setMessage(''); setSelected(ids.length === eligible.length ? [] : eligible); } };
   const close = () => { if (gate.current || busy) return; dialog.current?.close(); setAction(null); trigger.current?.focus(); };
   const target = action?.value === 'assign' ? assignees.find(row => String(row.id) === value)?.name : action?.value === 'priority' ? priorities.find(row => row.value === value)?.label : value;
-  const summary = action?.value === 'complete' ? `Mark ${review.length} selected Tasks complete.` : action?.value === 'assign' ? `Assign ${review.length} selected ${kind === 'tasks' ? 'Tasks' : 'Cases'} to ${target || 'the chosen assignee'}.` : action?.value === 'dueDate' ? `Change the due date of ${review.length} selected Tasks to ${target || 'the chosen date'}.` : `Change the priority of ${review.length} selected Cases to ${target || 'the chosen priority'}.`;
+  const summary = action?.value === 'complete' ? `Mark ${review.length} selected Tasks complete.` : action?.value === 'assign' ? `Assign ${review.length} selected ${entity} to ${target || 'the chosen assignee'}.` : action?.value === 'dueDate' ? `Change the due date of ${review.length} selected Tasks to ${target || 'the chosen date'}.` : `Change the priority of ${review.length} selected Cases to ${target || 'the chosen priority'}.`;
   return <Context.Provider value={enabled ? { ids, eligible: eligible.map(row => row.id), busy, toggle, all } : null}>
     {enabled && <>
       {ids.length > 0 && <div className="panel mb-3 flex flex-wrap items-center gap-2 p-3 text-sm" aria-label="Bulk actions">
         <strong aria-live="polite">{ids.length} selected</strong><span className="text-slate-600">on this page · limit {BULK_SELECTION_LIMIT}</span>
         <button type="button" className="btn-secondary" disabled={busy} onClick={() => { setSelected([]); setMessage(''); }}>Clear selection</button>
-        {(kind === 'tasks' ? taskActions : caseActions).filter(item => !allowedActions || allowedActions.includes(item.value)).map(item => <button key={item.value} type="button" className="btn-secondary" disabled={busy} onClick={event => { trigger.current = event.currentTarget; setAction(item); setReview(current); setValue(''); setError(''); dialog.current?.showModal(); }}>{item.label}</button>)}
-        <HelpLink topic="bulk-actions">Help with Bulk Actions</HelpLink>
+        {quality && <div className="min-w-0 w-full sm:w-64"><label className="label" htmlFor={`${targetId}-bar`}>New owner</label><select id={`${targetId}-bar`} className="field" required value={value} disabled={busy} onChange={event => setValue(event.target.value)}><option value="">Choose owner…</option>{assignees.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></div>}
+        {(quality ? [{ value: 'assign', label: 'Assign owner' }] : kind === 'tasks' ? taskActions : caseActions).filter(item => !allowedActions || allowedActions.includes(item.value)).map(item => <button key={item.value} type="button" className="btn-secondary" disabled={busy || (quality && !value)} onClick={event => { trigger.current = event.currentTarget; setAction(item); setReview(current); if (!quality) setValue(''); setError(''); dialog.current?.showModal(); }}>{item.label}</button>)}
+        {quality ? <HelpLink topic="data-quality">Help with Data Quality</HelpLink> : <HelpLink topic="bulk-actions">Help with Bulk Actions</HelpLink>}
       </div>}
       {message && <p role="status" className="mb-3 text-sm text-emerald-800">{message}</p>}
       <dialog ref={dialog} className="bulk-confirm-dialog saved-views-dialog" aria-label="Confirm bulk update" onCancel={event => { event.preventDefault(); close(); }} onKeyDown={event => {
@@ -55,10 +60,10 @@ export function BulkSelection({ kind, records, assignees, enabled, children, all
           const request = { records: review, action: action.value, value, confirmed: true };
           startTransition(async () => {
           try {
-            const result = await (kind === 'tasks' ? changeTasks(request) : changeCases(request));
+            const result = await (quality && qualityScope ? assignQualityOwner(qualityScope, request) : kind === 'tasks' ? changeTasks(request) : changeCases(request));
             if (result.ok) {
               dialog.current?.close(); setAction(null); setSelected([]);
-              setMessage(`${result.count} ${kind === 'tasks' ? 'Tasks' : 'Cases'} updated.`);
+              setMessage(quality ? `${result.count} ${result.count === 1 ? (entity === 'Accounts' ? 'Account was' : 'Opportunity was') : `${entity} were`} assigned successfully.` : `${result.count} ${entity} updated.`);
             } else setError(result.message);
           } catch { setError('The result could not be confirmed. Refresh the list before retrying.'); }
           finally { gate.current = false; setSubmitting(false); }
@@ -66,7 +71,7 @@ export function BulkSelection({ kind, records, assignees, enabled, children, all
         }}>
           <h2 className="text-lg font-semibold">Confirm bulk update</h2>
           <p className="break-words text-sm">{summary}</p>
-          {action?.value === 'assign' && <div><label className="label" htmlFor={targetId}>{kind === 'tasks' ? 'Assignee' : 'Support Rep'}</label><select id={targetId} className="field" required value={value} disabled={busy} onChange={event => setValue(event.target.value)}><option value="">Choose…</option>{assignees.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></div>}
+          {action?.value === 'assign' && !quality && <div><label className="label" htmlFor={targetId}>{kind === 'tasks' ? 'Assignee' : 'Support Rep'}</label><select id={targetId} className="field" required value={value} disabled={busy} onChange={event => setValue(event.target.value)}><option value="">Choose…</option>{assignees.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></div>}
           {action?.value === 'dueDate' && <div><label className="label" htmlFor={targetId}>Due date</label><input id={targetId} className="field" type="date" required value={value} disabled={busy} onChange={event => setValue(event.target.value)}/></div>}
           {action?.value === 'priority' && <div><label className="label" htmlFor={targetId}>Priority</label><select id={targetId} className="field" required value={value} disabled={busy} onChange={event => setValue(event.target.value)}><option value="">Choose…</option>{priorities.map(row => <option key={row.value} value={row.value}>{row.label}</option>)}</select></div>}
           <p className="text-sm text-slate-600">If any selected record needs a correction, none of the selected records will change.</p>

@@ -17,7 +17,7 @@ export function bulkTaskWhere(actor: Actor): Prisma.TaskWhereInput {
   return { AND: [operationalTaskWhere, taskScope(actor), project, { status: { in: ['OPEN', 'IN_PROGRESS'] } }] };
 }
 
-function assertVersions(rows: { id: number; updatedAt: Date }[], request: BulkRequest) {
+export function assertVersions(rows: { id: number; updatedAt: Date }[], request: BulkRequest) {
   if (rows.length !== request.records.length || rows.some(row => request.records.find(record => record.id === row.id)?.updatedAt !== row.updatedAt.toISOString())) {
     throw new Error('Some selected records changed or are unavailable. No records changed. Refresh the list and select again.');
   }

@@ -1,14 +1,15 @@
 # Bulk Actions v1
 
-Tasks and Support Cases offer selection beside eligible rows. Select **Select page** to select eligible records on the current page, or select rows individually. The compact action controls appear only while records are selected and show the selected count. **Clear selection** requires no confirmation. Changing filters, page, sort, Saved View, or effective user clears selection. Switching between the Case cards and desktop table retains the same selection.
+Tasks, Support Cases, and the two supported Admin Data Quality owner checks offer selection beside eligible rows. Select **Select page** to select eligible records on the current page, or select rows individually. The compact action controls appear only while records are selected and show the selected count. **Clear selection** requires no confirmation. Changing filters, page, sort, Saved View, or effective user clears selection. Switching between the Case cards and desktop table retains the same selection.
 
-The maximum is **20 records per request**, matching both lists' existing page size. There is no “select all results” feature, cross-page selection, or unbounded browser download.
+The maximum is **20 records per request**, matching the supported lists' page size. There is no “select all results” feature, cross-page selection, or unbounded browser download.
 
 ## Supported actions
 
 | List | Actions | Eligibility |
 | --- | --- | --- |
 | Tasks | Mark complete, assign to an eligible Task user, set a due date | Open or In Progress, unarchived, live Account/Opportunity/Project relationships, normal Project edit rights. Sales users can select only their assigned Tasks. |
+| Data Quality: unowned Accounts / ownerless open Opportunities | Assign owner (Admin only) | Current issue, current search/page, unchanged versions, active/unarchived Accounts or open/unarchived Opportunities; eligible active owner under ordinary owner rules. |
 | Support Cases | Assign to an eligible Support Rep (active Support or Admin), change priority | Unarchived Cases accessible to an actor with normal Case write permission. Individual Case validation still applies, including resolution-summary validation for historical resolved/closed Cases. |
 
 Reassignment requires a named eligible user; v1 does not mass-unassign records. Due date requires a valid date; v1 does not mass-clear dates. Task lists keep their shared read visibility; visible Tasks outside the actor's bulk write scope have no selection checkbox. Support does not receive general Task mutation access. Read Only receives no selection or mutation controls. Test as user uses the effective user's permissions, scope, and write attribution.
@@ -19,24 +20,24 @@ Each action opens a keyboard-accessible modal showing the exact count, action/fi
 
 The server accepts at most 20 unique positive IDs with displayed modification timestamps. It reloads every record under the effective actor's permissions; checkbox IDs and UI eligibility are never authorization. Changed, missing, archived, inaccessible, or invalid records reject the entire request. There are no skipped failures or partial-success mutations. A failed save keeps the dialog, selection, and target available; stale selections require refreshing the list and selecting again.
 
-All mutations run in a serializable transaction, lock selected rows in ID order, and call the same transaction-level mutation functions as individual saves. Concurrent conflicts roll back and ask for a refresh/retry. Version checks and the client submission gate protect against duplicate submissions; repeated assignment/priority values do not duplicate assignment/lifecycle events. No external email is sent by these actions.
+All mutations run in a serializable transaction, lock selected rows in ID order, and preserve the ordinary per-record history and notification behavior. Task and Case actions call their individual-save routines; Data Quality uses owner-only writes so unrelated fields stay untouched. Concurrent conflicts roll back and ask for a refresh/retry. Version checks and the client submission gate protect against duplicate submissions; repeated assignment/priority values do not duplicate assignment/lifecycle events. No external email is sent by these actions.
 
 Task changes preserve `completedAt`, `updatedById`, per-Task assignment events and in-app notifications. Tasks do not currently have field-by-field history for due dates or completion; bulk actions preserve the existing individual behavior. Cases retain ordinary per-field lifecycle events, human-readable assignment labels, acting-user attribution and in-app notifications. History and notifications roll back with the records if any save fails.
 
 After success, selection clears and list data refreshes in the same URL context. Filters, sorting, pagination and Saved Views remain intact; normal pagination clamping still applies if a filtered result shrinks. Records can move off the page or disappear from a filter after the requested field changes.
 
-Selection, scope and version reads are batched; updates and their existing per-record history/notification logic are bounded at 20. There are no schema changes or migrations.
+Selection, scope and version reads are batched; updates and their existing per-record history/notification logic are bounded at 20. The Data Quality extension adds nullable new-owner ID/name fields to existing Maintenance History with no backfill; Task and Case actions retain their original schema.
 
 ## Inventory and deliberately deferred actions
 
 - Price Exceptions already have specialized Admin preview/confirm corrections, archival, and import workflows. These remain the only PE bulk controls.
 - Trade Show leads already have bulk routing, assignment and specialized Contact resolution/creation. These workflows retain their own rules.
-- Admin Data Quality remains a read-only issue inventory with individual record links and a link to PE Cleanup.
+- Admin Data Quality supports confirmed owner assignment only for Accounts without a sales owner and Open Opportunities without an owner. All other checks retain individual record links. See [Data Quality](../../docs/data-quality-dashboard.md).
 - Task bulk archive/restore is deferred: individual archive attribution is inconsistent with the richer archive model, and cleanup policy needs reconciliation before expanding it.
 - Case bulk status, resolve, close, archive and restore are deferred. Status changes can reopen work or require resolution details that deserve individual review.
 - Activities have individual and related-record views with archive/restore, rather than an operational bulk queue. No clear cleanup workflow justifies adding broad mutation or a new list solely for bulk controls.
-- Contacts/Accounts have individual edit/archive workflows and duplicate review. Account assignment, relationship rewriting, merges, archival and deletion need explicit administrative scope and review policy. Contacts have no equivalent general owner-assignment workflow.
-- Opportunities and Projects have ownership restrictions, relationship dependencies, and sales-process/status rules. Stage/status/ownership changes remain individual.
+- Contacts/Accounts have individual edit/archive workflows and duplicate review. Account assignment is limited to the unowned-Account Data Quality check; relationship rewriting, merges, bulk archival and deletion remain deferred. Contacts have no equivalent general owner-assignment workflow.
+- Opportunities and Projects have ownership restrictions, relationship dependencies, and sales-process/status rules. Stage/status changes remain individual; owner corrections are limited to the supported Admin Data Quality issue.
 - Bulk deletion is intentionally excluded everywhere.
 
 ## Validation
@@ -54,4 +55,4 @@ Validated on 2026-10-15 with Node 22.23.3: lint, typecheck, all 161 unit test fi
 - Tests and configuration: `app/tests/bulk-actions.test.mjs`, `app/tests/engagement.test.mjs` (supply the already-required responsible user in an Activity fixture), `app/e2e/bulk-actions.spec.ts`, `app/e2e/bulk-responsive.spec.ts`, `app/playwright.config.ts`.
 - Documentation: `app/docs/bulk-actions.md`, `app/docs/ui-conventions.md`, `CHANGELOG.md`.
 
-No migrations, dependency changes, generated build files or local environment configuration are included.
+The original Task/Case release included no migration. The Data Quality extension uses the additive owner-history migration; no dependency or local environment configuration changes are needed.

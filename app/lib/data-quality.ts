@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { BULK_SELECTION_LIMIT } from './bulk-action-contract';
 
 export const qualityIssues = [
   { key: 'account-owner', label: 'Accounts without a sales owner', entity: 'Accounts', explanation: 'Active Accounts with no owner.' },
@@ -18,6 +19,8 @@ export const qualityIssues = [
 ] as const;
 export type QualityIssueKey = typeof qualityIssues[number]['key'];
 export const qualityPageSize = 25;
+export function qualityBulkSupported(key: string): key is 'account-owner' | 'opportunity-owner' { return key === 'account-owner' || key === 'opportunity-owner'; }
+export function qualityPageSizeFor(key: QualityIssueKey) { return qualityBulkSupported(key) ? BULK_SELECTION_LIMIT : qualityPageSize; }
 export function qualityIssue(key: string | undefined) { return qualityIssues.find(issue => issue.key === key); }
 export function qualityPage(value: string | undefined) { const n = Number(value); return Number.isSafeInteger(n) && n > 0 ? Math.min(n, 100000) : 1; }
 
@@ -80,36 +83,37 @@ export async function qualityCounts(db: PrismaClient) {
   return Object.fromEntries(qualityIssues.map((issue, index) => [issue.key, counts[index]])) as Record<QualityIssueKey, number>;
 }
 
-export type QualityRow = { id: number; name: string; detail: string | null; href: string };
+export type QualityRow = { id: number; name: string; detail: string | null; href: string; updatedAt?: string };
 export async function qualityRows(db: PrismaClient, key: QualityIssueKey, q: string, page: number): Promise<{ count: number; rows: QualityRow[] }> {
-  const skip = (page - 1) * qualityPageSize;
+  const pageSize = qualityPageSizeFor(key);
+  const skip = (page - 1) * pageSize;
   if (key === 'duplicate-account' || key === 'duplicate-contact') return duplicateRows(db, key === 'duplicate-contact', q, skip);
   if (key.startsWith('account-')) {
     const where: Prisma.AccountWhereInput = { ...(qualityWhere(key) as Prisma.AccountWhereInput), ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}) };
-    const [count, rows] = await Promise.all([db.account.count({ where }), db.account.findMany({ where, select: { id: true, name: true, owner: { select: { firstName: true, lastName: true } } }, orderBy: { id: 'desc' }, skip, take: qualityPageSize })]);
-    return { count, rows: rows.map(row => ({ id: row.id, name: row.name, detail: row.owner ? `Owner: ${row.owner.firstName} ${row.owner.lastName}` : 'Unassigned', href: `/accounts/${row.id}` })) };
+    const [count, rows] = await Promise.all([db.account.count({ where }), db.account.findMany({ where, select: { id: true, name: true, updatedAt: true, owner: { select: { firstName: true, lastName: true } } }, orderBy: { id: 'desc' }, skip, take: pageSize })]);
+    return { count, rows: rows.map(row => ({ id: row.id, name: row.name, updatedAt: row.updatedAt.toISOString(), detail: row.owner ? `Owner: ${row.owner.firstName} ${row.owner.lastName}` : 'Unassigned', href: `/accounts/${row.id}` })) };
   }
   if (key.startsWith('contact-')) {
     const where: Prisma.ContactWhereInput = { ...(qualityWhere(key) as Prisma.ContactWhereInput), ...(q ? { OR: [{ firstName: { contains: q, mode: 'insensitive' } }, { lastName: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }] } : {}) };
-    const [count, rows] = await Promise.all([db.contact.count({ where }), db.contact.findMany({ where, select: { id: true, firstName: true, lastName: true, account: { select: { name: true } } }, orderBy: { id: 'desc' }, skip, take: qualityPageSize })]);
+    const [count, rows] = await Promise.all([db.contact.count({ where }), db.contact.findMany({ where, select: { id: true, firstName: true, lastName: true, account: { select: { name: true } } }, orderBy: { id: 'desc' }, skip, take: pageSize })]);
     return { count, rows: rows.map(row => ({ id: row.id, name: `${row.firstName} ${row.lastName}`, detail: row.account?.name ?? 'No Account', href: `/contacts/${row.id}` })) };
   }
   if (key.startsWith('opportunity-')) {
     const where: Prisma.OpportunityWhereInput = { ...(qualityWhere(key) as Prisma.OpportunityWhereInput), ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}) };
-    const [count, rows] = await Promise.all([db.opportunity.count({ where }), db.opportunity.findMany({ where, select: { id: true, name: true, stage: { select: { name: true } } }, orderBy: { id: 'desc' }, skip, take: qualityPageSize })]);
-    return { count, rows: rows.map(row => ({ id: row.id, name: row.name, detail: row.stage.name, href: `/opportunities/${row.id}` })) };
+    const [count, rows] = await Promise.all([db.opportunity.count({ where }), db.opportunity.findMany({ where, select: { id: true, name: true, updatedAt: true, stage: { select: { name: true } } }, orderBy: { id: 'desc' }, skip, take: pageSize })]);
+    return { count, rows: rows.map(row => ({ id: row.id, name: row.name, updatedAt: row.updatedAt.toISOString(), detail: row.stage.name, href: `/opportunities/${row.id}` })) };
   }
   if (key.startsWith('project-')) {
     const where: Prisma.ProjectWhereInput = { ...(qualityWhere(key) as Prisma.ProjectWhereInput), ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}) };
-    const [count, rows] = await Promise.all([db.project.count({ where }), db.project.findMany({ where, select: { id: true, name: true, primaryAccount: { select: { name: true } } }, orderBy: { id: 'desc' }, skip, take: qualityPageSize })]);
+    const [count, rows] = await Promise.all([db.project.count({ where }), db.project.findMany({ where, select: { id: true, name: true, primaryAccount: { select: { name: true } } }, orderBy: { id: 'desc' }, skip, take: pageSize })]);
     return { count, rows: rows.map(row => ({ id: row.id, name: row.name, detail: row.primaryAccount?.name ?? 'No primary Account', href: `/projects/${row.id}` })) };
   }
   if (key.startsWith('task-')) {
     const where: Prisma.TaskWhereInput = { ...(qualityWhere(key) as Prisma.TaskWhereInput), ...(q ? { subject: { contains: q, mode: 'insensitive' } } : {}) };
-    const [count, rows] = await Promise.all([db.task.count({ where }), db.task.findMany({ where, select: { id: true, subject: true }, orderBy: { id: 'desc' }, skip, take: qualityPageSize })]);
+    const [count, rows] = await Promise.all([db.task.count({ where }), db.task.findMany({ where, select: { id: true, subject: true }, orderBy: { id: 'desc' }, skip, take: pageSize })]);
     return { count, rows: rows.map(row => ({ id: row.id, name: row.subject, detail: 'Open Task', href: `/tasks/${row.id}` })) };
   }
   const where: Prisma.ActivityWhereInput = { ...(qualityWhere(key) as Prisma.ActivityWhereInput), ...(q ? { subject: { contains: q, mode: 'insensitive' } } : {}) };
-  const [count, rows] = await Promise.all([db.activity.count({ where }), db.activity.findMany({ where, select: { id: true, subject: true }, orderBy: { id: 'desc' }, skip, take: qualityPageSize })]);
+  const [count, rows] = await Promise.all([db.activity.count({ where }), db.activity.findMany({ where, select: { id: true, subject: true }, orderBy: { id: 'desc' }, skip, take: pageSize })]);
   return { count, rows: rows.map(row => ({ id: row.id, name: row.subject, detail: 'Activity', href: `/activities/${row.id}/edit` })) };
 }

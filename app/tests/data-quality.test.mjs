@@ -11,13 +11,18 @@ const require = Module.createRequire(fileURLToPath(import.meta.url));
 const originalTs = Module._extensions['.ts'];
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
 const { routeAccess } = require(path.join(root, 'lib/authorization.ts'));
-const { qualityIssues, qualityWhere, qualityPage, qualityCounts, qualityRows } = require(path.join(root, 'lib/data-quality.ts'));
+const { qualityIssues, qualityWhere, qualityPage, qualityCounts, qualityRows, qualityBulkSupported, qualityPageSizeFor } = require(path.join(root, 'lib/data-quality.ts'));
 Module._extensions['.ts'] = originalTs;
 
 test('Data Quality routes are Admin only, including inactive Admin denial', () => {
   for (const role of ['SALES', 'SALES_MANAGER', 'MARKETING_MANAGER', 'READ_ONLY', 'SUPPORT']) assert.equal(routeAccess('/administration/data-quality', { id: 1, role, active: true }), 'denied');
   assert.equal(routeAccess('/administration/data-quality', { id: 1, role: 'ADMIN', active: false }), 'denied');
   assert.equal(routeAccess('/administration/data-quality', { id: 1, role: 'ADMIN', active: true }), 'allowed');
+});
+
+test('only the two owner checks support bulk corrections and their entire page fits the shared limit', () => {
+  assert.deepEqual(qualityIssues.filter(issue => qualityBulkSupported(issue.key)).map(issue => issue.key), ['account-owner', 'opportunity-owner']);
+  for (const issue of qualityIssues) assert.equal(qualityPageSizeFor(issue.key), qualityBulkSupported(issue.key) ? 20 : 25);
 });
 
 test('issue predicates respect active records, open stages, and relationship status', () => {

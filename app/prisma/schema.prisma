@@ -262,6 +262,7 @@ enum TradeShowImportFormat {
 }
 
 model User {
+  maintenanceOwnerAssignments AdminMaintenanceEvent[] @relation("MaintenanceNewOwner")
   recentItems RecentItem[]
   savedViews SavedView[]
   assignedSupportCases SupportCase[] @relation("SupportCaseAssignee")
@@ -2562,6 +2563,9 @@ model AdminMaintenanceEvent {
   action String @db.VarChar(40)
   recordIds Int[]
   recordCount Int
+  newOwnerId Int?
+  newOwnerName String?
+  newOwner User? @relation("MaintenanceNewOwner", fields: [newOwnerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([occurredAt(sort: Desc), id(sort: Desc)])
   @@index([actorId, occurredAt])
