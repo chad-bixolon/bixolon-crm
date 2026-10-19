@@ -112,7 +112,7 @@ test('ownership UI confirms reassignment and removes the resolved issue', async 
   await dialog.getByLabel('Assignee').selectOption(String(sales.id));
   await dialog.getByRole('button', { name: /^Confirm 1 updates$/  }).click();
   await expect(dialog).not.toBeVisible();
-  await expect(page.locator('main')).toContainText('No records assigned to this user need reassignment for the selected record type.');
+  await expect(page.locator('main')).toContainText('No records need reassignment for these filters.');
   expect((await db.task.findUniqueOrThrow({ where: { id: task.id } })).assignedToId).toBe(sales.id);
 });
 
