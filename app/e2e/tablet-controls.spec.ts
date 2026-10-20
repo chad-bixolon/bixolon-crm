@@ -130,10 +130,10 @@ test('selected pickers, unassigned Contacts, and date submission retain alignmen
   await expect(opportunities).toHaveAttribute('id', /-controls$/);
   const show = opportunities.getByRole('button', { name: /^Show filters/ });
   if (await show.isVisible()) await show.tap();
-  await opportunities.getByLabel('Close Date From', { exact: true }).fill('2026-10-01');
-  await opportunities.getByLabel('Close Date Through', { exact: true }).fill('2026-12-31');
-  await expect(opportunities.getByLabel('Close Date From', { exact: true })).toHaveValue('2026-10-01');
-  await expect(opportunities.getByLabel('Close Date Through', { exact: true })).toHaveValue('2026-12-31');
+  await opportunities.getByLabel('Expected Close Date From', { exact: true }).fill('2026-10-01');
+  await opportunities.getByLabel('Expected Close Date Through', { exact: true }).fill('2026-12-31');
+  await expect(opportunities.getByLabel('Expected Close Date From', { exact: true })).toHaveValue('2026-10-01');
+  await expect(opportunities.getByLabel('Expected Close Date Through', { exact: true })).toHaveValue('2026-12-31');
   await opportunities.screenshot({ path: info.outputPath('opportunities-custom-dates.png'), caret: 'initial' });
   await opportunities.getByRole('button', { name: 'Apply', exact: true }).tap();
   await expect(page).toHaveURL(/closeFrom=2026-10-01/);

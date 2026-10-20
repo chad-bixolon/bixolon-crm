@@ -12,6 +12,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Added Opportunity list outcome filters for Open/Won/Lost, inclusive Actual Close Date ranges, and configured Outcome Reasons including inactive history. Personal Saved Views retain the new criteria; expected-date filters remain separate. Closed rows show recorded actual dates/reason labels, with unknown legacy dates explicit. No migration.
+
 - Extended Admin Data Quality bulk owner correction to Accounts assigned to unavailable users, using current Account eligibility rules, current-page selection (maximum 20), explicit reassignment confirmation, atomic version-checked saves, and readable Maintenance History with destination ID/name. Added concise Data Quality/Ownership Help and regression coverage; Contacts retain inherited ownership. No schema migration.
 
 - Added Durable Integration Attempt History & Failure Status v1 under Admin Maintenance History and System Health. The shared job ledger records explicit Support Gmail actions and per-connection Calendar syncs, reuses weekly snapshot attempts, and shows safe failures and conservative matching recoveries with filters, pagination and record links. Added bounded Calendar requests/syncs, privacy and retention guidance, and forward-only migration `20261018010000_integration_attempt_history`; no provider polling or automatic cleanup is introduced.

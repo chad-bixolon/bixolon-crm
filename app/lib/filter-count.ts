@@ -10,8 +10,8 @@ export function countActiveFilters(values: Record<string, string | undefined>, d
 }
 
 export function countOpportunityFilters(values: Record<string, string | undefined>) {
-  const other = Object.fromEntries(Object.entries(values).filter(([key]) => !['closePeriod', 'closeFrom', 'closeTo'].includes(key)));
-  return countActiveFilters(other) + (values.closePeriod || values.closeFrom || values.closeTo ? 1 : 0);
+  const other = Object.fromEntries(Object.entries(values).filter(([key]) => !['closePeriod', 'closeFrom', 'closeTo', 'actualCloseFrom', 'actualCloseTo'].includes(key)));
+  return countActiveFilters(other, { outcomeStatus: 'all' }) + (values.closePeriod || values.closeFrom || values.closeTo ? 1 : 0) + (values.actualCloseFrom || values.actualCloseTo ? 1 : 0);
 }
 
 export function countTaskFilters(values: Record<string, string | undefined>) {

@@ -108,7 +108,7 @@ export function parseOpportunity(form: FormData) {
 export function lineTotal(line: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number }) { return new Prisma.Decimal(line.estimatedUnitPrice).mul(line.quantity); }
 export function opportunityTotal(lines: { quantity: number; estimatedUnitPrice: Prisma.Decimal | string | number; archivedAt?: Date | null }[]) { return lines.reduce((sum, line) => line.archivedAt ? sum : sum.add(lineTotal(line)), new Prisma.Decimal(0)); }
 export function weightedValue(total: Prisma.Decimal, probability: number) { return total.mul(probability).div(100); }
-export async function opportunityOptions(client: PrismaClient) {
+export async function opportunityOptions(client: PrismaClient, { historicalOutcomeReasons = false } = {}) {
   const [owners, stages, currencyConfig, productCount, productCategories, competitors, outcomeReasons] = await Promise.all([
     client.user.findMany({ where: eligibleUserWhere('sales.write'), orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
     client.salesStage.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { id: true, name: true, probability: true, isClosed: true, isWon: true } }),
@@ -116,7 +116,7 @@ export async function opportunityOptions(client: PrismaClient) {
     client.product.count({ where: { active: true, archivedAt: null } }),
     client.productCategory.findMany({ where: { OR: [{ active: true }, { products: { some: {} } }] }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
     client.competitorOption.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true, active: true } }),
-    client.outcomeReason.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true, isWon: true, active: true } }),
+    client.outcomeReason.findMany({ where: historicalOutcomeReasons ? {} : { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }, { id: "asc" }], select: { id: true, name: true, isWon: true, active: true } }),
   ]);
   return { defaultCurrency: currencyConfig.defaultCurrency, businessDate: businessToday().toISOString().slice(0, 10), outcomeReasons, accounts: [] as { id: number; name: string }[], contacts: [] as { id: number; firstName: string; lastName: string; email: string | null; accountId: number | null }[], owners, stages, currencies: currencyConfig.activeCurrencies, productCount, projects: [] as { id: number; name: string }[], productCategories, competitors };
 }

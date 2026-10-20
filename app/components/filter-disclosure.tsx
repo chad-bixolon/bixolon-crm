@@ -5,9 +5,12 @@ import { useEffect, useId, useRef, useState } from 'react';
 
 import { countActiveFilters, countOpportunityFilters, countTaskFilters, type FilterDefaults } from '../lib/filter-count';
 
-export function FilterDisclosure({ initialCount, clearHref, defaults = {}, opportunityClosePeriod = false, taskDuePeriod = false }: { initialCount: number; clearHref: string; defaults?: FilterDefaults; opportunityClosePeriod?: boolean; taskDuePeriod?: boolean }) {
+export function FilterDisclosure({ initialCount, clearHref, defaults = {}, opportunityClosePeriod = false, taskDuePeriod = false, queryKey = '' }: { initialCount: number; clearHref: string; defaults?: FilterDefaults; opportunityClosePeriod?: boolean; taskDuePeriod?: boolean; queryKey?: string }) {
   const [open, setOpen] = useState(false);
-  const [count, setCount] = useState(initialCount);
+  const [draftCount, setDraftCount] = useState<{ queryKey: string; value: number } | null>(null);
+  if (draftCount && draftCount.queryKey !== queryKey) setDraftCount(null);
+  // A restored URL starts with its server count without collapsing the disclosure.
+  const count = draftCount?.queryKey === queryKey ? draftCount.value : initialCount;
   const id = useId();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -17,7 +20,7 @@ export function FilterDisclosure({ initialCount, clearHref, defaults = {}, oppor
     const update = () => {
       const entries = Object.fromEntries(new FormData(form).entries());
       const values = Object.fromEntries(Object.entries(entries).map(([key, value]) => [key, String(value)]));
-      setCount(opportunityClosePeriod ? countOpportunityFilters(values) : taskDuePeriod ? countTaskFilters(values) : countActiveFilters(values, defaults));
+      setDraftCount({ queryKey, value: opportunityClosePeriod ? countOpportunityFilters(values) : taskDuePeriod ? countTaskFilters(values) : countActiveFilters(values, defaults) });
     };
     let pending = 0;
     const schedule = () => { cancelAnimationFrame(pending); pending = requestAnimationFrame(update); };
@@ -25,7 +28,7 @@ export function FilterDisclosure({ initialCount, clearHref, defaults = {}, oppor
     form.addEventListener('change', schedule);
     form.addEventListener('click', schedule);
     return () => { cancelAnimationFrame(pending); form.removeEventListener('input', schedule); form.removeEventListener('change', schedule); form.removeEventListener('click', schedule); };
-  }, [defaults, id, opportunityClosePeriod, taskDuePeriod]);
+  }, [defaults, id, opportunityClosePeriod, taskDuePeriod, queryKey]);
   return <div ref={ref} className="filter-disclosure" id={id}>
     <button type="button" className="filter-disclosure-button" aria-label={`${open ? 'Hide' : 'Show'} filters${count ? `, ${count} active` : ''}`} aria-expanded={open} aria-controls={`${id}-controls`} onClick={() => setOpen(value => !value)}>
       <span>Filters{count > 0 ? ` · ${count} active` : ''}</span><span aria-hidden="true">{open ? '▾' : '▸'}</span>

@@ -46,6 +46,7 @@ export type OutcomeFilters = { actualCloseFrom?: string; actualCloseTo?: string;
 /** Compose with owner and authorization scopes in opportunityWhere/listOpportunities. */
 export function opportunityOutcomeWhere(filters: OutcomeFilters): Prisma.OpportunityWhereInput {
   const where: Prisma.OpportunityWhereInput = {};
+  if (filters.outcomeStatus === 'open') where.stage = { isClosed: false };
   if (filters.outcomeStatus === 'won' || filters.outcomeStatus === 'lost') where.stage = { isClosed: true, isWon: filters.outcomeStatus === 'won' };
   const from = parseActualCloseDate(filters.actualCloseFrom ?? ''), to = parseActualCloseDate(filters.actualCloseTo ?? '');
   if (from && to && from > to) throw new Error('Actual Close Date range must end on or after its start.');

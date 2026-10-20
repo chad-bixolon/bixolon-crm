@@ -5,7 +5,7 @@ import { validTaskDuePeriod } from './task-due-period';
 export const savedViewRoutes = {
   accounts: { path: '/accounts', keys: ['q','view','status','salesRepId','role','territory','industry','strategic'] },
   contacts: { path: '/contacts', keys: ['q','active','accountId','salesRepId','marketingPreference','title','primary','assignment','sort','dir'] },
-  opportunities: { path: '/opportunities', keys: ['currencyCode','q','stageId','competitorId','ownerId','forecastCategory','closePeriod','closeFrom','closeTo','accountId','projectId','archived'] },
+  opportunities: { path: '/opportunities', keys: ['currencyCode','q','stageId','competitorId','ownerId','forecastCategory','closePeriod','closeFrom','closeTo','accountId','projectId','archived','outcomeStatus','actualCloseFrom','actualCloseTo','outcomeReasonId'] },
   tasks: { path: '/tasks', keys: ['q','visibility','status','priority','assignedToId','accountId','opportunityId','duePeriod','dueFrom','dueTo'] },
   'trade-show-follow-up': { path: '/trade-shows/my-leads', keys: ['view','q','status','tradeShowId','ownerId','assignedToId','mine','taskStatus','duePeriod','dueFrom','dueTo'] },
   projects: { path: '/projects', keys: ['q','status','ownerId','accountId','archived'] },
@@ -21,8 +21,8 @@ export const savedViewRoutes = {
 export type SavedViewRoute = keyof typeof savedViewRoutes;
 export type SavedQuery = Record<string, string>;
 const defaults: Record<string, SavedQuery> = { tasks: { visibility: 'active' }, 'price-exceptions': { expiration: 'all' }, 'support-cases': { archive: 'active', sort: 'current' }, 'calendar-matches': { status: 'review' } };
-const idKeys = new Set(['accountId','projectId','opportunityId','ownerId','assignedToId','salesRepId','stageId','competitorId','categoryId','tradeShowId']);
-const dateKeys = new Set(['closeFrom','closeTo','dueFrom','dueTo','openedFrom','openedTo','from','to']);
+const idKeys = new Set(['accountId','projectId','opportunityId','ownerId','assignedToId','salesRepId','stageId','competitorId','categoryId','tradeShowId','outcomeReasonId']);
+const dateKeys = new Set(['closeFrom','closeTo','dueFrom','dueTo','openedFrom','openedTo','from','to','actualCloseFrom','actualCloseTo']);
 
 export function isSavedViewRoute(value: string): value is SavedViewRoute { return Object.hasOwn(savedViewRoutes, value); }
 export function canUseSavedViews(actor: Actor, route: SavedViewRoute) {
@@ -45,6 +45,7 @@ export function normalizeSavedQuery(route: SavedViewRoute, input: unknown): Save
     if (key === 'currencyCode' && !/^[A-Z]{3}$/.test(clean)) continue;
     if (key === 'closePeriod' && !validClosePeriod(clean)) continue;
     if (key === 'duePeriod' && !validTaskDuePeriod(clean)) continue;
+    if (key === 'outcomeStatus' && !['won', 'lost', 'open'].includes(clean)) continue;
     output[key] = clean;
   }
   if (route === 'opportunities') {

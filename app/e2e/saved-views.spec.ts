@@ -48,12 +48,12 @@ test('Opportunity Close Period views preserve relative, explicit, and custom cho
     await page.locator('.saved-views-menu summary').click();
     await page.getByRole('button', { name: item.name }).click();
     const form = page.getByRole('form', { name: 'Filter opportunities' });
-    await expect(form.getByRole('combobox', { name: 'Close Period' })).toHaveValue(item.period);
+    await expect(form.getByRole('combobox', { name: 'Expected Close Period' })).toHaveValue(item.period);
     if (item.from) {
-      await expect(form.getByLabel('Close Date From')).toHaveValue(item.from);
-      await expect(form.getByLabel('Close Date Through')).toHaveValue(item.through!);
-    } else await expect(form.getByLabel('Close Date From')).toHaveCount(0);
-    await form.getByRole('combobox', { name: 'Close Period' }).selectOption('');
+      await expect(form.getByLabel('Expected Close Date From')).toHaveValue(item.from);
+      await expect(form.getByLabel('Expected Close Date Through')).toHaveValue(item.through!);
+    } else await expect(form.getByLabel('Expected Close Date From')).toHaveCount(0);
+    await form.getByRole('combobox', { name: 'Expected Close Period' }).selectOption('');
     await expect(page.locator('.saved-views-menu summary')).toContainText('Modified');
   }
   const currentView = await db.savedView.findFirstOrThrow({ where: { name: cases[0].name } });
@@ -63,13 +63,13 @@ test('Opportunity Close Period views preserve relative, explicit, and custom cho
     await page.goto('/opportunities?closePeriod=current-quarter');
     await page.getByRole('form', { name: 'Filter opportunities' }).getByRole('link', { name: 'Clear' }).click();
     await expect(page).toHaveURL(/\/opportunities\?closePeriod=$/);
-    await expect(page.getByRole('combobox', { name: 'Close Period' })).toHaveValue('');
+    await expect(page.getByRole('combobox', { name: 'Expected Close Period' })).toHaveValue('');
   } finally { expect((await defaultRequest(false)).ok()).toBe(true); }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/opportunities?closeFrom=2026-10-01&closeTo=2026-12-31');
   await expect(page.getByRole('button', { name: /Show filters, 1 active/ })).toBeVisible();
   await page.getByRole('button', { name: /Show filters, 1 active/ }).click();
-  await expect(page.getByRole('combobox', { name: 'Close Period' })).toHaveValue('custom');
+  await expect(page.getByRole('combobox', { name: 'Expected Close Period' })).toHaveValue('custom');
 });
 
 test('Opportunity Close Period stays compact and custom dates appear only when selected', async ({ page }) => {
@@ -80,16 +80,16 @@ test('Opportunity Close Period stays compact and custom dates appear only when s
     await page.goto('/opportunities?closePeriod=current-quarter');
     const form = page.getByRole('form', { name: 'Filter opportunities' });
     if (width < 1024) await page.getByRole('button', { name: /Show filters, 1 active/ }).click();
-    await expect(form.getByRole('combobox', { name: 'Close Period' })).toBeVisible();
-    await expect(form.getByLabel('Close Date From')).toHaveCount(0);
-    await form.getByRole('combobox', { name: 'Close Period' }).selectOption('custom');
-    await expect(form.getByLabel('Close Date From')).toBeVisible();
-    await expect(form.getByLabel('Close Date Through')).toBeVisible();
-    await form.getByLabel('Close Date From').fill('2026-11-15');
-    await form.getByLabel('Close Date Through').fill('2026-12-15');
+    await expect(form.getByRole('combobox', { name: 'Expected Close Period' })).toBeVisible();
+    await expect(form.getByLabel('Expected Close Date From')).toHaveCount(0);
+    await form.getByRole('combobox', { name: 'Expected Close Period' }).selectOption('custom');
+    await expect(form.getByLabel('Expected Close Date From')).toBeVisible();
+    await expect(form.getByLabel('Expected Close Date Through')).toBeVisible();
+    await form.getByLabel('Expected Close Date From').fill('2026-11-15');
+    await form.getByLabel('Expected Close Date Through').fill('2026-12-15');
     if (width < 1024) await expect(page.getByRole('button', { name: /filters, 1 active/i })).toBeVisible();
-    await form.getByRole('combobox', { name: 'Close Period' }).selectOption('2026-Q4');
-    await expect(form.getByLabel('Close Date From')).toHaveCount(0);
+    await form.getByRole('combobox', { name: 'Expected Close Period' }).selectOption('2026-Q4');
+    await expect(form.getByLabel('Expected Close Date From')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
     await form.getByRole('button', { name: 'Apply' }).click();
     await expect(page).toHaveURL(/closePeriod=2026-Q4/);
@@ -97,7 +97,7 @@ test('Opportunity Close Period stays compact and custom dates appear only when s
     else await form.locator('.btn-filter-secondary').click();
     await expect(page).toHaveURL(/\/opportunities\?closePeriod=$/);
     if (width < 1024) await page.getByRole('button', { name: 'Show filters' }).click();
-    await expect(form.getByRole('combobox', { name: 'Close Period' })).toHaveValue('');
+    await expect(form.getByRole('combobox', { name: 'Expected Close Period' })).toHaveValue('');
   }
 });
 
