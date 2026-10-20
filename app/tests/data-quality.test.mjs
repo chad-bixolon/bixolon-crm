@@ -10,6 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = Module.createRequire(fileURLToPath(import.meta.url));
 const originalTs = Module._extensions['.ts'];
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
+const { eligibleUserWhere } = require(path.join(root, 'lib/assignment-eligibility.ts'));
 const { routeAccess } = require(path.join(root, 'lib/authorization.ts'));
 const { qualityIssues, qualityWhere, qualityPage, qualityCounts, qualityRows, qualityBulkSupported, qualityPageSizeFor } = require(path.join(root, 'lib/data-quality.ts'));
 Module._extensions['.ts'] = originalTs;
@@ -20,13 +21,14 @@ test('Data Quality routes are Admin only, including inactive Admin denial', () =
   assert.equal(routeAccess('/administration/data-quality', { id: 1, role: 'ADMIN', active: true }), 'allowed');
 });
 
-test('only the two owner checks support bulk corrections and their entire page fits the shared limit', () => {
-  assert.deepEqual(qualityIssues.filter(issue => qualityBulkSupported(issue.key)).map(issue => issue.key), ['account-owner', 'opportunity-owner']);
+test('only the three owner checks support bulk corrections and their entire page fits the shared limit', () => {
+  assert.deepEqual(qualityIssues.filter(issue => qualityBulkSupported(issue.key)).map(issue => issue.key), ['account-owner', 'account-owner-inactive', 'opportunity-owner']);
   for (const issue of qualityIssues) assert.equal(qualityPageSizeFor(issue.key), qualityBulkSupported(issue.key) ? 20 : 25);
 });
 
 test('issue predicates respect active records, open stages, and relationship status', () => {
   assert.deepEqual(qualityWhere('account-owner'), { status: 'ACTIVE', archivedAt: null, ownerId: null });
+  assert.deepEqual(qualityWhere('account-owner-inactive'), { status: 'ACTIVE', archivedAt: null, owner: { is: { NOT: eligibleUserWhere('accounts.write') } } });
   assert.deepEqual(qualityWhere('contact-account'), { active: true, archivedAt: null, accountId: null });
   assert.deepEqual(qualityWhere('contact-account-inactive').account.OR[0].status, { not: 'ACTIVE' });
   assert.deepEqual(qualityWhere('opportunity-account').participants, { none: {} });

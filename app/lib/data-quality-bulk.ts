@@ -16,6 +16,7 @@ export async function bulkQualityOwners(db: PrismaClient, actor: Actor, scope: Q
   const ids = validateBulkRequest(request);
   if (!scope || !qualityBulkSupported(scope.issue) || request.action !== 'assign') throw new Error('This check requires individual review.');
   const issue = scope.issue;
+  const account = issue !== 'opportunity-owner';
   if (typeof scope.q !== 'string' || scope.q.length > 100 || qualityPage(String(scope.page)) !== scope.page) throw new Error('Refresh the list and select again.');
   const ownerId = /^\d+$/.test(request.value) ? Number(request.value) : 0;
   if (!Number.isSafeInteger(ownerId) || ownerId < 1) throw new Error('Choose an eligible owner.');
@@ -25,9 +26,8 @@ export async function bulkQualityOwners(db: PrismaClient, actor: Actor, scope: Q
     const currentActor = await tx.user.findUnique({ where: { id: actor.id } });
     if (!currentActor) throw new Error('Access denied');
     assertAdmin(currentActor);
-    const owner = await tx.user.findFirst({ where: { id: ownerId, ...eligibleUserWhere(issue === 'account-owner' ? 'accounts.write' : 'sales.write') } });
+    const owner = await tx.user.findFirst({ where: { id: ownerId, ...eligibleUserWhere(account ? 'accounts.write' : 'sales.write') } });
     if (!owner) throw new Error('The chosen owner is no longer available. No records changed. Choose an active, eligible owner.');
-    const account = issue === 'account-owner';
     if (account) await tx.$queryRaw(Prisma.sql`SELECT id FROM "Account" WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR UPDATE`);
     else await tx.$queryRaw(Prisma.sql`SELECT id FROM "Opportunity" WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR UPDATE`);
     const where = qualityWhere(issue)!;
@@ -41,7 +41,7 @@ export async function bulkQualityOwners(db: PrismaClient, actor: Actor, scope: Q
       if (account) await tx.account.update({ where: { id: row.id, updatedAt: row.updatedAt }, data: { ownerId, updatedById: actor.id, updatedAt: nextUpdatedAt(row.updatedAt) } });
       else await assignOpportunityOwnerInTransaction(tx, row.id, owner, currentActor);
     }
-    await recordMaintenance(tx, actor.id, account ? 'Account' : 'Opportunity', 'Assign owner', ids, ids.length, { id: owner.id, name: `${owner.firstName} ${owner.lastName}` });
+    await recordMaintenance(tx, actor.id, account ? 'Account' : 'Opportunity', issue === 'account-owner-inactive' ? 'Reassign' : 'Assign owner', ids, ids.length, { id: owner.id, name: `${owner.firstName} ${owner.lastName}` });
     return rows.length;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 });
 }

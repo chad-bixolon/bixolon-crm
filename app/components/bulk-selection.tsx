@@ -26,7 +26,8 @@ export function BulkSelection({ kind, records, assignees, enabled, children, all
   const dialog = useRef<HTMLDialogElement>(null), gate = useRef(false), trigger = useRef<HTMLButtonElement | null>(null);
   const targetId = useId();
   const quality = kind === 'quality';
-  const entity = quality ? (qualityScope?.issue === 'account-owner' ? 'Accounts' : 'Opportunities') : kind === 'tasks' ? 'Tasks' : 'Cases';
+  const reassign = quality && qualityScope?.issue === 'account-owner-inactive';
+  const entity = quality ? (qualityScope?.issue === 'opportunity-owner' ? 'Opportunities' : 'Accounts') : kind === 'tasks' ? 'Tasks' : 'Cases';
   const eligible = records.slice(0, BULK_SELECTION_LIMIT);
   const current = selected.filter(row => eligible.some(record => record.id === row.id && record.updatedAt === row.updatedAt));
   const ids = current.map(row => row.id);
@@ -34,14 +35,14 @@ export function BulkSelection({ kind, records, assignees, enabled, children, all
   const all = () => { if (!busy) { setMessage(''); setSelected(ids.length === eligible.length ? [] : eligible); } };
   const close = () => { if (gate.current || busy) return; dialog.current?.close(); setAction(null); trigger.current?.focus(); };
   const target = action?.value === 'assign' ? assignees.find(row => String(row.id) === value)?.name : action?.value === 'priority' ? priorities.find(row => row.value === value)?.label : value;
-  const summary = action?.value === 'complete' ? `Mark ${review.length} selected Tasks complete.` : action?.value === 'assign' ? `Assign ${review.length} selected ${entity} to ${target || 'the chosen assignee'}.` : action?.value === 'dueDate' ? `Change the due date of ${review.length} selected Tasks to ${target || 'the chosen date'}.` : `Change the priority of ${review.length} selected Cases to ${target || 'the chosen priority'}.`;
+  const summary = reassign ? `Reassign ${review.length} Accounts from unavailable owners to ${target || 'the chosen owner'}?` : action?.value === 'complete' ? `Mark ${review.length} selected Tasks complete.` : action?.value === 'assign' ? `Assign ${review.length} selected ${entity} to ${target || 'the chosen assignee'}.` : action?.value === 'dueDate' ? `Change the due date of ${review.length} selected Tasks to ${target || 'the chosen date'}.` : `Change the priority of ${review.length} selected Cases to ${target || 'the chosen priority'}.`;
   return <Context.Provider value={enabled ? { ids, eligible: eligible.map(row => row.id), busy, toggle, all } : null}>
     {enabled && <>
       {ids.length > 0 && <div className="panel mb-3 flex flex-wrap items-center gap-2 p-3 text-sm" aria-label="Bulk actions">
         <strong aria-live="polite">{ids.length} selected</strong><span className="text-slate-600">on this page · limit {BULK_SELECTION_LIMIT}</span>
         <button type="button" className="btn-secondary" disabled={busy} onClick={() => { setSelected([]); setMessage(''); }}>Clear selection</button>
         {quality && <div className="min-w-0 w-full sm:w-64"><label className="label" htmlFor={`${targetId}-bar`}>New owner</label><select id={`${targetId}-bar`} className="field" required value={value} disabled={busy} onChange={event => setValue(event.target.value)}><option value="">Choose owner…</option>{assignees.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></div>}
-        {(quality ? [{ value: 'assign', label: 'Assign owner' }] : kind === 'tasks' ? taskActions : caseActions).filter(item => !allowedActions || allowedActions.includes(item.value)).map(item => <button key={item.value} type="button" className="btn-secondary" disabled={busy || (quality && !value)} onClick={event => { trigger.current = event.currentTarget; setAction(item); setReview(current); if (!quality) setValue(''); setError(''); dialog.current?.showModal(); }}>{item.label}</button>)}
+        {(quality ? [{ value: 'assign', label: reassign ? 'Reassign owner' : 'Assign owner' }] : kind === 'tasks' ? taskActions : caseActions).filter(item => !allowedActions || allowedActions.includes(item.value)).map(item => <button key={item.value} type="button" className="btn-secondary" disabled={busy || (quality && !value)} onClick={event => { trigger.current = event.currentTarget; setAction(item); setReview(current); if (!quality) setValue(''); setError(''); dialog.current?.showModal(); }}>{item.label}</button>)}
         {quality ? <HelpLink topic="data-quality">Help with Data Quality</HelpLink> : <HelpLink topic="bulk-actions">Help with Bulk Actions</HelpLink>}
       </div>}
       {message && <p role="status" className="mb-3 text-sm text-emerald-800">{message}</p>}
@@ -63,7 +64,7 @@ export function BulkSelection({ kind, records, assignees, enabled, children, all
             const result = await (quality && qualityScope ? assignQualityOwner(qualityScope, request) : kind === 'tasks' ? changeTasks(request) : changeCases(request));
             if (result.ok) {
               dialog.current?.close(); setAction(null); setSelected([]);
-              setMessage(quality ? `${result.count} ${result.count === 1 ? (entity === 'Accounts' ? 'Account was' : 'Opportunity was') : `${entity} were`} assigned successfully.` : `${result.count} ${entity} updated.`);
+              setMessage(quality ? `${result.count} ${result.count === 1 ? (entity === 'Accounts' ? 'Account was' : 'Opportunity was') : `${entity} were`} ${reassign ? 'reassigned' : 'assigned'} successfully.` : `${result.count} ${entity} updated.`);
             } else setError(result.message);
           } catch { setError('The result could not be confirmed. Refresh the list before retrying.'); }
           finally { gate.current = false; setSubmitting(false); }

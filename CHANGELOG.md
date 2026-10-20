@@ -12,6 +12,8 @@ boundaries. Dates are the dates of the last commits in each group.
 
 ## Unreleased
 
+- Extended Admin Data Quality bulk owner correction to Accounts assigned to unavailable users, using current Account eligibility rules, current-page selection (maximum 20), explicit reassignment confirmation, atomic version-checked saves, and readable Maintenance History with destination ID/name. Added concise Data Quality/Ownership Help and regression coverage; Contacts retain inherited ownership. No schema migration.
+
 - Added Durable Integration Attempt History & Failure Status v1 under Admin Maintenance History and System Health. The shared job ledger records explicit Support Gmail actions and per-connection Calendar syncs, reuses weekly snapshot attempts, and shows safe failures and conservative matching recoveries with filters, pagination and record links. Added bounded Calendar requests/syncs, privacy and retention guidance, and forward-only migration `20261018010000_integration_attempt_history`; no provider polling or automatic cleanup is introduced.
 
 - Added rolling Task due-date periods (Overdue, Due today, Next 7 days and This week) alongside fixed custom ranges. Personal Saved Views retain relative meaning and recalculate with Eastern business dates; existing absolute views and Task defaults remain compatible. No database migration.

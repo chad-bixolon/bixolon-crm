@@ -1,9 +1,10 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { BULK_SELECTION_LIMIT } from './bulk-action-contract';
+import { eligibleUserWhere } from './assignment-eligibility';
 
 export const qualityIssues = [
   { key: 'account-owner', label: 'Accounts without a sales owner', entity: 'Accounts', explanation: 'Active Accounts with no owner.' },
-  { key: 'account-owner-inactive', label: 'Accounts assigned to an unavailable owner', entity: 'Accounts', explanation: 'Active Accounts assigned to an inactive or archived user.' },
+  { key: 'account-owner-inactive', label: 'Accounts assigned to unavailable owners', entity: 'Accounts', explanation: 'These Accounts are still assigned to users who can no longer manage them.' },
   { key: 'contact-account', label: 'Contacts without an Account', entity: 'Contacts', explanation: 'Active Contacts that are not linked to an Account.' },
   { key: 'contact-account-inactive', label: 'Contacts linked to an inactive Account', entity: 'Contacts', explanation: 'Active Contacts linked to an inactive or archived Account.' },
   { key: 'opportunity-owner', label: 'Open Opportunities without an owner', entity: 'Opportunities', explanation: 'Open Opportunities with no owner, or an inactive or archived owner.' },
@@ -19,7 +20,7 @@ export const qualityIssues = [
 ] as const;
 export type QualityIssueKey = typeof qualityIssues[number]['key'];
 export const qualityPageSize = 25;
-export function qualityBulkSupported(key: string): key is 'account-owner' | 'opportunity-owner' { return key === 'account-owner' || key === 'opportunity-owner'; }
+export function qualityBulkSupported(key: string): key is 'account-owner' | 'account-owner-inactive' | 'opportunity-owner' { return key === 'account-owner' || key === 'account-owner-inactive' || key === 'opportunity-owner'; }
 export function qualityPageSizeFor(key: QualityIssueKey) { return qualityBulkSupported(key) ? BULK_SELECTION_LIMIT : qualityPageSize; }
 export function qualityIssue(key: string | undefined) { return qualityIssues.find(issue => issue.key === key); }
 export function qualityPage(value: string | undefined) { const n = Number(value); return Number.isSafeInteger(n) && n > 0 ? Math.min(n, 100000) : 1; }
@@ -35,7 +36,7 @@ const archivedLink = { archivedAt: { not: null } } as const;
 export function qualityWhere(key: QualityIssueKey): Prisma.AccountWhereInput | Prisma.ContactWhereInput | Prisma.OpportunityWhereInput | Prisma.ProjectWhereInput | Prisma.TaskWhereInput | Prisma.ActivityWhereInput | null {
   switch (key) {
     case 'account-owner': return { ...activeAccount, ownerId: null };
-    case 'account-owner-inactive': return { ...activeAccount, owner: { OR: [{ active: false }, { archivedAt: { not: null } }] } };
+    case 'account-owner-inactive': return { ...activeAccount, owner: { is: { NOT: eligibleUserWhere('accounts.write') } } };
     case 'contact-account': return { ...activeContact, accountId: null };
     case 'contact-account-inactive': return { ...activeContact, account: unavailableAccount };
     case 'opportunity-owner': return { ...openOpportunity, OR: [{ ownerId: null }, { owner: { OR: [{ active: false }, { archivedAt: { not: null } }] } }] };

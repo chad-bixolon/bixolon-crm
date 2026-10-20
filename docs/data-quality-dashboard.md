@@ -1,13 +1,13 @@
 # Data Quality / Cleanup
 
-The Administration page links to a dashboard for Admin users. Each card counts current records matching one review rule. Selecting a card opens a server-side paged list, with a search field and links to existing CRM records. A record can appear in more than one group. Admins can assign owners in the two supported checks described below. PE Cleanup remains the place to review Price Exceptions.
+The Administration page links to a dashboard for Admin users. Each card counts current records matching one review rule. Selecting a card opens a server-side paged list, with a search field and links to existing CRM records. A record can appear in more than one group. Admins can assign or reassign owners in the three supported checks described below. PE Cleanup remains the place to review Price Exceptions.
 
 ## Implemented checks
 
 | Group | Rule |
 | --- | --- |
 | Accounts without a sales owner | Active, unarchived Account with no owner. |
-| Accounts assigned to an unavailable owner | Active, unarchived Account owned by an inactive or archived user. |
+| Accounts assigned to unavailable owners | Active, unarchived Account with an owner excluded by `eligibleUserWhere('accounts.write')`: inactive, archived, or without Account write permission. Unowned Accounts remain in their separate check. |
 | Contacts without an Account | Active, unarchived Contact with no Account. |
 | Contacts linked to an inactive Account | Active, unarchived Contact whose Account is inactive or archived. |
 | Open Opportunities without an owner | Unarchived Opportunity in an open stage with no owner or an inactive/archived owner. |
@@ -33,15 +33,17 @@ Counts use database aggregates and duplicate groups use SQL window aggregation. 
 
 ## Bulk owner assignment v1
 
-Only **Accounts without a sales owner** and **Open Opportunities without an owner** support bulk correction. Select records → choose an eligible owner → Assign owner → confirm. Select page selects at most 20 visible records. Search, issue and page changes clear selection; there is no selection across pages. Open record remains available.
+**Accounts without a sales owner**, **Accounts assigned to unavailable owners**, and **Open Opportunities without an owner** support bulk correction. Select records → choose an eligible owner → Assign owner (or Reassign owner) → confirm. Reassignment confirmation names the count, unavailable-owner condition, and replacement owner. Select page selects at most 20 visible records. Search, issue and page changes clear selection; there is no selection across pages. Open record remains available.
 
 The server rechecks the effective Admin against the current User row, owner eligibility under the ordinary Account/Opportunity assignment rules, record existence and versions, active/open issue criteria, search and current-page membership. User locks hold permission/eligibility through commit; selected records use ordered locks in a serializable transaction. One failure rolls back every record, history entry and notification. Refresh after stale selection errors. Success refreshes list and summary counts.
 
 Account updates preserve updated-by attribution; Contacts continue to follow their Account. Opportunity updates preserve updated-by attribution, OWNER history (old/new owner names), assignment notifications and notification reconciliation. Individual edit behavior and Sales permissions are unchanged. Admin impersonation uses the effective user's permissions.
 
-One existing Maintenance History event records **Assign owner**, record type, count, affected IDs, effective Admin, timestamp, new owner ID and a display-name snapshot. The nullable `newOwnerId` / `newOwnerName` extension has no backfill and retains append-only protections. The User FK restricts deletion/update of the referenced ID. Existing events retain NULL destination fields. History uses wording such as “Assigned 20 Accounts to Jane Smith” and includes affected-record links.
+One existing Maintenance History event records **Assign owner** for the original checks or **Reassign** for unavailable-owner Accounts, record type, count, affected IDs, effective Admin, timestamp, new owner ID and a display-name snapshot. The nullable `newOwnerId` / `newOwnerName` extension has no backfill and retains append-only protections. The User FK restricts deletion/update of the referenced ID. Existing events retain NULL destination fields. History uses wording such as “Assigned 20 Accounts to Jane Smith” and includes affected-record links.
 
-All other groups remain individual review. A future candidate is Accounts assigned to an unavailable owner, if explicitly approved with the same revalidation and confirmation rules. No other bulk corrections are enabled.
+Unavailable-owner reassignment reuses the same transaction and `updatedAt` token, advances the Account version, and leaves Contact rows untouched. If a current owner regains eligibility, the Account no longer matches even when its own version is unchanged. Replacement owners must be active, unarchived, and permitted to write Accounts; currently Admin, Sales Manager, or Sales. No schema migration is needed for reassignment.
+
+All other groups remain individual review. Deferred reassignment candidates include unavailable-owner Opportunities and Projects as dedicated bulk groups, and general Contact owner changes. The existing Opportunity owner check retains its original criteria and behavior. No general mass reassignment, cross-page selection, relationship rewriting, or bulk deletion is enabled.
 
 ## Bulk v1 implementation files
 
@@ -75,3 +77,37 @@ Validated with Node 22.23.3. No production data was changed; migrations and writ
 Run browser checks from `app/` with `E2E_DATABASE_NAME=saleshub_e2e_data_quality_bulk ENABLE_DEV_IMPERSONATION=true npm run test:e2e -- data-quality.spec.ts data-quality-bulk.spec.ts bulk-actions.spec.ts admin-audit.spec.ts --project=desktop-chromium`. The separate responsive run selects `bulk-responsive.spec.ts` plus the last-page test across the desktop, phone, tablet portrait, tablet landscape and responsive desktop projects.
 
 The migration is prepared and tested, not deployed. No commit, push, deployment, historical-event backfill, unrelated schema change or production mutation is included.
+
+
+## Unavailable-owner Account reassignment v1 — 2026-10-19
+
+The existing `account-owner-inactive` URL now supports the same bounded bulk workflow as unowned Accounts. The business label is **Accounts assigned to unavailable owners**, with helper “These Accounts are still assigned to users who can no longer manage them” and empty state “No Accounts need owner reassignment for these filters.” Selection, search, paging, counts, record links, cancellation, and last-page clamping remain available. The existing unowned Account and open Opportunity predicates are unchanged.
+
+Submission rechecks the effective Admin's current User row and destination eligibility under shared User locks, locks selected Accounts in ID order, rechecks existence, active/unarchived status, unavailable-owner condition, displayed `updatedAt`, and current issue/search/page membership. The existing serializable transaction saves all Accounts and one Maintenance History event together; validation errors, serialization conflicts, or failed history writes roll everything back. Account versions advance using `nextUpdatedAt`, protecting individual forms opened before reassignment. Contact versions/records are untouched and ownership continues to come from the Account.
+
+History stores `Reassign`, actor, timestamp, count, all selected Account IDs (at most 20), new-owner ID, and name snapshot; the display uses “Reassigned N Accounts to Name.” Existing unowned assignment retains `Assign owner` / “Assigned.” No migration, push, deployment, DigitalOcean changes, or production-data mutation is part of this extension.
+
+Files changed in this extension (paths relative to repository root):
+
+| Area | Files |
+| --- | --- |
+| Existing workflow/UI | `app/lib/data-quality.ts`, `app/lib/data-quality-bulk.ts`, `app/app/administration/data-quality/page.tsx`, `app/components/bulk-selection.tsx` |
+| History display | `app/lib/admin-audit.ts` |
+| Help | `app/lib/help/topics.ts` |
+| Focused tests | `app/tests/data-quality.test.mjs`, `app/tests/data-quality-bulk.test.mjs`, `app/e2e/data-quality-bulk.spec.ts`, `app/e2e/bulk-responsive.spec.ts` |
+| Documentation | `app/docs/bulk-actions.md`, `docs/data-quality-dashboard.md`, `CHANGELOG.md` |
+
+Validation uses Node 22.23.3 and only the disposable `saleshub_e2e_unavailable_owner` database on the existing local E2E service. During implementation validation, `release:check` was deferred until a clean commit; its separate release report records the validation of that commit. General Contact/Project reassignment and a separate unavailable-owner Opportunity bulk group remain deferred; the existing Opportunity cleanup is preserved.
+
+
+| Reassignment validation | Result |
+| --- | --- |
+| Lint / typecheck | Passed. |
+| Full unit suite | 1,390 passed; one existing skipped SQL fixture test. Includes Data Quality, bulk contract, eligibility, permissions/impersonation, stale-edit and Maintenance History. |
+| Data Quality bulk server/browser checks | All 38 checks passed across the corrected focused run and affected-case rerun: issue criteria, actual writes, counts, versions, permissions, restored owners, target deactivation, rollback after writes, owner snapshots, search, paging and layouts. |
+| Existing regression suites | 52 passed: Data Quality dashboard (3), bulk actions (7), Maintenance/Audit History (9), Help (16), stale edits/concurrency (17). |
+| Final responsive/affected-case run | 24 passed: 20 touch-enabled workflow tests across phone, portrait/landscape tablets and desktop, plus the issue-criteria case and three 1024px checks. Includes real reassignment and visible Maintenance History at every responsive size. Screenshots reviewed at 390, 768, 1024 and 1440 pixels. |
+| Production build | `npm run build -- --webpack` passed: compilation, TypeScript, page generation and traces. |
+| `git diff --check` | Passed. |
+
+Initial archived-user fixtures were corrected to satisfy the existing archive/inactive constraints. One browser check affected by concurrent Prisma regeneration was rerun after separating generation/build and browser validation. No application workaround or configuration change was introduced. Sandbox subprocess restrictions required running the unit suite, production compiler and local browser/database checks with execution approval. Task-owned logs, screenshots/reports and the disposable database were cleaned afterward; generated framework edits were restored.

@@ -54,26 +54,30 @@ for (const kind of ['tasks', 'cases'] as const) {
   });
 }
 
-for (const issue of ['account-owner', 'opportunity-owner'] as const) {
+for (const issue of ['account-owner', 'account-owner-inactive', 'opportunity-owner'] as const) {
   test(`Data Quality ${issue} touch selection and assignment fit the viewport`, async ({ page }, info) => {
     const name = uniqueName('E2E responsive owner cleanup');
     const owner = await db.user.findUniqueOrThrow({ where: { email: emails.sales } });
     const stage = await db.salesStage.findFirstOrThrow({ where: { isClosed: false } });
+    const former = issue === 'account-owner-inactive' ? await db.user.create({ data: { email: `${name.replaceAll(' ', '')}@example.test`, firstName: 'Former', lastName: 'Rep', active: false, role: 'SALES' } }) : null;
     for (let i = 0; i < 2; i++) {
-      if (issue === 'account-owner') await db.account.create({ data: { name: `${name} ${i}` } });
+      if (issue !== 'opportunity-owner') await db.account.create({ data: { name: `${name} ${i}`, ownerId: former?.id } });
       else await db.opportunity.create({ data: { name: `${name} ${i}`, stageId: stage.id } });
     }
     await signInAs(page, 'admin');
     await page.goto(`/administration/data-quality?issue=${issue}&q=${encodeURIComponent(name)}`);
     const select = page.getByRole('checkbox', { name: 'Select eligible records on this page' });
     expect((await select.locator('..').boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    await select.check();
+    if (issue === 'account-owner-inactive') {
+      await page.getByRole('checkbox', { name: `Select ${name} 0`, exact: true }).check();
+      await page.getByRole('checkbox', { name: `Select ${name} 1`, exact: true }).check();
+    } else await select.check();
     await expect(page.getByText('2 selected', { exact: true })).toBeVisible();
     await page.getByLabel('New owner', { exact: true }).selectOption(String(owner.id));
     const bar = await page.getByLabel('Bulk actions', { exact: true }).boundingBox();
     expect(bar!.x).toBeGreaterThanOrEqual(0);
     expect(bar!.x + bar!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-    await page.getByRole('button', { name: 'Assign owner', exact: true }).click();
+    await page.getByRole('button', { name: issue === 'account-owner-inactive' ? 'Reassign owner' : 'Assign owner', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Confirm bulk update' });
     await expect(dialog).toContainText(`${owner.firstName} ${owner.lastName}`);
     const box = await dialog.boundingBox();
@@ -82,8 +86,15 @@ for (const issue of ['account-owner', 'opportunity-owner'] as const) {
     await page.screenshot({ path: info.outputPath(`quality-${issue}-confirm.png`) });
     await dialog.getByRole('button', { name: 'Confirm 2 updates' }).click();
     await expect(dialog).not.toBeVisible();
-    await expect(page.getByRole('status').filter({ hasText: 'assigned successfully' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: /(?:re)?assigned successfully/ })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Open record', exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    if (issue === 'account-owner-inactive') {
+      const event = await db.adminMaintenanceEvent.findFirstOrThrow({ where: { entityType: 'Account', action: 'Reassign', recordIds: { has: (await db.account.findFirstOrThrow({ where: { name: `${name} 0` } })).id } } });
+      expect(event).toMatchObject({ newOwnerId: owner.id, newOwnerName: `${owner.firstName} ${owner.lastName}`, recordCount: 2 });
+      await page.goto('/administration/maintenance-history?entity=Account&action=Reassign');
+      const entry = page.locator('article').filter({ has: page.getByRole('link', { name: `Open record #${event.recordIds[0]}`, exact: true }) });
+      await expect(entry).toContainText(`Reassigned 2 Accounts to ${owner.firstName} ${owner.lastName}`);
+    }
   });
 }
