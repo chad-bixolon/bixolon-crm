@@ -1,4 +1,8 @@
-import { RecoverableActionForm } from '@/components/recoverable-action-form';
+import { TradeShowBulkRoutingForm } from '@/components/trade-show-bulk-routing-form';
+import { TradeShowFollowUpTask } from '@/components/trade-show-follow-up-task';
+import { eventLeadWhere } from '@/lib/trade-show-event-leads';
+import { pageNumber } from '@/lib/crm-validation';
+import { currentFollowUpTasks } from '@/lib/trade-show-queue';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -10,9 +14,10 @@ import { saveFeedbackMessage } from '@/lib/save-feedback';
 import { prisma } from '@/lib/prisma';
 import { currentUser } from '@/lib/current-user';
 import { can } from '@/lib/authorization';
-import { canViewTradeShowImportHistory, tradeShowKpis, tradeShowLeadReadWhere, tradeShowReadWhere } from '@/lib/trade-shows';
+import { canViewTradeShowImportHistory, tradeShowReadWhere } from '@/lib/trade-shows';
 import { tradeShowTimezoneLabel } from '@/lib/trade-show-timezones';
-import { defaultReportConfiguration, executeTradeShowReport } from '@/lib/reporting';
+import { tradeShowEventSummary } from '@/lib/trade-show-event-summary';
+import { canViewTradeShowFollowUpQueue } from '@/lib/trade-show-queue';
 import { bulkRouteTradeShowAction } from './bulk-routing-actions';
 import { TradeShowBulkRoutingControls } from '@/components/trade-show-bulk-routing-controls';
 import { TradeShowResources } from '@/components/trade-show-resources';
@@ -31,32 +36,37 @@ const leadStatusClasses: Record<string, string> = {
 const leadStatusLabels: Record<TradeShowLeadStatus, string> = { NEW: 'New', CONTACTED: 'Contacted', QUALIFIED: 'Qualified', CONVERTED: 'Converted', DISQUALIFIED: 'Disqualified' };
 const routingLabels:Record<TradeShowLeadRouting,string>={UNREVIEWED:'Unreviewed',BIXOLON_SALES:'BIXOLON Sales',REFERRED_TO_PARTNER:'Partner',MARKETING_FOLLOW_UP:'Marketing'};
 const sourceFormatLabels: Record<TradeShowImportFormat, string> = { NRA_NRF: 'NRA / NRF', XPRESSLEADS_MODEX: 'MODEX / XPressLeads', CUSTOM_MAPPING: 'Custom mapping' };
-export default async function TradeShowPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{q?:string;rep?:string;status?:string;routing?:string;account?:string;contact?:string;followUp?:string;bulk?:string;saved?:string}> }) {
+export default async function TradeShowPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{q?:string;rep?:string;status?:string;routing?:string;account?:string;contact?:string;followUp?:string;bulk?:string;saved?:string;page?:string}> }) {
   const actor = await currentUser();
   const viewImportHistory = canViewTradeShowImportHistory(actor);
   const id = Number((await params).id);
   const filters = await searchParams;
   if (!Number.isSafeInteger(id) || id < 1) notFound();
-  const repId=Number(filters.rep); const statuses=['NEW','CONTACTED','QUALIFIED','CONVERTED','DISQUALIFIED'];
+  const statuses=['NEW','CONTACTED','QUALIFIED','CONVERTED','DISQUALIFIED'];
   const routings=['UNREVIEWED','BIXOLON_SALES','REFERRED_TO_PARTNER','MARKETING_FOLLOW_UP'];
-  const leadFilter={AND:[tradeShowLeadReadWhere(actor),...(filters.q?[{OR:[{firstName:{contains:filters.q,mode:'insensitive' as const}},{lastName:{contains:filters.q,mode:'insensitive' as const}},{sourceCompany:{contains:filters.q,mode:'insensitive' as const}},{email:{contains:filters.q,mode:'insensitive' as const}}]}]:[]),...(Number.isSafeInteger(repId)&&repId>0?[{assignedSalesRepUserId:repId}]:[]),...(filters.status&&statuses.includes(filters.status)?[{status:filters.status as 'NEW'|'CONTACTED'|'QUALIFIED'|'CONVERTED'|'DISQUALIFIED'}]:[]),...(filters.routing&&routings.includes(filters.routing)?[{routing:filters.routing as TradeShowLeadRouting}]:[]),...(filters.account==='unresolved'?[{accountId:null}]:[]),...(filters.contact==='unresolved'?[{contactId:null}]:filters.contact==='linked'?[{contactId:{not:null}}]:[]),...(filters.followUp==='overdue'?[{routing:'BIXOLON_SALES' as const,followUpAt:{lt:new Date()}}]:filters.followUp==='scheduled'?[{routing:'BIXOLON_SALES' as const,followUpAt:{not:null}}]:filters.followUp==='none'?[{routing:'BIXOLON_SALES' as const,followUpAt:null}]:[])]};
-  const [show,reps] = await Promise.all([prisma.tradeShow.findFirst({
+  const leadFilter = eventLeadWhere(actor, filters);
+  const count = await prisma.tradeShowLead.count({ where: { tradeShowId: id, ...leadFilter } });
+  const { page, pages } = pageNumber(filters.page, count);
+  const [showRecord,reps] = await Promise.all([prisma.tradeShow.findFirst({
     where: { AND: [{ id }, tradeShowReadWhere(actor)] },
     include: {
       marketingOwner: { select: { firstName: true, lastName: true } },
       resourceLinks: { orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] },
-      leads: { where: leadFilter, select: { id: true, firstName: true, lastName: true, title: true, sourceCompany: true, email: true, phone: true, followUpAt: true, assignedSalesRepUserId: true, status: true,routing:true,routedPartnerAccount:{select:{name:true}}, assignedSalesRep: { select: { firstName: true, lastName: true } }, account:{select:{name:true}},contact:{select:{firstName:true,lastName:true}},convertedOpportunity:{select:{id:true}} }, orderBy: { id: 'desc' }, take: 100 },
+      leads: { where: leadFilter, select: { id: true, updatedAt: true, accountId: true, contactId: true,  firstName: true, lastName: true, title: true, sourceCompany: true, email: true, phone: true, followUpAt: true, assignedSalesRepUserId: true, status: true,routing:true,routedPartnerAccount:{select:{name:true}}, assignedSalesRep: { select: { firstName: true, lastName: true } }, account:{select:{name:true}},contact:{select:{firstName:true,lastName:true}},convertedOpportunity:{select:{id:true}} }, orderBy: { id: 'desc' }, skip: (page - 1) * 20, take: 20 },
       imports: { where: viewImportHistory ? {} : { id: -1 }, select: { id: true, format:true, mappingName:true, sourceFileName: true, sourceSheet: true, fileSha256:true, uploadedAt: true, rowCount: true, createdCount: true, existingCount: true, skippedCount: true,uploadedBy:{select:{firstName:true,lastName:true}} }, orderBy: { uploadedAt: 'desc' }, take: 20 },
     },
   }),prisma.user.findMany({where:{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true,firstName:true,lastName:true},orderBy:{firstName:'asc'}})]);
-  if (!show) notFound();
-  const [kpiRows,report] = await Promise.all([prisma.tradeShowLead.findMany({ where: { AND: [{ tradeShowId: id }, tradeShowLeadReadWhere(actor)] }, select: { assignedSalesRepUserId: true, status: true,routing:true,contactId:true } }),executeTradeShowReport(prisma,actor,{...defaultReportConfiguration('TRADE_SHOW'),filters:[{field:'tradeShowId',operator:'eq',value:id}]})]);
-  const kpi = tradeShowKpis(kpiRows);
-  const conversionRate=kpi.total?Math.round(kpi.converted/kpi.total*1000)/10:null;
-  const opportunities=report.summary.amounts.reduce((total,item)=>total+item.opportunityCount,0);
-  const contactsResolved=kpiRows.filter(lead=>lead.contactId!==null).length,contactsUnresolved=kpiRows.length-contactsResolved;
+  if (!showRecord) notFound();
+  const tasks = await currentFollowUpTasks(prisma, showRecord.leads.map(lead => lead.id));
+  const show = { ...showRecord, leads: showRecord.leads.map(lead => ({ ...lead, followUpTasks: tasks.filter(task => task.tradeShowLeadId === lead.id) })) };
+  const kpi = await tradeShowEventSummary(prisma, actor, id);
+  const conversionRate = kpi.total ? Math.round(kpi.converted / kpi.total * 1000) / 10 : null;
+  const opportunities = kpi.amounts.reduce((total, item) => total + item.opportunityCount, 0);
+  const contactsResolved = kpi.contactsResolved, contactsUnresolved = kpi.total - contactsResolved;
   const date = (value: Date | null) => value ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(value) : '—';
   const dateTime = (value: Date) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }).format(value);
+  const linkFor = (target: number) => { const q = new URLSearchParams(); Object.entries(filters).forEach(([key, value]) => { if (value && key !== 'page' && key !== 'bulk') q.set(key, value); }); q.set('page', String(target)); return `/trade-shows/${id}?${q}`; };
+  const bulkEnabled = !show.archivedAt && can(actor, 'trade-shows.assign') && can(actor, 'trade-shows.route');
   const saveMessage = saveFeedbackMessage(filters.saved, 'Trade Show');
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.marketing} title={show.name} description={undefined} action={<div className="page-header-actions"><Link className="btn-secondary" href="/trade-shows">All Trade Shows</Link>{can(actor, 'trade-shows.manage') && !show.archivedAt && <><Link className="btn-secondary" href={`/trade-shows/${id}/import`}>Import Leads</Link><Link className="btn-primary" href={`/trade-shows/${id}/edit`}>Edit Trade Show</Link></>}</div>}/>
     {saveMessage && <SaveSuccess message={saveMessage}/>}
@@ -67,11 +77,11 @@ export default async function TradeShowPage({ params, searchParams }: { params: 
     </div>
     <section className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">{Object.entries({ 'Total Leads': kpi.total, Assigned: kpi.assigned, Contacted: kpi.contacted, Qualified: kpi.qualified, Converted: kpi.converted, 'Conversion Rate': conversionRate===null?'—':`${conversionRate}%`, Opportunities:opportunities }).map(([label, value]) => <div className="panel p-4" key={label}><p className="text-xs font-semibold uppercase text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold">{value}</p></div>)}</section>
     <section className="mb-5 flex flex-wrap gap-x-6 gap-y-2 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm">{(['BIXOLON_SALES','REFERRED_TO_PARTNER','MARKETING_FOLLOW_UP','UNREVIEWED'] as TradeShowLeadRouting[]).map(routing=><span key={routing}><strong>{routingLabels[routing]}:</strong> {kpi.routing[routing]}</span>)}</section>
-    <section className="panel mb-5 flex flex-wrap items-center justify-between gap-3 p-4"><div><h2 className="font-semibold">Contact Resolution</h2><p className="mt-1 text-sm text-slate-600">{contactsResolved} / {kpiRows.length} linked · {contactsUnresolved} need Contact resolution</p></div><Link className={canManageContactResolution(actor)?'btn-primary':'btn-secondary'} href={`/trade-shows/${id}/contact-resolution`}>{canManageContactResolution(actor)?`Review ${contactsUnresolved} Lead${contactsUnresolved===1?'':'s'}`:'View Contact Resolution'}</Link></section>
-    <section className="panel mb-5 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Attributed sales outcomes</h2><p className="mt-1 text-sm text-slate-600">Only Opportunities explicitly created from this Trade Show&apos;s leads are included.</p></div><Link className="btn-secondary" href={`/reports/trade-shows?configured=1&tradeShowId=${id}&groupBy=tradeShow`}>View Trade Show Report</Link></div>{report.summary.amounts.length?<div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{report.summary.amounts.flatMap(item=>[['Pipeline',item.pipeline],['Weighted Pipeline',item.weightedPipeline],['Closed Won',item.closedWonValue]].map(([label,value])=><div className="rounded-md border border-slate-200 p-3" key={`${item.currency}-${label}`}><p className="text-xs font-semibold uppercase text-slate-500">{label} · {item.currency}</p><p className="mt-1 font-semibold tabular-nums">{formatCurrency(Number(value),item.currency,true)}</p></div>))}</div>:<p className="mt-4 text-sm text-slate-500">No attributed Opportunity value yet.</p>}</section>
+    <section className="panel mb-5 flex flex-wrap items-center justify-between gap-3 p-4"><div><h2 className="font-semibold">Contact Resolution</h2><p className="mt-1 text-sm text-slate-600">{contactsResolved} / {kpi.total} linked · {contactsUnresolved} need Contact resolution</p></div><Link className={canManageContactResolution(actor)?'btn-primary':'btn-secondary'} href={`/trade-shows/${id}/contact-resolution`}>{canManageContactResolution(actor)?`Review ${contactsUnresolved} Lead${contactsUnresolved===1?'':'s'}`:'View Contact Resolution'}</Link></section>
+    <section className="panel mb-5 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Attributed sales outcomes</h2><p className="mt-1 text-sm text-slate-600">Only Opportunities explicitly created from this Trade Show&apos;s leads are included.</p></div><Link className="btn-secondary" href={`/reports/trade-shows?configured=1&tradeShowId=${id}&groupBy=tradeShow`}>View Trade Show Report</Link></div>{kpi.amounts.length?<div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{kpi.amounts.flatMap(item=>[['Pipeline',item.pipeline],['Weighted Pipeline',item.weightedPipeline],['Closed Won',item.closedWonValue]].map(([label,value])=><div className="rounded-md border border-slate-200 p-3" key={`${item.currency}-${label}`}><p className="text-xs font-semibold uppercase text-slate-500">{String(label)} · {item.currency}</p><p className="mt-1 font-semibold tabular-nums">{formatCurrency(Number(value),item.currency,true)}</p></div>))}</div>:<p className="mt-4 text-sm text-slate-500">No attributed Opportunity value yet.</p>}</section>
     <section className="panel mb-5 min-w-0 max-w-full">
       <div className="p-5">
-        <h2 className="text-lg font-semibold">Leads</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Leads</h2>{canViewTradeShowFollowUpQueue(actor) && <Link className="btn-secondary" href={`/trade-shows/my-leads?tradeShowId=${id}&view=all`}>Follow-Up Queue</Link>}</div>
         <p className="mt-1 text-sm text-slate-600">Captured leads and their follow-up outcomes.</p>
         <form className="filter-panel mt-4 rounded-md border" method="get" aria-label="Filter Trade Show leads">
           <div className="filter-grid">
@@ -81,12 +91,12 @@ export default async function TradeShowPage({ params, searchParams }: { params: 
             <div><label className="label" htmlFor="lead-routing">Routing</label><select className="field filter-control" id="lead-routing" name="routing" defaultValue={filters.routing??''}><option value="">All routing</option>{routings.map(routing=><option key={routing} value={routing}>{routingLabels[routing as TradeShowLeadRouting]}</option>)}</select></div>
             <div><label className="label" htmlFor="lead-account">Account</label><select className="field filter-control" id="lead-account" name="account" defaultValue={filters.account??''}><option value="">All accounts</option><option value="unresolved">Not linked</option></select></div>
             <div><label className="label" htmlFor="lead-contact">Contact Resolution</label><select className="field filter-control" id="lead-contact" name="contact" defaultValue={filters.contact??''}><option value="">All</option><option value="linked">Linked</option><option value="unresolved">Needs Resolution</option></select></div>
-            <div><label className="label" htmlFor="lead-follow-up">Follow-Up</label><select className="field filter-control" id="lead-follow-up" name="followUp" defaultValue={filters.followUp??''}><option value="">All follow-ups</option><option value="overdue">Overdue</option><option value="scheduled">Scheduled</option><option value="none">None</option></select></div>
+            <div><label className="label" htmlFor="lead-follow-up">Lead follow-up date</label><select className="field filter-control" id="lead-follow-up" name="followUp" defaultValue={filters.followUp??''}><option value="">All follow-ups</option><option value="overdue">Overdue</option><option value="scheduled">Scheduled</option><option value="none">None</option></select></div>
           </div>
           <div className="filter-actions mt-3 justify-end"><button className="btn-filter-primary" type="submit">Filter</button><Link className="btn-filter-secondary" href={`/trade-shows/${id}`}>Clear</Link></div>
         </form>
       </div>
-      <RecoverableActionForm action={bulkRouteTradeShowAction.bind(null,id)}>{can(actor,'trade-shows.assign')&&can(actor,'trade-shows.route')&&<TradeShowBulkRoutingControls reps={reps.map(rep=>({id:rep.id,name:`${rep.firstName} ${rep.lastName}`}))}/>} {filters.bulk&&<p role={filters.bulk.startsWith('Error:')?'alert':'status'} className={`mx-5 mb-3 rounded p-3 text-sm ${filters.bulk.startsWith('Error:')?'bg-red-50 text-red-800':'bg-emerald-50 text-emerald-800'}`}>{filters.bulk}</p>}
+      <TradeShowBulkRoutingForm key={JSON.stringify([filters, show.leads.map(lead => lead.updatedAt)])} action={bulkRouteTradeShowAction.bind(null, id, show.leads.map(lead => ({ id: lead.id, updatedAt: lead.updatedAt.toISOString() })), { where: leadFilter, page })}>{bulkEnabled&&<TradeShowBulkRoutingControls reps={reps.map(rep=>({id:rep.id,name:`${rep.firstName} ${rep.lastName}`}))}/>} {filters.bulk&&<p role={filters.bulk.startsWith('Error:')?'alert':'status'} className={`mx-5 mb-3 rounded p-3 text-sm ${filters.bulk.startsWith('Error:')?'bg-red-50 text-red-800':'bg-emerald-50 text-emerald-800'}`}>{filters.bulk}</p>}
       <TableScroll label="Trade Show leads">
         <table className="w-full min-w-[960px] table-fixed text-left text-sm">
           <colgroup>{['17%','18%','19%','14%','11%','21%'].map((width,index)=><col key={index} style={{width}}/>)}</colgroup>
@@ -95,19 +105,20 @@ export default async function TradeShowPage({ params, searchParams }: { params: 
             const linkedCompany = lead.account?.name;
             const sourceCompanyDiffers = linkedCompany && lead.sourceCompany && linkedCompany.toLowerCase() !== lead.sourceCompany.toLowerCase();
             return <tr className="align-top even:bg-slate-50/60 hover:bg-orange-50/50 focus-within:bg-orange-50/50" key={lead.id}>
-              <td className="px-3 py-2.5">{can(actor,'trade-shows.assign')&&can(actor,'trade-shows.route')&&<label className="mr-2 inline-flex"><input aria-label={`Select ${lead.firstName} ${lead.lastName}`} type="checkbox" name="leadIds" value={lead.id}/></label>}<Link className="font-semibold text-orange-800 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600" href={`/trade-shows/${id}/leads/${lead.id}`}>{lead.firstName} {lead.lastName}</Link>{lead.title && <div className="mt-0.5 line-clamp-2 break-words text-xs leading-4 text-slate-500">{lead.title}</div>}</td>
+              <td className="px-3 py-2.5">{bulkEnabled&&<label className="mr-2 inline-flex"><input aria-label={`Select ${lead.firstName} ${lead.lastName}`} type="checkbox" name="leadIds" value={lead.id}/></label>}<Link className="font-semibold text-orange-800 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600" href={`/trade-shows/${id}/leads/${lead.id}`}>{lead.firstName} {lead.lastName}</Link>{lead.title && <div className="mt-0.5 line-clamp-2 break-words text-xs leading-4 text-slate-500">{lead.title}</div>}</td>
               <td className="px-3 py-2.5"><div className="line-clamp-3 break-words leading-5">{linkedCompany ?? lead.sourceCompany ?? '—'}</div>{sourceCompanyDiffers && <div className="mt-0.5 line-clamp-1 break-words text-xs leading-4 text-slate-500">Source: {lead.sourceCompany}</div>}</td>
               <td className="px-3 py-2.5"><div className="line-clamp-2 break-all leading-5">{lead.email??'—'}</div>{lead.phone && <div className="mt-0.5 break-words text-xs leading-4 text-slate-500">{lead.phone}</div>}</td>
               <td className="break-words px-3 py-2.5 leading-5">{lead.assignedSalesRep ? `${lead.assignedSalesRep.firstName} ${lead.assignedSalesRep.lastName}` : <span className="text-slate-500">Unassigned</span>}</td>
               <td className="px-3 py-2.5"><span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold leading-5 ${leadStatusClasses[lead.status] ?? 'bg-slate-100 text-slate-700'}`}>{leadStatusLabels[lead.status]}</span><div className="mt-1 text-[11px] font-semibold text-orange-800">{routingLabels[lead.routing]}{lead.routing==='REFERRED_TO_PARTNER'&&lead.routedPartnerAccount?` · ${lead.routedPartnerAccount.name}`:''}</div></td>
-              <td className="px-3 py-2.5 text-xs leading-5"><div className="break-words"><span className="font-semibold text-slate-600">Account:</span> {lead.account?.name??<span className="text-amber-700">Not linked</span>}</div><div className="break-words"><span className="font-semibold text-slate-600">Contact:</span> {lead.contact?`${lead.contact.firstName} ${lead.contact.lastName}`:<span className="text-amber-700">Not linked</span>}</div><div><span className="font-semibold text-slate-600">Follow-Up:</span> {lead.followUpAt ? date(lead.followUpAt) : '—'}</div>{lead.convertedOpportunity && <div>{can(actor, 'sales.read') ? <Link className="font-semibold text-orange-800 underline underline-offset-2" href={`/opportunities/${lead.convertedOpportunity.id}`}>Converted Opportunity</Link> : <span className="font-semibold text-emerald-700">Converted</span>}</div>}</td>
+              <td className="px-3 py-2.5 text-xs leading-5"><div className="break-words"><span className="font-semibold text-slate-600">Account:</span> {lead.account && can(actor, 'accounts.read') ? <Link className="text-orange-800 underline" href={`/accounts/${lead.accountId}`}>{lead.account.name}</Link> : lead.account?.name??<span className="text-amber-700">Not linked</span>}</div><div className="break-words"><span className="font-semibold text-slate-600">Contact:</span> {lead.contact && can(actor, 'contacts.read') ? <Link className="text-orange-800 underline" href={`/contacts/${lead.contactId}`}>{lead.contact.firstName} {lead.contact.lastName}</Link> : <span className="text-amber-700">Not linked</span>}</div><div><span className="font-semibold text-slate-600">Lead follow-up:</span> {lead.followUpAt ? date(lead.followUpAt) : '—'}</div><div className="mt-2 border-t pt-2"><TradeShowFollowUpTask task={lead.followUpTasks[0]}/></div>{lead.convertedOpportunity && <div>{can(actor, 'opportunities.read') ? <Link className="font-semibold text-orange-800 underline underline-offset-2" href={`/opportunities/${lead.convertedOpportunity.id}`}>Converted Opportunity</Link> : <span className="font-semibold text-emerald-700">Converted</span>}</div>}</td>
             </tr>;
           })}</tbody>
         </table>
       </TableScroll>
-      </RecoverableActionForm>
+      </TradeShowBulkRoutingForm>
       {!show.leads.length && <p className="p-8 text-center text-sm text-slate-500">No leads match these filters.</p>}
     </section>
+    <div className="mb-5 flex flex-wrap justify-between gap-3 text-sm"><span>{count} leads · Page {page} of {pages}</span><div className="flex gap-2">{page > 1 && <Link className="btn-secondary" href={linkFor(page - 1)}>Previous</Link>}{page < pages && <Link className="btn-secondary" href={linkFor(page + 1)}>Next</Link>}</div></div>
     {viewImportHistory && <section className="panel p-5"><h2 className="text-lg font-semibold">Import History</h2>{show.imports.length ? <ul className="mt-3 divide-y">{show.imports.map(item => <li className="min-w-0 py-3 text-sm" key={item.id}><strong className="block break-all text-slate-900">{item.sourceFileName}</strong><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-slate-600"><span>{sourceFormatLabels[item.format]}</span>{item.mappingName&&<span>Mapping: {item.mappingName}</span>}<span>Sheet: {item.sourceSheet}</span><span>Uploaded by {item.uploadedBy.firstName} {item.uploadedBy.lastName}</span><span>{dateTime(item.uploadedAt)}</span></div><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-slate-500"><span>{item.rowCount} rows</span><span>{item.createdCount} new</span><span>{item.existingCount} existing</span><span>{item.skippedCount} skipped</span></div></li>)}</ul> : <p className="mt-3 text-sm text-slate-500">No confirmed imports yet.</p>}</section>}
   </Content>;
 }

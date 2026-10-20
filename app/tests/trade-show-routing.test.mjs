@@ -46,20 +46,21 @@ test('role authorization permits managers and own-lead Sales routing but keeps R
 });
 
 test('individual assignment and bulk routing create follow-up Tasks through their transactions',async()=>{
-  const base={id:2,tradeShowId:1,routing:'UNREVIEWED',assignedSalesRepUserId:null,referredAt:null,routedPartnerAccountId:null,convertedOpportunityId:null,accountId:null,contactId:null,competitorId:null,firstName:'Jane',lastName:'Smith',sourceCompany:'Acme',email:null,productInterest:null};
+  const base={updatedAt:new Date('2026-10-19T12:00:00Z'),id:2,tradeShowId:1,routing:'UNREVIEWED',assignedSalesRepUserId:null,referredAt:null,routedPartnerAccountId:null,convertedOpportunityId:null,accountId:null,contactId:null,competitorId:null,firstName:'Jane',lastName:'Smith',sourceCompany:'Acme',email:null,productInterest:null};
   for(const mode of ['individual','bulk']){
     let stored={...base,tradeShow:{archivedAt:null}},created=null;
     const tx={
-      user:{findFirst:async()=>({id:8})},
+      user:{findFirst:async()=>({id:8}),findUnique:async()=>actor('ADMIN')},
+      $queryRaw:async()=>[],adminMaintenanceEvent:{create:async()=>({})},
       tradeShow:{findUnique:async()=>({name:'NRF',archivedAt:null})},
-      tradeShowLead:{findFirst:async()=>stored,findMany:async()=>[stored],update:async({data})=>(stored={...stored,...data})},
+      tradeShowLead:{count:async()=>1,findFirst:async()=>stored,findMany:async()=>[stored],update:async({data})=>(stored={...stored,...data})},
       task:{findFirst:async()=>null,create:async({data})=>(created={id:10,...data})},
       taskAssignmentEvent:{create:async()=>({})},
       account:{findFirst:async()=>null},contact:{findFirst:async()=>null},competitorOption:{findFirst:async()=>null},
     };
     const now=new Date();const client={systemSetting:{findUnique:async()=>({value:5})},$transaction:async callback=>callback(tx)};
     if(mode==='individual')await leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','BIXOLON_SALES'],['assignedSalesRepUserId','8']]),actor('ADMIN'));
-    else await routing.bulkRouteTradeShowLeads(client,1,[2],'BIXOLON_SALES',8,null,null,actor('ADMIN'));
+    else await routing.bulkRouteTradeShowLeads(client,1,{records:[{id:2,updatedAt:base.updatedAt.toISOString()}],confirmed:true,action:'route',value:''},'BIXOLON_SALES',8,null,null,actor('ADMIN'),{where:{},page:1});
     assert.equal(created.assignedToId,8);assert.equal(created.tradeShowLeadId,2);assert.equal(created.source,'TRADE_SHOW_LEAD_FOLLOW_UP');assert.equal(created.dueDate.toISOString(),followUp.followUpDueDate(now,5).toISOString());
   }
 });
@@ -90,13 +91,14 @@ test('individual partner referral records actor/time and later rerouting preserv
 });
 
 test('bulk routing validates once, updates every selected lead, and enforces manager-level access',async()=>{
-  const rows=[{id:1,routing:'UNREVIEWED'},{id:2,routing:'UNREVIEWED'}],updates=[];
-  const tx={tradeShow:{findUnique:async()=>({archivedAt:null})},tradeShowLead:{findMany:async()=>rows.map(row=>({...row,referredAt:null})),update:async({where,data})=>updates.push({id:where.id,...data})},user:{findFirst:async({where})=>where.id===9?{id:9}:null},account:{findFirst:async({where})=>where.id===20?{id:20}:null}};
+  const rows=[{id:1,routing:'UNREVIEWED',updatedAt:new Date('2026-10-19T12:00:00Z')},{id:2,routing:'UNREVIEWED',updatedAt:new Date('2026-10-19T12:00:00Z')}],updates=[];
+  const req=ids=>({records:rows.filter(row=>ids.includes(row.id)).map(row=>({id:row.id,updatedAt:row.updatedAt.toISOString()})),confirmed:true,action:'route',value:''});
+  const tx={$queryRaw:async()=>[],adminMaintenanceEvent:{create:async()=>({})},tradeShow:{findUnique:async()=>({archivedAt:null})},tradeShowLead:{count:async()=>2,findMany:async()=>rows.map(row=>({...row,referredAt:null})),update:async({where,data})=>updates.push({id:where.id,...data})},user:{findUnique:async()=>actor('SALES_MANAGER'),findFirst:async({where})=>where.id===9?{id:9}:null},account:{findFirst:async({where})=>where.id===20?{id:20}:null}};
   const client={$transaction:async callback=>callback(tx)};
-  assert.equal(await routing.bulkRouteTradeShowLeads(client,1,[1,2],'REFERRED_TO_PARTNER',null,20,'BlueStar',actor('SALES_MANAGER')),2);
+  assert.equal(await routing.bulkRouteTradeShowLeads(client,1,req([1,2]),'REFERRED_TO_PARTNER',null,20,'BlueStar',actor('SALES_MANAGER'),{where:{},page:1}),2);
   assert.equal(updates.length,2);assert.ok(updates.every(item=>item.routing==='REFERRED_TO_PARTNER'&&item.routedPartnerAccountId===20&&item.referredByUserId===7));
-  await assert.rejects(routing.bulkRouteTradeShowLeads(client,1,[1],'UNREVIEWED',null,null,null,actor('SALES')),/Access denied/);
-  await assert.rejects(routing.bulkRouteTradeShowLeads(client,1,[1],'UNREVIEWED',null,null,null,actor('READ_ONLY')),/Access denied/);
+  await assert.rejects(routing.bulkRouteTradeShowLeads(client,1,req([1]),'UNREVIEWED',null,null,null,actor('SALES'),{where:{},page:1}),/Access denied/);
+  await assert.rejects(routing.bulkRouteTradeShowLeads(client,1,req([1]),'UNREVIEWED',null,null,null,actor('READ_ONLY'),{where:{},page:1}),/Access denied/);
 });
 
 test('migration defaults existing leads to Unreviewed and enforces required current-route references',()=>{

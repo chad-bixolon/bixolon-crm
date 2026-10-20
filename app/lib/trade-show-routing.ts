@@ -1,4 +1,10 @@
-import { AccountBusinessRoleCode, TradeShowLeadRouting, type Prisma, type PrismaClient } from '@prisma/client';
+import { recordMaintenance } from './admin-maintenance';
+import { validateBulkRequest, type BulkRequest } from './bulk-action-contract';
+import { assertVersions } from './bulk-actions';
+import { nextUpdatedAt } from './stale-edit';
+import { pageNumber } from './crm-validation';
+import { tradeShowLeadReadWhere } from './trade-shows';
+import { AccountBusinessRoleCode, TradeShowLeadRouting, Prisma, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { syncTradeShowFollowUp } from './trade-show-follow-up';
 import { tradeShowFollowUpBusinessDays } from './configuration';
@@ -46,16 +52,46 @@ export function referralData(routing: TradeShowLeadRouting, priorRouting: TradeS
       : {};
 }
 
-export async function bulkRouteTradeShowLeads(client:PrismaClient,tradeShowId:number,leadIds:number[],routing:TradeShowLeadRouting,repId:number|null,partnerAccountId:number|null,notes:string|null,actor:Actor){
-  if(!can(actor,'trade-shows.assign')||!can(actor,'trade-shows.route'))throw new Error('Access denied');
-  const ids=[...new Set(leadIds)];if(!ids.length)throw new Error('Select at least one lead.');
-  const businessDays=await tradeShowFollowUpBusinessDays(client);
-  return client.$transaction(async tx=>{
-    const show=await tx.tradeShow.findUnique({where:{id:tradeShowId},select:{archivedAt:true}});if(!show||show.archivedAt)throw new Error('Trade Show not found or archived.');
-    const leads=await tx.tradeShowLead.findMany({where:{tradeShowId,id:{in:ids}},select:{id:true,tradeShowId:true,routing:true,assignedSalesRepUserId:true,referredAt:true,firstName:true,lastName:true,sourceCompany:true,email:true,productInterest:true,accountId:true,contactId:true}});
-    if(leads.length!==ids.length)throw new Error('One or more selected leads are unavailable.');
-    await validateTradeShowRouting(tx,routing,repId,partnerAccountId);
-    for(const lead of leads){const updated=await tx.tradeShowLead.update({where:{id:lead.id},data:{routing,assignedSalesRepUserId:repId,...(routing==='REFERRED_TO_PARTNER'?{routedPartnerAccountId:partnerAccountId}:{}),...referralData(routing,lead.routing,actor.id,notes,lead.referredAt)}});await syncTradeShowFollowUp(tx,lead,updated,actor.id,new Date(),businessDays);}
+export type TradeShowRoutingScope = { where: Prisma.TradeShowLeadWhereInput; page: number };
+export async function bulkRouteTradeShowLeads(client: PrismaClient, tradeShowId: number, request: BulkRequest, routing: TradeShowLeadRouting, repId: number | null, partnerAccountId: number | null, notes: string | null, actor: Actor, scope: TradeShowRoutingScope) {
+  if (!can(actor, 'trade-shows.assign') || !can(actor, 'trade-shows.route')) throw new Error('Access denied');
+  const ids = validateBulkRequest(request);
+  if (request.action !== 'route' || !TRADE_SHOW_ROUTINGS.includes(routing) || !scope || !Number.isSafeInteger(scope.page) || scope.page < 1) throw new Error('Refresh the page and select again.');
+  for (const id of [tradeShowId, repId, partnerAccountId]) if (id !== null && (!Number.isSafeInteger(id) || id < 1)) throw new Error('Choose a valid routing destination.');
+  if (notes && notes.length > 20000) throw new Error('Referral notes must be 20,000 characters or fewer.');
+  const businessDays = await tradeShowFollowUpBusinessDays(client);
+  return client.$transaction(async tx => {
+    // Hold effective permission, destination eligibility and event state through commit.
+    const users = [...new Set([actor.id, ...(repId ? [repId] : [])])].sort((a, b) => a - b);
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id IN (${Prisma.join(users)}) ORDER BY id FOR SHARE`);
+    const currentActor = await tx.user.findUnique({ where: { id: actor.id } });
+    if (!currentActor || !can(currentActor, 'trade-shows.assign') || !can(currentActor, 'trade-shows.route')) throw new Error('Access denied');
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM "TradeShow" WHERE id = ${tradeShowId} FOR SHARE`);
+    const show = await tx.tradeShow.findUnique({ where: { id: tradeShowId }, select: { archivedAt: true } });
+    if (!show || show.archivedAt) throw new Error('Trade Show not found or archived.');
+    if (partnerAccountId) {
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM "Account" WHERE id = ${partnerAccountId} FOR SHARE`);
+      await tx.$queryRaw(Prisma.sql`SELECT "accountId" FROM "AccountBusinessRole" WHERE "accountId" = ${partnerAccountId} ORDER BY role FOR SHARE`);
+    }
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM "TradeShowLead" WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR UPDATE`);
+    const where = { AND: [{ tradeShowId }, tradeShowLeadReadWhere(currentActor), scope.where] };
+    const count = await tx.tradeShowLead.count({ where });
+    const { page } = pageNumber(String(scope.page), count);
+    const visible = await tx.tradeShowLead.findMany({ where, select: { id: true }, orderBy: { id: 'desc' }, skip: (page - 1) * 20, take: 20 });
+    if (page !== scope.page || ids.some(id => !visible.some(row => row.id === id))) throw new Error('The current page changed. No records changed. Refresh the list and select again.');
+    const leads = await tx.tradeShowLead.findMany({ where: { AND: [{ tradeShowId, id: { in: ids } }, tradeShowLeadReadWhere(currentActor)] }, orderBy: { id: 'asc' } });
+    assertVersions(leads, request);
+    await validateTradeShowRouting(tx, routing, repId, partnerAccountId);
+    if (leads.some(lead => lead.convertedOpportunityId && repId !== lead.assignedSalesRepUserId)) throw new Error('Converted lead ownership cannot be changed.');
+    for (const lead of leads) {
+      const updated = await tx.tradeShowLead.update({ where: { id: lead.id, updatedAt: lead.updatedAt }, data: {
+        updatedAt: nextUpdatedAt(lead.updatedAt), routing, assignedSalesRepUserId: repId,
+        ...(routing === 'REFERRED_TO_PARTNER' ? { routedPartnerAccountId: partnerAccountId } : {}),
+        ...referralData(routing, lead.routing, actor.id, notes, lead.referredAt),
+      } });
+      await syncTradeShowFollowUp(tx, lead, updated, actor.id, new Date(), businessDays);
+    }
+    await recordMaintenance(tx, actor.id, 'Trade Show Lead', 'Bulk routing', ids);
     return leads.length;
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 });
 }

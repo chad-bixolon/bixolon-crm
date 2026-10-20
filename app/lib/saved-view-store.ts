@@ -12,6 +12,10 @@ export async function visibleSavedQuery(route: SavedViewRoute, state: unknown, a
     const account = await prisma.account.findFirst({ where: { id: Number(query.accountId), archivedAt: null }, select: { id: true } });
     if (!account) { delete query.accountId; omitted.push('Account'); }
   }
+  if (query.tradeShowId) {
+    const show = await prisma.tradeShow.findFirst({ where: { id: Number(query.tradeShowId), archivedAt: null }, select: { id: true } });
+    if (!show) { delete query.tradeShowId; omitted.push('Trade Show'); }
+  }
   if (query.projectId && /^\d+$/.test(query.projectId)) {
     const project = await prisma.project.findFirst({ where: { AND: [{ id: Number(query.projectId) }, projectReadWhere(actor)] }, select: { id: true } });
     if (!project) { delete query.projectId; omitted.push('Project'); }

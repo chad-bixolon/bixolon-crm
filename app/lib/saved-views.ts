@@ -7,6 +7,7 @@ export const savedViewRoutes = {
   contacts: { path: '/contacts', keys: ['q','active','accountId','salesRepId','marketingPreference','title','primary','assignment','sort','dir'] },
   opportunities: { path: '/opportunities', keys: ['currencyCode','q','stageId','competitorId','ownerId','forecastCategory','closePeriod','closeFrom','closeTo','accountId','projectId','archived'] },
   tasks: { path: '/tasks', keys: ['q','visibility','status','priority','assignedToId','accountId','opportunityId','duePeriod','dueFrom','dueTo'] },
+  'trade-show-follow-up': { path: '/trade-shows/my-leads', keys: ['view','q','status','tradeShowId','ownerId','assignedToId','mine','taskStatus','duePeriod','dueFrom','dueTo'] },
   projects: { path: '/projects', keys: ['q','status','ownerId','accountId','archived'] },
   'price-exceptions': { path: '/price-exceptions', keys: ['q','status','distributor','varName','endUser','expiration','unresolved','salesRep'] },
   demos: { path: '/demos', keys: ['q','status'] },
@@ -20,11 +21,12 @@ export const savedViewRoutes = {
 export type SavedViewRoute = keyof typeof savedViewRoutes;
 export type SavedQuery = Record<string, string>;
 const defaults: Record<string, SavedQuery> = { tasks: { visibility: 'active' }, 'price-exceptions': { expiration: 'all' }, 'support-cases': { archive: 'active', sort: 'current' }, 'calendar-matches': { status: 'review' } };
-const idKeys = new Set(['accountId','projectId','opportunityId','ownerId','assignedToId','salesRepId','stageId','competitorId','categoryId']);
+const idKeys = new Set(['accountId','projectId','opportunityId','ownerId','assignedToId','salesRepId','stageId','competitorId','categoryId','tradeShowId']);
 const dateKeys = new Set(['closeFrom','closeTo','dueFrom','dueTo','openedFrom','openedTo','from','to']);
 
 export function isSavedViewRoute(value: string): value is SavedViewRoute { return Object.hasOwn(savedViewRoutes, value); }
 export function canUseSavedViews(actor: Actor, route: SavedViewRoute) {
+  if (route === 'trade-show-follow-up' && !['ADMIN','SALES_MANAGER','SALES','MARKETING_MANAGER'].includes(actor.role)) return false;
   if (route === 'demos' && actor.role !== 'ADMIN') return false;
   const permission = permissionForPath(savedViewRoutes[route].path);
   return !!permission && can(actor, permission);
@@ -50,7 +52,7 @@ export function normalizeSavedQuery(route: SavedViewRoute, input: unknown): Save
     if (period) output.closePeriod = period;
     if (period !== 'custom') { delete output.closeFrom; delete output.closeTo; }
   }
-  if (route === 'tasks') {
+  if (route === 'tasks' || route === 'trade-show-follow-up') {
     // Store only the meaning of a relative period. Never resolve it to dates.
     // Legacy absolute views keep their original shape and dates.
     if (record.duePeriod === '' || output.duePeriod && output.duePeriod !== 'custom') {

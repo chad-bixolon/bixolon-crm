@@ -7,7 +7,7 @@ const subscribe = () => () => {};
 const ready = () => true;
 const serverReady = () => false;
 
-export function TaskDuePeriod({ initial }: { initial: TaskDuePeriodInput }) {
+export function TaskDuePeriod({ initial, label = 'Due date' }: { initial: TaskDuePeriodInput; label?: string }) {
   // A native select can otherwise change before its React handler is attached,
   // leaving the selected period and the conditional custom inputs out of sync.
   const hydrated = useSyncExternalStore(subscribe, ready, serverReady);
@@ -20,7 +20,7 @@ export function TaskDuePeriod({ initial }: { initial: TaskDuePeriodInput }) {
     : period === 'this-week' ? 'Monday through Sunday of this week in Eastern time.' : '';
   return <>
     <div>
-      <label className="label" htmlFor="duePeriod">Due date</label>
+      <label className="label" htmlFor="duePeriod">{label}</label>
       <select className="field filter-control" id="duePeriod" name="duePeriod" value={period} disabled={!hydrated} aria-describedby={description ? 'due-period-help' : undefined} onChange={event => {
         const value = event.target.value;
         setPeriod(value);

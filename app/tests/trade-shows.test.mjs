@@ -85,7 +85,9 @@ test('Sales can read every Trade Show event while lead data stays assigned-rep s
   assert.deepEqual(shows.tradeShowLeadReadWhere(actor('SALES')), { assignedSalesRepUserId: 7 });
   assert.match(list, /leads: \{ where: tradeShowLeadReadWhere\(actor\)/);
   assert.match(detail, /leads: \{ where: leadFilter/);
-  assert.match(detail, /tradeShowLeadReadWhere\(actor\)/);
+  const eventFilters = fs.readFileSync(path.join(root, 'lib/trade-show-event-leads.ts'), 'utf8');
+  assert.match(detail, /eventLeadWhere\(actor, filters\)/);
+  assert.match(eventFilters, /tradeShowLeadReadWhere\(actor\)/);
   assert.match(resolution, /_count:\{select:\{leads:\{where:tradeShowLeadReadWhere\(actor\)\}\}\}/);
   assert.match(detail, /title=\{show\.name\}/);
   assert.match(detail, /tradeShowTimezoneLabel\(show\.timezone\)/);
@@ -130,7 +132,7 @@ test('Trade Show roles and row scopes preserve Marketing and Sales boundaries', 
   assert.equal(routeAccess('/trade-shows/my-leads', actor('SALES')), 'allowed');
   assert.equal(routeAccess('/trade-shows/my-leads', actor('SALES_MANAGER')), 'allowed');
   assert.equal(routeAccess('/trade-shows/my-leads', actor('ADMIN')), 'allowed');
-  assert.equal(routeAccess('/trade-shows/my-leads', actor('MARKETING_MANAGER')), 'denied');
+  assert.equal(routeAccess('/trade-shows/my-leads', actor('MARKETING_MANAGER')), 'allowed');
   assert.equal(routeAccess('/trade-shows/my-leads', actor('READ_ONLY')), 'denied');
 });
 test('My Trade Show Leads uses one actionable internal-sales assignment scope for the page and widget',()=>{

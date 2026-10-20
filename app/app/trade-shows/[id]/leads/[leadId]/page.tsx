@@ -42,7 +42,7 @@ export default async function TradeShowLeadPage({ params, searchParams }: { para
   const leadSource = await prisma.leadSourceOption.findUnique({ where: { id: lead.leadSourceId ?? -1 }, select: { name: true } });
   const followUpTask = await prisma.task.findFirst({ where: { tradeShowLeadId: lead.id, source: 'TRADE_SHOW_LEAD_FOLLOW_UP' }, orderBy: { id: 'desc' }, select: { id: true, status: true, dueDate: true } });
   const when = (value: Date | null) => value ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }).format(value) : '—';
-  const canLinkOpportunity = can(actor, 'sales.read') && (actor.role !== 'SALES' || lead.convertedOpportunity?.ownerId === actor.id);
+  const canLinkOpportunity = can(actor, 'opportunities.read');
   const canConvert = !lead.tradeShow.archivedAt && !lead.convertedOpportunityId && !!lead.accountId && (!lead.contactId || !!lead.contact?.active && !lead.contact.archivedAt) && canConvertTradeShowLead(actor, lead);
   const contactLabel = lead.contact ? `${lead.contact.firstName} ${lead.contact.lastName}${lead.contact.archivedAt ? ' · Archived' : !lead.contact.active ? ' · Inactive' : ''}` : null;
   const row = (label: string, value: React.ReactNode, fullWidth = false) => <div className={fullWidth ? 'min-w-0 sm:col-span-2' : 'min-w-0'}><dt className="label">{label}</dt><dd className="whitespace-pre-wrap break-words text-sm text-slate-800">{value || '—'}</dd></div>;
