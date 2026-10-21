@@ -1,10 +1,10 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient, type Task, type Note, type SupportCaseAttachment, type SupportCaseEmail } from '@prisma/client';
 import { supportEventFields, supportEventValue, supportHistoryItems, type SupportHistoryEvent } from './support-case-display';
 
 export type CaseTimelineItem = {
   key: string; at: Date; source: 'Case' | 'Activity' | 'Task' | 'Note' | 'Attachment' | 'Email';
   title: string; detail?: string; fullBody?: string; summary?: { label: string; value: string }[];
-  actor?: string; href?: string;
+  actor?: string; href?: string; noteHref?: string; unavailable?: string;
   kind?: 'Inbound Email' | 'Email Response Logged';
 };
 export type CaseHistoryView = { timeline: CaseTimelineItem[]; auditEvents: SupportHistoryEvent[]; auditTruncated: boolean };
@@ -45,7 +45,7 @@ function creationSummary(fields: readonly SupportHistoryEvent[], zone: string) {
   return summary;
 }
 
-export function classifySupportLifecycle(events: readonly SupportHistoryEvent[], caseCreatedAt: Date, zone: string): CaseTimelineItem[] {
+export function classifySupportLifecycle(events: readonly SupportHistoryEvent[], caseCreatedAt: Date, zone: string, includeFieldChanges = false): CaseTimelineItem[] {
   const grouped = supportHistoryItems(events, caseCreatedAt);
   const creation = grouped.find(item => item.kind === 'creation');
   const items: CaseTimelineItem[] = [];
@@ -90,6 +90,10 @@ export function classifySupportLifecycle(events: readonly SupportHistoryEvent[],
     } else if (event.field === 'archivedAt') {
       title = event.newValue ? 'Case archived' : 'Case restored';
     }
+    if (!title && includeFieldChanges) {
+      title = supportEventFields[event.field] ? `${supportEventFields[event.field]} changed` : 'Case updated';
+      detail = event.field.startsWith('TASK_') ? event.newLabel ? preview(event.newLabel, 240) : undefined : supportEventFields[event.field] ? `${preview(oldValue, 240)} → ${preview(newValue, 240)}` : undefined;
+    }
     if (title) items.push({ key: `history-${event.id}`, at: event.createdAt, source: 'Case', title, detail, actor: actorName(event) });
   }
   return items;
@@ -100,7 +104,7 @@ export async function caseHistoryView(db: PrismaClient, caseId: number, createdA
     db.supportCaseLifecycleEvent.findMany({ where: { supportCaseId: caseId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: LIMIT_AUDIT + 1, include: { actor: { select: { firstName: true, lastName: true } } } }),
     db.activity.findMany({ where: { supportCaseId: caseId, archivedAt: null }, orderBy: [{ activityDate: 'desc' }, { id: 'desc' }], take: LIMIT_PER_WORK_SOURCE, include: { activityType: { select: { name: true } }, user: { select: { firstName: true, lastName: true } }, contacts: { include: { contact: { select: { firstName: true, lastName: true } } } } } }),
     db.task.findMany({ where: { supportCaseId: caseId, archivedAt: null }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: LIMIT_PER_WORK_SOURCE, include: { assignedTo: { select: { firstName: true, lastName: true } } } }),
-    db.note.findMany({ where: { supportCaseId: caseId, archivedAt: null }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: LIMIT_PER_WORK_SOURCE, include: { createdBy: { select: { firstName: true, lastName: true } } } }),
+    caseNotePreviews(db, caseId),
     db.supportCaseAttachment.findMany({ where: { supportCaseId: caseId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: LIMIT_PER_WORK_SOURCE, include: { uploadedBy: { select: { firstName: true, lastName: true } }, deletedBy: { select: { firstName: true, lastName: true } } } }),
     includeEmail ? db.supportCaseEmail.findMany({ where: { supportCaseId: caseId }, orderBy: [{ messageDate: 'desc' }, { id: 'desc' }], take: LIMIT_PER_WORK_SOURCE }) : Promise.resolve([]),
   ]);
@@ -109,19 +113,44 @@ export async function caseHistoryView(db: PrismaClient, caseId: number, createdA
   const lifecycle = [...new Map([...initial, ...auditEvents].map(event => [event.id, event])).values()].sort((a, b) => a.id - b.id);
   const operational = classifySupportLifecycle(lifecycle, createdAt, zone);
   const activityItems: CaseTimelineItem[] = activities.map(supportActivityTimelineItem);
-  const taskItems: CaseTimelineItem[] = tasks.flatMap(row => {
-    const detail = [row.subject, row.dueDate ? `Due ${row.dueDate.toISOString().slice(0, 10)}` : null, row.assignedTo ? `Assigned to ${row.assignedTo.firstName} ${row.assignedTo.lastName}` : null].filter(Boolean).join(' · ');
-    const recordedCompletion = lifecycle.some(event => event.field === 'TASK_COMPLETED' && event.source === `TASK:${row.id}` && event.createdAt.getTime() === row.completedAt?.getTime());
-    return [{ key: `task-created-${row.id}`, at: row.createdAt, source: 'Task', title: 'Task created', detail, href: `/tasks/${row.id}` }, ...(row.completedAt && !recordedCompletion ? [{ key: `task-completed-${row.id}`, at: row.completedAt, source: 'Task' as const, title: 'Task completed', detail: row.subject, href: `/tasks/${row.id}` }] : [])];
-  });
-  const noteItems: CaseTimelineItem[] = notes.map(row => ({ key: `note-${row.id}`, at: row.createdAt, source: 'Note', title: 'Note added', detail: preview(row.body, 240), actor: row.createdBy ? `${row.createdBy.firstName} ${row.createdBy.lastName}` : undefined }));
-  const attachmentItems: CaseTimelineItem[] = attachments.flatMap(row => [
-    { key: `attachment-added-${row.id}`, at: row.createdAt, source: 'Attachment' as const, title: row.sourceGmailMessageId ? 'Email attachment imported' : 'Attachment added', detail: row.originalFileName, actor: `${row.uploadedBy.firstName} ${row.uploadedBy.lastName}` },
-    ...(row.deletedAt && row.deletedBy ? [{ key: `attachment-removed-${row.id}`, at: row.deletedAt, source: 'Attachment' as const, title: 'Attachment removed', detail: row.originalFileName, actor: `${row.deletedBy.firstName} ${row.deletedBy.lastName}` }] : []),
-  ]);
+  const taskItems = tasks.flatMap(row => supportTaskTimelineItems(row, lifecycle.some(event => event.field === 'TASK_COMPLETED' && event.source === `TASK:${row.id}` && event.createdAt.getTime() === row.completedAt?.getTime())));
+  const noteItems = notes.map(row => supportNoteTimelineItem(row, caseId));
+  const attachmentItems = attachments.flatMap(supportAttachmentTimelineItems);
   const origin = lifecycle.find(event => event.field === 'CREATED' && event.source.startsWith('EMAIL_ORIGIN:'))?.source.slice('EMAIL_ORIGIN:'.length);
-  const emailItems: CaseTimelineItem[] = emails.map(row => ({ key: `email-${row.id}`, at: row.messageDate, source: 'Email', kind: 'Inbound Email', title: `${origin === row.gmailMessageId ? 'Case originated from email' : 'Email received'} · ${row.subject}`, detail: `${row.senderEmail} · ${preview(row.bodyText || row.subject, 240)}`, fullBody: row.bodyText }));
+  const emailItems = emails.map(row => supportEmailTimelineItem(row, origin));
   const created = operational.find(item => item.title === 'Case created');
   const sorted = [...operational.filter(item => item !== created), ...activityItems, ...taskItems, ...noteItems, ...attachmentItems, ...emailItems].sort((a, b) => b.at.getTime() - a.at.getTime() || b.key.localeCompare(a.key));
   return { timeline: [...sorted.slice(0, LIMIT_TIMELINE - (created ? 1 : 0)), ...(created ? [created] : [])], auditEvents, auditTruncated: recent.length > LIMIT_AUDIT };
+}
+
+
+type Person = { firstName: string; lastName: string };
+type TimelineTask = Pick<Task, 'id' | 'subject' | 'createdAt' | 'completedAt' | 'dueDate'> & { assignedTo: Person | null };
+type TimelineNote = Pick<Note, 'id' | 'createdAt' | 'body'> & { createdBy: Person | null };
+type TimelineAttachment = Pick<SupportCaseAttachment, 'id' | 'createdAt' | 'deletedAt' | 'originalFileName' | 'sourceGmailMessageId'> & { uploadedBy: Person; deletedBy: Person | null };
+
+/** Project the preview in PostgreSQL: full Note bodies are loaded only on the read-only Note page. */
+export function caseNotePreviews(db: Pick<Prisma.TransactionClient, '$queryRaw'>, caseId: number, ids?: number[]) {
+  if (ids && !ids.length) return Promise.resolve([] as TimelineNote[]);
+  return db.$queryRaw<TimelineNote[]>(Prisma.sql`SELECT n.id, n."createdAt", left(n.body, 241) AS body,
+    CASE WHEN u.id IS NULL THEN NULL ELSE json_build_object('firstName', u."firstName", 'lastName', u."lastName") END AS "createdBy"
+    FROM "Note" n LEFT JOIN "User" u ON u.id = n."createdById"
+    WHERE n."supportCaseId" = ${caseId} AND n."archivedAt" IS NULL ${ids ? Prisma.sql`AND n.id IN (${Prisma.join(ids)})` : Prisma.empty}
+    ORDER BY n."createdAt" DESC, n.id DESC LIMIT ${ids ? ids.length : LIMIT_PER_WORK_SOURCE}`);
+}
+export function supportNoteTimelineItem(row: TimelineNote, caseId: number): CaseTimelineItem {
+  return { key: `note-${row.id}`, at: row.createdAt, source: 'Note', title: 'Note added', detail: preview(row.body, 240), actor: row.createdBy ? `${row.createdBy.firstName} ${row.createdBy.lastName}` : undefined, noteHref: `/support/cases/${caseId}/notes/${row.id}` };
+}
+export function supportTaskTimelineItems(row: TimelineTask, recordedCompletion: boolean): CaseTimelineItem[] {
+  const detail = [row.subject, row.dueDate ? `Due ${row.dueDate.toISOString().slice(0, 10)}` : null, row.assignedTo ? `Assigned to ${row.assignedTo.firstName} ${row.assignedTo.lastName}` : null].filter(Boolean).join(' · ');
+  return [{ key: `task-created-${row.id}`, at: row.createdAt, source: 'Task', title: 'Task created', detail, href: `/tasks/${row.id}` }, ...(row.completedAt && !recordedCompletion ? [{ key: `task-completed-${row.id}`, at: row.completedAt, source: 'Task' as const, title: 'Task completed', detail: row.subject, href: `/tasks/${row.id}` }] : [])];
+}
+export function supportAttachmentTimelineItems(row: TimelineAttachment): CaseTimelineItem[] {
+  return [
+    { key: `attachment-added-${row.id}`, at: row.createdAt, source: 'Attachment', title: row.sourceGmailMessageId ? 'Email attachment imported' : 'Attachment added', detail: row.originalFileName, actor: `${row.uploadedBy.firstName} ${row.uploadedBy.lastName}` },
+    ...(row.deletedAt && row.deletedBy ? [{ key: `attachment-removed-${row.id}`, at: row.deletedAt, source: 'Attachment' as const, title: 'Attachment removed', detail: row.originalFileName, actor: `${row.deletedBy.firstName} ${row.deletedBy.lastName}` }] : []),
+  ];
+}
+export function supportEmailTimelineItem(row: Pick<SupportCaseEmail, 'id' | 'messageDate' | 'gmailMessageId' | 'subject' | 'senderEmail' | 'bodyText'>, origin?: string): CaseTimelineItem {
+  return { key: `email-${row.id}`, at: row.messageDate, source: 'Email', kind: 'Inbound Email', title: `${origin === row.gmailMessageId ? 'Case originated from email' : 'Email received'} · ${row.subject}`, detail: `${row.senderEmail} · ${preview(row.bodyText || row.subject, 240)}`, fullBody: row.bodyText };
 }

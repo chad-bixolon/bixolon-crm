@@ -164,3 +164,52 @@ logs, panic logs, and the production Webpack validation cache were cleaned.
 No commit, push, deployment, Gmail connection, DigitalOcean change, or production
 data mutation was performed. No policy decision blocks v1; expanding Support
 reassignment or cross-linked Sales Task editing would require an owner policy.
+
+## Support History Retrieval v1
+
+The Case page keeps its existing collapsed recent timeline and audit sections: 40
+rows per work source, 80 recent audit rows, a 24-row creation lookup when needed,
+and at most 80 timeline entries. **Recent activity · Newest first** and
+**View older history** explain the distinction without expanding the initial view.
+The existing separate attachments and Case Tasks sections are unchanged.
+
+`/support/cases/[id]/history` pages the same stored timeline sources in PostgreSQL,
+25 entries at a time, newest first with a stable event-key tie-breaker. It includes
+field changes previously available only in the recent audit section. All, Notes,
+Tasks, Case changes, and Email activity filters use that same database query.
+Creation fields are grouped with their original event using the existing display
+helper; recorded Task completions suppress the legacy completion fallback across
+the entire Case, including across page boundaries. No history rows are written.
+A repeatable-read transaction keeps each request's count, page, and hydrated rows
+consistent. New events between requests can shift numbered pages.
+
+The query returns a count and at most 25 source keys before fetching their display
+records in batches. The initial creation lookup remains capped at 24 rows. Note
+previews use `left(body, 241)` in PostgreSQL, both in recent and older history;
+full Note bodies are not fetched for list rows. **View full note** opens the
+read-only `/support/cases/[id]/notes/[noteId]` view and preserves line breaks and
+spacing. Back to history retains the filter/page; Back to Case is always available.
+Note creation, editing, and archival rules are unchanged. Archived Notes remain
+excluded, as in the existing timeline; closed or archived *Cases* remain readable.
+
+Both new routes enforce `supportCaseReadWhere(actor, true)` with the effective
+actor. Support and Admin retain unlinked Case access; other current Case viewers
+retain their linked-Account requirement. There is no separate Support Manager
+role in the current role model. Note reads also check the persisted Case/Note
+relationship. Missing or moved historical Tasks and removed attachments have a
+neutral unavailable state. Active attachments use the existing authorized download
+endpoint; no storage keys are exposed. Stored email entries require no Gmail
+connection or request. This retrieves Case evidence already in SalesHub, not a
+complete mailbox or a newly synchronized email archive.
+
+Existing Case indexes support these queries. Counts and deep offsets can still
+scan/sort many event keys inside PostgreSQL; application memory stays bounded.
+Review plans and consider cursor paging or an owner-approved index change if a
+single Case exceeds 10,000 history entries or measured history latency exceeds
+500 ms at p95. No migration is part of v1.
+
+The isolated PostgreSQL query review used a Case with 1,000 Notes and requested
+page 20 of the Notes filter. The service returned 25 previews with six SELECTs
+in 28 ms; EXPLAIN ANALYZE returned 25 keys in 2.5 ms using existing Case indexes.
+This is a local sample, not a production latency guarantee. The integration test
+checks query bounds, preview projection, counts, and query count on every run.

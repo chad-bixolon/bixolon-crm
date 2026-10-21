@@ -171,6 +171,7 @@ test('timeline renders outbound attribution/time/summary/subject/recipient disti
   for (const text of ['Email Response Logged', 'Chad Guenther → Jane Smith', 'Sent updated firmware', 'Re: RFID setup', 'jane@example.test', '9:42']) assert.ok(html.includes(text), text);
   assert.doesNotMatch(html, /Outbound Email|Read full email|attachment|Send button/);
   const db = { supportCaseLifecycleEvent: { findMany: async () => [] }, activity: { findMany: async () => [activity] }, task: { findMany: async () => [] }, note: { findMany: async () => [] }, supportCaseAttachment: { findMany: async () => [] }, supportCaseEmail: { findMany: async () => [{ id: 8, messageDate: new Date('2026-10-09T12:00Z'), gmailMessageId: 'inbound', subject: 'RFID setup', senderEmail: 'jane@example.test', bodyText: 'Existing inbound content' }] } };
+  db.$queryRaw=async()=>[];
   assert.deepEqual((await caseHistoryView(db, 12, new Date('2026-10-09'), 'UTC', true)).timeline.map(entry => entry.kind), ['Email Response Logged', 'Inbound Email']);
   for (const [source, label] of [['Note', 'Note'], ['Task', 'Task'], ['Case', 'Case Update']]) assert.ok(renderToStaticMarkup(React.createElement(CaseTimelineEntry, { item: { key: source, at: new Date(), source, title: 'Test' }, zone: 'UTC' })).includes(label));
 });

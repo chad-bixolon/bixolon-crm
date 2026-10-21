@@ -93,7 +93,10 @@ for (const enabled of [false,true]) {
 test('timeline merges business labeled sources in time order and caps source queries',async()=>{
   const at=day=>new Date(`2026-10-${day}T12:00:00Z`), calls=[];
   const db={supportCaseLifecycleEvent:{findMany:async args=>(calls.push(args),[{id:1,supportCaseId:12,field:'CREATED',oldValue:null,newValue:null,oldLabel:null,newLabel:null,actorId:7,source:'CRM',createdAt:at('01'),actor:{firstName:'Sam',lastName:'Rep'}}])},activity:{findMany:async args=>(calls.push(args),[{id:2,activityDate:at('02'),subject:'Phone call',description:null,activityType:{name:'Call'},user:{firstName:'Sam',lastName:'Rep'},contacts:[]}])},task:{findMany:async args=>(calls.push(args),[{id:3,createdAt:at('03'),subject:'Send firmware',status:'COMPLETED',dueDate:at('04'),completedAt:at('04'),assignedTo:{firstName:'Sam',lastName:'Rep'}}])},note:{findMany:async args=>(calls.push(args),[{id:4,createdAt:at('05'),body:'Engineering reviewing logs',createdBy:{firstName:'Sam',lastName:'Rep'}}])},supportCaseAttachment:{findMany:async args=>(calls.push(args),[])}};
+  const noteQueries=[]; db.$queryRaw=async query=>(noteQueries.push(query),db.note.findMany({where:{supportCaseId:12,archivedAt:null},take:40}));
   const view=await caseHistoryView(db,12,at('01'),'UTC');
+  assert.match(noteQueries[0].sql,/left\(n.body, 241\)/);
+  assert.match(noteQueries[0].sql,/LIMIT/);
   const items=view.timeline;
   assert.deepEqual(items.map(item=>item.source),['Note','Task','Task','Activity','Case']);
   assert.equal(items[1].title,'Task completed');
@@ -155,6 +158,7 @@ test('older cases keep one creation entry while audit history stays bounded',asy
   const recent=Array.from({length:81},(_,index)=>({...base,id:200-index,field:'description',oldValue:'Before',newValue:'After',newLabel:null,createdAt:new Date(`2026-10-08T${String(23-Math.floor(index/60)).padStart(2,'0')}:${String(59-index%60).padStart(2,'0')}:00Z`)}));
   const calls=[];
   const db={supportCaseLifecycleEvent:{findMany:async args=>(calls.push(args),args.orderBy[0].createdAt==='asc'?initial:recent)},activity:{findMany:async()=>[]},task:{findMany:async()=>[]},note:{findMany:async()=>[]},supportCaseAttachment:{findMany:async()=>[]}};
+  db.$queryRaw=async()=>[];
   const view=await caseHistoryView(db,12,createdAt,'UTC');
   assert.equal(view.auditEvents.length,80);
   assert.equal(view.auditTruncated,true);
@@ -199,6 +203,7 @@ test('recorded Task completion appears once and remains after reopening, with bu
   const events=[{...base,id:1,field:'TASK_COMPLETED',source:'TASK:3',createdAt:at}];
   const task={id:3,createdAt:new Date('2026-10-18T12:00:00Z'),subject:'Check firmware',completedAt:at,dueDate:null,assignedTo:null};
   const db={supportCaseLifecycleEvent:{findMany:async()=>events},activity:{findMany:async()=>[]},task:{findMany:async()=>[task]},note:{findMany:async()=>[]},supportCaseAttachment:{findMany:async()=>[]}};
+  db.$queryRaw=async()=>[];
   let view=await caseHistoryView(db,12,new Date('2026-10-17T12:00:00Z'),'UTC');
   assert.equal(view.timeline.filter(item=>item.title==='Task completed').length,1);
   assert.equal(view.timeline.find(item=>item.title==='Task completed').actor,'Sam Support');

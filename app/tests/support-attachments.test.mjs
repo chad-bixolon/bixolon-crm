@@ -95,6 +95,7 @@ test('removal records actor and blocks subsequent downloads', async () => {
   assert.equal(f.calls.filter(call => call[0] === 'sign').length, 0);
   const viewDb = { ...f.db, supportCaseLifecycleEvent: { findMany: async () => [] }, activity: { findMany: async () => [] }, task: { findMany: async () => [] }, note: { findMany: async () => [] } };
   viewDb.supportCaseAttachment.findMany = async () => f.rows.map(row => ({ ...row, createdAt: new Date('2026-10-09T00:00:00Z'), uploadedBy: { firstName: 'E2E', lastName: 'support' }, deletedBy: { firstName: 'E2E', lastName: 'support' } }));
+  viewDb.$queryRaw=async()=>[];
   const history = await timeline.caseHistoryView(viewDb, 11, new Date('2026-10-09T00:00:00Z'), 'America/New_York');
   assert.deepEqual(history.timeline.filter(item => item.title === 'Attachment removed').map(item => ({ detail: item.detail, actor: item.actor })), [{ detail: 'sample.prn', actor: 'E2E support' }]);
   await service.removeSupportAttachment(f.db, f.storage, actor('SUPPORT'), 1);
