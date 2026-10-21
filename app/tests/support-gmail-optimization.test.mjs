@@ -268,3 +268,19 @@ test('the process-wide runtime recognizes typed provider errors from separately 
   await assert.rejects(runtime.request('mailbox',true,async()=>{calls++;return json({});},response=>throwSupportGmailHttpError(response,'read')), /rate limited/);
   assert.equal(calls,0);
 });
+
+test('triage views and counts reuse one bounded provider batch without additional Gmail requests', async () => {
+  const { inboxTriageState, inboxMatchesView, inboxTriageCounts } = require(path.join(root, 'lib/support-inbox-display.ts'));
+  const google = provider(50);
+  const mailbox = new gmail.GoogleGmailSupportMailbox(google.fetcher, new SupportGmailRuntime());
+  const messages = await mailbox.recent();
+  const calls = google.calls.length;
+  assert.equal(calls, 53);
+  const rows = messages.slice(1).map((message, index) => ({ message, ...inboxTriageState({ alreadyLinkedCaseId: index % 2 ? 1 : null, ambiguousContact: index % 3 === 0, suggestedCases: [], relatedCaseCount: 0 }) }));
+  const counts = inboxTriageCounts(rows);
+  for (const view of ['all', 'unlinked', 'needs-review']) assert.equal(rows.filter(row => inboxMatchesView(row, view)).length, counts[view]);
+  assert.equal(counts.all, 49); // A locally hidden message never expands the fetch.
+  assert.equal(google.calls.length, calls);
+  assert.equal(google.calls.filter(row => row.url.includes('messages?')).length, 1);
+  assert.match(google.calls.find(row => row.url.includes('messages?')).url, /maxResults=50/);
+});

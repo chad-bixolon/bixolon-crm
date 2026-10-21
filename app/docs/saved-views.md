@@ -2,7 +2,7 @@
 
 Saved Views are personal bookmarks for operational list filters. Saved Reports remain separate report definitions and output configurations.
 
-The supported routes are Accounts, Contacts, Opportunities, Tasks, Projects, Price Exceptions, Demos, Support Cases, Products, Campaigns, Pipeline, and Calendar Matches. Trade Shows is excluded because its list has only an active/archived tab, without a useful filter model.
+The supported routes are Accounts, Contacts, Opportunities, Tasks, Projects, Price Exceptions, Demos, Support Cases, Products, Campaigns, Pipeline, Calendar Matches, and the Trade Show Follow-Up Queue (`/trade-shows/my-leads`). The Trade Shows event list itself is excluded because it has only an active/archived tab. The follow-up queue saves event, owner, search, lead and Task status, and rolling due-period criteria.
 
 The JSON state contains only allowlisted URL query values for each route. Free-text Search is saved because it is a meaningful URL filter; temporary entity picker text is not. Deliberate sort choices are saved. Pagination page number, cursor, offset, page size, modal state, and filter disclosure state are excluded. Applying a view starts at the first page and uses the route's normal filter and permission logic.
 

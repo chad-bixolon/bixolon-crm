@@ -1,16 +1,29 @@
 # SalesHub Changelog
 
-## 2026-10-13 — Recent Items v1
-
-- Added a compact authenticated header history popover with current business labels, entity types, viewed timestamps, direct links and empty/loading/failure states. Keyboard focus, outside click and Escape follow shell conventions across phone, tablet and desktop.
-- Added per-user PostgreSQL history for Accounts, Contacts, Opportunities, Projects, Support Cases, Price Exceptions, Tasks and Activities. Actual record access updates one entry, persists across sessions/devices, and retains at most 50 records under concurrent visits. Reads recheck permissions and operational visibility and batch only the needed display fields.
-- Added a read-only Activity detail destination, documented deferred dashboard duplication and stale-reference eviction, and added unit/browser/database regression coverage. Forward-only migration: `20261013120000_recent_items`.
-
-This changelog summarizes committed, user-facing SalesHub work. Versions below are
+This changelog separates current working-tree changes from committed, user-facing
+SalesHub work. Versions below are
 retrospective release groupings, not historical Git tags or verified deployment
 boundaries. Dates are the dates of the last commits in each group.
 
+## Working tree — Support Inbox Triage & Documentation Quick Wins v1
+
+- Added visible configured Inbox scope, compact All/Unlinked/Needs Review views and counts over the current batch, and an older-mail Gmail link. View switching stays local; ignored messages remain separate. Updated concise Inbox Help and focused tests. No migration or provider strategy change.
+- Reconciled missing committed work below and corrected stale Saved Views, bulk-action and Administration documentation. This working-tree change has not been committed or deployed; earlier dated validation records remain historical evidence.
+
 ## Unreleased
+
+- Added Opportunity outcomes with Actual Close Date, configured Won/Lost reasons, optional notes, validated closure/reopen transitions and immutable outcome history. Legacy unknown dates remain explicit; Expected Close Date and historical snapshots retain their meaning.
+- Added Pipeline Movement Weekly Comparison and History & Outcomes, with weekly snapshot charts, reference-cohort outcomes, expected-versus-actual close timing, slippage detail, historical reason analysis and quarter comparisons. Missing captures and unsupported historical dimensions remain explicit; currencies remain separate.
+- Added company currency configuration, Admin currency management/default protection, simplified single-currency entry and reporting, and retained access to inactive historical currencies. No FX conversion or consolidated currency totals.
+- Added confirmed Admin Data Quality owner assignment for unowned Accounts and ownerless open Opportunities, with bounded current-page selection, atomic version checks and Maintenance History. Unavailable-owner Account reassignment is listed separately below.
+- Added stale-edit protection for shared Account, Opportunity, Task and Support Case forms, preserving entered values and offering a fresh-record recovery path. Extended displayed-version checks and confirmed mutation safety to Trade Show lead edits/routing and Price Exception maintenance.
+- Completed Support Case Notes and assigned/unassigned-created Case Task editing, completion and reopening with Case lifecycle evidence and existing Support authorization boundaries.
+- Improved the Trade Show Follow-Up Queue with linked Task status/due date/assignee, rolling due periods, personal Saved Views, event summaries and confirmed version-checked bulk routing. Lead metadata and Task completion remain independent.
+- Added Support History Retrieval: paginated stored Case history, source filters, bounded Note previews and full read-only Note pages. Existing Case permissions apply; history retrieval makes no Gmail requests. No migration.
+
+- Recent Items v1 (committed 2026-10-13): added a compact authenticated header history popover with current business labels, entity types, viewed timestamps, direct links and empty/loading/failure states. Keyboard focus, outside click and Escape follow shell conventions across phone, tablet and desktop.
+- Added per-user PostgreSQL history for Accounts, Contacts, Opportunities, Projects, Support Cases, Price Exceptions, Tasks and Activities. Actual record access updates one entry, persists across sessions/devices, and retains at most 50 records under concurrent visits. Reads recheck permissions and operational visibility and batch only the needed display fields.
+- Added a read-only Activity detail destination, documented deferred dashboard duplication and stale-reference eviction, and added unit/browser/database regression coverage. Forward-only migration: `20261013120000_recent_items`.
 
 - Added Opportunity list outcome filters for Open/Won/Lost, inclusive Actual Close Date ranges, and configured Outcome Reasons including inactive history. Personal Saved Views retain the new criteria; expected-date filters remain separate. Closed rows show recorded actual dates/reason labels, with unknown legacy dates explicit. No migration.
 

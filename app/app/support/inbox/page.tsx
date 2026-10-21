@@ -7,14 +7,15 @@ import { requirePermission } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { recentSupportMail, supportGmailEnabled, supportGmailFetchStatus, supportGmailLookbackDays, supportGmailMode, supportGmailMockMode, supportGmailTestFixtureMode } from '@/lib/support-gmail';
 import { connectionStatus, supportGmailClientConfigured } from '@/lib/support-gmail-connection';
-import { supportGmailEnvironmentIssue } from '@/lib/support-gmail-config';
+import { supportGmailEnvironmentIssue, SUPPORT_GMAIL_INBOX_LIMIT } from '@/lib/support-gmail-config';
 import { signEmailSource } from '@/lib/support-email-source';
 import { inboxMailboxIdentity, suggestSupportEmails } from '@/lib/support-email';
 import { connectSupportGmail, disconnectInboxGmail } from './actions';
 import { InboxMessageActions } from './message-actions';
 import { LocalFetchTime } from './local-fetch-time';
 import { InboxDisclosure } from './disclosure';
-import { inboxMatchSummary, inboxAttachmentLabel } from '@/lib/support-inbox-display';
+import { InboxTriage } from './triage';
+import { inboxMatchSummary, inboxAttachmentLabel, inboxTriageState } from '@/lib/support-inbox-display';
 import { trackIntegrationAttempt, gmailContext } from '@/lib/integration-attempts';
 
 export const dynamic = 'force-dynamic';
@@ -48,7 +49,7 @@ export default async function SupportInboxPage({ searchParams }: { searchParams:
             <div><dt className="inline font-medium">Access: </dt><dd className="inline">Gmail read-only</dd></div>
             <div><dt className="inline font-medium">Mode: </dt><dd className="inline">{mode}</dd></div>
             <div><dt className="inline font-medium">Window: </dt><dd className="inline">Showing messages from the last {lookback} days</dd></div>
-            <div><dt className="inline font-medium">Maximum inbox messages: </dt><dd className="inline">50</dd></div>
+            <div><dt className="inline font-medium">Maximum inbox messages: </dt><dd className="inline">{SUPPORT_GMAIL_INBOX_LIMIT}</dd></div>
             <div><dt className="inline font-medium">Last successful fetch: </dt><dd className="inline">{synced ? <LocalFetchTime iso={synced.toISOString()}/> : 'Not yet'}</dd></div>
             <div><dt className="inline font-medium">Last fetch result: </dt><dd className="inline">{fetch.result}</dd></div>
           </dl>
@@ -75,14 +76,13 @@ export default async function SupportInboxPage({ searchParams }: { searchParams:
   const threadCounts = new Map<string, number>();
   for (const message of messages) threadCounts.set(message.threadId, (threadCounts.get(message.threadId) ?? 0) + 1);
   return <Content>{heading}{connectionPanel()}
-    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-      <p>{rows.length} recent messages</p>
-      <Link className="rounded py-2 text-orange-800 underline focus-visible:outline-2 focus-visible:outline-orange-600" href={params.showIgnored === '1' ? '/support/inbox' : '/support/inbox?showIgnored=1'}>{params.showIgnored === '1' ? 'Hide ignored messages' : `Show ignored messages (${ignoredIds.size})`}</Link>
-    </div>
-    <div className="space-y-3">{rows.map(({ message, suggestion }) => {
+    <InboxTriage limit={SUPPORT_GMAIL_INBOX_LIMIT} lookbackDays={lookback} actions={<div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+      <a className="inline-flex min-h-11 items-center rounded py-2 text-orange-800 underline focus-visible:outline-2 focus-visible:outline-orange-600" href="https://mail.google.com/" target="_blank" rel="noopener noreferrer">Older messages in Gmail</a>
+      <Link className="inline-flex min-h-11 items-center rounded py-2 text-orange-800 underline focus-visible:outline-2 focus-visible:outline-orange-600" href={params.showIgnored === '1' ? '/support/inbox' : '/support/inbox?showIgnored=1'}>{params.showIgnored === '1' ? 'Hide ignored messages' : `Show ignored messages (${ignoredIds.size})`}</Link>
+    </div>} rows={rows.map(({ message, suggestion }) => {
       const match = inboxMatchSummary(suggestion);
       const attachments = inboxAttachmentLabel(message);
-      return <article className="panel p-4" key={message.id} aria-labelledby={`message-${message.id}`} data-message-state={suggestion.alreadyLinkedCaseId ? 'linked' : match.needsReview ? 'needs-review' : 'unhandled'}>
+      return { id: message.id, ...inboxTriageState(suggestion), content: <article className="panel p-4" key={message.id} aria-labelledby={`message-${message.id}`} data-message-state={suggestion.alreadyLinkedCaseId ? 'linked' : match.needsReview ? 'needs-review' : 'unhandled'}>
         <h2 id={`message-${message.id}`} className="break-words font-semibold text-slate-950">{message.subject}</h2>
         <div className="mt-1 flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">
           <p className="min-w-0 break-all text-slate-700">{message.senderName && <span className="font-medium">{message.senderName} </span>}&lt;{message.senderEmail}&gt;</p>
@@ -109,8 +109,8 @@ export default async function SupportInboxPage({ searchParams }: { searchParams:
           </div>
         </InboxDisclosure>
         <InboxMessageActions emailSource={signEmailSource(actor, message)} messageId={message.id} suggestedCases={suggestion.suggestedCases} linked={!!suggestion.alreadyLinkedCaseId}/>
-      </article>;
-    })}{!rows.length && <p className="panel p-5">No messages match this inbox view. Show ignored messages or check Gmail for older mail.</p>}</div>
+      </article> };
+    })}/>
     {params.showIgnored === '1' && <section className="mt-6 space-y-3" aria-label="Ignored messages"><h2 className="text-lg font-semibold">Ignored messages</h2>{ignored.map(message => <article className="panel p-4" key={message.id} data-message-state="ignored"><p className="break-words font-medium">{message.subject}</p><p className="break-all text-sm text-slate-600">{message.senderEmail}</p><InboxMessageActions emailSource={signEmailSource(actor, message)} messageId={message.id} suggestedCases={[]} ignored/></article>)}{!ignored.length && <p className="panel p-4 text-sm">No ignored messages in this recent window.</p>}</section>}
   </Content>;
 }

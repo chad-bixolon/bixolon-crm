@@ -22,7 +22,7 @@ The server accepts at most 20 unique positive IDs with displayed modification ti
 
 All mutations run in a serializable transaction, lock selected rows in ID order, and preserve the ordinary per-record history and notification behavior. Task and Case actions call their individual-save routines; Data Quality uses owner-only writes so unrelated fields stay untouched. Concurrent conflicts roll back and ask for a refresh/retry. Version checks and the client submission gate protect against duplicate submissions; repeated assignment/priority values do not duplicate assignment/lifecycle events. No external email is sent by these actions.
 
-Task changes preserve `completedAt`, `updatedById`, per-Task assignment events and in-app notifications. Tasks do not currently have field-by-field history for due dates or completion; bulk actions preserve the existing individual behavior. Cases retain ordinary per-field lifecycle events, human-readable assignment labels, acting-user attribution and in-app notifications. History and notifications roll back with the records if any save fails.
+Task changes preserve `completedAt`, `updatedById`, per-Task assignment events and in-app notifications. Case-linked Tasks also record completion, reopening and changed work fields (including due date) in Support Case lifecycle history. General Task field-by-field history remains deferred; bulk actions preserve the existing individual behavior. Cases retain ordinary per-field lifecycle events, human-readable assignment labels, acting-user attribution and in-app notifications. History and notifications roll back with the records if any save fails.
 
 After success, selection clears and list data refreshes in the same URL context. Filters, sorting, pagination and Saved Views remain intact; normal pagination clamping still applies if a filtered result shrinks. Records can move off the page or disappear from a filter after the requested field changes.
 
@@ -31,7 +31,7 @@ Selection, scope and version reads are batched; updates and their existing per-r
 ## Inventory and deliberately deferred actions
 
 - Price Exceptions already have specialized Admin preview/confirm corrections, archival, and import workflows. These remain the only PE bulk controls.
-- Trade Show leads already have bulk routing, assignment and specialized Contact resolution/creation. These workflows retain their own rules.
+- Trade Show leads already have bulk routing, assignment and specialized Contact resolution/creation. Routing uses current-page selection, displayed-version checks and explicit confirmation, with atomic rollback and Maintenance History; specialized Contact resolution retains its own rules.
 - Admin Data Quality supports confirmed owner assignment for Accounts without a sales owner, Accounts assigned to unavailable owners, and Open Opportunities without an owner. All other checks retain individual record links. See [Data Quality](../../docs/data-quality-dashboard.md).
 - Task bulk archive/restore is deferred: individual archive attribution is inconsistent with the richer archive model, and cleanup policy needs reconciliation before expanding it.
 - Case bulk status, resolve, close, archive and restore are deferred. Status changes can reopen work or require resolution details that deserve individual review.

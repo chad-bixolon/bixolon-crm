@@ -1,7 +1,7 @@
 import { supportGmailRuntime, gmailWorkflow, type SupportGmailRuntime } from './support-gmail-runtime';
 import { discoverGmailFiles, gmailParts, isFilePart, decodeGmailFile, type GmailPart, type SupportMailFile } from './support-gmail-files';
 import { connectedRefreshToken, verifyReadOnlyScope, recordSupportGmailFetch, supportGmailReadIdentity } from './support-gmail-connection';
-import { assertLiveSupportGmailEnvironment, assertSupportGmailEnabled, supportGmailMockMode, supportGmailTestFixtureMode, supportGmailLookbackDays } from './support-gmail-config';
+import { assertLiveSupportGmailEnvironment, assertSupportGmailEnabled, supportGmailMockMode, supportGmailTestFixtureMode, supportGmailLookbackDays, SUPPORT_GMAIL_INBOX_LIMIT } from './support-gmail-config';
 import { logSupportGmailReadFailure, throwSupportGmailHttpError, type SupportGmailReadStage } from './support-gmail-errors';
 export * from './support-gmail-config';
 export type SupportMailMessage = { id: string; threadId: string; senderEmail: string; senderName: string | null; recipients: string; subject: string; snippet: string; bodyText: string; messageDate: Date; sourceExcluded?: boolean; hasAttachments?: boolean; files?: SupportMailFile[] };
@@ -102,9 +102,9 @@ for (const kind of ['files', 'files-failure', 'files-unselected']) {
 const manualFileFixture = mockMessages.find(message => message.subject === 'POC intake manual request');
 if (manualFileFixture) { manualFileFixture.files = mockMessages.find(message => message.subject === 'POC intake files request')!.files!.slice(0, 2); manualFileFixture.hasAttachments = true; }
 export function withinLookback(date: Date, now = new Date(), days = 30) { return date.getTime() >= now.getTime() - days * 86400000; }
-export function recentMockMessages(now = new Date(), count = 50, days = 30) { return mockMessages.filter(message => withinLookback(message.messageDate, now, days)).sort((a, b) => b.messageDate.getTime() - a.messageDate.getTime()).slice(0, Math.min(count, 50)); }
+export function recentMockMessages(now = new Date(), count = SUPPORT_GMAIL_INBOX_LIMIT, days = 30) { return mockMessages.filter(message => withinLookback(message.messageDate, now, days)).sort((a, b) => b.messageDate.getTime() - a.messageDate.getTime()).slice(0, Math.min(count, SUPPORT_GMAIL_INBOX_LIMIT)); }
 export class MockGmailSupportMailbox implements GmailSupportMailbox {
-  async recent() { return recentMockMessages(new Date(), 50, supportGmailLookbackDays()); }
+  async recent() { return recentMockMessages(new Date(), SUPPORT_GMAIL_INBOX_LIMIT, supportGmailLookbackDays()); }
   async get(id: string) { return mockMessages.find(message => message.id === id) ?? null; }
   async attachment(messageId: string, partId: string) {
     const message = await this.get(messageId);
@@ -199,9 +199,9 @@ export class GoogleGmailSupportMailbox implements GmailSupportMailbox {
     const days = supportGmailLookbackDays();
     return this.read(`recent:${days}`, true, 10000, async (token, mailbox) => {
       const after = Math.floor((Date.now() - days * 86400000) / 1000) - 1;
-      const result = await this.gmail(`messages?maxResults=50&q=${encodeURIComponent(`after:${after} -in:spam -in:trash`)}`, token, mailbox) as { messages?: { id: string }[] };
+      const result = await this.gmail(`messages?maxResults=${SUPPORT_GMAIL_INBOX_LIMIT}&q=${encodeURIComponent(`after:${after} -in:spam -in:trash`)}`, token, mailbox) as { messages?: { id: string }[] };
       const rows: GmailMessage[] = [];
-      const ids = (result.messages ?? []).slice(0, 50);
+      const ids = (result.messages ?? []).slice(0, SUPPORT_GMAIL_INBOX_LIMIT);
       for (let index = 0; index < ids.length; index += 5) {
         // Drain all five reads before releasing the operation on failure.
         const batch = await Promise.allSettled(ids.slice(index, index + 5).map(row => this.gmail(`messages/${encodeURIComponent(row.id)}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject`, token, mailbox) as Promise<GmailMessage>));

@@ -1,5 +1,6 @@
 import { e2eAuthEnabled } from './e2e-auth';
 
+export const SUPPORT_GMAIL_INBOX_LIMIT = 50;
 export const SUPPORT_GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 export function supportGmailEnabled() { return process.env.SUPPORT_GMAIL_ENABLED === 'true'; }
 export function assertSupportGmailEnabled() { if (!supportGmailEnabled()) throw new Error('Support Gmail is disabled.'); }

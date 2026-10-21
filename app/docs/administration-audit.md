@@ -8,7 +8,7 @@ Administration remains a set of focused tools; no new primary sidebar module is 
 
 Ownership is optional in the current Account, Opportunity, Project and Task forms; a missing owner is not a new validation error. Contacts inherit Account ownership and have no independent owner. Data Quality retains its existing unowned Account/Opportunity review signals. No Contact ownership field or ownership requirement is introduced.
 
-Tasks and Support Cases offer confirmed reassignment on the current page through Bulk Actions (maximum 20). Existing services check versions, permissions, eligible assignees, ordinary form rules, parent relationships and business validation. One failure rolls back the full selection, per-record events, notifications and maintenance log together. Legacy records requiring corrections must use their individual forms. Accounts, Opportunities and Projects link to those forms; Contacts link to their Account's edit form. There is no new generic owner update endpoint.
+Tasks and Support Cases offer confirmed reassignment on the current page through Bulk Actions (maximum 20). Existing services check versions, permissions, eligible assignees, ordinary form rules, parent relationships and business validation. One failure rolls back the full selection, per-record events, notifications and maintenance log together. Legacy records requiring corrections must use their individual forms. Accounts, Opportunities and Projects link to those forms; Contacts link to their Account's edit form. Data Quality separately offers confirmed bulk owner correction for unowned/unavailable-owner Accounts and ownerless open Opportunities. There is no new generic owner update endpoint.
 
 ## System Health
 
@@ -26,7 +26,7 @@ Raw job result/error summaries are omitted. No credentials, tokens, keys, provid
 | --- | --- | --- |
 | OpportunityHistoryEvent and OpportunityHistoryArchive | Stage, value and currency, expected close date, owner, forecast category, probability, recorded relationships, archive/restore, creation | Baseline events do not imply changes before capture; archived data retains original context. Duplicate live/archive source IDs are not double counted. |
 | SupportCaseLifecycleEvent | Status, priority, assigned rep, creation and recorded archive state | Only curated fields; no descriptions or arbitrary lifecycle payloads. |
-| TaskAssignmentEvent | Previous/new assigned user and actor | No historical completion or due-date events exist. Names resolve against current users; deleted/missing references use an explicit fallback. |
+| TaskAssignmentEvent | Previous/new assigned user and actor | This source covers assignment only. Case-linked Task completion, reopening and work-field changes are recorded separately in Support Case lifecycle history. Names resolve against current users; deleted/missing references use an explicit fallback. |
 | PriceExceptionLifecycleEvent | Old/new lifecycle status | Existing PE tooling remains the full source. |
 | PriceExceptionFollowUpEvent | Changed follow-up status, owner and next follow-up date | Only curated JSON keys; notes/source metadata are excluded. General PE admin/source revisions remain in PE Cleanup. |
 | Account, Contact, Activity archive metadata | Current archive timestamp and archived-by actor, when preserved | Displayed as **Archived record**. Not an append-only lifecycle source; disappears after restore. Previous/new values are not inferred. |
@@ -43,6 +43,7 @@ Maintenance History now links to its Integration / Job History view. It extends 
 
 Supported writes are atomic with the operation:
 
+- Confirmed Data Quality Account/Opportunity owner corrections and Trade Show bulk routing.
 - Validated Task reassignment/completion/due-date bulk actions and Support reassignment/priority bulk actions, including authorized non-Admin operations.
 - Account, Contact, Activity and Task archive/restore; Contact activate/deactivate.
 - Existing confirmed PE Cleanup archive/expire/assignment/link actions, preserving their validation and existing per-record lifecycle events.
@@ -55,7 +56,7 @@ Migration `20261015210000_admin_maintenance_history` creates only this small led
 
 ## Deferred
 
-Full Account/Contact/Activity ownership or relationship timelines, restore-cycle reconstruction, Task completion/due-date events, general PE admin assignment/source-revision normalization, other import families, uninstrumented schedulers, and full expected-schema readiness checks. Existing module-specific revision/import tools remain authoritative for their preserved evidence. A generic all-model event log would need a separate design for capture, actor attribution, redaction, retention and transaction boundaries; v1 does not introduce one.
+Full Account/Contact/Activity ownership or relationship timelines, restore-cycle reconstruction, general Task completion/due-date history beyond Case-linked lifecycle evidence, general PE admin assignment/source-revision normalization, other import families, uninstrumented schedulers, and full expected-schema readiness checks. Existing module-specific revision/import tools remain authoritative for their preserved evidence. A generic all-model event log would need a separate design for capture, actor attribution, redaction, retention and transaction boundaries; v1 does not introduce one.
 
 ## Validation
 

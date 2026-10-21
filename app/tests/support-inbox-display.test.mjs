@@ -36,3 +36,36 @@ test('attachment badge counts visible file metadata including unavailable files,
   assert.equal(inboxAttachmentLabel({ files: [{ hiddenReason: null }, { hiddenReason: null, unavailableReason: 'Too large' }, { hiddenReason: 'Signature' }] }), '2 attachments');
   assert.equal(inboxAttachmentLabel({ files: [{ hiddenReason: 'Signature' }], hasAttachments: true }), 'Attachments');
 });
+
+const { inboxTriageState, inboxMatchesView, inboxTriageCounts, inboxScopeWording } = require('../lib/support-inbox-display.ts');
+const { SUPPORT_GMAIL_INBOX_LIMIT, supportGmailLookbackDays } = require('../lib/support-gmail-config.ts');
+
+test('triage uses persisted links and existing review flags; suggestions alone are not links', () => {
+  const rows = [empty, { ...empty, linkedThreadCaseId: 1, suggestedCases: [caseRow] }, { ...empty, ambiguousContact: true }, { ...empty, alreadyLinkedCaseId: 1, ambiguousContact: true }].map(inboxTriageState);
+  assert.deepEqual(rows, [{ unlinked: true, needsReview: false }, { unlinked: true, needsReview: false }, { unlinked: true, needsReview: true }, { unlinked: false, needsReview: false }]);
+  assert.deepEqual(rows.filter(row => inboxMatchesView(row, 'all')), rows);
+  assert.equal(rows.filter(row => inboxMatchesView(row, 'unlinked')).length, 3);
+  assert.deepEqual(rows.filter(row => inboxMatchesView(row, 'needs-review')), [rows[2]]);
+  assert.deepEqual(inboxTriageCounts(rows), { all: 4, unlinked: 3, 'needs-review': 1 });
+  assert.deepEqual(inboxTriageCounts([]), { all: 0, unlinked: 0, 'needs-review': 0 });
+  for (const flag of [{ threadConflict: true }, { caseReferenceConflict: true }, { multipleCaseReferences: true }, { ambiguousContact: true }, { relatedCaseCount: 2 }]) {
+    assert.equal(inboxTriageState({ ...empty, ...flag }).needsReview, true);
+    assert.equal(inboxTriageState({ ...empty, ...flag, alreadyLinkedCaseId: 1 }).needsReview, false);
+  }
+});
+
+test('scope reflects configured lookback and shared cap even when ignored or filtered messages reduce the display', () => {
+  const previous = process.env.SUPPORT_GMAIL_INITIAL_LOOKBACK_DAYS;
+  try {
+    for (const days of [1, 20, 30, 365]) {
+      process.env.SUPPORT_GMAIL_INITIAL_LOOKBACK_DAYS = String(days);
+      for (const shown of [0, 1, 3, 18, SUPPORT_GMAIL_INBOX_LIMIT]) {
+        assert.equal(inboxScopeWording(shown, SUPPORT_GMAIL_INBOX_LIMIT, supportGmailLookbackDays()), `${shown} message${shown === 1 ? '' : 's'} shown · Up to 50 messages from the last ${days} day${days === 1 ? '' : 's'}`);
+      }
+    }
+    assert.equal(inboxScopeWording(3, 25, 7), '3 messages shown · Up to 25 messages from the last 7 days');
+  } finally {
+    if (previous === undefined) delete process.env.SUPPORT_GMAIL_INITIAL_LOOKBACK_DAYS;
+    else process.env.SUPPORT_GMAIL_INITIAL_LOOKBACK_DAYS = previous;
+  }
+});

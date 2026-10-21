@@ -79,7 +79,8 @@ test('compact queue, Manage, matching and case-link disclosures fit phone, table
     await expect(page.getByRole('article').getByRole('checkbox')).toHaveCount(0);
     await expect(email.getByRole('link', { name: 'Create Case', exact: true })).toBeVisible();
     const first = await page.getByRole('article').first().boundingBox();
-    expect(first!.y).toBeLessThan(width === 390 ? 430 : 340);
+    // Keep the first message close to the compact triage/scope controls.
+    expect(first!.y).toBeLessThan(width === 390 ? 580 : 410);
     await page.screenshot({ path: testInfo.outputPath(`inbox-${width}.png`), fullPage: false, caret: 'initial' });
 
     await manage.focus();

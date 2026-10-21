@@ -21,3 +21,28 @@ export function inboxAttachmentLabel(message: Pick<SupportMailMessage, 'files' |
   if (count) return `${count} attachment${count === 1 ? '' : 's'}`;
   return message.hasAttachments ? 'Attachments' : null;
 }
+
+export type InboxTriageState = { unlinked: boolean; needsReview: boolean };
+export type InboxTriageView = 'all' | 'unlinked' | 'needs-review';
+export const inboxTriageViews = [
+  { id: 'all', label: 'All' },
+  { id: 'unlinked', label: 'Unlinked' },
+  { id: 'needs-review', label: 'Needs Review' },
+] as const;
+
+export function inboxTriageState(suggestion: Suggestion): InboxTriageState {
+  const unlinked = !suggestion.alreadyLinkedCaseId;
+  return { unlinked, needsReview: unlinked && inboxMatchSummary(suggestion).needsReview };
+}
+
+export function inboxMatchesView(row: InboxTriageState, view: InboxTriageView) {
+  return view === 'all' || (view === 'unlinked' ? row.unlinked : row.needsReview);
+}
+
+export function inboxTriageCounts(rows: readonly InboxTriageState[]) {
+  return { all: rows.length, unlinked: rows.filter(row => row.unlinked).length, 'needs-review': rows.filter(row => row.needsReview).length };
+}
+
+export function inboxScopeWording(shown: number, limit: number, lookbackDays: number) {
+  return `${shown} message${shown === 1 ? '' : 's'} shown · Up to ${limit} messages from the last ${lookbackDays} day${lookbackDays === 1 ? '' : 's'}`;
+}
