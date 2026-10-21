@@ -1,4 +1,5 @@
 'use client';
+import { RecordChangedNotice } from './record-changed-notice';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useActionState, useEffect, useState } from 'react';
@@ -10,6 +11,7 @@ import { EntityPicker, type PickerResult } from './entity-picker';
 
 type Option = { id: number; name: string };
 type Lead = {
+  updatedAt: Date;
   status: TradeShowLeadStatus; followUpAt: Date | null; lastContactedAt: Date | null; salesNotes: string | null;
   productInterest: string | null; competitorSourceText: string | null; competitorId: number | null;
   currentProductBeingUsed: string | null; customerPainPoints: string | null;
@@ -29,6 +31,7 @@ export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, currentR
   tradeShowId: number; leadId: number; initial: Lead; reps: Option[]; currentRep?: string|null; partnerAccounts:Option[]; accounts: Option[]; contacts: (Option & { accountId: number | null; context: string })[]; competitors: Option[]; canAssign: boolean; canResolve: boolean; canRoute:boolean;
 }) {
   const router = useRouter();
+  const [editToken] = useState(initial.updatedAt.toISOString());
   const [state, action, pending] = useActionState(submitTradeShowLead.bind(null, tradeShowId, leadId), { errors: {} } as TradeShowLeadFormState);
   const guard = useSubmitGuard(state, action);
   const [routing,setRouting]=useState<TradeShowLeadRouting>((state.values?.routing as TradeShowLeadRouting|undefined)??initial.routing);
@@ -43,7 +46,9 @@ export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, currentR
   const textarea = (key: string, label: string, current: string | null, limit: number, rows = 3) => <div className="min-w-0"><label className="label" htmlFor={key}>{label}</label><textarea className="field min-h-20 resize-y" rows={rows} id={key} name={key} maxLength={limit} defaultValue={val(key, current ?? '')}/>{error(key)}</div>;
   const select = (key: string, label: string, current: number | null, options: Option[], emptyLabel: string, inactiveLabel: string) => <div className="min-w-0"><label className="label" htmlFor={key}>{label}</label><select className="field min-w-0" id={key} name={key} defaultValue={val(key, current?.toString() ?? '')}><option value="">{emptyLabel}</option>{current && !options.some(option => option.id === current) && <optgroup label="Current assignment"><option value={current}>{inactiveLabel}</option></optgroup>}{options.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select>{error(key)}</div>;
   return <>{createdRecord&&<SaveSuccess message={`${createdRecord.name} created successfully.`} action={{href:`/${createdRecord.path}/${createdRecord.id}`,label:`Open ${createdRecord.name}`}}/>}<form action={action} onSubmit={guard} className="panel max-w-5xl space-y-7 p-5 sm:p-6" aria-label="Edit Trade Show Lead">
-    {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
+    <input type="hidden" name="editToken" value={editToken}/>
+    {state.recordChanged && <RecordChangedNotice result={state} href={`/trade-shows/${tradeShowId}/leads/${leadId}`}/>}
+    {state.message && !state.recordChanged && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     <section><h2 className="mb-3 text-lg font-semibold">Status &amp; Follow-Up</h2><div className="grid min-w-0 gap-5 sm:grid-cols-2">
       <div className="min-w-0"><label className="label" htmlFor="status">Status</label><select className="field min-w-0" id="status" name="status" defaultValue={val('status', initial.status)}>{statuses.filter(status => initial.status === 'CONVERTED' ? status === 'CONVERTED' : status !== 'CONVERTED').map(status => <option key={status} value={status}>{statusLabels[status]}</option>)}</select>{error('status')}</div>
       <div className="min-w-0"><label className="label" htmlFor="followUpAt">Follow-Up Date</label><input className="field min-w-0" type="date" id="followUpAt" name="followUpAt" defaultValue={val('followUpAt', initial.followUpAt?.toISOString().slice(0,10) ?? '')}/>{error('followUpAt')}</div>

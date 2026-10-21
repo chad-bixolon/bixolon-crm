@@ -1,4 +1,5 @@
 'use server';
+import { isRecordChanged, recordChangedMessage, requireEditToken } from '@/lib/stale-edit';
 import { revalidatePath } from 'next/cache';
 import { requireMutation } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
@@ -21,10 +22,23 @@ export async function confirmCleanup(request: CleanupRequest, fingerprint: strin
     return { ok: true as const, count };
   } catch (error) { return { ok: false as const, message: error instanceof Error ? error.message : 'Update failed. Preview again.' }; }
 }
-export async function correctReference(id:number,field:MaintenanceField,targetId:number,updatedAt:string,lineId?:number){
-  const actor=await requireMutation('users.manage');
-  try{await correctPriceExceptionReference(prisma,actor,id,field,targetId,new Date(updatedAt),lineId);revalidatePath('/administration/price-exceptions');revalidatePath(`/price-exceptions/${id}`);revalidatePath('/price-exceptions');revalidatePath('/accounts');return {ok:true as const};}
-  catch(error){return {ok:false as const,message:error instanceof Error?error.message:'Correction failed.'};}
+export async function correctReference(id: number, field: MaintenanceField, targetId: number, updatedAt: string, lineId?: number) {
+  const actor = await requireMutation('users.manage');
+  try {
+    const tokenForm = new FormData();
+    tokenForm.set('editToken', updatedAt);
+    const editToken = requireEditToken(tokenForm);
+    await correctPriceExceptionReference(prisma, actor, id, field, targetId, new Date(editToken), lineId);
+    revalidatePath('/administration/price-exceptions');
+    revalidatePath(`/price-exceptions/${id}`);
+    revalidatePath('/price-exceptions');
+    revalidatePath('/accounts');
+    revalidatePath('/administration/maintenance-history');
+    return { ok: true as const };
+  } catch (error) {
+    const recordChanged = isRecordChanged(error);
+    return { ok: false as const, recordChanged, message: recordChanged ? recordChangedMessage : error instanceof Error ? error.message : 'Correction failed.' };
+  }
 }
 export async function createCleanupAccount(form:FormData,confirmed:boolean,acknowledgeDuplicate:boolean){
   const actor=await requireMutation('accounts.write');

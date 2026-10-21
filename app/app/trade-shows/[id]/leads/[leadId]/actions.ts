@@ -1,11 +1,12 @@
 'use server';
+import { isRecordChanged, recordChangedMessage } from '@/lib/stale-edit';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { currentUser } from '@/lib/current-user';
 import { saveTradeShowLeadUpdate, tradeShowLeadFailureState } from '@/lib/trade-show-leads';
 import { saveFeedbackPath } from '@/lib/save-feedback';
 
-export type TradeShowLeadFormState = { errors: Record<string, string>; message?: string; redirectTo?: string; values?: Record<string, string> };
+export type TradeShowLeadFormState = { errors: Record<string, string>; message?: string; recordChanged?: boolean; redirectTo?: string; values?: Record<string, string> };
 
 export async function submitTradeShowLead(tradeShowId: number, leadId: number, _old: TradeShowLeadFormState, form: FormData): Promise<TradeShowLeadFormState> {
   const actor = await currentUser();
@@ -15,6 +16,7 @@ export async function submitTradeShowLead(tradeShowId: number, leadId: number, _
     revalidatePath(`/trade-shows/${tradeShowId}`); revalidatePath(`/trade-shows/${tradeShowId}/leads/${leadId}`);
     return { errors: {}, redirectTo: saveFeedbackPath(`/trade-shows/${tradeShowId}/leads/${leadId}`, 'updated') };
   } catch (error) {
+    if (isRecordChanged(error)) return { ...tradeShowLeadFailureState(form, {}, recordChangedMessage), recordChanged: true };
     const message = error instanceof Error && /^(Access denied|Trade Show Lead not found|Only Opportunity conversion|Converted lead status|Choose an active|Contact belongs|Select an active|Select a Partner)/.test(error.message) ? error.message : 'Lead could not be saved.';
     return tradeShowLeadFailureState(form, {}, message);
   }

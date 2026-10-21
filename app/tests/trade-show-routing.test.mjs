@@ -14,6 +14,7 @@ const leads=require(path.join(root,'lib/trade-show-leads.ts'));
 const followUp=require(path.join(root,'lib/trade-show-follow-up.ts'));
 const {can}=require(path.join(root,'lib/authorization.ts'));
 const actor=(role,id=7)=>({id,role,active:true,archivedAt:null});
+const editForm=(row,entries)=>form([['editToken',row.updatedAt.toISOString()],...entries]);
 const form=entries=>{const value=new FormData();for(const [key,item] of entries)value.set(key,item);return value};
 
 test('routing validation applies route-specific rep and eligible partner requirements',async()=>{
@@ -59,34 +60,34 @@ test('individual assignment and bulk routing create follow-up Tasks through thei
       account:{findFirst:async()=>null},contact:{findFirst:async()=>null},competitorOption:{findFirst:async()=>null},
     };
     const now=new Date();const client={systemSetting:{findUnique:async()=>({value:5})},$transaction:async callback=>callback(tx)};
-    if(mode==='individual')await leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','BIXOLON_SALES'],['assignedSalesRepUserId','8']]),actor('ADMIN'));
+    if(mode==='individual')await leads.saveTradeShowLeadUpdate(client,1,2,editForm(stored,[['status','NEW'],['routing','BIXOLON_SALES'],['assignedSalesRepUserId','8']]),actor('ADMIN'));
     else await routing.bulkRouteTradeShowLeads(client,1,{records:[{id:2,updatedAt:base.updatedAt.toISOString()}],confirmed:true,action:'route',value:''},'BIXOLON_SALES',8,null,null,actor('ADMIN'),{where:{},page:1});
     assert.equal(created.assignedToId,8);assert.equal(created.tradeShowLeadId,2);assert.equal(created.source,'TRADE_SHOW_LEAD_FOLLOW_UP');assert.equal(created.dueDate.toISOString(),followUp.followUpDueDate(now,5).toISOString());
   }
 });
 
 test('Lead edit preserves a historical rep during ordinary edits and rejects new sales routing',async()=>{
-  let stored={id:2,tradeShowId:1,routing:'BIXOLON_SALES',assignedSalesRepUserId:8,convertedOpportunityId:null,routedPartnerAccountId:null,accountId:null,contactId:null,competitorId:null,tradeShow:{archivedAt:null}};
+  let stored={updatedAt:new Date('2026-10-19T12:00:00Z'),id:2,tradeShowId:1,routing:'BIXOLON_SALES',assignedSalesRepUserId:8,convertedOpportunityId:null,routedPartnerAccountId:null,accountId:null,contactId:null,competitorId:null,tradeShow:{archivedAt:null}};
   const tx={tradeShowLead:{findFirst:async()=>stored,update:async({data})=>(stored={...stored,...data})},user:{findFirst:async()=>null},account:{findFirst:async()=>null},contact:{findFirst:async()=>null},competitorOption:{findFirst:async()=>null}};
   tx.task={findFirst:async()=>null};const client={$transaction:async callback=>callback(tx)};
-  await leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','BIXOLON_SALES'],['assignedSalesRepUserId','8']]),actor('ADMIN'));
+  await leads.saveTradeShowLeadUpdate(client,1,2,editForm(stored,[['status','NEW'],['routing','BIXOLON_SALES'],['assignedSalesRepUserId','8']]),actor('ADMIN'));
   assert.equal(stored.assignedSalesRepUserId,8);
-  await assert.rejects(leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','BIXOLON_SALES'],['assignedSalesRepUserId','9']]),actor('ADMIN')), /active Sales rep/);
-  await leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','MARKETING_FOLLOW_UP'],['assignedSalesRepUserId','8']]),actor('ADMIN'));
+  await assert.rejects(leads.saveTradeShowLeadUpdate(client,1,2,editForm(stored,[['status','NEW'],['routing','BIXOLON_SALES'],['assignedSalesRepUserId','9']]),actor('ADMIN')), /active Sales rep/);
+  await leads.saveTradeShowLeadUpdate(client,1,2,editForm(stored,[['status','NEW'],['routing','MARKETING_FOLLOW_UP'],['assignedSalesRepUserId','8']]),actor('ADMIN'));
   assert.equal(stored.assignedSalesRepUserId,8);
-  await assert.rejects(leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','BIXOLON_SALES'],['assignedSalesRepUserId','8']]),actor('ADMIN')), /active Sales rep/);
+  await assert.rejects(leads.saveTradeShowLeadUpdate(client,1,2,editForm(stored,[['status','NEW'],['routing','BIXOLON_SALES'],['assignedSalesRepUserId','8']]),actor('ADMIN')), /active Sales rep/);
 });
 
 test('individual partner referral records actor/time and later rerouting preserves referral audit fields',async()=>{
-  let stored={id:2,tradeShowId:1,routing:'UNREVIEWED',routedPartnerAccountId:null,referredAt:null,referredByUserId:null,referralNotes:null,assignedSalesRepUserId:null,convertedOpportunityId:null,accountId:null,contactId:null,competitorId:null,tradeShow:{archivedAt:null}};
+  let stored={updatedAt:new Date('2026-10-19T12:00:00Z'),id:2,tradeShowId:1,routing:'UNREVIEWED',routedPartnerAccountId:null,referredAt:null,referredByUserId:null,referralNotes:null,assignedSalesRepUserId:null,convertedOpportunityId:null,accountId:null,contactId:null,competitorId:null,tradeShow:{archivedAt:null}};
   const tx={tradeShowLead:{findFirst:async()=>stored,update:async({data})=>(stored={...stored,...data})},user:{findFirst:async()=>null},account:{findFirst:async({where})=>where.id===20?{id:20}:null},contact:{findFirst:async()=>null},competitorOption:{findFirst:async()=>null}};
   const client={$transaction:async callback=>callback(tx)};
-  await leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','REFERRED_TO_PARTNER'],['routedPartnerAccountId','20'],['referralNotes','Warm handoff']]),actor('MARKETING_MANAGER'));
+  await leads.saveTradeShowLeadUpdate(client,1,2,editForm(stored,[['status','NEW'],['routing','REFERRED_TO_PARTNER'],['routedPartnerAccountId','20'],['referralNotes','Warm handoff']]),actor('MARKETING_MANAGER'));
   assert.equal(stored.routing,'REFERRED_TO_PARTNER');assert.equal(stored.routedPartnerAccountId,20);assert.equal(stored.referredByUserId,7);assert.ok(stored.referredAt instanceof Date);assert.equal(stored.referralNotes,'Warm handoff');
   const audit={partner:stored.routedPartnerAccountId,at:stored.referredAt,by:stored.referredByUserId,notes:stored.referralNotes};
-  await leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','MARKETING_FOLLOW_UP'],['routedPartnerAccountId',''],['referralNotes','']]),actor('MARKETING_MANAGER'));
+  await leads.saveTradeShowLeadUpdate(client,1,2,editForm(stored,[['status','NEW'],['routing','MARKETING_FOLLOW_UP'],['routedPartnerAccountId',''],['referralNotes','']]),actor('MARKETING_MANAGER'));
   assert.equal(stored.routing,'MARKETING_FOLLOW_UP');assert.deepEqual({partner:stored.routedPartnerAccountId,at:stored.referredAt,by:stored.referredByUserId,notes:stored.referralNotes},audit);
-  await leads.saveTradeShowLeadUpdate(client,1,2,form([['status','NEW'],['routing','REFERRED_TO_PARTNER'],['routedPartnerAccountId','20'],['referralNotes','Replacement text']]),actor('ADMIN',99));
+  await leads.saveTradeShowLeadUpdate(client,1,2,editForm(stored,[['status','NEW'],['routing','REFERRED_TO_PARTNER'],['routedPartnerAccountId','20'],['referralNotes','Replacement text']]),actor('ADMIN',99));
   assert.deepEqual({partner:stored.routedPartnerAccountId,at:stored.referredAt,by:stored.referredByUserId,notes:stored.referralNotes},audit);
 });
 

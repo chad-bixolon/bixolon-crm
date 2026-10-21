@@ -1,3 +1,4 @@
+import { assertEditToken, nextUpdatedAt, requireEditToken } from './stale-edit';
 import { TradeShowLeadRouting, TradeShowLeadStatus, type Prisma, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { field, optional, positiveId, type Errors } from './crm-validation';
@@ -66,6 +67,7 @@ export function tradeShowLeadFailureState(form: FormData, errors: Errors, messag
 }
 
 export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId: number, leadId: number, form: FormData, actor: Actor) {
+  const editToken = requireEditToken(form);
   const parsed = parseTradeShowLeadUpdate(form);
   if (!parsed.value) return { errors: parsed.errors, message: 'Correct the highlighted fields.' };
   const input = parsed.value;
@@ -73,6 +75,8 @@ export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId:
   return client.$transaction(async tx => {
     const lead = await tx.tradeShowLead.findFirst({ where: { id: leadId, tradeShowId }, include: { tradeShow: { select: { archivedAt: true } } } });
     if (!lead || lead.tradeShow.archivedAt) throw new Error('Trade Show Lead not found or archived.');
+    if (!can(actor, 'trade-shows.leads.write')) throw new Error('Access denied');
+    assertEditToken(lead.updatedAt, editToken);
     if (!canEditTradeShowLead(actor, lead)) throw new Error('Access denied');
     if (input.status === 'CONVERTED' && !lead.convertedOpportunityId) throw new Error('Only Opportunity conversion can set Converted status.');
     if (lead.convertedOpportunityId && input.status !== 'CONVERTED') throw new Error('Converted lead status cannot be changed here.');
@@ -106,7 +110,8 @@ export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId:
       const competitor = await tx.competitorOption.findFirst({ where: { id: input.competitorId, active: true } });
       if (!competitor && input.competitorId !== lead.competitorId) throw new Error('Choose an active Competitor.');
     }
-    const updated = await tx.tradeShowLead.update({ where: { id: leadId }, data: {
+    const updated = await tx.tradeShowLead.update({ where: { id: leadId, tradeShowId, updatedAt: new Date(editToken) }, data: {
+      updatedAt: nextUpdatedAt(lead.updatedAt),
       status: input.status, followUpAt: input.followUpAt, lastContactedAt: input.lastContactedAt,
       salesNotes: input.salesNotes, productInterest: input.productInterest,
       competitorSourceText: input.competitorSourceText, competitorId: input.competitorId,

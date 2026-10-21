@@ -229,7 +229,7 @@ test('schema reserves source ID but keeps Badge ID only in raw provenance', () =
 });
 
 test('lead update enforces assigned Sales scope and does not invent conversion', async () => {
-  let stored = { id: 2, tradeShowId: 1, assignedSalesRepUserId: 7, convertedOpportunityId: null, accountId: null, contactId: null, competitorId: null, tradeShow: { archivedAt: null } };
+  let stored = { updatedAt: new Date('2026-10-19T12:00:00Z'), id: 2, tradeShowId: 1, assignedSalesRepUserId: 7, convertedOpportunityId: null, accountId: null, contactId: null, competitorId: null, tradeShow: { archivedAt: null } };
   const tx = {
     tradeShowLead: { findFirst: async () => stored, update: async ({ data }) => { stored = { ...stored, ...data }; return stored; } },
     user: { findFirst: async () => ({ id: 7 }) },
@@ -239,11 +239,13 @@ test('lead update enforces assigned Sales scope and does not invent conversion',
   };
   const client = { $transaction: async callback => callback(tx) };
   const contacted = form([['status','CONTACTED'],['salesNotes','Called at show']]);
+  contacted.set('editToken', stored.updatedAt.toISOString());
   assert.deepEqual(await leads.saveTradeShowLeadUpdate(client, 1, 2, contacted, actor('SALES')), { errors: {} });
+  contacted.set('editToken', stored.updatedAt.toISOString());
   assert.equal(stored.status, 'CONTACTED');
   assert.equal(stored.assignedSalesRepUserId, 7);
   await assert.rejects(leads.saveTradeShowLeadUpdate(client, 1, 2, contacted, actor('SALES', 8)), /Access denied/);
   await assert.rejects(leads.saveTradeShowLeadUpdate(client, 1, 2, contacted, actor('READ_ONLY')), /Access denied/);
-  await assert.rejects(leads.saveTradeShowLeadUpdate(client, 1, 2, form([['status','CONVERTED']]), actor('SALES')), /Only Opportunity conversion/);
-  await assert.rejects(leads.saveTradeShowLeadUpdate(client, 1, 2, form([['status','CONTACTED'],['assignedSalesRepUserId','8']]), actor('SALES')), /Access denied to rep assignment/);
+  await assert.rejects(leads.saveTradeShowLeadUpdate(client, 1, 2, form([['editToken',stored.updatedAt.toISOString()],['status','CONVERTED']]), actor('SALES')), /Only Opportunity conversion/);
+  await assert.rejects(leads.saveTradeShowLeadUpdate(client, 1, 2, form([['editToken',stored.updatedAt.toISOString()],['status','CONTACTED'],['assignedSalesRepUserId','8']]), actor('SALES')), /Access denied to rep assignment/);
 });
