@@ -35,7 +35,7 @@ test('contact validation and lifecycle enforce active primary contacts', async (
 test('setting a new primary clears the previous primary inside the save transaction', async () => {
   const calls = [];
   const client = { $transaction: async (fn) => fn({ account: { findUnique: async () => ({ status: 'ACTIVE' }) }, contact: {
-    findUnique: async () => ({ id: 8, archivedAt: null }), updateMany: async (args) => calls.push(['clear', args]), update: async (args) => { calls.push(['save', args]); return { id: 8 }; },
+    findUnique: async () => ({ id: 8, archivedAt: null }), findMany: async (args) => { calls.push(['clear', args]); return []; }, update: async (args) => { calls.push(['save', args]); return { id: 8 }; },
   } }) };
   const input = { accountId: 2, firstName: 'Ada', lastName: 'Lovelace', title: null, email: null, phone: null, mobile: null, active: true, isPrimary: true };
   assert.equal(await contacts.saveContact(client, input, 8), 8);
@@ -57,7 +57,7 @@ test('unassigned Contacts can be created, assigned later, and filtered', async (
       findUnique: async () => row,
       create: async ({ data }) => (row = { id: 9, ...data, archivedAt: null }),
       update: async ({ data }) => (row = { ...row, ...data }),
-      updateMany: async args => calls.push(['primary', args.where.accountId]),
+      findMany: async args => { calls.push(['primary', args.where.accountId]); return []; },
     },
   }) };
   assert.equal(await contacts.saveContact(client, unassigned.value), 9);

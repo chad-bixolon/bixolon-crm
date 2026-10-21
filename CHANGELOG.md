@@ -10,6 +10,12 @@ boundaries. Dates are the dates of the last commits in each group.
 - Added visible configured Inbox scope, compact All/Unlinked/Needs Review views and counts over the current batch, and an older-mail Gmail link. View switching stays local; ignored messages remain separate. Updated concise Inbox Help and focused tests. No migration or provider strategy change.
 - Reconciled missing committed work below and corrected stale Saved Views, bulk-action and Administration documentation. This working-tree change has not been committed or deployed; earlier dated validation records remain historical evidence.
 
+## Working tree — Shared Editor Stale-Edit Protection v1
+
+- Extended the existing shared edit checks to Contacts, Projects, ordinary Activities and editable Notes. Forms retain entered values on conflicts and offer the existing review/reload controls; missing or invalid form tokens require reload, including for Admins and impersonated users.
+- Contact primary transfers and Project participant changes save transactionally with the parent comparison. Project Opportunity link/unlink transactions now advance the Project token too. Note edits use the Note token; creation and Calendar logging/deduplication stay unchanged. Existing role, ownership and history policies remain in place. No migration.
+- Other shared editors still using last-write-wins include Project/Opportunity Update entries, Marketing Campaigns and Audience definitions, Demo Request notes/relationships, Products/SKU metadata, Trade Show setup, and saved Report definitions. These remain outside this build; no ownership policy decision is required for the included editors.
+
 ## Unreleased
 
 - Added Opportunity outcomes with Actual Close Date, configured Won/Lost reasons, optional notes, validated closure/reopen transitions and immutable outcome history. Legacy unknown dates remain explicit; Expected Close Date and historical snapshots retain their meaning.

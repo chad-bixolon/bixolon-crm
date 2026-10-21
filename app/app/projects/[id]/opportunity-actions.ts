@@ -22,6 +22,7 @@ export async function changeProjectOpportunity(projectId: number, _state: LinkSt
       if (!opportunity || (operation === "link" && opportunity.archivedAt)) throw new Error("Choose an active Opportunity.");
       // Claim the parent before changing the collection, so an older full edit cannot restore it.
       await tx.opportunity.update({ where: { id: opportunityId, updatedAt: opportunity.updatedAt }, data: { updatedAt: nextUpdatedAt(opportunity.updatedAt) } });
+      await tx.project.update({ where: { id: projectId, updatedAt: project.updatedAt }, data: { updatedAt: nextUpdatedAt(project.updatedAt) } });
       if (operation === "link") {
         await tx.opportunityProject.create({ data: { projectId, opportunityId } });
       } else {

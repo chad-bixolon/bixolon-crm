@@ -187,7 +187,7 @@ export function activityErrorField(message: string) {
   if (message.includes('responsible user')) return 'userId';
   return null;
 }
-export async function saveActivity(client: PrismaClient, value: NonNullable<ReturnType<typeof parseActivity>['value']> & { emailRecipientName?: string | null; emailRecipientEmail?: string | null }, id?: number, actorId?: number, calendarEventId?: number) {
+export async function saveActivity(client: PrismaClient, value: NonNullable<ReturnType<typeof parseActivity>['value']> & { emailRecipientName?: string | null; emailRecipientEmail?: string | null }, id?: number, actorId?: number, calendarEventId?: number, editToken?: string) {
   if (!id && value.createFollowUpTask && await client.task.findUnique({ where: { createKey: value.followUpTaskCreateKey } })) throw new Error('This follow-up Task has already been scheduled.');
   return client.$transaction(async tx => {
     if (calendarEventId) {
@@ -198,6 +198,7 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
     }
     const existing = id ? await tx.activity.findFirst({ where: { id, archivedAt: null } }) : null;
     if (id && !existing) throw new Error('Activity not found or archived.');
+    if (id && editToken !== undefined) assertEditToken(existing!.updatedAt, editToken);
     const occurrenceError = validateActivityOccurrence(value.activityDate, existing?.activityDate);
     if (occurrenceError) throw new Error(occurrenceError);
     if ((!id || existing?.userId) && !value.userId) throw new Error('Choose a responsible user.');
@@ -237,7 +238,7 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
     // Forms have minute precision. Keep the original instant on unrelated edits.
     const activityDate = existing?.activityDate?.toISOString().slice(0, 16) === data.activityDate.toISOString().slice(0, 16) ? existing.activityDate : data.activityDate;
     const attributedData = { ...data, activityDate, ...(actorId ? { updatedById: actorId, ...(!id ? { createdById: actorId } : {}) } : {}) };
-    const row = id ? await tx.activity.update({ where: { id }, data: attributedData }) : await tx.activity.create({ data: attributedData });
+    const row = id ? await tx.activity.update({ where: { id, updatedAt: editToken !== undefined ? new Date(editToken) : existing!.updatedAt }, data: { ...attributedData, updatedAt: nextUpdatedAt(existing!.updatedAt) } }) : await tx.activity.create({ data: attributedData });
     if (calendarEventId) await tx.googleCalendarEventReview.update({ where: { eventId: calendarEventId }, data: { activityId: row.id, reviewedAt: new Date(), reviewedById: actorId, selectedContactIds: value.contactIds, selectedAccountId: value.accountId, selectedOpportunityId: value.opportunityId, selectedProjectId: value.projectId, selectionsConfirmed: true } });
     const removedContactIds = linked.filter(link => !contactIds.includes(link.contactId)).map(link => link.contactId);
     if (removedContactIds.length) await tx.activityContact.deleteMany({ where: { activityId: row.id, contactId: { in: removedContactIds } } });
@@ -275,12 +276,14 @@ export async function saveNote(
   value: NonNullable<ReturnType<typeof parseNote>['value']>,
   id?: number,
   actorId?: number,
+  editToken?: string,
 ) {
   return client.$transaction(async tx => {
     if (!value.accountId && !value.opportunityId && !value.projectId && !value.supportCaseId) throw new Error('Choose an Account, Opportunity, Project, or Support Case.');
     await checkRelations(tx, value.accountId, value.opportunityId, value.projectId);
     const existing = id ? await tx.note.findFirst({ where: { id, archivedAt: null } }) : null;
     if (id && !existing) throw new Error('Note not found or archived.');
+    if (id && editToken !== undefined) assertEditToken(existing!.updatedAt, editToken);
     await checkSupportCaseRelation(tx, value.supportCaseId, value.accountId, !!id && existing?.supportCaseId === value.supportCaseId, !!existing && existing.supportCaseId === value.supportCaseId && existing.accountId === null && value.accountId === null);
     const createdById = actorId ?? value.createdById;
 
@@ -289,7 +292,7 @@ if (!id && !actorId && createdById && !(await tx.user.findFirst({
 }))) {
   throw new Error('Choose an active author.');
 }
-    if (id) { return tx.note.update({ where: { id }, data: { body: value.body, accountId: value.accountId, opportunityId: value.opportunityId, projectId: value.projectId, supportCaseId: value.supportCaseId } }); }
+    if (id) { return tx.note.update({ where: { id, updatedAt: editToken !== undefined ? new Date(editToken) : existing!.updatedAt }, data: { updatedAt: nextUpdatedAt(existing!.updatedAt), body: value.body, accountId: value.accountId, opportunityId: value.opportunityId, projectId: value.projectId, supportCaseId: value.supportCaseId } }); }
     return tx.note.create({
   data: {
     ...value,

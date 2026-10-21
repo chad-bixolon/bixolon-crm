@@ -6,17 +6,18 @@ import { parseProject, projectFailureState, saveProject, setProjectArchived } fr
 import { friendlyError } from '@/lib/crm-validation';
 import { saveFeedbackPath } from '@/lib/save-feedback';
 
-export type ProjectFormState = { errors: Record<string, string>; message?: string; redirectTo?: string; values?: Record<string, string> };
+import { requireEditToken, isRecordChanged, recordChangedMessage } from '../../lib/stale-edit';
+export type ProjectFormState = { errors: Record<string, string>; message?: string; redirectTo?: string; values?: Record<string, string>; recordChanged?: boolean };
 export async function submitProject(id: number | null, _old: ProjectFormState, form: FormData): Promise<ProjectFormState> {
   const actor = await requireMutation('projects.write');
   const parsed = parseProject(form);
   if (!parsed.value) return projectFailureState(form, parsed.errors);
   try {
-    const projectId = await saveProject(prisma, parsed.value, actor, id ?? undefined);
+    const projectId = await saveProject(prisma, parsed.value, actor, id ?? undefined, id ? requireEditToken(form) : undefined);
     revalidatePath('/projects'); revalidatePath('/accounts'); revalidatePath('/opportunities'); revalidatePath('/pipeline');
     revalidatePath(`/projects/${projectId}`);
     return { errors: {}, redirectTo: saveFeedbackPath(`/projects/${projectId}`, id ? 'updated' : 'created') };
-  } catch (error) { return projectFailureState(form, {}, friendlyError(error, 'Project could not be saved.')); }
+  } catch (error) { if (isRecordChanged(error)) return { ...projectFailureState(form, {}, recordChangedMessage), recordChanged: true }; return projectFailureState(form, {}, friendlyError(error, 'Project could not be saved.')); }
 }
 export async function changeProjectArchive(id: number, archive: boolean, _old: ProjectFormState): Promise<ProjectFormState> {
   void _old;

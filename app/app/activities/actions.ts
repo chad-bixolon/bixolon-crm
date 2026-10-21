@@ -1,5 +1,6 @@
 'use server';
 import { recordMaintenance } from '../../lib/admin-maintenance';
+import { nextUpdatedAt, requireEditToken, isRecordChanged, recordChangedMessage } from '../../lib/stale-edit';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
@@ -16,25 +17,25 @@ export async function submitActivity(id: number | null, _old: WorkState, form: F
   const parsed = parseActivity(form); if (!parsed.value) return activityFailureState(form, parsed.errors);
   if (!id && !parsed.value.userId) return activityFailureState(form, { userId: 'Choose a responsible user.' });
   let destination: string;
-  try { const actor = await currentUser(); assertWorkPermission(actor, parsed.value.supportCaseId); const existing = id ? await prisma.activity.findUnique({ where: { id }, select: { projectId: true, supportCaseId: true } }) : null; if (actor.role === 'SUPPORT' && id) throw new Error('Access denied'); if (actor.role === 'SUPPORT' && (parsed.value.opportunityId || parsed.value.projectId)) throw new Error('Access denied to Sales relationships.'); if (parsed.value.supportCaseId) await caseWorkContext(prisma, actor, parsed.value.supportCaseId, parsed.value.accountId, parsed.value.contactIds, !!id && existing?.supportCaseId === parsed.value.supportCaseId); await assertProjectWorkEdit(prisma, actor, existing?.projectId); await assertProjectWorkEdit(prisma, actor, parsed.value.projectId); const row = await saveActivity(prisma, parsed.value, id ?? undefined, actor.id); if (row.supportCaseId) revalidatePath(`/support/cases/${row.supportCaseId}`); revalidatePath('/'); revalidatePath('/tasks'); revalidatePath('/reports/engagement'); if (row.accountId) revalidatePath(`/accounts/${row.accountId}`); if (row.opportunityId) revalidatePath(`/opportunities/${row.opportunityId}`); if (row.projectId) revalidatePath(`/projects/${row.projectId}`); const base = row.supportCaseId ? `/support/cases/${row.supportCaseId}` : row.projectId ? `/projects/${row.projectId}?tab=activities` : row.opportunityId ? `/opportunities/${row.opportunityId}` : `/accounts/${row.accountId}?tab=activity`; destination = saveFeedbackPath(base, id ? 'updated' : row.followUpTaskCreated ? 'activity-task-created' : 'activity-created'); }
-  catch (e) { const message = e instanceof Error ? e.message : 'Activity could not be saved.'; const field = activityErrorField(message); return activityFailureState(form, field ? { [field]: message } : {}, field ? undefined : message); }
+  try { const actor = await currentUser(); assertWorkPermission(actor, parsed.value.supportCaseId); const existing = id ? await prisma.activity.findUnique({ where: { id }, select: { projectId: true, supportCaseId: true } }) : null; if (actor.role === 'SUPPORT' && id) throw new Error('Access denied'); if (actor.role === 'SUPPORT' && (parsed.value.opportunityId || parsed.value.projectId)) throw new Error('Access denied to Sales relationships.'); if (parsed.value.supportCaseId) await caseWorkContext(prisma, actor, parsed.value.supportCaseId, parsed.value.accountId, parsed.value.contactIds, !!id && existing?.supportCaseId === parsed.value.supportCaseId); await assertProjectWorkEdit(prisma, actor, existing?.projectId); await assertProjectWorkEdit(prisma, actor, parsed.value.projectId); const row = await saveActivity(prisma, parsed.value, id ?? undefined, actor.id, undefined, id ? requireEditToken(form) : undefined); if (row.supportCaseId) revalidatePath(`/support/cases/${row.supportCaseId}`); revalidatePath('/'); revalidatePath('/tasks'); revalidatePath('/reports/engagement'); if (row.accountId) revalidatePath(`/accounts/${row.accountId}`); if (row.opportunityId) revalidatePath(`/opportunities/${row.opportunityId}`); if (row.projectId) revalidatePath(`/projects/${row.projectId}`); const base = row.supportCaseId ? `/support/cases/${row.supportCaseId}` : row.projectId ? `/projects/${row.projectId}?tab=activities` : row.opportunityId ? `/opportunities/${row.opportunityId}` : `/accounts/${row.accountId}?tab=activity`; destination = saveFeedbackPath(base, id ? 'updated' : row.followUpTaskCreated ? 'activity-task-created' : 'activity-created'); }
+  catch (e) { if (isRecordChanged(e)) return { ...activityFailureState(form, {}, recordChangedMessage), recordChanged: true }; const message = e instanceof Error ? e.message : 'Activity could not be saved.'; const field = activityErrorField(message); return activityFailureState(form, field ? { [field]: message } : {}, field ? undefined : message); }
   redirect(destination);
 }
 export async function setActivityArchived(form: FormData) {
   const actor=await currentUser();assertPermission(actor,'tasks.write');
   const id=Number(form.get('id')), archived=String(form.get('archived'))==='true';
   if(!Number.isSafeInteger(id)||id<1)throw new Error('Activity not found.');
-  const row=await prisma.activity.findUnique({where:{id},select:{projectId:true,accountId:true,opportunityId:true,archivedAt:true}});
+  const row=await prisma.activity.findUnique({where:{id},select:{projectId:true,accountId:true,opportunityId:true,archivedAt:true,updatedAt:true}});
   if(!row)throw new Error('Activity not found.');
   await assertProjectWorkEdit(prisma,actor,row.projectId);
   if(Boolean(row.archivedAt)===archived)throw new Error('Activity state has already changed.');
-  const data = {archivedAt:archived?new Date():null,archivedById:archived?actor.id:null,updatedById:actor.id};
+  const data = {updatedAt:nextUpdatedAt(row.updatedAt),archivedAt:archived?new Date():null,archivedById:archived?actor.id:null,updatedById:actor.id};
   if (prisma.notification) await prisma.$transaction(async tx => {
-    await tx.activity.update({where:{id},data});
+    await tx.activity.update({where:{id,updatedAt:row.updatedAt},data});
     await recordMaintenance(tx, actor.id, 'Activity', archived ? 'Archive' : 'Restore', [id]);
     if (row.opportunityId) await syncOpportunityNotifications(tx, row.opportunityId, (await getSettings(tx as typeof prisma)).COMMIT_FOLLOW_UP_DAYS);
   });
-  else await prisma.activity.update({where:{id},data});
+  else await prisma.activity.update({where:{id,updatedAt:row.updatedAt},data});
   revalidatePath('/');revalidatePath('/reports/engagement');revalidatePath(`/activities/${id}/edit`);
   if(row.accountId)revalidatePath(`/accounts/${row.accountId}`);
   if(row.opportunityId)revalidatePath(`/opportunities/${row.opportunityId}`);

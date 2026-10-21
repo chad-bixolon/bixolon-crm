@@ -42,7 +42,7 @@ function fixture({ accounts = [[1, ['VAR_RESELLER']], [2, ['END_USER']]], contac
       account: { findMany: async ({ where }) => where.id.in.map(id => ({ id, name: accountNames.get(id) })) },
       contact: { findMany: async ({ where }) => where.id.in.map(id => ({ id, accountId: null, active: true, archivedAt: null, firstName: contactNames.get(id)[0], lastName: contactNames.get(id)[1] })) },
       product: { findMany: async () => [] },
-      project: { findMany: async ({ where }) => where.id.in.map(id => ({ id, name: projectNames.get(id), archivedAt: null })) },
+      project: { findUniqueOrThrow: async () => ({ updatedAt: new Date('2026-10-19T12:00:00.000Z') }), update: async () => ({}), findMany: async ({ where }) => where.id.in.map(id => ({ id, name: projectNames.get(id), archivedAt: null })) },
       opportunityAccount: {
         findMany: async () => [...working.accounts].map(([accountId, roles]) => ({ accountId, roles: roles.map(role => ({ role })) })),
         delete: async ({ where }) => { working.accounts.delete(where.opportunityId_accountId.accountId); },

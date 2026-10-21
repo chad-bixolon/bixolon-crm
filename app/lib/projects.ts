@@ -3,6 +3,7 @@ import { can, type Actor } from './authorization';
 import { field, optional, positiveId, required, type Errors } from './crm-validation';
 import { dateField } from './work';
 import { projectRoleLabels } from './project-labels';
+import { assertEditToken, nextUpdatedAt } from './stale-edit';
 import { eligibleUserWhere } from './assignment-eligibility';
 export { projectRoleLabels, projectStatusLabels } from './project-labels';
 export type ProjectParticipant = { accountId: number; roles: ProjectPartyRole[] };
@@ -91,7 +92,8 @@ export async function assertProjectWorkEdit(client: PrismaClient, actor: Actor, 
   const project = await client.project.findUnique({ where: { id: projectId }, include: { primaryAccount: { select: { ownerId: true } } } });
   if (!project || project.archivedAt || !canEditProject(actor, project)) throw new Error('Access denied to Project work.');
 }
-export async function saveProject(client: PrismaClient, input: ProjectInput, actor: Actor, id?: number) {
+/** Claim one parent version before saving details or participant collections. */
+export async function saveProject(client: PrismaClient, input: ProjectInput, actor: Actor, id?: number, editToken?: string) {
   if (!can(actor, 'projects.write')) throw new Error('Access denied');
   if (input.participants.some(p => (input.primaryAccountId !== null && p.accountId === input.primaryAccountId) || !p.roles.length) ||
       new Set(input.participants.map(p => p.accountId)).size !== input.participants.length) throw new Error('Invalid Project participants.');
@@ -99,6 +101,7 @@ export async function saveProject(client: PrismaClient, input: ProjectInput, act
     const existing = id ? await tx.project.findUnique({ where: { id }, include: { primaryAccount: { select: { ownerId: true } }, participants: { include: { roles: true } } } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Project not found or archived.');
     if (existing && !canEditProject(actor, existing)) throw new Error('Access denied');
+    if (id && editToken !== undefined) assertEditToken(existing!.updatedAt, editToken);
     const ids = [...(input.primaryAccountId ? [input.primaryAccountId] : []), ...input.participants.map(p => p.accountId)];
     const [accounts, owner] = await Promise.all([
       tx.account.findMany({ where: { id: { in: ids }, status: 'ACTIVE', archivedAt: null }, select: { id: true } }),
@@ -108,7 +111,9 @@ export async function saveProject(client: PrismaClient, input: ProjectInput, act
     if (input.ownerId && input.ownerId !== existing?.ownerId && !owner) throw new Error('Choose an eligible owner.');
     const data = { name: input.name, primaryAccountId: input.primaryAccountId, primaryAccountRole: input.primaryAccountRole,
       ownerId: input.ownerId, status: input.status, startDate: input.startDate, targetEndDate: input.targetEndDate,
-      description: input.description, updatedById: actor.id };
+      description: input.description, updatedById: actor.id, updatedAt: nextUpdatedAt(existing?.updatedAt) };
+    // Claim the parent before any participant change; nested writes roll back together.
+    if (existing) await tx.project.update({ where: { id: id!, updatedAt: editToken !== undefined ? new Date(editToken) : existing.updatedAt }, data: { updatedAt: data.updatedAt } });
     // Remove memberships that would collide with a changed Primary Account before updating Project.
     for (const membership of existing?.participants ?? []) {
       if (membership.accountId === input.primaryAccountId || !input.participants.some(p => p.accountId === membership.accountId)) {
@@ -135,5 +140,5 @@ export async function setProjectArchived(client: PrismaClient, id: number, archi
   if (!project) throw new Error('Project not found.');
   if (!canEditProject(actor, project)) throw new Error('Access denied');
   if (!!project.archivedAt === archived) throw new Error(archived ? 'Project already archived.' : 'Project already active.');
-  await client.project.update({ where: { id }, data: { archivedAt: archived ? new Date() : null, updatedById: actor.id } });
+  await client.project.update({ where: { id, updatedAt: project.updatedAt }, data: { updatedAt: nextUpdatedAt(project.updatedAt), archivedAt: archived ? new Date() : null, updatedById: actor.id } });
 }

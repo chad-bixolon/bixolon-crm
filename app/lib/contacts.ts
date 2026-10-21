@@ -1,3 +1,4 @@
+import { assertEditToken, nextUpdatedAt } from './stale-edit';
 import { recordMaintenance } from './admin-maintenance';
 import { MarketingPreference, Prisma, type PrismaClient } from "@prisma/client";
 import { can, type Actor } from "./authorization";
@@ -30,40 +31,49 @@ export function parseContact(form: FormData) {
   if (isPrimary && !accountId) errors.isPrimary = "Choose an account for a primary contact.";
   return { errors, value: Object.keys(errors).length ? undefined : { accountId, firstName, lastName, title, email, phone: office, mobile, active, isPrimary, marketingPreference, useAccountAddress, ...address } satisfies ContactInput };
 }
-export async function saveContactRecord(tx: ContactWriteClient, input: ContactInput, id?: number, actor?: Actor) {
+export async function saveContactRecord(tx: ContactWriteClient, input: ContactInput, id?: number, actor?: Actor, editToken?: string) {
+    if (id && actor && !can(actor, 'contacts.write')) throw new Error('Access denied');
     if (input.accountId !== null) {
       const account = await tx.account.findUnique({ where: { id: input.accountId }, select: { status: true, archivedAt: true } });
       if (!account || account.status !== "ACTIVE" || account.archivedAt) throw new Error("Choose an active account.");
     }
     const existing = id ? await tx.contact.findUnique({ where: { id } }) : null;
     if (id) { if (!existing) throw new Error("Contact not found."); if (existing.archivedAt) throw new Error("Reactivate this contact before editing it."); }
+    if (id && editToken !== undefined) assertEditToken(existing!.updatedAt, editToken);
     const preferenceChanged = id ? existing!.marketingPreference !== input.marketingPreference : input.marketingPreference !== MarketingPreference.UNKNOWN;
     if (preferenceChanged && (!actor || !can(actor,"contacts.write"))) throw new Error("Access denied");
-    if (input.isPrimary && input.accountId !== null) await tx.contact.updateMany({ where: { accountId: input.accountId, isPrimary: true, ...(id ? { id: { not: id } } : {}) }, data: { isPrimary: false } });
+    if (input.isPrimary && input.accountId !== null) {
+      const primaries = await tx.contact.findMany({ where: { accountId: input.accountId, isPrimary: true, ...(id ? { id: { not: id } } : {}) }, select: { id: true, updatedAt: true } });
+      for (const primary of primaries) await tx.contact.update({ where: { id: primary.id, updatedAt: primary.updatedAt }, data: { isPrimary: false, updatedAt: nextUpdatedAt(primary.updatedAt) } });
+    }
     const audit = preferenceChanged ? { marketingPreferenceUpdatedAt: new Date(), marketingPreferenceUpdatedByUserId: actor!.id } : {};
     const address = input.useAccountAddress && existing ? Object.fromEntries(addressFields.map(([key]) => [key, existing[key]])) as Address : input.useAccountAddress ? Object.fromEntries(addressFields.map(([key]) => [key, null])) as Address : input;
-    const record = id ? await tx.contact.update({ where: { id }, data: {...input,...address,...audit} }) : await tx.contact.create({ data: {...input,...address,...audit} });
+    const record = id ? await tx.contact.update({ where: { id, updatedAt: editToken !== undefined ? new Date(editToken) : existing!.updatedAt }, data: {...input,...address,...audit, updatedAt: nextUpdatedAt(existing!.updatedAt)} }) : await tx.contact.create({ data: {...input,...address,...audit} });
     return record.id;
 }
-export async function saveContact(client: PrismaClient, input: ContactInput, id?: number, actor?: Actor) {
-  return client.$transaction(tx => saveContactRecord(tx, input, id, actor));
+/** Browser actions require the form-open token; trusted callers compare the current row. */
+export async function saveContact(client: PrismaClient, input: ContactInput, id?: number, actor?: Actor, editToken?: string) {
+  return client.$transaction(tx => saveContactRecord(tx, input, id, actor, editToken));
 }
 export async function setContactState(client: PrismaClient, id: number, state: "active" | "inactive" | "archived", actorId?: number) {
-  if (actorId) return client.$transaction(async tx => {
-    const before = await tx.contact.findUnique({ where: { id }, select: { archivedAt: true, active: true } });
-    await setContactState(tx as PrismaClient, id, state);
-    await tx.contact.update({ where: { id }, data: { updatedById: actorId, archivedById: state === "archived" ? actorId : null } });
-    if (before && (Boolean(before.archivedAt) !== (state === "archived") || before.active !== (state === "active"))) await recordMaintenance(tx, actorId, "Contact", state === "archived" ? "Archive" : before.archivedAt ? "Restore" : state === "active" ? "Activate" : "Deactivate", [id]);
-  });
-  const existing = await client.contact.findUnique({ where: { id } });
-  if (!existing) throw new Error("Contact not found.");
-  if (state === "active") {
-    if (existing.accountId !== null) {
-      const account = await client.account.findUnique({ where: { id: existing.accountId }, select: { status: true } });
+  const run = async (tx: Prisma.TransactionClient) => {
+    const existing = await tx.contact.findUnique({ where: { id } });
+    if (!existing) throw new Error("Contact not found.");
+    if (state === "active" && existing.accountId !== null) {
+      const account = await tx.account.findUnique({ where: { id: existing.accountId }, select: { status: true } });
       if (account?.status !== "ACTIVE") throw new Error("Reactivate the account before activating this contact.");
     }
-  }
-  await client.contact.update({ where: { id }, data: { active: state === "active", archivedAt: state === "archived" ? new Date() : null, isPrimary: state === "active" ? existing.isPrimary && !existing.archivedAt : false } });
+    await tx.contact.update({ where: { id, updatedAt: existing.updatedAt }, data: {
+      active: state === "active", archivedAt: state === "archived" ? new Date() : null,
+      isPrimary: state === "active" ? existing.isPrimary && !existing.archivedAt : false,
+      updatedAt: nextUpdatedAt(existing.updatedAt),
+      ...(actorId ? { updatedById: actorId, archivedById: state === "archived" ? actorId : null } : {}),
+    } });
+    if (actorId && (Boolean(existing.archivedAt) !== (state === "archived") || existing.active !== (state === "active"))) {
+      await recordMaintenance(tx, actorId, "Contact", state === "archived" ? "Archive" : existing.archivedAt ? "Restore" : state === "active" ? "Activate" : "Deactivate", [id]);
+    }
+  };
+  return actorId ? client.$transaction(run) : run(client);
 }
 export type ContactSort = "name" | "account" | "title" | "email" | "status";
 export type ContactFilters = { q?: string; active?: string; accountId?: string; salesRepId?: string; marketingPreference?: string; title?: string; primary?: string; assignment?: string; sort?: string; dir?: string; page?: string; pageSize?: string };

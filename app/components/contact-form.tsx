@@ -1,4 +1,5 @@
 "use client";
+import { RecordChangedNotice } from './record-changed-notice';
 import { useSubmitGuard } from "@/lib/submit-guard";
 import Link from "next/link";
 import { useActionState, useState } from "react";
@@ -9,13 +10,14 @@ import { AddressFields } from "@/components/address-fields";
 import { hasAddress, type Address } from "@/lib/address";
 import type { MarketingPreference } from "@prisma/client";
 import { EntityPicker, type PickerResult } from '@/components/entity-picker';
-type Initial = Address & { accountId: number | null; useAccountAddress?: boolean | null; firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null; mobile: string | null; active: boolean; isPrimary: boolean; marketingPreference?: MarketingPreference };
+type Initial = { editToken?: string } & Address & { accountId: number | null; useAccountAddress?: boolean | null; firstName: string; lastName: string; title: string | null; email: string | null; phone: string | null; mobile: string | null; active: boolean; isPrimary: boolean; marketingPreference?: MarketingPreference };
 type AccountOption = Address & { id: number; name: string };
 export function ContactForm({ id, initial, accounts, accountId, leadContext, resolutionContext }: { id?: number; initial?: Initial; accounts: AccountOption[]; accountId?: number; leadContext?: {tradeShowId:number;leadId:number}; resolutionContext?:{tradeShowId:number;leadId:number;returnTo?:string} }) {
   const sourceContext=resolutionContext??leadContext;
   const submit: (state: FormState, form: FormData) => Promise<FormState> = resolutionContext ? createResolutionContactAction.bind(null,resolutionContext.tradeShowId,resolutionContext.leadId,resolutionContext.returnTo??"") : leadContext ? createContactForTradeShowLead.bind(null,leadContext.tradeShowId,leadContext.leadId) : submitContact.bind(null, id ?? null, id ? null : accountId ?? null);
   const [state, action, pending] = useActionState(submit, { errors: {} } as FormState);
   const guard = useSubmitGuard(state, action);
+  const [editToken] = useState(initial?.editToken ?? '');
   const retained=(key:string,fallback:string|number|boolean|null|undefined="")=>state.values?.[key]??String(fallback??"");
   const [selectedAccount, setSelectedAccount] = useState<PickerResult | null>(() => {
     const id = Number(retained('accountId', initial?.accountId ?? accountId));
@@ -34,7 +36,9 @@ export function ContactForm({ id, initial, accounts, accountId, leadContext, res
   ].filter(Boolean) : [];
   const error = (key: string) => state.errors[key] && <p className="mt-1 text-sm text-red-700">{state.errors[key]}</p>;
   return <form action={action} onSubmit={guard} className="panel max-w-4xl p-6" aria-label={id ? "Edit contact" : "Create contact"}>
-    {state.message && <p role="alert" className="mb-5 rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
+    {state.message && !state.recordChanged && <p role="alert" className="mb-5 rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
+    {id && <input type="hidden" name="editToken" value={editToken}/>}
+    {state.recordChanged && id && <RecordChangedNotice result={state} href={`/contacts/${id}`}/>}
     {!!state.matches?.length && <section className="mb-5 rounded border border-amber-300 bg-amber-50 p-4 text-sm" role="alert"><h2 className="font-semibold">Possible duplicate Contact found</h2><p className="mt-1">We found an existing Contact that may be the same person. Please review it before creating or saving this Contact.</p>{state.matches.some(match => match.reason === 'email') && <p className="mt-2 font-medium">A Contact with this email already exists.</p>}{state.matches.some(match => match.archived) && <p className="mt-2">An archived Contact may be available to restore. Review it before creating a new record.</p>}<ul className="mt-3 space-y-3">{state.matches.map(match => <li key={match.id} className="rounded border border-amber-200 bg-white p-3"><p className="font-medium">{match.name}{match.archived ? ' — Archived' : match.inactive ? ' — Inactive' : ''}</p><p className="text-slate-700">{match.email ?? 'No email'} · {match.accountName ?? 'No Account'}{match.title ? ` · ${match.title}` : ''}</p><p className="mt-1 text-slate-600">{match.reason === 'email' ? 'Same email address' : match.reason === 'same-account-name' ? 'Same name and Account' : 'Same name; at least one Contact has no Account'}</p><Link className="mt-2 inline-block font-medium text-orange-800 underline" href={`/contacts/${match.id}`} target="_blank" rel="noopener noreferrer">Open existing Contact</Link></li>)}</ul><p className="mt-3">If these are different people, you can continue after reviewing them.</p></section>}
     <div className="grid gap-5 sm:grid-cols-2">
       <div className="sm:col-span-2"><EntityPicker type="account" label="Account (optional)" name="accountId" value={selectedAccount} onChange={setSelectedAccount} disabled={!!accountId && !id} error={state.errors.accountId}/></div>

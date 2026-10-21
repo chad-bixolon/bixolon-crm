@@ -6,12 +6,13 @@ import { useActionState, useEffect, useState } from 'react';
 import { ProjectPartyRole, ProjectStatus } from '@prisma/client';
 import { submitProject, changeProjectArchive, type ProjectFormState } from '@/app/projects/actions';
 import { projectRoleLabels, projectStatusLabels } from '@/lib/project-labels';
+import { RecordChangedNotice } from './record-changed-notice';
 import { useSubmitGuard } from '@/lib/submit-guard';
 import { EntityPicker, type PickerResult } from './entity-picker';
 
 type AccountOption = { id: number; name: string };
 type OwnerOption = { id: number; firstName: string; lastName: string };
-type Initial = { name: string; primaryAccountId: number | null; primaryAccountRole: ProjectPartyRole; ownerId: number | null;
+type Initial = { editToken?: string } & { name: string; primaryAccountId: number | null; primaryAccountRole: ProjectPartyRole; ownerId: number | null;
   status: ProjectStatus; startDate: Date | null; targetEndDate: Date | null; description: string | null;
   participants: { accountId: number; roles: ProjectPartyRole[] }[] };
 export function ProjectForm({ id, initial, accounts, owners, currentOwner, primaryAccountId: preselected, defaultOwnerId }: {
@@ -20,6 +21,7 @@ export function ProjectForm({ id, initial, accounts, owners, currentOwner, prima
   const router = useRouter();
   const [state, action, pending] = useActionState(submitProject.bind(null, id ?? null), { errors: {} } as ProjectFormState);
   const guard = useSubmitGuard(state, action);
+  const [editToken] = useState(initial?.editToken ?? '');
   const val = (key: string, fallback: string | number = '') => String(state.values?.[key] ?? fallback);
   const [primaryId, setPrimaryId] = useState(initial?.primaryAccountId ?? preselected ?? 0);
   const [primaryRole, setPrimaryRole] = useState(initial?.primaryAccountRole ?? ProjectPartyRole.PROGRAM_OWNER);
@@ -37,7 +39,9 @@ export function ProjectForm({ id, initial, accounts, owners, currentOwner, prima
     setParticipants(old => [...old, { accountId, roles: [] }]); setSelectedAccount(null); setParticipantMessage(''); };
   return <form action={action} onSubmit={guard} className="panel max-w-5xl space-y-7 p-6" aria-label={id ? 'Edit project' : 'Create project'}>
     <HelpLink topic="projects">Help with Projects</HelpLink>
-    {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
+    {state.message && !state.recordChanged && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
+    {id && <input type="hidden" name="editToken" value={editToken}/>}
+    {state.recordChanged && id && <RecordChangedNotice result={state} href={`/projects/${id}`}/>}
     <section className="grid gap-4 sm:grid-cols-2"><h2 className="sm:col-span-2 text-lg font-semibold">Overview</h2>
       <div className="sm:col-span-2"><label className="label" htmlFor="name">Project name *</label><input className="field" id="name" name="name" required maxLength={200} defaultValue={val('name', initial?.name ?? '')}/>{error('name')}</div>
       <div><label className="label" htmlFor="ownerId">Owner</label><select className="field" id="ownerId" name="ownerId" defaultValue={val('ownerId', initial?.ownerId ?? (!id ? defaultOwnerId : null) ?? '')}><option value="">Unassigned</option>{id && initial?.ownerId && !owners.some(o => o.id === initial.ownerId) && <optgroup label="Current assignment"><option value={initial.ownerId}>{currentOwner ? `${currentOwner.firstName} ${currentOwner.lastName}` : 'User'} (no longer eligible)</option></optgroup>}{owners.map(o => <option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}</select>{error('ownerId')}</div>

@@ -19,6 +19,6 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
   const linkedAccountIds = [project.primaryAccountId, ...project.participants.map(participant => participant.accountId)]
     .filter((accountId): accountId is number => accountId !== null);
   const accounts = linkedAccountIds.length ? await prisma.account.findMany({ where: { id: { in: linkedAccountIds } }, select: { id: true, name: true } }) : [];
-  const initial = { ...project, participants: project.participants.map(p => ({ accountId: p.accountId, roles: p.roles.map(r => r.role) })) };
+  const initial = { ...project, editToken: project.updatedAt.toISOString(), participants: project.participants.map(p => ({ accountId: p.accountId, roles: p.roles.map(r => r.role) })) };
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.programs} title={`Edit ${project.name}`}/>{project.archivedAt ? <div className="panel p-6">Reactivate this Project before editing it.</div> : <ProjectForm id={id} initial={initial} accounts={accounts} owners={owners} currentOwner={project.owner}/>}</Content>;
 }

@@ -7,7 +7,8 @@ import { friendlyError } from "@/lib/crm-validation";
 import { requireMutation } from "@/lib/current-user";
 import { saveFeedbackPath } from "@/lib/save-feedback";
 import { contactSaveReview, type ContactDuplicateMatch } from "@/lib/contact-duplicates";
-export type FormState = { errors: Record<string, string>; message?: string; values?: Record<string, string>; matches?: ContactDuplicateMatch[]; reviewToken?: string };
+import { assertEditToken, requireEditToken, isRecordChanged, recordChangedMessage } from '../../lib/stale-edit';
+export type FormState = { errors: Record<string, string>; message?: string; values?: Record<string, string>; recordChanged?: boolean; matches?: ContactDuplicateMatch[]; reviewToken?: string };
 function retainedValues(form: FormData) { const values=Object.fromEntries([...form.entries()].filter((entry): entry is [string,string] => typeof entry[1] === "string")); values.isPrimary=form.has("isPrimary")?"true":"false"; return values; }
 export async function submitContact(id: number | null, originatingAccountId: number | null, _state: FormState, form: FormData): Promise<FormState> {
   const actor = await requireMutation("contacts.write");
@@ -18,11 +19,14 @@ export async function submitContact(id: number | null, originatingAccountId: num
     if (!account || account.status !== "ACTIVE" || account.archivedAt || parsed.value.accountId !== originatingAccountId) return { errors: { accountId: "Choose the originating active Account." }, message: "Account is no longer available for this Contact.", values };
   }
   let contactId: number;
-  const previous = id ? await prisma.contact.findUnique({ where: { id }, select: { accountId: true, firstName: true, lastName: true, email: true } }) : null;
+  const previous = id ? await prisma.contact.findUnique({ where: { id }, select: { accountId: true, firstName: true, lastName: true, email: true, updatedAt: true } }) : null;
+  let editToken: string | undefined;
+  try { if (id) { editToken = requireEditToken(form); if (previous) assertEditToken(previous.updatedAt, editToken); } }
+  catch (error) { if (isRecordChanged(error)) return { errors: {}, recordChanged: true, message: recordChangedMessage, values }; throw error; }
   const review = await contactSaveReview(prisma, parsed.value, form, id ?? undefined, previous);
   if (review) return { errors: {}, values, ...review };
-  try { contactId = await saveContact(prisma, parsed.value, id ?? undefined, actor); }
-  catch (error) { return { errors: {}, message: friendlyError(error, "Contact could not be saved. Check whether another contact is primary for this account."), values }; }
+  try { contactId = await saveContact(prisma, parsed.value, id ?? undefined, actor, editToken); }
+  catch (error) { if (isRecordChanged(error)) return { errors: {}, message: recordChangedMessage, recordChanged: true, values }; return { errors: {}, message: friendlyError(error, "Contact could not be saved. Check whether another contact is primary for this account."), values }; }
   revalidatePath("/contacts");
   for (const accountId of new Set([previous?.accountId, parsed.value.accountId])) if (accountId) revalidatePath(`/accounts/${accountId}`);
   if (id) revalidatePath(`/contacts/${id}`);

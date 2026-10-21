@@ -1,4 +1,5 @@
 import { assertEditToken, nextUpdatedAt } from './stale-edit';
+import { advanceProjectRelationships } from './project-relationships';
 import { getCurrencyConfiguration, canRetainCurrency } from './currency-configuration';
 import { parseActualCloseDate, resolveOpportunityOutcome, outcomeHistoryValue, opportunityOutcomeWhere, type OutcomeFilters } from './opportunity-outcomes';
 import { businessToday, isPriceExceptionExpired } from './price-exception-dates';
@@ -201,6 +202,11 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
     }
     else { const created = await tx.opportunity.create({ data }); id = created.id; }
     const opportunityId = id;
+    const changedProjectIds = [
+      ...(existing?.projects ?? []).filter(link => !input.projectIds.includes(link.projectId)).map(link => link.projectId),
+      ...input.projectIds.filter(projectId => !existing?.projects.some(link => link.projectId === projectId)),
+    ];
+    await advanceProjectRelationships(tx, changedProjectIds);
     for (const link of existing?.projects ?? []) if (!input.projectIds.includes(link.projectId)) await tx.opportunityProject.delete({ where: { opportunityId_projectId: { opportunityId, projectId: link.projectId } } });
     for (const projectId of input.projectIds) if (!existing?.projects.some(link => link.projectId === projectId)) await tx.opportunityProject.create({ data: { opportunityId, projectId } });
     const existingMemberships = await tx.opportunityAccount.findMany({ where: { opportunityId }, include: { roles: true } });

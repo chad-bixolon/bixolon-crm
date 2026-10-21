@@ -95,7 +95,7 @@ test('Project create and edit save participants transactionally; changing Primar
   calls.length = 0;
   const edited = { ...first, primaryAccountId: 2, participants: [{ accountId: 1, roles: ['END_CUSTOMER'] }] };
   assert.equal(await projects.saveProject(client, edited, actor('SALES'), 10), 10);
-  assert.deepEqual(calls.slice(0, 3), ['remove roles 2', 'remove 2', 'update Project']);
+  assert.deepEqual(calls.slice(0, 3), ['update Project', 'remove roles 2', 'remove 2']);
   assert.equal(stored.primaryAccountId, 2);
   assert.ok(calls.includes('add 1'));
   await assert.rejects(projects.saveProject(client, edited, actor('MARKETING_MANAGER'), 10), /Access denied/);
@@ -144,7 +144,7 @@ test('Opportunity supports zero, one, and many Projects without changing partici
   const tx = {
     salesStage: { findUnique: async () => ({ active: true }) }, currency: { findUnique: async () => ({ active: true }) },
     account: { findMany: async () => [{ id: 4 }] }, product: { findMany: async () => [] },
-    project: { findMany: async ({ where }) => where.id.in.map(id => ({ id, archivedAt: null, primaryAccountId: null, participants: [] })) },
+    project: { findUniqueOrThrow: async () => ({ updatedAt: new Date('2026-10-19T12:00:00.000Z') }), update: async () => ({}), findMany: async ({ where }) => where.id.in.map(id => ({ id, archivedAt: null, primaryAccountId: null, participants: [] })) },
     opportunity: { create: async () => ({ id: 5 }), findUnique: async () => ({ id: 5, archivedAt: null, projects: links.map(link => ({ ...link })) }), update: async () => {} },
     opportunityProject: { create: async ({ data }) => links.push(data), delete: async ({ where }) => { const i = links.findIndex(link => link.projectId === where.opportunityId_projectId.projectId); links.splice(i, 1); } },
     opportunityAccount: { findMany: async () => [{ accountId: 4, roles: [{ role: 'END_USER' }] }], upsert: async () => {} },

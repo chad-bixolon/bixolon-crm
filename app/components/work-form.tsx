@@ -64,8 +64,8 @@ export function WorkForm({ caseRelationshipsLocked = false, caseTaskOnly = false
   const opportunityChoice = selectedOpportunityId ? { id: selectedOpportunityId, name: knownOpportunities.find(row => row.id === selectedOpportunityId)?.name ?? 'Current Opportunity', context: null } : null;
   const projectChoice = selectedProjectId ? { id: selectedProjectId, name: knownProjects.find(row => row.id === selectedProjectId)?.name ?? 'Current Project', context: null } : null;
   return <>{kind==='task'&&id&&<SaveSuccessFromQuery recordName="Task"/>}<form action={action} onSubmit={guard} className="panel grid min-w-0 gap-4 p-4 sm:grid-cols-2 sm:p-6">
-    {kind === 'task' && id && <input type="hidden" name="editToken" value={editToken}/>}
-    {state.recordChanged && id && kind === 'task' && <div className="sm:col-span-2"><RecordChangedNotice result={state} href={`/tasks/${id}`}/></div>}
+    {id && <input type="hidden" name="editToken" value={editToken}/>}
+    {state.recordChanged && id && <div className="sm:col-span-2"><RecordChangedNotice result={state} href={kind === 'task' ? `/tasks/${id}` : `/${kind === 'activity' ? 'activities' : 'notes'}/${id}/edit`}/></div>}
     {!id && kind !== "note" && <p className="sm:col-span-2 text-sm text-slate-600">{kind === "activity" ? "Record work that already happened, such as a call, meeting, or email." : "Track work that still needs to be done."}</p>}
     {supportCase && <div className="sm:col-span-2 rounded-md border border-orange-200 bg-orange-50 p-3 text-sm"><strong>Support Case:</strong> {supportCase.caseNumber}{supportCase.contactName ? ` · ${supportCase.contactName}` : ""}<input type="hidden" name="supportCaseId" value={supportCase.id}/></div>}
     {createKey && !id && <input type="hidden" name="createKey" value={createKey}/>}
