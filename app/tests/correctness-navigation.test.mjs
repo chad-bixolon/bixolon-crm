@@ -20,8 +20,8 @@ let actor = { id: 7, role: 'SALES', active: true }, query;
 const db = {
   opportunity: { findMany: async args => { query = args; return []; } },
   user: { findMany: async () => [] }, salesStage: { findMany: async () => [] }, territory: { findMany: async () => [] },
-  task: { findMany: async () => [{ id: 42, subject: 'Call customer', status: 'OPEN', priority: 'NORMAL', dueDate: null }] },
-  note: { findMany: async () => [{ id: 43, body: 'Customer background', createdAt: new Date('2026-10-16'), createdBy: null }] },
+  task: { count: async () => 1, findMany: async () => [{ id: 42, subject: 'Call customer', status: 'OPEN', priority: 'NORMAL', dueDate: null }] },
+  note: { count: async () => 1, findMany: async () => [{ id: 43, body: 'Customer background', createdAt: new Date('2026-10-16'), createdBy: null }] },
 };
 Module._load = function(request, parent, isMain) {
   if (request === 'next/link') return function Link({ href, children, ...props }) { return React.createElement('a', { href, ...props }, children); };

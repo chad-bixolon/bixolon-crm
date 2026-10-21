@@ -17,7 +17,7 @@ test('Account Quick Actions offer create only with sales write on an eligible Ac
   const page = source('app/accounts/[id]/page.tsx');
   assert.match(page, /account\.status === 'ACTIVE' && !account\.archivedAt/);
   assert.match(page, /can\(actor, 'sales\.write'\) \? \[\{ label: 'New Opportunity', href: `\/opportunities\/new\?accountId=\$\{id\}`/);
-  assert.match(page, /opportunityMemberships: \{ where: \{ opportunity: operationalOpportunityWhere \}/);
+  assert.match(source('lib/account-detail.ts'), /opportunityMemberships: \{ where: \{ opportunity: operationalOpportunityWhere \}/);
   assert.equal(can({ id: 1, role: 'SALES', active: true, archivedAt: null }, 'sales.write'), true);
   assert.equal(can({ id: 1, role: 'READ_ONLY', active: true, archivedAt: null }, 'sales.write'), false);
 });

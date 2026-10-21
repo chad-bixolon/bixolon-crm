@@ -2,10 +2,13 @@ import Link from 'next/link';
 import { DocumentType } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import type { Actor } from '@/lib/authorization';
-import { assertDocumentParentAccess, documentTypeLabels, documentWhere, type DocumentParentType } from '@/lib/documents';
+import { assertDocumentParentAccess, documentTypeLabels, type DocumentParentType } from '@/lib/documents';
 import { DocumentArchive, DocumentFeedback, DocumentUpload } from './document-controls';
 
-type Props = { parentType: DocumentParentType; parentId: number; actor: Actor; view?: string; basePath: string; compact?: boolean };
+import { loadDocumentList } from '@/lib/document-list';
+import { DetailPagination } from './detail-pagination';
+
+type Props = { parentType: DocumentParentType; parentId: number; actor: Actor; view?: string; basePath: string; compact?: boolean; page?: string };
 const types = Object.values(DocumentType).map(value => ({ value, label: documentTypeLabels[value] }));
 
 function formatSize(bytes: number) {
@@ -20,17 +23,13 @@ function viewHref(basePath: string, archived: boolean) {
   return `${path}${params.size ? `?${params}` : ''}#documents`;
 }
 
-export async function DocumentsSection({ parentType, parentId, actor, view, basePath, compact = false }: Props) {
+export async function DocumentsSection({ parentType, parentId, actor, view, basePath, compact = false, page }: Props) {
   const parent = { type: parentType, id: parentId };
   await assertDocumentParentAccess(prisma, actor, parent, 'read');
   let canWrite = true;
   try { await assertDocumentParentAccess(prisma, actor, parent, 'write'); } catch { canWrite = false; }
   const archived = view === 'archived';
-  const documents = await prisma.document.findMany({
-    where: documentWhere(parent, archived),
-    include: { uploadedBy: { select: { firstName: true, lastName: true } }, archivedBy: { select: { firstName: true, lastName: true } } },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-  });
+  const { documents, pagination } = await loadDocumentList(prisma, parent, archived, page);
   return <section id="documents" className="panel min-w-0 p-6">
     <DocumentFeedback/>
     <div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">Documents</h2><div className="mt-2 flex gap-3 text-sm"><Link className={!archived ? 'font-semibold text-orange-800' : 'text-slate-600 underline'} href={viewHref(basePath, false)}>Active</Link><Link className={archived ? 'font-semibold text-orange-800' : 'text-slate-600 underline'} href={viewHref(basePath, true)}>Archived</Link></div></div>{canWrite && !archived && <DocumentUpload parent={parent} types={types} compact={compact}/>}</div>
@@ -45,5 +44,6 @@ export async function DocumentsSection({ parentType, parentId, actor, view, base
         {archived && <div className={compact ? '' : 'md:col-span-4'}><a className="text-orange-800 underline" href={`/api/documents/${document.id}/download?view=archived`} target="_blank" rel="noopener noreferrer">Open retained document</a>{canWrite && <DocumentArchive id={document.id} archived/>}</div>}
       </div>)}
     </div> : <p className={compact ? 'text-sm text-slate-500' : 'rounded-lg bg-slate-50 p-4 text-sm text-slate-600'}>{archived ? (compact ? 'No documents archived.' : 'No documents have been archived.') : (compact ? 'No documents uploaded.' : 'No documents have been uploaded.')}</p>}
+    {pagination && <DetailPagination pagination={pagination} basePath={viewHref(basePath, archived)} label="Documents"/>}
   </section>;
 }

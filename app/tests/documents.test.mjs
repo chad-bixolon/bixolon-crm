@@ -152,7 +152,7 @@ test('schema, migration, and detail pages wire the V1 document invariants and UI
   for (const source of [account, project, opportunity]) assert.match(source, /DocumentsSection/);
   const section = fs.readFileSync(path.join(root, 'components/documents-section.tsx'), 'utf8');
   assert.match(section, /No documents have been uploaded/);
-  assert.match(section, /orderBy: \[\{ createdAt: 'desc' \}, \{ id: 'desc' \}\]/);
+  assert.match(fs.readFileSync(path.join(root, 'lib/document-list.ts'), 'utf8'), /orderBy: \[\{ createdAt: 'desc' \}, \{ id: 'desc' \}\]/);
   for (const label of Object.values(documents.documentTypeLabels)) assert.match(section + JSON.stringify(documents.documentTypeLabels), new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
