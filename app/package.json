@@ -13,7 +13,7 @@
     "prisma:generate": "node scripts/prisma-generate.mjs",
     "postinstall": "npm run prisma:generate",
     "predev": "npm run prisma:generate",
-    "prebuild": "npm run prisma:generate",
+    "prebuild": "npm run prisma:generate && node scripts/build-release-metadata.mjs",
     "typecheck": "npm run prisma:generate && tsc --noEmit --incremental false",
     "db:deploy": "prisma migrate deploy",
     "db:status": "prisma migrate status",

@@ -42,6 +42,8 @@ COPY prisma.config.ts ./
 COPY scripts/prisma-generate.mjs ./scripts/prisma-generate.mjs
 RUN npm ci
 COPY . .
+ARG RELEASE_GIT_SHA
+ARG RELEASE_BRANCH
 RUN npm run build && rm -rf .next/cache
 
 FROM production-base AS production
@@ -53,6 +55,7 @@ COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_m
 COPY --from=production-build --chown=node:node /app/.next ./.next
 COPY --from=production-build --chown=node:node /app/public ./public
 COPY --from=production-build --chown=node:node /app/package.json ./package.json
+COPY --from=production-build --chown=node:node /app/release-metadata.json ./release-metadata.json
 COPY --from=production-build --chown=node:node /app/prisma ./prisma
 COPY --from=production-build --chown=node:node /app/prisma.config.ts ./prisma.config.ts
 COPY --from=production-build --chown=node:node /app/scripts/seed-sales-stages.mjs ./scripts/seed-sales-stages.mjs

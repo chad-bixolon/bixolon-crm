@@ -94,6 +94,54 @@ App Platform configuration references:
 [monorepo source directories](https://docs.digitalocean.com/products/app-platform/how-to/deploy-from-monorepo/), and
 [health checks](https://docs.digitalocean.com/products/app-platform/how-to/manage-health-checks/).
 
+### DigitalOcean release identity
+
+After deploying the runtime identity support, go to **App → Settings → Web
+Service → Environment Variables** and configure:
+
+| Key | Value | Scope | Type |
+| --- | --- | --- | --- |
+| `RELEASE_GIT_SHA` | `${_self.COMMIT_HASH}` | Run Time | General / unencrypted |
+| `RELEASE_BRANCH` (optional) | `main` (or the configured production branch) | Run Time | General / unencrypted |
+
+DigitalOcean resolves `${_self.COMMIT_HASH}` to the component's source commit.
+For Dockerfile builds its bindable variables are runtime-only, which this
+implementation now supports. No additional Dockerfile change or build-time SHA
+configuration is required. Remove any manually maintained build-time SHA setting
+when adopting this runtime mapping, so it cannot become a stale fallback. The Web
+Service needs this mapping; scheduled Jobs do not need it for System Health release
+verification. Jobs sharing its image inherit the same build manifest.
+
+The app-spec fragment belongs under the existing Web Service's `envs`:
+
+```yaml
+envs:
+  - key: RELEASE_GIT_SHA
+    value: ${_self.COMMIT_HASH}
+    scope: RUN_TIME
+    type: GENERAL
+  - key: RELEASE_BRANCH
+    value: main
+    scope: RUN_TIME
+    type: GENERAL
+```
+
+The runtime-support code must be built and deployed once. After that, saving the
+runtime configuration must deploy/restart the service with the new environment;
+the SHA mapping needs no manual update on later source deployments. The original
+`builtAt` continues to describe the build, not deployment or restart time.
+
+As an Admin, open **Administration → System Health → Release Status**. Compare
+**Commit** with the full source SHA in DigitalOcean's deployed release. **Branch**
+is optional; **Build time** remains the generated build timestamp. Overall
+**Verified** requires the resolved SHA, **Migration status: Up to date**, and
+**Runtime/schema status: Verified**. A malformed runtime SHA is discarded; a
+valid build SHA is used next, otherwise **Commit** shows **Unable to verify** and
+the release cannot be fully verified. Setting branch alone cannot verify it.
+
+See [DigitalOcean bindable variables](https://docs.digitalocean.com/products/app-platform/how-to/use-environment-variables/#component-specific-variables)
+and the [Dockerfile binding restriction](https://docs.digitalocean.com/support/why-cant-i-access-my-environment-variables-at-build-time-when-building-from-a-dockerfile-on-app-platform/).
+
 ## Support Gmail rollout
 
 See [Support Gmail production rollout](support-email-rollout.md) for dedicated OAuth configuration, PostgreSQL encrypted token persistence, runtime boundaries, migration sequence and controlled verification. Gmail stays read-only; local development uses synthetic fixtures.

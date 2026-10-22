@@ -9,3 +9,5 @@ test-results/
 .env.*
 
 /generated/prisma
+
+/release-metadata.json
