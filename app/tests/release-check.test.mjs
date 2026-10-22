@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import test from 'node:test';
 import { assertClientAlignment, commandRunner, migrationChanged, parseOptions, parseUnitCounts, redact, runReleaseCheck, runtimeSupported } from '../scripts/release-check.mjs';
 
-function fixture(t, { dirty = false, paths = [], fail, output, version = 'v22.23.3', mutate = false, allowDirty = false, focus = null } = {}) {
+function fixture(t, { dirty = false, paths = [], fail, output, version = 'v22.23.4', mutate = false, allowDirty = false, focus = null } = {}) {
   const directory = mkdtempSync(resolve(tmpdir(), 'saleshub-release-check-test-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const calls = [], environments = [];
@@ -32,7 +32,7 @@ test('successful orchestration emits READY JSON/text with identity, counts, dura
   const text = readFileSync(resolve(f.directory, 'release.txt'), 'utf8');
   assert.equal(json.formatVersion, 1);
   assert.equal(json.repository.commit, 'abc123');
-  assert.equal(json.runtime.node, 'v22.23.3');
+  assert.equal(json.runtime.node, 'v22.23.4');
   assert.equal(json.runtime.npm, '10.9.8');
   assert.ok(json.timestamp && json.durationMs >= 0);
   assert.deepEqual(json.stages.find(stage => stage.name === 'Unit').counts, { passed: 11, failed: 0, skipped: 1, total: 12 });
@@ -83,14 +83,17 @@ test('schema and migration edits invoke current test-image build and existing re
 });
 
 test('unsupported runtime fails visibly without generation, tests or runtime switching', async t => {
-  const f = fixture(t, { version: 'v20.19.2' });
-  const result = await f.execute();
-  assert.equal(result.result, 'NOT READY');
-  assert.match(result.stages.find(stage => stage.name === 'Runtime').detail, /unsupported/);
-  assert.equal(f.calls.some(([, args]) => args.includes('prisma:generate')), false);
-  for (const version of ['22.12.0', 'v22.23.3', '22.99.0']) assert.equal(runtimeSupported(version, '>=22.12 <23'), true);
-  for (const version of ['22.11.9', '23.0.0', '20.19.2', '22.12.0-rc.1']) assert.equal(runtimeSupported(version, '>=22.12 <23'), false);
-  assert.equal(runtimeSupported('22.23.3', '^22'), false);
+  for (const version of ['v20.19.2', 'v22.23.3', 'v24.0.0', 'v26.0.0']) {
+    const f = fixture(t, { version });
+    const result = await f.execute();
+    assert.equal(result.result, 'NOT READY');
+    assert.match(result.stages.find(stage => stage.name === 'Runtime').detail, /unsupported/);
+    assert.equal(f.calls.some(([, args]) => args.includes('prisma:generate')), false);
+  }
+  const range = JSON.parse(readFileSync(new URL('../package.json', import.meta.url))).engines.node;
+  for (const version of ['22.23.4', 'v22.23.4', '22.99.0']) assert.equal(runtimeSupported(version, range), true);
+  for (const version of ['22.12.0', '22.23.3', '23.0.0', '24.0.0', '26.0.0', '20.19.2', '22.23.4-rc.1']) assert.equal(runtimeSupported(version, range), false);
+  assert.equal(runtimeSupported('22.23.4', '^22'), false);
 });
 
 test('candidate mutation and missing unit totals fail closed', async t => {
