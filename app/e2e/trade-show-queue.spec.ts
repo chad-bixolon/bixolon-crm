@@ -203,3 +203,24 @@ test('Sales can follow another rep Opportunity link from lead/report while edit 
   await signInAs(page, 'readOnly'); await page.goto(`/tasks/${(await db.task.findFirstOrThrow({ where: { tradeShowLeadId: fixture.leads[0].id } })).id}`);
   await expect(page.getByRole('link', { name: 'Edit task', exact: true })).toHaveCount(0);
 });
+
+test('historical XPressLeads template display stays separate from the actual event', async ({ page }) => {
+  const { show, leads } = await makeShow(1);
+  await db.tradeShowImport.update({ where: { id: leads[0].firstImportId }, data: { format: 'XPRESSLEADS_MODEX', uploadedAt: new Date('2026-04-01T12:00:00Z') } });
+  await signInAs(page, 'admin');
+  await page.goto(`/trade-shows/${show.id}`);
+  await expect(page.getByRole('heading', { name: show.name, exact: true })).toBeVisible();
+  await expect(page.getByText('Import Template: MODEX / XPressLeads', { exact: true })).toBeVisible();
+  await page.goto(`/trade-shows/${show.id}/leads/${leads[0].id}`);
+  const details = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Source & Import Details' }) });
+  await expect(details.locator('dt', { hasText: 'Import Template' })).toBeVisible();
+  await expect(details.getByText('MODEX / XPressLeads', { exact: true })).toBeVisible();
+  await expect(page.getByText(show.name, { exact: true })).toBeVisible();
+  await page.goto(`/trade-shows/${show.id}/import`);
+  await page.locator('input[type=file]').setInputFiles('tests/fixtures/trade-show/modex-xpressleads-known-profile.xlsx');
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByText(/Import Template: MODEX \/ XPressLeads/)).toBeVisible();
+  const persisted = await db.tradeShowLead.findUniqueOrThrow({ where: { id: leads[0].id }, include: { firstImport: true } });
+  expect(persisted.tradeShowId).toBe(show.id);
+  expect(persisted.firstImport.format).toBe('XPRESSLEADS_MODEX');
+});

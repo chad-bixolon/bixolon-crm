@@ -182,3 +182,25 @@ test('routing defaults and row overrides remove the unconditional import rep req
   outcome=await run('UNREVIEWED',null,null,{routing:'REFERRED_TO_PARTNER',partnerAccountId:20});assert.equal(outcome.created[0].routing,'REFERRED_TO_PARTNER');assert.equal(outcome.created[0].routedPartnerAccountId,20);assert.equal(outcome.created[0].referredByUserId,7);
   await assert.rejects(run('REFERRED_TO_PARTNER',null,null),/Partner Account/);
 });
+
+test('MODEX template imports into the selected event with Events attribution and event follow-up', async () => {
+  const buffer=fixtureBuffer('modex','xlsx'), parsed=parseFixture('modex','xlsx');
+  let history, campaign, sourceQuery; const leads=[], touches=[], tasks=[], sources=[];
+  const tx=withFollowUpMocks({user:{findMany:async()=>[{id:9}]},account:{findMany:async()=>[]},contact:{findMany:async()=>[]},tradeShowImport:{create:async({data})=>(history={id:3,...data}),update:async()=>{}},tradeShowLead:{findUnique:async()=>null,create:async({data})=>{const lead={id:leads.length+1,...data};leads.push(lead);return lead;}}});
+  tx.marketingCampaign.upsert=async(args)=>{campaign=args;return {id:12}};
+  tx.leadSourceOption.findUnique=async(args)=>{sourceQuery=args;return {id:13,active:true}};
+  tx.tradeShowLead.updateMany=async({data})=>{sources.push(data);return {count:1}};
+  tx.campaignInfluence.upsert=async({create})=>{touches.push(create);return {}};
+  tx.task.create=async({data})=>{tasks.push(data);return {id:tasks.length,...data}};
+  const client={tradeShow:{findUnique:async()=>({timezone:'America/New_York',archivedAt:null})},$transaction:async callback=>callback(tx)};
+  const choices=parsed.rows.map(row=>({sourceKey:row.sourceKey,repId:null,accountId:null,contactId:null,refresh:false}));
+  await importer.confirmTradeShowImport(client,42,buffer,'fixture.xlsx',{id:7,role:'MARKETING_MANAGER',active:true,archivedAt:null},parsed.sha256,9,choices);
+  assert.equal(history.format,'XPRESSLEADS_MODEX'); assert.equal(history.tradeShowId,42);
+  assert.equal(campaign.create.name,'NRF 2026'); assert.equal(campaign.where.tradeShowId,42);
+  assert.deepEqual(sourceQuery.where,{systemKey:'TRADE_SHOW_EVENT'});
+  assert.ok(leads.length>0); assert.equal(tasks.length,leads.length);
+  for(const lead of leads){assert.equal(lead.tradeShowId,42);assert.equal(lead.firstImportId,3);assert.equal(lead.routing,'BIXOLON_SALES');assert.equal(lead.assignedSalesRepUserId,9)}
+  for(const source of sources)assert.equal(source.leadSourceId,13);
+  for(const touch of touches){assert.equal(touch.campaignId,12);assert.equal(touch.sourceContext,'TRADE_SHOW_IMPORT')}
+  for(const task of tasks){assert.match(task.description,/NRF 2026/);assert.doesNotMatch(task.description,/MODEX|XPressLeads/);assert.equal(task.assignedToId,9)}
+});

@@ -1,3 +1,4 @@
+import { importTemplateLabels } from '@/lib/trade-show-import-labels';
 import { TradeShowBulkRoutingForm } from '@/components/trade-show-bulk-routing-form';
 import { TradeShowFollowUpTask } from '@/components/trade-show-follow-up-task';
 import { eventLeadWhere } from '@/lib/trade-show-event-leads';
@@ -23,7 +24,7 @@ import { TradeShowBulkRoutingControls } from '@/components/trade-show-bulk-routi
 import { TradeShowResources } from '@/components/trade-show-resources';
 import { formatCurrency } from '@/lib/display-format';
 import { canManageContactResolution } from '@/lib/trade-show-contact-resolution';
-import type { TradeShowImportFormat, TradeShowLeadRouting, TradeShowLeadStatus } from '@prisma/client';
+import type { TradeShowLeadRouting, TradeShowLeadStatus } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 const leadStatusClasses: Record<string, string> = {
@@ -35,7 +36,6 @@ const leadStatusClasses: Record<string, string> = {
 };
 const leadStatusLabels: Record<TradeShowLeadStatus, string> = { NEW: 'New', CONTACTED: 'Contacted', QUALIFIED: 'Qualified', CONVERTED: 'Converted', DISQUALIFIED: 'Disqualified' };
 const routingLabels:Record<TradeShowLeadRouting,string>={UNREVIEWED:'Unreviewed',BIXOLON_SALES:'BIXOLON Sales',REFERRED_TO_PARTNER:'Partner',MARKETING_FOLLOW_UP:'Marketing'};
-const sourceFormatLabels: Record<TradeShowImportFormat, string> = { NRA_NRF: 'NRA / NRF', XPRESSLEADS_MODEX: 'MODEX / XPressLeads', CUSTOM_MAPPING: 'Custom mapping' };
 export default async function TradeShowPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{q?:string;rep?:string;status?:string;routing?:string;account?:string;contact?:string;followUp?:string;bulk?:string;saved?:string;page?:string}> }) {
   const actor = await currentUser();
   const viewImportHistory = canViewTradeShowImportHistory(actor);
@@ -119,6 +119,6 @@ export default async function TradeShowPage({ params, searchParams }: { params: 
       {!show.leads.length && <p className="p-8 text-center text-sm text-slate-500">No leads match these filters.</p>}
     </section>
     <div className="mb-5 flex flex-wrap justify-between gap-3 text-sm"><span>{count} leads · Page {page} of {pages}</span><div className="flex gap-2">{page > 1 && <Link className="btn-secondary" href={linkFor(page - 1)}>Previous</Link>}{page < pages && <Link className="btn-secondary" href={linkFor(page + 1)}>Next</Link>}</div></div>
-    {viewImportHistory && <section className="panel p-5"><h2 className="text-lg font-semibold">Import History</h2>{show.imports.length ? <ul className="mt-3 divide-y">{show.imports.map(item => <li className="min-w-0 py-3 text-sm" key={item.id}><strong className="block break-all text-slate-900">{item.sourceFileName}</strong><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-slate-600"><span>{sourceFormatLabels[item.format]}</span>{item.mappingName&&<span>Mapping: {item.mappingName}</span>}<span>Sheet: {item.sourceSheet}</span><span>Uploaded by {item.uploadedBy.firstName} {item.uploadedBy.lastName}</span><span>{dateTime(item.uploadedAt)}</span></div><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-slate-500"><span>{item.rowCount} rows</span><span>{item.createdCount} new</span><span>{item.existingCount} existing</span><span>{item.skippedCount} skipped</span></div></li>)}</ul> : <p className="mt-3 text-sm text-slate-500">No confirmed imports yet.</p>}</section>}
+    {viewImportHistory && <section className="panel p-5"><h2 className="text-lg font-semibold">Import History</h2>{show.imports.length ? <ul className="mt-3 divide-y">{show.imports.map(item => <li className="min-w-0 py-3 text-sm" key={item.id}><strong className="block break-all text-slate-900">{item.sourceFileName}</strong><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-slate-600"><span>Import Template: {importTemplateLabels[item.format]}</span>{item.mappingName&&<span>Mapping: {item.mappingName}</span>}<span>Sheet: {item.sourceSheet}</span><span>Uploaded by {item.uploadedBy.firstName} {item.uploadedBy.lastName}</span><span>{dateTime(item.uploadedAt)}</span></div><div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-slate-500"><span>{item.rowCount} rows</span><span>{item.createdCount} new</span><span>{item.existingCount} existing</span><span>{item.skippedCount} skipped</span></div></li>)}</ul> : <p className="mt-3 text-sm text-slate-500">No confirmed imports yet.</p>}</section>}
   </Content>;
 }

@@ -1,4 +1,5 @@
 'use client';
+import { importTemplateLabels } from '@/lib/trade-show-import-labels';
 
 import { useState } from 'react';
 import { TableScroll } from '@/components/table-scroll';
@@ -7,7 +8,7 @@ import { RemoteImportEntityPicker } from '@/components/remote-import-entity-pick
 import { previewTradeShowAction, previewMappedTradeShowAction, reviewTradeShowCorrectionsAction, confirmTradeShowAction } from './actions';
 import type { ImportChoice } from '@/lib/trade-show-import';
 import { MAPPING_DESTINATIONS, REVIEWABLE_LEAD_FIELDS, type MappingDefinition, type MappingDestination, type ReviewableLeadField } from '@/lib/trade-show-import-fields';
-import type { TradeShowImportFormat, TradeShowLeadRouting } from '@prisma/client';
+import type { TradeShowLeadRouting } from '@prisma/client';
 import { SaveSuccess } from '@/components/save-success';
 import { defaultEligibleUserId } from '@/lib/assignment-eligibility';
 
@@ -39,7 +40,6 @@ const summaryMetrics = [
   ['placeholderRows', 'Placeholder Rows'],
 ] as const;
 
-const sourceFormatLabels: Record<TradeShowImportFormat, string> = { NRA_NRF: 'NRA / NRF', XPRESSLEADS_MODEX: 'MODEX / XPressLeads', CUSTOM_MAPPING: 'Custom column mapping' };
 
 const rowStateLabel = (state: string) => state.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ');
 const rowWarnings = (warnings: string[]) => warnings.filter(warning => warning !== 'Trade Show timezone is missing.');
@@ -172,6 +172,7 @@ export function TradeShowImportWorkflow({ showId, timezone, effectiveUserId }: {
     <section className="panel max-w-3xl p-4 sm:p-5">
       <h2 className="text-lg font-semibold">1. Upload</h2>
       <ul id="file-requirements" className="mt-2 flex flex-col gap-1 text-sm text-slate-600 sm:flex-row sm:flex-wrap sm:gap-x-5">
+        <li>Import Template identifies the file format. Leads belong to the selected Trade Show, even when the template name includes another event.</li>
         <li>Trade Show lead exports only (.xls or .xlsx); known formats map automatically.</li>
         <li>Maximum 2 MB and 1,000 leads.</li>
         <li>Previewing does not change CRM data.</li>
@@ -232,7 +233,7 @@ export function TradeShowImportWorkflow({ showId, timezone, effectiveUserId }: {
     {plan && <>
       <section className="panel min-w-0 p-4 sm:p-5">
         <h2 className="text-lg font-semibold">{mappingFlow?'3':'2'}. Review &amp; Assign</h2>
-        <p className="mt-1 break-words text-xs leading-5 text-slate-600">{sourceFormatLabels[plan.parsed.format]} · <span className="break-all">{plan.filename}</span> · {plan.parsed.sheet}</p>
+        <p className="mt-1 break-words text-xs leading-5 text-slate-600">Import Template: {importTemplateLabels[plan.parsed.format]} · <span className="break-all">{plan.filename}</span> · {plan.parsed.sheet}</p>
         {plan.mapping?.name&&<p className="mt-1.5 rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-xs text-orange-900">Saved mapping detected: <strong>{plan.mapping.name}</strong></p>}
         {plan.priorExactFile && <p className="mt-1.5 text-xs font-semibold text-amber-800">This exact file has already been confirmed for this Trade Show.</p>}
         <div className="trade-show-import-metrics mt-3" aria-label="Import summary">
