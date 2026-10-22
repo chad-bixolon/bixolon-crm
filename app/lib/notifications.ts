@@ -52,12 +52,12 @@ async function visibleEntityWhere(db: Db, actor: Actor, category: NotificationCa
   const clauses: Prisma.NotificationWhereInput[] = [];
   for (const entityType of types) {
     const permission = entityType === 'PRICE_EXCEPTION' ? 'pricing.read' : entityType === 'TASK' ? 'tasks.read' : entityType === 'SUPPORT_CASE' ? 'support-cases.read' : 'opportunities.read';
-    if (!can(actor, permission)) continue;
+    if (!can(actor, permission) && !(entityType === 'TASK' && can(actor, 'support-work.write'))) continue;
     const candidates = await db.notification.findMany({ where: { userId: actor.id, entityType }, select: { entityId: true }, distinct: ['entityId'] });
     const ids = candidates.map(row => row.entityId);
     if (!ids.length) continue;
     const rows = entityType === 'PRICE_EXCEPTION' ? await db.priceException.findMany({ where: scopedPriceExceptionWhere(actor, { id: { in: ids } }), select: { id: true } })
-      : entityType === 'TASK' ? await db.task.findMany({ where: { id: { in: ids }, ...taskScope(actor) }, select: { id: true } })
+      : entityType === 'TASK' ? await db.task.findMany({ where: { id: { in: ids }, ...taskScope(actor), ...(!can(actor, 'tasks.read') ? { supportCaseId: { not: null }, supportCase: supportCaseReadWhere(actor, true) } : {}) }, select: { id: true } })
       : entityType === 'SUPPORT_CASE' ? await db.supportCase.findMany({ where: { id: { in: ids }, ...supportCaseReadWhere(actor, true) }, select: { id: true } })
       : await db.opportunity.findMany({ where: { id: { in: ids }, ...opportunityScope(actor) }, select: { id: true } });
     if (rows.length) clauses.push({ entityType, entityId: { in: rows.map(row => row.id) } });

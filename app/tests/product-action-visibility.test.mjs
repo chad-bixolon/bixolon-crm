@@ -27,6 +27,7 @@ Module._load = function(request, parent, isMain) {
   if (request === '@/components/shell') return { Content: ({ children }) => React.createElement('main', null, children), PageHeader: ({ title, action }) => React.createElement('header', null, React.createElement('h1', null, title), action) };
   if (request === '@/lib/current-user') return { requirePermission: async permission => { if (!can(effective, permission)) throw new Error('Access denied'); return effective; } };
   if (request === '@/lib/authorization') return { can };
+  if (request === '@/lib/product-detail-data') return require(path.join(root, 'lib/product-detail-data.ts'));
   if (request === '@/lib/prisma') return { prisma: { product: { findUnique: async () => product } } };
   if (request === '@/lib/products') return { catalogSourceLabels: {}, listProducts: async () => ({ products: [product], count: 1, page: 1, pages: 1, priceExceptionsByProduct: new Map() }), productCategoryChoices: async () => [], productHref: () => '/products' };
   if (request === '@/lib/product-labels') return { odmSubtypeLabels: {} };
@@ -97,4 +98,16 @@ test('development impersonation uses the effective Sales permission', async () =
   assert.equal(context.impersonating, true);
   effective = context.effective;
   assert.doesNotMatch(renderToStaticMarkup(await ProductsPage({ searchParams: Promise.resolve({}) })), /New product|Deactivate/);
+});
+
+test('Support SSR contains catalog data but no negotiated pricing fields or values', async () => {
+  effective = actor('SUPPORT');
+  const sku = product.skus[0];
+  const prior = { ...sku };
+  Object.assign(sku, { catalogSource:'ODM', odmSubtype:'CUSTOMER_SPECIFIC', priceUnit:'EACH', prices:[], odmCustomers:[{accountId:1,account:{id:1,name:'Customer'},prices:[{currencyCode:'USD',customerPrice:987.65,previousPrice:876.54,tariffPercent:25,tariffAmount:246.91,finalUnitPrice:1234.56,effectiveDate:null,notes:'PRIVATE_NEGOTIATED_NOTE'}]}] });
+  try {
+    const html = renderToStaticMarkup(await ProductDetails({ id:5, manage:false }));
+    assert.match(html,/Printer|P5-8/); assert.match(html,/Customer/);
+    assert.doesNotMatch(html,/987\.65|876\.54|246\.91|1234\.56|PRIVATE_NEGOTIATED_NOTE|Customer Price|Previous Price|Final Unit Price|Pricing Notes|Tariff/);
+  } finally { Object.assign(sku,prior); effective=actor('ADMIN'); }
 });

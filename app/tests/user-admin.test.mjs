@@ -14,6 +14,11 @@ const redirectSignal = Symbol('redirect');
 let savedId = 42;
 let saveError;
 let savedInput;
+let effectiveActor = { id: 1, role: 'ADMIN', active: true, archivedAt: null };
+const { assertPermission } = (() => {
+  Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, filename);
+  return require(path.join(root, 'lib/authorization.ts'));
+})();
 const redirects = [];
 const originalLoad = Module._load;
 Module._load = function(request, parent, isMain) {
@@ -22,9 +27,9 @@ Module._load = function(request, parent, isMain) {
   if (request === '@/lib/prisma') return { prisma: { user: { findUnique: async () => ({ id: 42, firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', role: 'SALES_MANAGER', active: true, archivedAt: null }) } } };
   if (request === '@/lib/users') return {
     parseUser: (form) => require(path.join(root, 'lib/users.ts')).parseUser(form),
-    saveUser: async (_client, input) => { savedInput = input; if (saveError) throw saveError; return savedId; },
+    saveUser: async (_client, actor, input) => { savedInput = input; if (saveError) throw saveError; return savedId; },
   };
-  if (request === '@/lib/current-user') return { requireMutation: async () => {} };
+  if (request === '@/lib/current-user') return { requireMutation: async permission => { assertPermission(effectiveActor, permission); return effectiveActor; } };
   if (request === '@/lib/identity') return { unlinkGoogleIdentity: async () => {} };
   if (request === '@/lib/submit-guard') return { useSubmitGuard: () => () => {} };
   if (request === '@/app/administration/users/actions') return { submitUser: async () => {} };
@@ -92,4 +97,26 @@ test('duplicate email keeps the existing error and entered values', async () => 
   assert.equal(result.values.email, 'ADA@example.com');
   assert.equal(result.success, undefined);
   saveError = undefined;
+});
+
+for (const actor of [null, ...['READ_ONLY', 'SALES', 'SUPPORT', 'SALES_MANAGER', 'MARKETING_MANAGER'].map(role => ({ id: 2, role, active: true })), { id: 1, role: 'ADMIN', active: false }, { id: 1, role: 'ADMIN', active: true, archivedAt: new Date() }]) {
+  test(`direct submitUser rejects ${JSON.stringify(actor)} before persistence, including forged Admin payloads`, async () => {
+    effectiveActor = actor;
+    savedInput = undefined;
+    try {
+      for (const id of [null, 42]) {
+        const data = form(); data.set('role', 'ADMIN'); data.set('active', 'true'); data.set('actorId', '1');
+        await assert.rejects(submitUser(id, { errors: {} }, data), /Access denied/);
+        assert.equal(savedInput, undefined);
+      }
+    } finally { effectiveActor = { id: 1, role: 'ADMIN', active: true }; }
+  });
+}
+test('Admin forged unknown roles and statuses are rejected without persistence', async () => {
+  for (const [key, value] of [['role', 'EXECUTIVE'], ['active', 'yes']]) {
+    savedInput = undefined;
+    const data = form(); data.set(key, value);
+    const result = await submitUser(null, { errors: {} }, data);
+    assert.ok(result.errors[key]); assert.equal(savedInput, undefined);
+  }
 });

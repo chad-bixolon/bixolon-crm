@@ -19,7 +19,7 @@ function href(issue: string, q = '', page = 1) {
 }
 
 export default async function DataQualityPage({ searchParams }: { searchParams: Promise<Filters> }) {
-  const actor = await requirePermission('users.manage');
+  const actor = await requirePermission('data-quality.manage');
   if (actor.role !== 'ADMIN') notFound();
   const filters = await searchParams;
   const selected = qualityIssue(filters.issue);
@@ -31,7 +31,7 @@ export default async function DataQualityPage({ searchParams }: { searchParams: 
   const pages = initialResult ? Math.max(1, Math.ceil(initialResult.count / pageSize)) : 1;
   const page = Math.min(requestedPage, pages);
   const result = selected && initialResult && page !== requestedPage ? await qualityRows(prisma, selected.key, q, page) : initialResult;
-  const owners = bulk ? await prisma.user.findMany({ where: eligibleUserWhere(selected?.key === 'opportunity-owner' ? 'sales.write' : 'accounts.write'), orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }], select: { id: true, firstName: true, lastName: true } }) : [];
+  const owners = bulk ? await prisma.user.findMany({ where: eligibleUserWhere(selected?.key === 'opportunity-owner' ? 'opportunity-owner' : 'account-owner'), orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }], select: { id: true, firstName: true, lastName: true } }) : [];
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.administration} title="Data Quality" description="Review records that may need attention. A record may appear in more than one group." action={<Link className="btn-secondary" href="/administration">Administration</Link>}/><div className="mb-3"><HelpLink topic="data-quality">Help with Data Quality</HelpLink></div>

@@ -28,7 +28,7 @@ test('only the three owner checks support bulk corrections and their entire page
 
 test('issue predicates respect active records, open stages, and relationship status', () => {
   assert.deepEqual(qualityWhere('account-owner'), { status: 'ACTIVE', archivedAt: null, ownerId: null });
-  assert.deepEqual(qualityWhere('account-owner-inactive'), { status: 'ACTIVE', archivedAt: null, owner: { is: { NOT: eligibleUserWhere('accounts.write') } } });
+  assert.deepEqual(qualityWhere('account-owner-inactive'), { status: 'ACTIVE', archivedAt: null, owner: { is: { NOT: eligibleUserWhere('account-owner') } } });
   assert.deepEqual(qualityWhere('contact-account'), { active: true, archivedAt: null, accountId: null });
   assert.deepEqual(qualityWhere('contact-account-inactive').account.OR[0].status, { not: 'ACTIVE' });
   assert.deepEqual(qualityWhere('opportunity-account').participants, { none: {} });

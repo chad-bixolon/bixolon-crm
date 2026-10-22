@@ -8,7 +8,7 @@ const types=['SUPPORT_FOLLOW_UP_OVERDUE'];
 export async function syncSupportNotifications(db:Db,caseId:number,now=new Date()){
   const row=await db.supportCase.findUnique({where:{id:caseId},select:{id:true,caseNumber:true,assignedToId:true,status:true,archivedAt:true,nextFollowUpAt:true}});
   if(!row)return {created:0,resolved:0};
-  const user=row.assignedToId?await db.user.findFirst({where:{id:row.assignedToId,...eligibleUserWhere('support-cases.write')},select:{id:true}}):null;
+  const user=row.assignedToId?await db.user.findFirst({where:{id:row.assignedToId,...eligibleUserWhere('support-case')},select:{id:true}}):null;
   const active=!!(user&&!row.archivedAt&&activeSupportStatuses.includes(row.status)&&row.nextFollowUpAt&&row.nextFollowUpAt<supportToday(now).start);
   const sourceKey=active?`SUPPORT:${caseId}:${user!.id}:FOLLOW_UP_OVERDUE:${row.nextFollowUpAt!.toISOString()}`:null;
   const current=await db.notification.findMany({where:{entityType:'SUPPORT_CASE',entityId:caseId,type:{in:types},resolvedAt:null},select:{id:true,sourceKey:true}});
@@ -19,7 +19,7 @@ export async function syncSupportNotifications(db:Db,caseId:number,now=new Date(
 }
 export async function notifySupportEvent(db:Db,caseId:number,userId:number|null,eventId:number,kind:'ASSIGNED'|'CRITICAL'|'REOPENED',caseNumber:string){
   if(!userId)return;
-  const user=await db.user.findFirst({where:{id:userId,...eligibleUserWhere('support-cases.write')},select:{id:true}});if(!user)return;
+  const user=await db.user.findFirst({where:{id:userId,...eligibleUserWhere('support-case')},select:{id:true}});if(!user)return;
   const settings={ASSIGNED:{title:'Support Case assigned to you',severity:'INFO' as const},CRITICAL:{title:'Critical Support Case needs attention',severity:'CRITICAL' as const},REOPENED:{title:'Support Case reopened',severity:'INFO' as const}}[kind];
   if (!await notificationEnabled(db,userId,'SUPPORT_CASE',settings.severity)) return;
   await db.notification.createMany({data:[{userId,type:`SUPPORT_${kind}`,severity:settings.severity,title:settings.title,message:`${caseNumber} needs your attention.`,entityType:'SUPPORT_CASE',entityId:caseId,actionUrl:`/support/cases/${caseId}`,sourceKey:`SUPPORT:${caseId}:${userId}:${kind}:${eventId}`}],skipDuplicates:true});

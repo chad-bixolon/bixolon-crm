@@ -54,3 +54,30 @@ test('Sales Plan presentation keeps previous versions and allocation controls bu
   assert.match(editor,/aria-expanded=\{open\}/);assert.match(editor,/Split evenly/);assert.match(editor,/Clear allocation/);
   assert.equal(editor.match(/Save Allocation/g)?.length,1);
 });
+
+test('new active plans require active unarchived Sales/Sales Manager owners at preview, review and transaction',async()=>{
+ const {finalizeSalesPlanImport}=req(path.join(root,'lib/sales-plan-import.ts'));
+ const X=req('xlsx'),book=X.utils.book_new();
+ X.utils.book_append_sheet(book,X.utils.aoa_to_sheet([['Account','SKU','Revenue'],['Acme','SKU-A',250]]),'Rep');
+ const buffer=X.write(book,{type:'buffer',bookType:'xlsx'});
+ const config={year:2027,currencyCode:'USD',name:'Eligibility',revision:1,mappings:[{sheet:'Rep',headerRow:1,repId:7,columns:{account:0,sku:1,revenue:2}}]};
+ for(const [owner,allowed] of [[{role:'SALES',active:true,archivedAt:null},true],[{role:'SALES_MANAGER',active:true,archivedAt:null},true],[{role:'SALES',active:false,archivedAt:null},false],[{role:'SALES',active:true,archivedAt:new Date()},false],[{role:'ADMIN',active:true,archivedAt:null},false],[{role:'SUPPORT',active:true,archivedAt:null},false]]){
+  let writes=0,disableInTransaction=false;
+  const eligible=where=>!where.role||(owner.active&&!owner.archivedAt&&where.role.in.includes(owner.role));
+  const client={account:{findMany:async()=>[]},productSku:{findMany:async()=>[]},currency:{findUnique:async()=>({active:true})},user:{findMany:async({where})=>eligible(where)?[{id:7,firstName:'Plan',lastName:'Owner',...owner}]:[]}};
+  const tx={...client,user:{findMany:async({where})=>{assert.equal(where.active,true);assert.equal(where.archivedAt,null);return disableInTransaction?[]:[{id:7}];}},salesPlan:{findUnique:async()=>null,findMany:async()=>[],create:async()=>{writes++;return {id:2};}}};
+  client.$transaction=async fn=>fn(tx);
+  const preview=await previewSalesPlanImport(client,actor('ADMIN'),buffer,config);
+  assert.equal(preview.users.length,allowed?1:0);
+  const review={config,sha256:preview.sha256,configSha256:preview.configSha256,rows:preview.rows.map(r=>({sheet:r.sheet,row:r.row,include:true,repId:7,accountId:null,skuId:null}))};
+  if(allowed){
+   assert.deepEqual(await finalizeSalesPlanImport(client,actor('ADMIN'),buffer,'plan.xlsx',review),[2]);
+   disableInTransaction=true;
+   await assert.rejects(finalizeSalesPlanImport(client,actor('ADMIN'),buffer,'plan.xlsx',review),/changed eligibility/);
+   assert.equal(writes,1);
+  }else{
+   await assert.rejects(finalizeSalesPlanImport(client,actor('ADMIN'),buffer,'plan.xlsx',review),/active, unarchived Sales rep/);
+   assert.equal(writes,0);
+  }
+ }
+});

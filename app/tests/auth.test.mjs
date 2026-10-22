@@ -90,12 +90,14 @@ test('ADMIN can pre-create and edit a CRM user without creating an identity', as
   let user;
   const client = { user: {
     create: async ({ data }) => { user = { id: 7, archivedAt: null, ...data }; return user; },
-    findUnique: async () => user,
+    findUnique: async ({ where }) => where.id === 1 ? { ...actor('ADMIN'), id: 1 } : user,
     update: async ({ data }) => { user = { ...user, ...data }; return user; },
   } };
-  assert.equal(await saveUser(client, parsed.value), 7);
+  client.$queryRaw = async () => [];
+  client.$transaction = async fn => fn(client);
+  assert.equal(await saveUser(client, { ...actor('ADMIN'), id: 1 }, parsed.value), 7);
   assert.equal(user.role, 'SALES');
-  assert.equal(await saveUser(client, { ...parsed.value, role: 'SALES_MANAGER', active: false }, 7), 7);
+  assert.equal(await saveUser(client, { ...actor('ADMIN'), id: 1 }, { ...parsed.value, role: 'SALES_MANAGER', active: false }, 7), 7);
   assert.equal(user.role, 'SALES_MANAGER');
   assert.equal(user.active, false);
 });

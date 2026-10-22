@@ -5,6 +5,7 @@ import { Content, PageHeader } from '@/components/shell';
 import { WorkForm, ReactivateTask } from '@/components/work-form';
 import { workOptions } from '@/lib/work-options';
 import { currentUser } from '@/lib/current-user';
+import { assertTaskEdit } from '@/lib/task-policy';
 import { can } from '@/lib/authorization';
 import { canEditCaseTask, caseWorkContext } from '@/lib/support-work';
 import { prisma } from '@/lib/prisma';
@@ -17,11 +18,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const row = await prisma.task.findUnique({ where: { id }, include: { account: true, opportunity: true, assignedTo: true, supportCase: true } });
   if (!row) notFound();
   const actor = await currentUser();
-  const caseTaskOnly = actor.role === 'SUPPORT';
+  const caseTaskOnly = !can(actor, 'tasks.write') && can(actor, 'support-work.write');
   if (!can(actor, 'tasks.write')) {
     if (!caseTaskOnly || !canEditCaseTask(actor, row)) notFound();
     try { await caseWorkContext(prisma, actor, row.supportCaseId!); } catch { notFound(); }
   }
+
+  if (!caseTaskOnly) { try { await assertTaskEdit(prisma, actor, id); } catch { notFound(); } }
 
   if (row.archivedAt) {
     const details = [

@@ -59,7 +59,7 @@ test('Support role and existing CRM permissions remain separate', () => {
   assert.equal(can(actor('SUPPORT'), 'support-categories.manage'), false);
   assert.equal(routeAccess('/administration', actor('SUPPORT')), 'denied');
   assert.equal(routeAccess('/sales-plan', actor('SUPPORT')), 'denied');
-  assert.deepEqual(eligibleUserWhere('support-cases.write').role.in.sort(), ['ADMIN', 'SUPPORT']);
+  assert.deepEqual(eligibleUserWhere('support-case').role.in.sort(), ['ADMIN', 'SUPPORT']);
 });
 test('creation validates Account and relationships and records baseline', async () => {
   const f = fixture();

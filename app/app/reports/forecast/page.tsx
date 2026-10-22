@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
 type Filters = { userId?: string; year?: string; quarter?: string; currencyCode?: string; issue?:string; attentionPage?:string; attention?:string };
 export default async function ForecastPage({ searchParams }: { searchParams: Promise<Filters> }) {
   const actor = await currentUser();const currencyConfig = await companyCurrency();
-  if (!can(actor, 'sales.read')) notFound();
+  if (!can(actor, 'forecast.read')) notFound();
   const f = await searchParams;
   const [users, currencies] = await Promise.all([
     prisma.user.findMany({ where: { ...activeSalesRepWhere(), ...(actor.role === 'SALES' ? { id: actor.id } : {}) }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),

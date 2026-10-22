@@ -1,3 +1,4 @@
+import { eligibleUserWhere } from './assignment-eligibility';
 import { Prisma, TradeShowLeadStatus, type TradeShowLeadRouting, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { field, optional, positiveId, required, type Errors } from './crm-validation';
@@ -106,7 +107,7 @@ export async function saveTradeShow(client: PrismaClient, input: TradeShowInput,
     const existing = id ? await tx.tradeShow.findUnique({ where: { id } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Trade Show not found or archived.');
     if (input.marketingOwnerId && input.marketingOwnerId !== existing?.marketingOwnerId) {
-      const owner = await tx.user.findFirst({ where: { id: input.marketingOwnerId, role: 'MARKETING_MANAGER', active: true, archivedAt: null } });
+      const owner = await tx.user.findFirst({ where: { id: input.marketingOwnerId, ...eligibleUserWhere('marketing-owner') } });
       if (!owner) throw new Error('Choose an active Marketing Manager.');
     }
     const currentLinks = id ? await tx.tradeShowResourceLink.findMany({ where: { tradeShowId: id }, select: { id: true, label: true, url: true, sortOrder: true } }) : [];

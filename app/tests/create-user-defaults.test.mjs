@@ -26,10 +26,11 @@ const people = [
   { id: 7, role: 'MARKETING_MANAGER', active: true, archivedAt: null },
 ];
 
-test('Sales, Sales Manager, and Admin create defaults use the effective eligible user', () => {
-  for (const permission of ['accounts.write', 'projects.write', 'tasks.write', 'sales.write']) {
+test('Sales owner defaults use the effective eligible rep; Admin defaults only for operational Tasks', () => {
+  for (const permission of ['account-owner', 'project-owner', 'general-task', 'opportunity-owner']) {
     const users = eligibleIds(permission, people);
-    for (const id of [1, 2, 3]) assert.equal(defaultEligibleUserId(users, id), id, `${permission}: ${id}`);
+    assert.equal(defaultEligibleUserId(users, 1), permission === 'general-task' ? 1 : null);
+    for (const id of [2, 3]) assert.equal(defaultEligibleUserId(users, id), id, `${permission}: ${id}`);
     assert.equal(defaultEligibleUserId(users, 6), null);
     assert.equal(defaultEligibleUserId(users, 4), null);
     assert.equal(defaultEligibleUserId(users, 5), null);
@@ -37,7 +38,7 @@ test('Sales, Sales Manager, and Admin create defaults use the effective eligible
 });
 
 test('impersonation uses effective ID, context wins, and another eligible user remains selectable', () => {
-  const users = eligibleIds('accounts.write', people);
+  const users = eligibleIds('account-owner', people);
   const realAdminId = 1, effectiveRyanId = 3;
   assert.equal(defaultEligibleUserId(users, effectiveRyanId), effectiveRyanId);
   assert.notEqual(defaultEligibleUserId(users, effectiveRyanId), realAdminId);
@@ -47,7 +48,7 @@ test('impersonation uses effective ID, context wins, and another eligible user r
 });
 
 test('Sales cannot default to an ineligible sales owner; Marketing Owner is marketing scoped', () => {
-  const salesOwners = eligibleIds('sales.write', people);
+  const salesOwners = eligibleIds('opportunity-owner', people);
   assert.equal(defaultEligibleUserId(salesOwners, 7), null);
   const marketingOwners = people.filter(person => person.role === 'MARKETING_MANAGER' && person.active && !person.archivedAt);
   assert.equal(defaultEligibleUserId(marketingOwners, 7), 7);

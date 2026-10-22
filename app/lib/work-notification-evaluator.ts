@@ -3,7 +3,7 @@ import { businessToday } from './price-exception-expiration';
 import { attentionPredicates } from './forecast-attention';
 import { getSettings } from './configuration';
 import { operationalOpportunityWhere, operationalTaskWhere } from './operational-where';
-import { eligibleUserWhere } from './assignment-eligibility';
+import { eligibleUserWhere, taskAssigneePolicy } from './assignment-eligibility';
 import { notificationEnabled } from './notification-preferences';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -39,9 +39,9 @@ async function reconcile(db: Db, entityType: 'TASK' | 'OPPORTUNITY', entityId: n
 }
 
 export async function syncTaskNotifications(db: Db, taskId: number, now = new Date()) {
-  const task = await db.task.findUnique({ where: { id: taskId }, select: { id: true, subject: true, assignedToId: true, dueDate: true, status: true, archivedAt: true } });
+  const task = await db.task.findUnique({ where: { id: taskId }, select: { id: true, subject: true, assignedToId: true, supportCaseId: true, dueDate: true, status: true, archivedAt: true } });
   if (!task) return { created: 0, resolved: 0 };
-  const eligible = task.assignedToId ? await db.user.findFirst({ where: { id: task.assignedToId, ...eligibleUserWhere('tasks.write') }, select: { id: true } }) : null;
+  const eligible = task.assignedToId ? await db.user.findFirst({ where: { id: task.assignedToId, ...eligibleUserWhere(taskAssigneePolicy(task)) }, select: { id: true } }) : null;
   const operational = await db.task.findFirst({ where: { id: taskId, AND: [operationalTaskWhere] }, select: { id: true } });
   return reconcile(db, 'TASK', taskId, eligible?.id ?? null, eligible && operational ? taskNotificationCandidates(task, businessToday(now)) : [], taskTypes, now);
 }
@@ -49,7 +49,7 @@ export async function syncTaskNotifications(db: Db, taskId: number, now = new Da
 export async function syncOpportunityNotifications(db: Db, opportunityId: number, days: number, now = new Date()) {
   const opp = await db.opportunity.findUnique({ where: { id: opportunityId }, select: { id: true, name: true, ownerId: true, expectedCloseDate: true, forecastCategory: true, archivedAt: true, stage: { select: { isClosed: true } }, activities: { where: { archivedAt: null }, orderBy: [{ activityDate: 'desc' }, { id: 'desc' }], take: 1, select: { id: true, activityDate: true } }, historyEvents: { where: { newCategory: 'COMMIT', eventType: { in: ['BASELINE', 'FORECAST_CATEGORY'] } }, orderBy: { id: 'desc' }, take: 1, select: { id: true } } } });
   if (!opp) return { created: 0, resolved: 0 };
-  const eligible = opp.ownerId ? await db.user.findFirst({ where: { id: opp.ownerId, ...eligibleUserWhere('sales.write') }, select: { id: true } }) : null;
+  const eligible = opp.ownerId ? await db.user.findFirst({ where: { id: opp.ownerId, ...eligibleUserWhere('opportunity-owner') }, select: { id: true } }) : null;
   const operational = await db.opportunity.findFirst({ where: { id: opportunityId, AND: [operationalOpportunityWhere] }, select: { id: true } });
   // Use the Forecast Attention predicate verbatim, including its configured New York cutoff.
   const staleCommit = !!(eligible && operational && !opp.stage.isClosed && await db.opportunity.findFirst({ where: { id: opportunityId, AND: [attentionPredicates(now, days).STALE_COMMIT] }, select: { id: true } }));
@@ -57,14 +57,16 @@ export async function syncOpportunityNotifications(db: Db, opportunityId: number
 }
 
 export async function notifyTaskAssignment(db: Db, taskId: number, userId: number, eventId: number) {
-  const user = await db.user.findFirst({ where: { id: userId, ...eligibleUserWhere('tasks.write') }, select: { id: true } });
+  const task = await db.task.findUnique({ where: { id: taskId }, select: { supportCaseId: true } });
+  if (!task) return;
+  const user = await db.user.findFirst({ where: { id: userId, ...eligibleUserWhere(taskAssigneePolicy(task)) }, select: { id: true } });
   if (!user) return;
   if (!await notificationEnabled(db, userId, 'TASK', 'INFO')) return;
   await db.notification.createMany({ data: [{ userId, type: 'TASK_ASSIGNED', severity: 'INFO', title: 'Task assigned to you', message: 'A Task was assigned to you.', entityType: 'TASK', entityId: taskId, actionUrl: `/tasks/${taskId}`, sourceKey: `TASK:${taskId}:${userId}:ASSIGNED:${eventId}` }], skipDuplicates: true });
 }
 
 export async function notifyOpportunityAssignment(db: Db, opportunityId: number, userId: number, eventId: number) {
-  const user = await db.user.findFirst({ where: { id: userId, ...eligibleUserWhere('sales.write') }, select: { id: true } });
+  const user = await db.user.findFirst({ where: { id: userId, ...eligibleUserWhere('opportunity-owner') }, select: { id: true } });
   if (!user) return;
   if (!await notificationEnabled(db, userId, 'OPPORTUNITY', 'INFO')) return;
   await db.notification.createMany({ data: [{ userId, type: 'OPP_ASSIGNED', severity: 'INFO', title: 'Opportunity assigned to you', message: 'An Opportunity was assigned to you.', entityType: 'OPPORTUNITY', entityId: opportunityId, actionUrl: `/opportunities/${opportunityId}`, sourceKey: `OPP:${opportunityId}:${userId}:ASSIGNED:${eventId}` }], skipDuplicates: true });

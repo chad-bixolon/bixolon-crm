@@ -163,7 +163,7 @@ test('Trade Show create/edit validates eligible owner and archive stays reversib
       update: async ({ where, data }) => Object.assign(resourceLinks.find(link => link.id === where.id), data),
       deleteMany: async ({ where }) => { for (const linkId of where.id.in) resourceLinks.splice(resourceLinks.findIndex(link => link.id === linkId), 1); },
     },
-    user: { findFirst: async ({ where }) => owner?.id === where.id && owner.role === where.role && owner.active && !owner.archivedAt ? owner : null },
+    user: { findFirst: async ({ where }) => owner?.id === where.id && where.role.in.includes(owner.role) && owner.active && !owner.archivedAt ? owner : null },
   };
   const client = { $transaction: async callback => callback(tx), tradeShow: tx.tradeShow };
   const input = shows.parseTradeShow(form([['name','MODEX 2026'],['timezone','America/Chicago'],['marketingOwnerId','8']])).value;

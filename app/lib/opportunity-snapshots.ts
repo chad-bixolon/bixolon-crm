@@ -18,7 +18,7 @@ export const snapshotWhere: Prisma.OpportunityWhereInput = {
 };
 
 export function canReadOpportunitySnapshots(actor: Actor) {
-  return can(actor, 'sales.read') && ['ADMIN', 'SALES_MANAGER'].includes(actor.role);
+  return can(actor, 'snapshots.read');
 }
 export function assertSnapshotAdmin(actor: Actor) {
   if (actor.role !== 'ADMIN' || !can(actor, 'users.manage')) throw new Error('Access denied');

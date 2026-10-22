@@ -18,7 +18,7 @@ export default async function OwnershipPage({ searchParams }: { searchParams: Pr
   const [rows, users, assignees] = await Promise.all([
     ownershipRows(prisma, actor, type, owner, page),
     prisma.user.findMany({ orderBy: [{ lastName: 'asc' }, { id: 'asc' }], select: { id: true, firstName: true, lastName: true } }),
-    prisma.user.findMany({ where: eligibleUserWhere(type === 'Support Case' ? 'support-cases.write' : 'tasks.write'), select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }),
+    prisma.user.findMany({ where: eligibleUserWhere(type === 'Support Case' ? 'support-case' : 'support-task'), select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }),
   ]);
   const href = (entity: string, p = 1) => `/administration/ownership?${new URLSearchParams({ entity, ...(owner ? { owner: String(owner) } : {}), page: String(p) })}`;
   const bulk = type === 'Task' || type === 'Support Case';

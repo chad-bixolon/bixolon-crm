@@ -9,7 +9,7 @@ import { analyzePipelineMovement, type MovementPolicy } from './pipeline-movemen
 export class MovementInputError extends Error {}
 
 export function canReadPipelineMovement(actor: Actor) {
-  return can(actor, 'sales.read') && ['ADMIN', 'SALES_MANAGER', 'SALES'].includes(actor.role);
+  return can(actor, 'pipeline-movement.read');
 }
 // Deployment policy is separate from the generic engine. Null eligibility is
 // legacy/unknown, preserved as captured rather than inferred from live users.

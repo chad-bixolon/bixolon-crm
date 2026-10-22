@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { assertAdmin } from './admin-maintenance';
-import type { Actor, Permission } from './authorization';
-import { eligibleUserWhere } from './assignment-eligibility';
+import type { Actor } from './authorization';
+import { eligibleUserWhere, type Eligibility } from './assignment-eligibility';
 import { operationalAccountWhere, operationalContactWhere, operationalOpportunityWhere, operationalProjectWhere, operationalTaskWhere } from './operational-where';
 
 export const ownershipTypes = ['Account', 'Contact', 'Opportunity', 'Project', 'Task', 'Support Case'] as const;
@@ -9,16 +9,16 @@ export type OwnershipType = typeof ownershipTypes[number];
 export const adminPageSize = 25;
 export function adminPage(raw?: string) { const n = Number(raw); return Number.isSafeInteger(n) && n > 0 ? Math.min(n, 100000) : 1; }
 export function ownershipType(raw?: string) { return ownershipTypes.find(type => type === raw) ?? 'Account'; }
-const invalidUser = (permission: Permission): Prisma.UserWhereInput => ({ NOT: eligibleUserWhere(permission) });
+const invalidUser = (permission: Eligibility): Prisma.UserWhereInput => ({ NOT: eligibleUserWhere(permission) });
 // Null owners/assignees are allowed by the existing edit forms. Contacts inherit Account ownership.
 export function ownershipWhere(type: OwnershipType, owner?: number) {
   switch (type) {
-    case 'Account': return { AND: [operationalAccountWhere], owner: { is: invalidUser('accounts.write') }, ...(owner ? { ownerId: owner } : {}) } satisfies Prisma.AccountWhereInput;
-    case 'Contact': return { AND: [operationalContactWhere], account: { is: { owner: { is: invalidUser('accounts.write') }, ...(owner ? { ownerId: owner } : {}) } } } satisfies Prisma.ContactWhereInput;
-    case 'Opportunity': return { AND: [operationalOpportunityWhere], stage: { isClosed: false }, owner: { is: invalidUser('sales.write') }, ...(owner ? { ownerId: owner } : {}) } satisfies Prisma.OpportunityWhereInput;
-    case 'Project': return { AND: [operationalProjectWhere], status: { in: ['PLANNING', 'ACTIVE', 'ON_HOLD'] }, owner: { is: invalidUser('projects.write') }, ...(owner ? { ownerId: owner } : {}) } satisfies Prisma.ProjectWhereInput;
-    case 'Task': return { AND: [operationalTaskWhere], status: { in: ['OPEN', 'IN_PROGRESS'] }, OR: [{ supportCaseId: null, assignedTo: { is: invalidUser('tasks.write') } }, { supportCaseId: { not: null }, assignedTo: { is: invalidUser('support-work.write') } }], ...(owner ? { assignedToId: owner } : {}) } satisfies Prisma.TaskWhereInput;
-    case 'Support Case': return { archivedAt: null, status: { notIn: ['CLOSED', 'RESOLVED'] }, assignedTo: { is: invalidUser('support-cases.write') }, ...(owner ? { assignedToId: owner } : {}) } satisfies Prisma.SupportCaseWhereInput;
+    case 'Account': return { AND: [operationalAccountWhere], owner: { is: invalidUser('account-owner') }, ...(owner ? { ownerId: owner } : {}) } satisfies Prisma.AccountWhereInput;
+    case 'Contact': return { AND: [operationalContactWhere], account: { is: { owner: { is: invalidUser('account-owner') }, ...(owner ? { ownerId: owner } : {}) } } } satisfies Prisma.ContactWhereInput;
+    case 'Opportunity': return { AND: [operationalOpportunityWhere], stage: { isClosed: false }, owner: { is: invalidUser('opportunity-owner') }, ...(owner ? { ownerId: owner } : {}) } satisfies Prisma.OpportunityWhereInput;
+    case 'Project': return { AND: [operationalProjectWhere], status: { in: ['PLANNING', 'ACTIVE', 'ON_HOLD'] }, owner: { is: invalidUser('project-owner') }, ...(owner ? { ownerId: owner } : {}) } satisfies Prisma.ProjectWhereInput;
+    case 'Task': return { AND: [operationalTaskWhere], status: { in: ['OPEN', 'IN_PROGRESS'] }, OR: [{ supportCaseId: null, assignedTo: { is: invalidUser('general-task') } }, { supportCaseId: { not: null }, assignedTo: { is: invalidUser('support-task') } }], ...(owner ? { assignedToId: owner } : {}) } satisfies Prisma.TaskWhereInput;
+    case 'Support Case': return { archivedAt: null, status: { notIn: ['CLOSED', 'RESOLVED'] }, assignedTo: { is: invalidUser('support-case') }, ...(owner ? { assignedToId: owner } : {}) } satisfies Prisma.SupportCaseWhereInput;
   }
 }
 const userSelect = { id: true, firstName: true, lastName: true } as const;

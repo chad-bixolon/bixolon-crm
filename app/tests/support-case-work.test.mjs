@@ -31,7 +31,7 @@ function fixture(overrides={}) {
   const tx={
     $queryRaw:async(strings,...values)=>{locks.push([strings.join('?'),values]);return [];},
     user:{findUnique:async()=>user},
-    task:{findUnique:async()=>row,update:async({data})=>(row={...row,...data})},
+    task:{findFirst:async()=>row,findUnique:async()=>row,update:async({data})=>(row={...row,...data})},
     supportCase:{findFirst:async({where})=>caseRow && where.id===caseRow.id&&(!('archivedAt' in where)||!caseRow.archivedAt)?caseRow:null,findUnique:async()=>caseRow},
     supportCaseLifecycleEvent:{create:async({data})=>(events.push(data),data)},
     account:{findFirst:async()=>({id:5})},
@@ -180,4 +180,24 @@ test('Support Case Task protects entered work and records no lifecycle event aft
   const count=f.events.length;
   for(let n=0;n<2;n++) await assert.rejects(policy.saveSupportCaseTask(f.db,actor('SUPPORT'),entered,12,token),/This record changed after you opened it/);
   assert.equal(f.row.status,'IN_PROGRESS');assert.equal(f.row.dueDate.toISOString().slice(0,10),'2026-12-01');assert.equal(f.events.length,count);assert.equal(entered.subject,'My entered subject');
+});
+
+
+test('Sales case-Task edit link follows general scope; Support retains its restricted case editor',async()=>{
+  activeFixture=fixture({assignedToId:null,createdById:7,accountId:5});
+  activeFixture.caseRow.accountId=5;
+  activeFixture.row={...activeFixture.row,supportCase:activeFixture.caseRow};
+  // The unassigned creator exception belongs to the restricted case editor.
+  // A Sales user must still satisfy the persisted general Task edit scope.
+  activeFixture.tx.task.findFirst=async()=>null;
+  effectiveActor=actor('SALES');
+  assert.equal(policy.canEditCaseTask(effectiveActor,activeFixture.row),true);
+  assert.doesNotMatch(renderToStaticMarkup(await detail(params)),/href="\/tasks\/12\/edit"/);
+  await assert.rejects(edit(params),/not found/);
+  const denied=await actions.submitTask(12,{errors:{}},form({...input(activeFixture),subject:'Sales edit'}));
+  assert.match(denied.message,/unavailable/);
+  assert.equal(activeFixture.row.subject,'Check logs');assert.equal(activeFixture.events.length,0);
+  effectiveActor=actor('SUPPORT');
+  assert.match(renderToStaticMarkup(await detail(params)),/Edit \/ complete task/);
+  assert.match(renderToStaticMarkup(await edit(params)),/data-scoped="true"/);
 });

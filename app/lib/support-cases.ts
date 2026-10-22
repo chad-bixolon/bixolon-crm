@@ -77,7 +77,7 @@ async function validateReferences(tx: Prisma.TransactionClient, data: SupportCas
   }
   if (data.assignedToId !== undefined) {
     id(data.assignedToId, 'assignee');
-    if (data.assignedToId != null && data.assignedToId !== current?.assignedToId && !await tx.user.findFirst({ where: { id: data.assignedToId, ...eligibleUserWhere('support-cases.write') }, select: { id: true } })) throw new Error('Select an eligible Support Rep.');
+    if (data.assignedToId != null && data.assignedToId !== current?.assignedToId && !await tx.user.findFirst({ where: { id: data.assignedToId, ...eligibleUserWhere('support-case') }, select: { id: true } })) throw new Error('Select an eligible Support Rep.');
   }
   if (data.productSkuId !== undefined) {
     id(data.productSkuId, 'Product/SKU');

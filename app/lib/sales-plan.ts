@@ -1,3 +1,4 @@
+import { eligibleUser } from './assignment-eligibility';
 import { Prisma, SalesQuarter, type PrismaClient, type SalesPlanLine, type SalesPlanQuarterAllocation } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { forecastForRep, forecastForTeam, quarters } from './forecast';
@@ -17,7 +18,7 @@ export async function saveAllocation(client: PrismaClient, actor: Actor, input: 
   if (!can(actor,'sales-plan.allocate') || !Number.isSafeInteger(input.lineId) || input.lineId <= 0 || !quarters.includes(input.quarter)) throw new Error('Access denied');
   return client.$transaction(async tx => {
   const line = await tx.salesPlanLine.findUnique({ where: { id: input.lineId }, include: {plan:{include:{owner:true}}} });
-  if (!line || line.plan.status !== 'ACTIVE' || (actor.role === 'SALES' && line.plan.ownerId !== actor.id) || !line.plan.owner.active || line.plan.owner.archivedAt || !['SALES','SALES_MANAGER'].includes(line.plan.owner.role)) throw new Error('This plan is not eligible for allocation.');
+  if (!line || line.plan.status !== 'ACTIVE' || (actor.role === 'SALES' && line.plan.ownerId !== actor.id) || !eligibleUser(line.plan.owner, 'sales-plan-owner')) throw new Error('This plan is not eligible for allocation.');
   function amount(raw:string, precision:number, enabled:boolean) { if (!enabled && raw.trim()) throw new Error('This annual measure is not present.'); if (!raw.trim()) return null; if (!new RegExp(`^\\d{1,15}(?:\\.\\d{1,${precision}})?$`).test(raw.trim())) throw new Error('Enter a nonnegative amount.'); return new Prisma.Decimal(raw.trim()); }
   const plannedUnits=amount(input.units,3,line.annualPlannedUnits!==null),plannedRevenue=amount(input.revenue,2,line.annualPlannedRevenue!==null);
   await tx.salesPlanQuarterAllocation.upsert({where:{salesPlanLineId_quarter:{salesPlanLineId:line.id,quarter:input.quarter}},create:{salesPlanLineId:line.id,quarter:input.quarter,plannedUnits,plannedRevenue,updatedById:actor.id},update:{plannedUnits,plannedRevenue,updatedById:actor.id}});
@@ -27,7 +28,7 @@ export async function saveLineAllocation(client: PrismaClient, actor: Actor, inp
   if (!can(actor,'sales-plan.allocate') || !Number.isSafeInteger(input.lineId) || input.lineId <= 0) throw new Error('Access denied');
   return client.$transaction(async tx => {
     const line=await tx.salesPlanLine.findUnique({where:{id:input.lineId},include:{plan:{include:{owner:true}}}});
-    if (!line || line.plan.status!=='ACTIVE' || (actor.role==='SALES'&&line.plan.ownerId!==actor.id) || !line.plan.owner.active || line.plan.owner.archivedAt || !['SALES','SALES_MANAGER'].includes(line.plan.owner.role)) throw new Error('This plan is not eligible for allocation.');
+    if (!line || line.plan.status!=='ACTIVE' || (actor.role==='SALES'&&line.plan.ownerId!==actor.id) || !eligibleUser(line.plan.owner, 'sales-plan-owner')) throw new Error('This plan is not eligible for allocation.');
     const parse=(raw:string,precision:number,enabled:boolean)=>{
       if (!enabled&&raw.trim()) throw new Error('This annual measure is not present.');
       if (!raw.trim()) return null;

@@ -8,11 +8,12 @@ import { unlinkGoogleIdentity } from "@/lib/identity";
 export type FormState = { errors: Record<string, string>; message?: string; success?: boolean; values?: Record<string, string> };
 const submittedValues = (form: FormData) => Object.fromEntries(["firstName", "lastName", "email", "role", "active"].map(key => [key, String(form.get(key) ?? "")]));
 export async function submitUser(id: number | null, _state: FormState, form: FormData): Promise<FormState> {
+  const actor = await requireMutation("users.manage");
   const parsed = parseUser(form);
   if (!parsed.value) return { errors: parsed.errors, message: "Please correct the highlighted fields.", values: submittedValues(form) };
   let userId: number;
-  try { userId = await saveUser(prisma, parsed.value, id ?? undefined); }
-  catch (error) { return { errors: {}, message: error instanceof Error && /already in use|not found/.test(error.message) ? error.message : "User could not be saved.", values: submittedValues(form) }; }
+  try { userId = await saveUser(prisma, actor, parsed.value, id ?? undefined); }
+  catch (error) { return { errors: {}, message: error instanceof Error && /already in use|not found|Keep at least one active/.test(error.message) ? error.message : "User could not be saved.", values: submittedValues(form) }; }
   revalidatePath("/administration/users"); revalidatePath("/accounts"); revalidatePath("/opportunities");
   if (id) return { errors: {}, message: "User updated successfully.", success: true, values: submittedValues(form) };
   redirect(`/administration/users/${userId}/edit?saved=created`);

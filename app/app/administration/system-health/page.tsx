@@ -15,7 +15,7 @@ const badge = (state: string) => state === 'Healthy' ? 'bg-emerald-50 text-emera
 const date = (value: Date | null | undefined) => value ? `${value.toLocaleString('en-US', { timeZone: 'America/New_York' })} Eastern` : 'No run recorded';
 
 export default async function SystemHealthPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
-  const actor = await requirePermission('users.manage');
+  const actor = await requirePermission('system-health.read');
   const page = adminPage((await searchParams).page);
   const [database, storage, jobs, integrations] = await Promise.all([databaseHealth(prisma), objectStorageHealth(), scheduledJobHealth(prisma), integrationHealth(prisma, page)]);
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="System Health" description="Check services, connections, and scheduled jobs." action={<Link className="btn-secondary" href="/administration/settings">System Settings</Link>}/><div className="mb-3"><HelpLink topic="system-health">Help with System Health</HelpLink></div><p className="mb-4 text-sm text-slate-600">Start with failed checks and the last successful run. <Link className="font-medium text-orange-800 underline" href="/administration/maintenance-history?view=integrations">Review Integration &amp; Job History</Link> for details and successful retries.</p>

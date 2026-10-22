@@ -15,13 +15,14 @@ const initialLoad=Module._load;
 Module._load=function(name,parent,isMain){if(name==='./work-notification-evaluator')return {notifyTaskAssignment:async()=>{},syncTaskNotifications:async()=>{},syncOpportunityNotifications:async()=>{}};return initialLoad.call(this,name,parent,isMain);};
 const work=require(path.join(root,'lib/work.ts'));
 let row={id:7,subject:'Follow up',archivedAt:null,accountId:null,opportunityId:null};
-const prisma={adminMaintenanceEvent:{create:async()=>({id:1})},task:{findUnique:async()=>row,update:async({data})=>(row={...row,...data})}};
+const prisma={$queryRaw:async()=>[],adminMaintenanceEvent:{create:async()=>({id:1})},task:{findFirst:async()=>row,findUnique:async()=>row,update:async({data})=>(row={...row,...data})}};
 const originalLoad=Module._load;
 Module._load=function(name,parent,isMain){
  if(name==='@/components/recent-view') return {RecentView:()=>null};
  if(name==='next/cache') return {revalidatePath:()=>{}};
  if(name==='next/navigation') return {redirect:(destination)=>{throw Object.assign(new Error('redirect'),{destination});},notFound:()=>{throw new Error('not found');}};
  if(name==='next/link') return {__esModule:true,default:({href,children,...props})=>React.createElement('a',{href,...props},children)};
+ if(name==='@/lib/task-policy') return require(path.join(root,'lib/task-policy.ts'));
  if(name==='@/lib/prisma') return {prisma};
  if(name==='@/lib/work') return work;
  if(name==='@/lib/work-notification-evaluator') return {syncTaskNotifications:async()=>{}};
@@ -45,7 +46,7 @@ test('successful create redirects to Task detail with visible success feedback',
  let creates=0;row=null;
  prisma.task.findUnique=async({where})=>row && (row.createKey===where.createKey || row.id===where.id)?row:null;
  prisma.task.create=async({data})=>{creates++;row={id:7,...data};return row;};
- prisma.$transaction=async(fn)=>fn({task:prisma.task,adminMaintenanceEvent:prisma.adminMaintenanceEvent});
+ prisma.$transaction=async(fn)=>fn({$queryRaw:prisma.$queryRaw,task:prisma.task,adminMaintenanceEvent:prisma.adminMaintenanceEvent});
  const data=form([['subject','Follow up'],['status','OPEN'],['priority','NORMAL'],['createKey','d7054358-5d57-4398-8550-506157266184']]);
  await assert.rejects(actions.submitTask(null,{errors:{}},data),error=>error.destination==='/tasks/7?saved=created');
  const html=renderToStaticMarkup(await taskPage.default({params:Promise.resolve({id:'7'}),searchParams:Promise.resolve({saved:'created'})}));
@@ -76,7 +77,7 @@ test('editing an existing Task still returns to its edit page',async()=>{
  row={updatedAt:new Date('2026-10-19T12:00:00.000Z'),id:7,subject:'Before',status:'OPEN',priority:'NORMAL',archivedAt:null,completedAt:null,projectId:null,accountId:null,opportunityId:null};
  prisma.task.findUnique=async({where})=>where.id===7?row:null;
  prisma.task.update=async({data})=>(row={...row,...data});
- prisma.$transaction=async(fn)=>fn({task:prisma.task,adminMaintenanceEvent:prisma.adminMaintenanceEvent});
+ prisma.$transaction=async(fn)=>fn({$queryRaw:prisma.$queryRaw,task:prisma.task,adminMaintenanceEvent:prisma.adminMaintenanceEvent});
  const data=form([['subject','After'],['status','OPEN'],['priority','NORMAL']]);
  await assert.rejects(actions.submitTask(7,{errors:{}},data),error=>error.destination==='/tasks/7/edit?saved=updated');
  assert.equal(row.subject,'After');

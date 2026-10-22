@@ -26,7 +26,7 @@ test('ownership predicates use eligibility and operational rules without inventi
     const where = ownershipWhere(type, 42), user = where.owner ?? where.assignedTo ?? where.OR[0].assignedTo;
     assert.equal(user.is.NOT.active, true);
     assert.equal(user.is.NOT.archivedAt, null);
-    assert.ok(user.is.NOT.role.in.includes('ADMIN'));
+    assert.equal(user.is.NOT.role.in.includes('ADMIN'), ['Task', 'Support Case'].includes(type));
     assert.equal(where.ownerId ?? where.assignedToId, 42);
     assert.equal(JSON.stringify(where).includes('"ownerId":null'), false);
   }

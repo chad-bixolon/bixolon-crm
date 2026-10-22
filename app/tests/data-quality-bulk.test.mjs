@@ -28,7 +28,7 @@ function reassignmentDb({ currentActor = admin, owner = { id: 2, firstName: 'Jan
     $queryRaw: async query => { queries.push(query); return []; },
     user: {
       findUnique: async () => currentActor,
-      findFirst: async ({ where }) => { assert.deepEqual(where, { id: 2, ...eligibleUserWhere('accounts.write') }); return owner; },
+      findFirst: async ({ where }) => { assert.deepEqual(where, { id: 2, ...eligibleUserWhere('account-owner') }); return owner; },
     },
     account: {
       findMany: async args => args.take ? visible.map(record => ({ ...record, name: 'Acme', owner: null })) : rows,

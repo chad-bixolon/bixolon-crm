@@ -48,7 +48,7 @@ export async function syncTradeShowFollowUp(tx: Client, before: Pick<FollowUpLea
     if (active) { await tx.task.update({ where: { id: active.id, updatedAt: active.updatedAt }, data: { updatedAt: nextUpdatedAt(active.updatedAt), status: 'CANCELLED', updatedById: actorId } }); if (tx.notification) await syncTaskNotifications(tx, active.id); }
     return;
   }
-  const eligible = await tx.user.findFirst({ where: { id: nextRep, ...eligibleUserWhere('tasks.write') }, select: { id: true } });
+  const eligible = await tx.user.findFirst({ where: { id: nextRep, ...eligibleUserWhere('general-task') }, select: { id: true } });
   if (!eligible) throw new Error(`Assigned Sales rep ${nextRep} cannot receive Tasks. Lead assignment was not changed.`);
   if (active) {
     if (active.assignedToId !== nextRep) {

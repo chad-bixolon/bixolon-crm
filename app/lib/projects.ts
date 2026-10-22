@@ -105,7 +105,7 @@ export async function saveProject(client: PrismaClient, input: ProjectInput, act
     const ids = [...(input.primaryAccountId ? [input.primaryAccountId] : []), ...input.participants.map(p => p.accountId)];
     const [accounts, owner] = await Promise.all([
       tx.account.findMany({ where: { id: { in: ids }, status: 'ACTIVE', archivedAt: null }, select: { id: true } }),
-      input.ownerId && input.ownerId !== existing?.ownerId ? tx.user.findFirst({ where: { id: input.ownerId, ...eligibleUserWhere('projects.write') } }) : null,
+      input.ownerId && input.ownerId !== existing?.ownerId ? tx.user.findFirst({ where: { id: input.ownerId, ...eligibleUserWhere('project-owner') } }) : null,
     ]);
     if (accounts.length !== ids.length) throw new Error('Choose active Accounts for the Primary Account and all participants.');
     if (input.ownerId && input.ownerId !== existing?.ownerId && !owner) throw new Error('Choose an eligible owner.');

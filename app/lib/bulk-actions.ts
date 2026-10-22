@@ -1,7 +1,8 @@
 import { recordMaintenance } from './admin-maintenance';
 import { Prisma, SupportCasePriority, type PrismaClient } from '@prisma/client';
-import { assertPermission, can, taskScope, type Actor } from './authorization';
-import { eligibleUserWhere } from './assignment-eligibility';
+import { assertPermission, type Actor } from './authorization';
+import { eligibleUserWhere, taskAssigneePolicy } from './assignment-eligibility';
+import { taskEditWhere } from './task-policy';
 import { operationalTaskWhere } from './operational-where';
 import { dateField, parseTask, saveTaskInTransaction, type TaskInput } from './work';
 import { supportCaseReadWhere, updateSupportCaseInTransaction } from './support-cases';
@@ -10,11 +11,7 @@ import { validateBulkRequest, type BulkRequest } from './bulk-action-contract';
 
 /** Bulk work is intentionally limited to live, unfinished Tasks in the actor's scope. */
 export function bulkTaskWhere(actor: Actor): Prisma.TaskWhereInput {
-  assertPermission(actor, 'tasks.write');
-  const project = !can(actor, 'projects.write') ? { projectId: null } : actor.role === 'SALES' ? {
-    OR: [{ projectId: null }, { project: { OR: [{ ownerId: actor.id }, { primaryAccount: { ownerId: actor.id } }] } }],
-  } : {};
-  return { AND: [operationalTaskWhere, taskScope(actor), project, { status: { in: ['OPEN', 'IN_PROGRESS'] } }] };
+  return { AND: [operationalTaskWhere, taskEditWhere(actor), { status: { in: ['OPEN', 'IN_PROGRESS'] } }] };
 }
 
 export function assertVersions(rows: { id: number; updatedAt: Date }[], request: BulkRequest) {
@@ -41,8 +38,8 @@ export async function bulkTasks(db: PrismaClient, actor: Actor, request: BulkReq
     await tx.$queryRaw(Prisma.sql`SELECT id FROM "Task" WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR UPDATE`);
     const rows = await tx.task.findMany({ where: { AND: [where, { id: { in: ids } }] }, orderBy: { id: 'asc' } });
     assertVersions(rows, request);
-    if (assignedToId && !await tx.user.findFirst({ where: { id: assignedToId, ...eligibleUserWhere('tasks.write') }, select: { id: true } })) throw new Error('Choose an eligible assignee.');
     for (const row of rows) {
+      if (assignedToId && !await tx.user.findFirst({ where: { id: assignedToId, ...eligibleUserWhere(taskAssigneePolicy(row)) }, select: { id: true } })) throw new Error('Choose an eligible assignee for every selected Task.');
       if (row.supportCaseId) await caseWorkContext(tx, actor, row.supportCaseId, row.accountId, row.contactId ? [row.contactId] : [], true);
       const value: TaskInput = { subject: row.subject, description: row.description, accountId: row.accountId, opportunityId: row.opportunityId, projectId: row.projectId, supportCaseId: row.supportCaseId, contactId: row.contactId, assignedToId: assignedToId ?? row.assignedToId, dueDate: dueDate === undefined ? row.dueDate : dueDate, status: request.action === 'complete' ? 'COMPLETED' : row.status, priority: row.priority };
       // Legacy records must also pass the ordinary form rules before bulk saves.
@@ -69,7 +66,7 @@ export async function bulkSupportCases(db: PrismaClient, actor: Actor, request: 
     await tx.$queryRaw(Prisma.sql`SELECT id FROM "SupportCase" WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR UPDATE`);
     const rows = await tx.supportCase.findMany({ where: { AND: [scope, { id: { in: ids } }] }, orderBy: { id: 'asc' } });
     assertVersions(rows, request);
-    if (assignedToId && !await tx.user.findFirst({ where: { id: assignedToId, ...eligibleUserWhere('support-cases.write') }, select: { id: true } })) throw new Error('Select an eligible Support Rep.');
+    if (assignedToId && !await tx.user.findFirst({ where: { id: assignedToId, ...eligibleUserWhere('support-case') }, select: { id: true } })) throw new Error('Select an eligible Support Rep.');
     for (const row of rows) await updateSupportCaseInTransaction(tx, actor, row.id, assignedToId ? { assignedToId } : { priority });
     await recordMaintenance(tx, actor.id, 'Support Case', request.action === 'assign' ? 'Reassign' : 'Bulk priority', ids);
     return rows.length;

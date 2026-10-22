@@ -24,7 +24,7 @@ export default async function MyTradeShowLeadsPage({ searchParams }: { searchPar
   const [{ leads, count, page, pages }, shows, reps] = await Promise.all([
     loadTradeShowQueue(prisma, actor, f, now),
     prisma.tradeShow.findMany({ where: { archivedAt: null, leads: { some: tradeShowLeadReadWhere(actor) } }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
-    prisma.user.findMany({ where: eligibleUserWhere('tasks.write'), select: { id: true, firstName: true, lastName: true, role: true }, orderBy: { firstName: 'asc' } }),
+    prisma.user.findMany({ where: eligibleUserWhere('general-task'), select: { id: true, firstName: true, lastName: true, role: true }, orderBy: { firstName: 'asc' } }),
   ]);
   const allAllowed = actor.role === 'ADMIN' || actor.role === 'SALES_MANAGER';
   const clear = f.view === 'all' || actor.role === 'MARKETING_MANAGER' ? '/trade-shows/my-leads?view=all' : '/trade-shows/my-leads?view=mine';

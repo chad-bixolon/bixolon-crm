@@ -1,10 +1,12 @@
+import { assertTaskEdit } from './task-policy';
+import { assertPermission, type Actor } from './authorization';
 import { assertEditToken, nextUpdatedAt } from './stale-edit';
 import { operationalProjectWhere, operationalAccountWhere } from './operational-where';
 import { operationalOpportunityWhere, operationalTaskWhere } from './operational-where';
 import { ActivityDirection, Prisma, TaskPriority, TaskStatus, type PrismaClient } from '@prisma/client';
 import { field, optional, positiveId, required, type Errors } from './crm-validation';
 import { archivedWhere, recordVisibility } from './record-visibility';
-import { eligibleUserWhere } from './assignment-eligibility';
+import { eligibleUserWhere, taskAssigneePolicy } from './assignment-eligibility';
 import { notifyTaskAssignment, syncTaskNotifications, syncOpportunityNotifications } from './work-notification-evaluator';
 import { getSettings } from './configuration';
 import { lockCalendarEvent } from './calendar-event-lock';
@@ -57,12 +59,18 @@ export async function saveTask(
   createKey?: string,
   actorId?: number,
   editToken?: string,
+  actor?: Actor,
 ) {
+  if (actor) assertPermission(actor, value.supportCaseId ? 'support-work.write' : 'tasks.write');
   if (!id && createKey) {
     const existing = await client.task.findUnique({ where: { createKey } });
     if (existing) return existing;
   }
   try { return await client.$transaction(async tx => {
+    if (actor && id) {
+      await tx.$queryRaw`SELECT id FROM "Task" WHERE id = ${id} FOR UPDATE`;
+      await assertTaskEdit(tx, actor, id);
+    }
     return saveTaskInTransaction(tx, value, id, createKey, actorId, editToken);
   }); } catch (error) {
     // A concurrent request may have won the unique-key race.
@@ -86,7 +94,7 @@ export async function saveTaskInTransaction(
     const contact = await tx.contact.findFirst({ where: { id: value.contactId, archivedAt: null, active: true }, select: { accountId: true } });
     if (!contact || contact.accountId && value.accountId && contact.accountId !== value.accountId) throw new Error('Contact does not match the selected Account.');
   }
-  if (value.assignedToId && value.assignedToId !== existing?.assignedToId && !(await tx.user.findFirst({ where: { id: value.assignedToId, ...eligibleUserWhere(value.supportCaseId ? 'support-work.write' : 'tasks.write') } }))) throw new Error('Choose an eligible assignee.');
+  if (value.assignedToId && (value.assignedToId !== existing?.assignedToId || !!value.supportCaseId !== !!existing?.supportCaseId) && !(await tx.user.findFirst({ where: { id: value.assignedToId, ...eligibleUserWhere(taskAssigneePolicy(value)) } }))) throw new Error('Choose an eligible assignee.');
   const completedAt = value.status === 'COMPLETED' ? existing?.completedAt ?? new Date() : null;
   const data = {
     ...value,
@@ -223,7 +231,7 @@ export async function saveActivity(client: PrismaClient, value: NonNullable<Retu
     }
     if (existing?.accountId != null && existing.accountId !== value.accountId && await tx.activityContact.count({ where: { activityId: id } })) throw new Error('Account cannot change while Contact history is linked.');
     if (!(await tx.activityType.findFirst({ where: { code: value.type, active: true } })) && existing?.type !== value.type) throw new Error('Choose an active activity type.');
-    if (value.userId && value.userId !== existing?.userId && !(await tx.user.findFirst({ where: { id: value.userId, ...eligibleUserWhere(value.supportCaseId ? 'support-work.write' : 'tasks.write') } }))) throw new Error('Choose an eligible responsible user.');
+    if (value.userId && value.userId !== existing?.userId && !(await tx.user.findFirst({ where: { id: value.userId, ...eligibleUserWhere(taskAssigneePolicy(value)) } }))) throw new Error('Choose an eligible responsible user.');
     const { contactIds: suppliedContactIds, createFollowUpTask, followUpTaskCreateKey, ...data } = value;
     const contactIds = suppliedContactIds ?? [];
     const linked = id && tx.activityContact ? await tx.activityContact.findMany({ where: { activityId: id }, select: { contactId: true } }) : [];

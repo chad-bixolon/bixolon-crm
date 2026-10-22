@@ -90,7 +90,7 @@ export async function accountOptions(client: PrismaClient) {
   const [industries, territories, owners] = await Promise.all([
     client.industry.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     client.territory.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }).then(items => items.filter(item => !isRetiredSpecialAccountTerritory(item))),
-    client.user.findMany({ where: eligibleUserWhere('accounts.write'), orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
+    client.user.findMany({ where: eligibleUserWhere('account-owner'), orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
   ]);
   return { industries, territories, owners };
 }
@@ -100,7 +100,7 @@ export async function checkAccountReferences(client: PrismaClient, input: Accoun
   const [industry, territory, owner] = await Promise.all([
     input.industry && input.industry !== existing?.industry ? client.industry.findFirst({ where: { code: input.industry, active: true } }) : null,
     input.territory && input.territory !== existing?.territory ? client.territory.findFirst({ where: { code: input.territory, active: true } }) : null,
-    input.ownerId && input.ownerId !== existing?.ownerId ? client.user.findFirst({ where: { id: input.ownerId, ...eligibleUserWhere('accounts.write') } }) : null,
+    input.ownerId && input.ownerId !== existing?.ownerId ? client.user.findFirst({ where: { id: input.ownerId, ...eligibleUserWhere('account-owner') } }) : null,
   ]);
   const errors: Record<string, string> = {};
   if (input.industry && input.industry !== existing?.industry && !industry) errors.industry = "Choose an active industry.";
@@ -123,7 +123,7 @@ export async function saveAccount(client: PrismaClient, input: AccountFields, id
     const existing = id ? await tx.account.findUnique({ where: { id }, select: { status: true, ownerId: true, updatedAt: true } }) : null;
     if (id && !existing) throw new Error("Account not found.");
     if (id && editToken !== undefined) assertEditToken(existing!.updatedAt, editToken);
-    if (input.ownerId && input.ownerId !== existing?.ownerId && !(await tx.user.findFirst({ where: { id: input.ownerId, ...eligibleUserWhere('accounts.write') } }))) throw new Error("Choose an eligible owner.");
+    if (input.ownerId && input.ownerId !== existing?.ownerId && !(await tx.user.findFirst({ where: { id: input.ownerId, ...eligibleUserWhere('account-owner') } }))) throw new Error("Choose an eligible owner.");
     if (id) {
       if (existing?.status === "ARCHIVED") throw new Error("Reactivate this account before editing it.");
       await tx.account.update({ where: { id, updatedAt: editToken !== undefined ? new Date(editToken) : existing!.updatedAt }, data: { ...data, updatedById: actorId, updatedAt: nextUpdatedAt(existing!.updatedAt) } });

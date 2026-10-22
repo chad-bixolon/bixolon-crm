@@ -12,7 +12,7 @@ export default async function EditProjectPage({ params }: { params: Promise<{ id
   if (!Number.isSafeInteger(id) || id < 1) notFound();
   const [project, owners] = await Promise.all([
     prisma.project.findUnique({ where: { id }, include: { owner: { select: { firstName: true, lastName: true } }, primaryAccount: { select: { ownerId: true } }, participants: { include: { roles: true } } } }),
-    prisma.user.findMany({ where: eligibleUserWhere('projects.write'), select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }),
+    prisma.user.findMany({ where: eligibleUserWhere('project-owner'), select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }),
   ]);
   if (!project) notFound();
   if (!canEditProject(actor, project)) redirect('/access-denied');

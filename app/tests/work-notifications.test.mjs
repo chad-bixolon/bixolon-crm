@@ -78,7 +78,7 @@ test('shared evaluator creates, dedupes, resolves and supersedes personal condit
 
 test('assignment keys use event identity and deliver only to the chosen user', async () => {
   const rows = [];
-  const db = { user: { findFirst: async ({ where }) => where.id === 7 ? { id: 7 } : null }, notification: { createMany: async ({ data }) => { rows.push(data[0]); return { count: 1 }; } } };
+  const db = { task: { findUnique: async () => ({ supportCaseId: null }) }, user: { findFirst: async ({ where }) => where.id === 7 ? { id: 7 } : null }, notification: { createMany: async ({ data }) => { rows.push(data[0]); return { count: 1 }; } } };
   await notifyTaskAssignment(db, 4, 7, 11);
   await notifyTaskAssignment(db, 4, 7, 12);
   await notifyOpportunityAssignment(db, 8, 7, 33);

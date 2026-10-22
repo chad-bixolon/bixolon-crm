@@ -16,6 +16,7 @@ import { supportUserZone } from '@/lib/support-case-ui';
 import { getSupportCaseById, supportPriorityLabels, supportSourceLabels, supportStatusLabels } from '@/lib/support-cases';
 import { caseHistoryView } from '@/lib/support-case-timeline';
 import { canCreateCaseWork, canEditCaseTask } from '@/lib/support-work';
+import { taskEditWhere } from '@/lib/task-policy';
 import { emailFileRecovery } from '@/lib/support-email-file-import';
 import { supportGmailEnabled } from '@/lib/support-gmail';
 import { SupportOutboundEmailForm } from '@/components/support-outbound-email-form';
@@ -31,6 +32,10 @@ export default async function SupportCaseDetailPage({ params, searchParams }: { 
   const allowNewWork = !row.archivedAt && row.status !== 'CLOSED' && canCreateCaseWork(actor);
   const emailContext = allowNewWork && canLogSupportEmail(actor) ? await supportOutboundEmailContext(prisma, actor, id) : null;
   const tasks = await prisma.task.findMany({ where: { supportCaseId: id, archivedAt: null }, orderBy: [{ dueDate: 'asc' }, { id: 'desc' }], take: 40 });
+  const editableTasks = !row.archivedAt && row.status !== 'CLOSED' && can(actor, 'tasks.write') && tasks.length
+    ? await prisma.task.findMany({ where: { AND: [{ id: { in: tasks.map(task => task.id) } }, taskEditWhere(actor)] }, select: { id: true } })
+    : [];
+  const editableTaskIds = new Set(editableTasks.map(task => task.id));
   const workActions = <><Link className="btn-secondary" href={`/activities/new?supportCaseId=${id}`}>Log Activity</Link><Link className="btn-secondary" href={`/tasks/new?supportCaseId=${id}`}>Create Task</Link><Link className="btn-secondary" href={`/notes/new?supportCaseId=${id}`}>Add Note</Link></>;
   const date = (value: Date | null) => value ? formatDateTimeForUser(value, zone) : '—';
   const overdue = !!row.nextFollowUpAt && row.nextFollowUpAt < new Date() && !['RESOLVED','CLOSED'].includes(row.status);
@@ -52,7 +57,7 @@ export default async function SupportCaseDetailPage({ params, searchParams }: { 
     {fileStatus === 'complete' && <p role="status" className="panel mb-5 p-4">Selected email files were imported or already present.</p>}
     {hasEmails && can(actor, 'support-cases.write') && !row.archivedAt && row.status !== 'CLOSED' && <div className="mb-4"><Link className="btn-secondary" href={`/support/cases/${id}/email-attachments`}>{emailFailures.length ? 'Review / retry email attachments' : 'Import files from linked email'}</Link></div>}
     <SupportAttachments caseId={id} items={attachments} canWrite={can(actor, 'support-cases.write') && !row.archivedAt && row.status !== 'CLOSED'} zone={zone}/>
-    <section className="panel mb-5 p-4 sm:p-5" aria-label="Case Tasks"><h2 className="mb-3 text-lg font-semibold">Case Tasks</h2>{tasks.length ? <ul className="divide-y">{tasks.map(task => <li key={task.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-3 text-sm"><div className="min-w-0 break-words"><Link className="font-medium text-orange-800 underline" href={`/tasks/${task.id}`}>{task.subject}</Link><p className="mt-1 text-slate-600">{task.status.replaceAll('_', ' ')} · {task.dueDate ? `Due ${task.dueDate.toISOString().slice(0, 10)}` : 'No due date'}</p></div>{!row.archivedAt && row.status !== 'CLOSED' && (can(actor, 'tasks.write') || canEditCaseTask(actor, task)) && <Link className="btn-secondary" href={`/tasks/${task.id}/edit`}>Edit / complete task</Link>}</li>)}</ul> : <p className="text-sm text-slate-500">No Tasks linked to this Case.</p>}{tasks.length === 40 && <p className="mt-3 text-xs text-slate-500">Showing up to 40 Case Tasks.</p>}</section>
+    <section className="panel mb-5 p-4 sm:p-5" aria-label="Case Tasks"><h2 className="mb-3 text-lg font-semibold">Case Tasks</h2>{tasks.length ? <ul className="divide-y">{tasks.map(task => <li key={task.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-3 text-sm"><div className="min-w-0 break-words"><Link className="font-medium text-orange-800 underline" href={`/tasks/${task.id}`}>{task.subject}</Link><p className="mt-1 text-slate-600">{task.status.replaceAll('_', ' ')} · {task.dueDate ? `Due ${task.dueDate.toISOString().slice(0, 10)}` : 'No due date'}</p></div>{!row.archivedAt && row.status !== 'CLOSED' && (editableTaskIds.has(task.id) || (!can(actor, 'tasks.write') && canEditCaseTask(actor, task))) && <Link className="btn-secondary" href={`/tasks/${task.id}/edit`}>Edit / complete task</Link>}</li>)}</ul> : <p className="text-sm text-slate-500">No Tasks linked to this Case.</p>}{tasks.length === 40 && <p className="mt-3 text-xs text-slate-500">Showing up to 40 Case Tasks.</p>}</section>
     <SupportCaseTimeline items={history.timeline} zone={zone} caseId={id}/>
     <SupportCaseHistory events={history.auditEvents} caseCreatedAt={row.createdAt} viewerId={actor.id} zone={zone} caseId={id} truncated={history.auditTruncated}/>
   </Content>;

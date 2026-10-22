@@ -107,6 +107,7 @@ test('disabled categories are suppressed only in surfaced queries and bulk actio
       count: async args => { queries.push(args); return 0; },
       updateMany: async args => { queries.push(args); return { count: 0 }; },
     },
+    task: { findMany: async () => [] },
     supportCase: { findMany: async () => [{ id: 44 }] },
   };
   await notificationPage(db, actor, 'active');

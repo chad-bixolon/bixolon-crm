@@ -36,7 +36,7 @@ const archivedLink = { archivedAt: { not: null } } as const;
 export function qualityWhere(key: QualityIssueKey): Prisma.AccountWhereInput | Prisma.ContactWhereInput | Prisma.OpportunityWhereInput | Prisma.ProjectWhereInput | Prisma.TaskWhereInput | Prisma.ActivityWhereInput | null {
   switch (key) {
     case 'account-owner': return { ...activeAccount, ownerId: null };
-    case 'account-owner-inactive': return { ...activeAccount, owner: { is: { NOT: eligibleUserWhere('accounts.write') } } };
+    case 'account-owner-inactive': return { ...activeAccount, owner: { is: { NOT: eligibleUserWhere('account-owner') } } };
     case 'contact-account': return { ...activeContact, accountId: null };
     case 'contact-account-inactive': return { ...activeContact, account: unavailableAccount };
     case 'opportunity-owner': return { ...openOpportunity, OR: [{ ownerId: null }, { owner: { OR: [{ active: false }, { archivedAt: { not: null } }] } }] };

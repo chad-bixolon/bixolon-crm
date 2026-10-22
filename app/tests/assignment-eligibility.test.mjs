@@ -29,7 +29,7 @@ function userClient() {
   return { user: { findMany: async ({ where }) => users.filter(user => matches(where, user)) } };
 }
 
-test('Account and Opportunity owner pickers include only active users with record write capability', async () => {
+test('Account and Opportunity owner pickers include only active eligible Sales owners', async () => {
   const client = {
     ...userClient(),
     industry: { findMany: async () => [] }, territory: { findMany: async () => [] },
@@ -42,12 +42,12 @@ test('Account and Opportunity owner pickers include only active users with recor
   assert.deepEqual((await opportunityOptions(client)).owners.map(user => user.id), [1]);
 });
 
-test('Project owners and Task assignees use their own write permissions; forecast reps stay sales only', () => {
-  assert.deepEqual(users.filter(user => matches(eligibleUserWhere('projects.write'), user)).map(user => user.id), [1]);
-  assert.deepEqual(users.filter(user => matches(eligibleUserWhere('tasks.write'), user)).map(user => user.id), [1, 5]);
-  assert.equal(eligibleUser(users[1], 'accounts.write'), false);
-  assert.equal(eligibleUser(users[2], 'sales.write'), false);
-  assert.equal(eligibleUser(users[3], 'tasks.write'), false);
+test('Project owners and Task assignees use separate business eligibility; forecast reps stay sales only', () => {
+  assert.deepEqual(users.filter(user => matches(eligibleUserWhere('project-owner'), user)).map(user => user.id), [1]);
+  assert.deepEqual(users.filter(user => matches(eligibleUserWhere('general-task'), user)).map(user => user.id), [1, 5]);
+  assert.equal(eligibleUser(users[1], 'account-owner'), false);
+  assert.equal(eligibleUser(users[2], 'opportunity-owner'), false);
+  assert.equal(eligibleUser(users[3], 'general-task'), false);
   assert.deepEqual(users.filter(user => matches(activeSalesRepWhere(), user)).map(user => user.id), [1]);
 });
 

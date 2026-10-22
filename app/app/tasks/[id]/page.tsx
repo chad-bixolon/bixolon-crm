@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { taskTiming } from '@/lib/work';
 import { currentUser } from '@/lib/current-user';
 import { assertTaskRead, canEditCaseTask } from '@/lib/support-work';
+import { assertTaskEdit } from '@/lib/task-policy';
 import { can } from '@/lib/authorization';
 import { SaveSuccess } from '@/components/save-success';
 import { saveFeedbackMessage } from '@/lib/save-feedback';
@@ -23,7 +24,9 @@ export default async function TaskPage({ params, searchParams }: { params: Promi
   ]);
   if (!task) notFound();
   try { await assertTaskRead(prisma, actor, task); } catch { notFound(); }
-  const allowEdit = can(actor, 'tasks.write') || (canEditCaseTask(actor, task) && !!task.supportCase && !task.supportCase.archivedAt && task.supportCase.status !== 'CLOSED');
+  let generalEdit = false;
+  if (can(actor, 'tasks.write')) { try { await assertTaskEdit(prisma, actor, id); generalEdit = true; } catch { /* Read visibility remains shared. */ } }
+  const allowEdit = generalEdit || (!can(actor, 'tasks.write') && canEditCaseTask(actor, task) && !!task.supportCase && !task.supportCase.archivedAt && task.supportCase.status !== 'CLOSED');
   const details = [
     ['Status', task.status.replace('_', ' ')],
     ['Priority', task.priority],

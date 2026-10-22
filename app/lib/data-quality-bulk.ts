@@ -1,7 +1,7 @@
 import { nextUpdatedAt } from './stale-edit';
 import { Prisma, type PrismaClient } from '@prisma/client';
-import { assertAdmin, recordMaintenance } from './admin-maintenance';
-import type { Actor } from './authorization';
+import { recordMaintenance } from './admin-maintenance';
+import { assertPermission, type Actor } from './authorization';
 import { eligibleUserWhere } from './assignment-eligibility';
 import { validateBulkRequest, type BulkRequest } from './bulk-action-contract';
 import { assertVersions } from './bulk-actions';
@@ -12,7 +12,7 @@ export type QualityBulkScope = { issue: string; q: string; page: number };
 
 /** Owner-only corrections, bounded to the current issue page; no general mass edit. */
 export async function bulkQualityOwners(db: PrismaClient, actor: Actor, scope: QualityBulkScope, request: BulkRequest) {
-  assertAdmin(actor);
+  assertPermission(actor, 'data-quality.manage');
   const ids = validateBulkRequest(request);
   if (!scope || !qualityBulkSupported(scope.issue) || request.action !== 'assign') throw new Error('This check requires individual review.');
   const issue = scope.issue;
@@ -25,8 +25,8 @@ export async function bulkQualityOwners(db: PrismaClient, actor: Actor, scope: Q
     await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id IN (${Prisma.join([...new Set([actor.id, ownerId])].sort((a, b) => a - b))}) ORDER BY id FOR SHARE`);
     const currentActor = await tx.user.findUnique({ where: { id: actor.id } });
     if (!currentActor) throw new Error('Access denied');
-    assertAdmin(currentActor);
-    const owner = await tx.user.findFirst({ where: { id: ownerId, ...eligibleUserWhere(account ? 'accounts.write' : 'sales.write') } });
+    assertPermission(currentActor, 'data-quality.manage');
+    const owner = await tx.user.findFirst({ where: { id: ownerId, ...eligibleUserWhere(account ? 'account-owner' : 'opportunity-owner') } });
     if (!owner) throw new Error('The chosen owner is no longer available. No records changed. Choose an active, eligible owner.');
     if (account) await tx.$queryRaw(Prisma.sql`SELECT id FROM "Account" WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR UPDATE`);
     else await tx.$queryRaw(Prisma.sql`SELECT id FROM "Opportunity" WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR UPDATE`);

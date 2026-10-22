@@ -1,17 +1,29 @@
-import { UserRole, type Prisma, type PrismaClient } from '@prisma/client';
-import { can, type Permission } from './authorization';
+import type { UserRole, Prisma, PrismaClient } from '@prisma/client';
 
-// Keep assignment rules tied to the same capabilities used to edit the record.
-export function eligibleUserWhere(permission: Permission): Prisma.UserWhereInput {
-  return {
-    active: true,
-    archivedAt: null,
-    role: { in: Object.values(UserRole).filter(role => can({ id: 0, role, active: true }, permission)) },
-  };
+/** Eligibility is a business population, independent of module write permissions.
+ * Admin remains eligible for operational Tasks and Support work because existing
+ * case handling and follow-up workflows explicitly use Admin assignees.
+ */
+export const eligibilityRoles = {
+  'account-owner': ['SALES', 'SALES_MANAGER'],
+  'opportunity-owner': ['SALES', 'SALES_MANAGER'],
+  'project-owner': ['SALES', 'SALES_MANAGER'],
+  'sales-plan-owner': ['SALES', 'SALES_MANAGER'],
+  'general-task': ['ADMIN', 'SALES', 'SALES_MANAGER', 'MARKETING_MANAGER'],
+  'support-task': ['ADMIN', 'SALES', 'SALES_MANAGER', 'MARKETING_MANAGER', 'SUPPORT'],
+  'support-case': ['ADMIN', 'SUPPORT'],
+  'trade-show-sales': ['SALES', 'SALES_MANAGER'],
+  'marketing-owner': ['MARKETING_MANAGER'],
+} as const satisfies Record<string, readonly UserRole[]>;
+export type Eligibility = keyof typeof eligibilityRoles;
+export function eligibleUserWhere(policy: Eligibility): Prisma.UserWhereInput {
+  return { active: true, archivedAt: null, role: { in: [...eligibilityRoles[policy]] } };
 }
-
-export function eligibleUser(user: { role: UserRole; active: boolean; archivedAt: Date | null } | null, permission: Permission) {
-  return !!user && can({ id: 0, ...user }, permission);
+export function eligibleUser(user: { role: UserRole; active: boolean; archivedAt?: Date | null } | null, policy: Eligibility) {
+  return !!user?.active && !user.archivedAt && (eligibilityRoles[policy] as readonly UserRole[]).includes(user.role);
+}
+export function taskAssigneePolicy(task: { supportCaseId?: number | null }): Eligibility {
+  return task.supportCaseId ? 'support-task' : 'general-task';
 }
 
 export function defaultEligibleUserId<T extends { id: number }>(users: readonly T[], effectiveUserId: number, contextUserId?: number | null): number | null {
@@ -21,7 +33,7 @@ export function defaultEligibleUserId<T extends { id: number }>(users: readonly 
 
 // Forecast and named sales-rep assignments are scoped to the sales organization.
 export function activeSalesRepWhere(): Prisma.UserWhereInput {
-  return { active: true, archivedAt: null, role: { in: [UserRole.SALES, UserRole.SALES_MANAGER] } };
+  return eligibleUserWhere('sales-plan-owner');
 }
 
 export function selectedSalesRepWhere(value?: string): Prisma.UserWhereInput | null {

@@ -68,15 +68,11 @@ ALTER TYPE "UserRole" ADD VALUE 'MARKETING_MANAGER';
 
 ## CRM permissions
 
-| Role | Accounts and contacts | Opportunities and pipeline | Tasks and notes | Products | User admin | Integrations | Pricing |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| ADMIN | Read/write | Read/write, company | Read/write, company | Read/write | Manage | Manage | Read |
-| SALES_MANAGER | Read/write | Read/write, company | Read/write, company | Read | No | No | Read |
-| SALES | Read/write | Read across Sales; edit own; Pipeline defaults to self | Read/write, assigned lists/dashboard | Read | No | No | Read |
-| MARKETING_MANAGER | Read/write | No | Read/write | Read | No | No | No |
-| READ_ONLY | Read | Read | Read | Read | No | No | No explicit pricing permission |
+See [Authorization Correctness & Policy Foundation v1](authorization-policy.md) for the current capability matrix, record policies, explicit owner/assignee populations, Read Only certification, and maintainer rules. `lib/authorization.ts` is the executable predefined capability matrix.
 
-Checks run in the request proxy and again in each mutating server action. The current user's active status and role are read from the CRM `User` record when a session is loaded. Future integrations and customer-specific pricing can use dedicated permission names in `lib/authorization.ts`.
+The request proxy and server-side action/service checks provide separate protection. The v1 audit found that `submitUser` previously lacked its own check; both that action and `saveUser` now independently require an active, unarchived Admin. Do not assume a protected page authorizes a mutation, or that every legacy persistence helper performs its own check. User saves also prevent removal of the final usable Admin within the transaction. There is currently no application User archive/delete path.
+
+Marketing Manager has read context for Accounts, Contacts, Opportunities, and Projects, plus pricing read access; it does not have Sales writes. Read Only retains pricing read access and cannot mutate business records. Support retains catalog visibility without negotiated/customer pricing. Personal-state exceptions are documented separately from business writes in the policy foundation.
 
 Sales users may view other Sales reps’ Accounts, Opportunities, and Projects through lists, relationship tabs, search, recent items, and direct detail URLs. Ownership determines responsibility, revenue/commission attribution, and owner-specific actions; it is not a blanket read restriction. Existing edit and reassignment permissions are unchanged.
 

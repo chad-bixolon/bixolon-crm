@@ -111,7 +111,7 @@ export function opportunityTotal(lines: { quantity: number; estimatedUnitPrice: 
 export function weightedValue(total: Prisma.Decimal, probability: number) { return total.mul(probability).div(100); }
 export async function opportunityOptions(client: PrismaClient, { historicalOutcomeReasons = false } = {}) {
   const [owners, stages, currencyConfig, productCount, productCategories, competitors, outcomeReasons] = await Promise.all([
-    client.user.findMany({ where: eligibleUserWhere('sales.write'), orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
+    client.user.findMany({ where: eligibleUserWhere('opportunity-owner'), orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
     client.salesStage.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { id: true, name: true, probability: true, isClosed: true, isWon: true } }),
     getCurrencyConfiguration(client),
     client.product.count({ where: { active: true, archivedAt: null } }),
@@ -151,7 +151,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       if (!competitor || (!competitor.active && existing?.competitorId !== input.competitorId)) throw new Error("Choose an available competitor.");
     }
     if (!canRetainCurrency(currency, input.currencyCode, existing?.currencyCode)) throw new Error("Choose an available currency.");
-    if (input.ownerId && input.ownerId !== existing?.ownerId && !eligibleUser(owner, 'sales.write')) throw new Error("Choose an eligible owner.");
+    if (input.ownerId && input.ownerId !== existing?.ownerId && !eligibleUser(owner, 'opportunity-owner')) throw new Error("Choose an eligible owner.");
     if (new Set(input.projectIds).size !== input.projectIds.length || projects.length !== input.projectIds.length || projects.some(project => project.archivedAt && !existing?.projects.some(link => link.projectId === project.id))) throw new Error("Choose each active Project only once.");
     if (accounts.length !== input.participants.length) throw new Error("Choose active accounts for all participants.");
     if (contacts.length !== input.contacts.length || contacts.some(contact => !existingContactIds.has(contact.id) && (!contact.active || contact.archivedAt))) throw new Error("Choose active Contacts.");
