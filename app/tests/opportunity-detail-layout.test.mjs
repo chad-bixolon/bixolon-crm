@@ -183,6 +183,8 @@ const documentMocks = {
   '@prisma/client': { DocumentType: { OTHER: 'OTHER' } },
   '@/lib/prisma': { prisma: { document: { findMany: async () => documentRows } } },
   '@/lib/documents': { assertDocumentParentAccess: async () => {}, documentTypeLabels: { OTHER: 'Other' }, documentWhere: (_, archived) => ({ archived }) },
+  '@/lib/document-list': { loadDocumentList: async () => ({ documents: documentRows, pagination: null }) },
+  './detail-pagination': { DetailPagination: () => null },
   './document-controls': { DocumentArchive: ({ archived }) => React.createElement('button', null, archived ? 'Restore' : 'Archive'), DocumentFeedback: () => null, DocumentUpload: () => React.createElement('button', null, 'Add document') },
 };
 let documentRows = [];
