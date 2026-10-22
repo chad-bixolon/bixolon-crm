@@ -118,7 +118,7 @@ test('Google adapter discovers parts, keeps Description text-only and only GETs 
   const calls=[];
   const fetcher=async(url,init={})=>{const value=String(url);calls.push({url:value,method:init.method??'GET'});let data;if(value.includes('/token'))data={access_token:'unit-token',scope:gmail.SUPPORT_GMAIL_SCOPE};else if(value.endsWith('/profile'))data={emailAddress:'support@bixolonusa.com'};else if(value.includes('/attachments/'))data={size:bytes.length,data:bytes.toString('base64url')};else if(value.includes('/messages?'))data={messages:[{id:raw.id}]};else data=raw;return new Response(JSON.stringify(data));};
   try{
-    await connection.saveSupportGmailConnection('support@bixolonusa.com','unit-refresh',actor);
+    await connection.saveSupportGmailConnection('support@bixolonusa.com','unit-refresh',{...actor,role:'ADMIN'});
     const adapter=new gmail.GoogleGmailSupportMailbox(fetcher);
     const [summary]=await adapter.recent();
     assert.equal(summary.bodyText,'');assert.equal(summary.files,undefined);

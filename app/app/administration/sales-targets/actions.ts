@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { archiveSalesTarget, saveSalesTarget } from '@/lib/sales-targets';
 
 export async function saveTargetAction(form: FormData) {
-  const actor = await requireMutation('users.manage');
+  const actor = await requireMutation('configuration.manage');
   const rawId = String(form.get('id') ?? '');
   const id = rawId ? Number(rawId) : undefined;
   let error = '';
@@ -18,7 +18,7 @@ export async function saveTargetAction(form: FormData) {
 }
 
 export async function archiveTargetAction(form: FormData) {
-  const actor = await requireMutation('users.manage');
+  const actor = await requireMutation('configuration.manage');
   let error = '';
   try { await archiveSalesTarget(prisma, actor, Number(form.get('id'))); }
   catch (cause) { error = cause instanceof Error ? cause.message : 'Target could not be archived.'; }

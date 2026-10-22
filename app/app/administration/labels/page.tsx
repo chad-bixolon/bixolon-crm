@@ -7,7 +7,7 @@ import { requirePermission } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 export default async function LabelsPage() {
-  await requirePermission("users.manage");
+  await requirePermission("configuration.manage");
   const rows = await prisma.terminologyLabel.findMany();
   const labels = labelMap(rows);
   const editors=await prisma.user.findMany({where:{id:{in:[...new Set(rows.map(row=>row.changedById).filter((id):id is number=>id!==null))]}},select:{id:true,firstName:true,lastName:true}});

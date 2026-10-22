@@ -8,7 +8,7 @@ import { saveRosaBackfill } from './actions';
 import { EntityPicker } from '@/components/entity-picker';
 
 export default async function RosaBackfillPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const actor = await requirePermission('users.manage');
+  const actor = await requirePermission('configuration.manage');
   if (actor.role !== 'ADMIN') return <Content><p>Administrator access required.</p></Content>;
   const [{ error }, skus] = await Promise.all([
     searchParams,

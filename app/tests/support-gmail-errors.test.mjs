@@ -70,7 +70,7 @@ test('real connect, repeated Ignore, refresh without scope and fresh adapters re
     return google.fetcher(url, init);
   });
   const flow = connection.beginSupportGmailAuthorization(actor.id);
-  assert.equal(await connection.completeSupportGmailAuthorization({actor, state:flow.state, cookie:flow.state, verifier:flow.verifier, code:'synthetic-code', error:null}), 'connected');
+  assert.equal(await connection.completeSupportGmailAuthorization({actor: {...actor, role:'ADMIN'}, state:flow.state, cookie:flow.state, verifier:flow.verifier, code:'synthetic-code', error:null}), 'connected');
   for (const id of ['one', 'two', 'three', 'one']) await assert.rejects(ignoreInboxMessage({}, form(id)), /test redirect/);
   assert.deepEqual([...dismissed], ['one', 'two', 'three']);
   assert.equal(credentials.attempts.filter(row => row.operation === 'IGNORE' && row.status === 'SUCCEEDED').length, 4);
@@ -89,7 +89,7 @@ test('real connect, repeated Ignore, refresh without scope and fresh adapters re
 });
 
 test('403 reason mapping is consistent at profile, list, full message, get and attachment reads', async () => {
-  await connection.saveSupportGmailConnection('support@example.test', 'refresh', actor);
+  await connection.saveSupportGmailConnection('support@example.test', 'refresh', { ...actor, role: 'ADMIN' });
   for (const [status, reason, expected, category] of [
     [403, 'userRateLimitExceeded', /rate limited/, 'rate-limit'],
     [403, 'rateLimitExceeded', /rate limited/, 'rate-limit'],
@@ -125,7 +125,7 @@ test('modern ErrorInfo scope/rate categories and malformed/unknown 403 bodies ne
 });
 
 test('Ignore does not persist on a Gmail failure; recovery needs no reconnect and connection stays saved', async t => {
-  await connection.saveSupportGmailConnection('support@example.test', 'refresh', actor);
+  await connection.saveSupportGmailConnection('support@example.test', 'refresh', { ...actor, role: 'ADMIN' });
   for (const [status, reason, expected] of [[403,'userRateLimitExceeded',/rate limited/], [404,'notFound',/message not found/], [503,'backendError',/temporarily unavailable/]]) {
     const google = provider({failStage:'message', failure: () => json({error:{errors:[{reason}]}}, status)});
     resetGmailRuntime(supportGmailRuntime);
@@ -145,7 +145,7 @@ test('Ignore does not persist on a Gmail failure; recovery needs no reconnect an
 });
 
 test('expired access token, revoked refresh token, OAuth client rejection and explicit broader scope stay distinct', async () => {
-  await connection.saveSupportGmailConnection('support@example.test', 'refresh', actor);
+  await connection.saveSupportGmailConnection('support@example.test', 'refresh', { ...actor, role: 'ADMIN' });
   for (const [status, error, expected] of [[400,'invalid_grant',/connection expired/], [401,'invalid_client',/OAuth client was rejected/], [400,'invalid_request',/token refresh failed/]]) {
     await assert.rejects(new gmail.GoogleGmailSupportMailbox(provider({failStage:'token-refresh', failure:() => json({error},status)}).fetcher, newRuntime()).recent(), expected);
   }
@@ -160,7 +160,7 @@ test('expired access token, revoked refresh token, OAuth client rejection and ex
 });
 
 test('network and timeout diagnostics contain only fixed stages/status/categories', async () => {
-  await connection.saveSupportGmailConnection('support@example.test', 'private-refresh-token', actor);
+  await connection.saveSupportGmailConnection('support@example.test', 'private-refresh-token', { ...actor, role: 'ADMIN' });
   for (const failStage of ['token-refresh', 'profile', 'message']) for (const [name, expected, category] of [['Error', /connection failed/, 'network'], ['TimeoutError', /timed out/, 'timeout']]) {
     const failure = () => { throw Object.assign(new Error('private-access-token private-client-secret private-encryption-key private-authorization-code'), {name}); };
     await assert.rejects(new gmail.GoogleGmailSupportMailbox(provider({failStage, failure}).fetcher, newRuntime()).get('one'), expected);
@@ -170,15 +170,15 @@ test('network and timeout diagnostics contain only fixed stages/status/categorie
 });
 
 test('concurrent mailbox requests use local fresh tokens and reread shared connection after reconnect/disconnect', async () => {
-  await connection.saveSupportGmailConnection('support@example.test', 'old-refresh', actor);
+  await connection.saveSupportGmailConnection('support@example.test', 'old-refresh', { ...actor, role: 'ADMIN' });
   const a = new gmail.GoogleGmailSupportMailbox(provider({tokenPrefix:'instance-a'}).fetcher, newRuntime());
   const b = new gmail.GoogleGmailSupportMailbox(provider({tokenPrefix:'instance-b'}).fetcher, newRuntime());
   assert.deepEqual((await Promise.all([a.get('one'), b.get('two')])).map(row => row.id), ['one','two']);
-  await connection.saveSupportGmailConnection('support@example.test', 'new-refresh', actor);
+  await connection.saveSupportGmailConnection('support@example.test', 'new-refresh', { ...actor, role: 'ADMIN' });
   const next = provider();
   const fetcher = async (url, init) => { if (url.endsWith('/token')) assert.equal(init.body.get('refresh_token'), 'new-refresh'); return next.fetcher(url, init); };
   assert.equal((await new gmail.GoogleGmailSupportMailbox(fetcher, newRuntime()).get('one')).id, 'one');
-  await connection.disconnectSupportGmail(actor);
+  await connection.disconnectSupportGmail({...actor,role:'ADMIN'});
   await assert.rejects(a.get('one'), /Connect Support Gmail/);
   await assert.rejects(b.get('two'), /Connect Support Gmail/);
 });

@@ -23,14 +23,14 @@ export async function readUpload(form: FormData, transform?:XlsxTransform) {
 }
 
 export async function previewUpload(form:FormData) {
-  await requireMutation('users.manage');
+  await requireMutation('configuration.manage');
   const upload = await readUpload(form);
   if (!upload.csv) return {error:upload.error ?? 'Upload could not be read.',sheets:'sheets' in upload ? upload.sheets : []};
   try { return {plan:await planImport(prisma,upload.csv),sheets:'sheets' in upload ? upload.sheets : [],selectedSheet:'selectedSheet' in upload ? upload.selectedSheet : undefined}; }
   catch { return {error:'Could not prepare the import preview. Check the file and try again.',sheets:[]}; }
 }
 export async function confirmUpload(form:FormData,digest:string) {
-  const actor = await requireMutation('users.manage');
+  const actor = await requireMutation('configuration.manage');
   const upload = await readUpload(form);
   if (!upload.csv) return {ok:false as const,message:upload.error ?? 'Upload could not be read.'};
   try {

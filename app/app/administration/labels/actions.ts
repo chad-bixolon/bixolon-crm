@@ -4,7 +4,7 @@ import { requireMutation } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { restoreLabel, saveLabel } from "@/lib/configuration";
 export async function submitLabel(key: string, action: "save" | "restore", _state: { message: string; success?: boolean }, form: FormData) {
-  const actor = await requireMutation("users.manage");
+  const actor = await requireMutation("configuration.manage");
   try {
     if (action === "restore") await restoreLabel(prisma, key, actor.id);
     else await saveLabel(prisma, key, String(form.get("displayLabel") ?? ""), actor.id);

@@ -36,13 +36,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (e2eAuthEnabled() && typeof token.e2eUserId === 'number') {
         const user = await prisma.user.findUnique({ where: { id: token.e2eUserId } });
-        if (user?.active && !user.archivedAt && user.email.endsWith('@e2e.saleshub.local')) session.crmUser = { id: user.id, name: `${user.firstName} ${user.lastName}`, email: user.email, role: user.role, active: true };
+        if (user?.active && !user.archivedAt && user.email.endsWith('@e2e.saleshub.local')) session.crmUser = { id: user.id, name: `${user.firstName} ${user.lastName}`, email: user.email, role: user.role, delegatedUserAdministrationEnabled: user.delegatedUserAdministrationEnabled, active: true };
         return session;
       }
       const id = token.crmUserId, identityId = token.crmIdentityId;
       const user = typeof id === 'number' && typeof identityId === 'number' ? await resolveLinkedSession(prisma, id, identityId) : null;
       if (user) {
-        session.crmUser = { id: user.id, name: `${user.firstName} ${user.lastName}`, email: user.email, role: user.role, active: true };
+        session.crmUser = { id: user.id, name: `${user.firstName} ${user.lastName}`, email: user.email, role: user.role, delegatedUserAdministrationEnabled: user.delegatedUserAdministrationEnabled, active: true };
       }
       return session;
     },

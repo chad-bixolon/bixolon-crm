@@ -31,7 +31,7 @@ export async function savePriceExceptionFollowUp(id:number,_state:{error?:string
 }
 
 export async function assignPriceExceptionSalesRep(id:number,_state:AssignPriceExceptionSalesRepState,form:FormData):Promise<AssignPriceExceptionSalesRepState>{
-  const actor=await requireMutation('users.manage');
+  const actor=await requireMutation('configuration.manage');
   const parsed=parseAssignedSalesRepUserId(form);
   if(parsed.error)return {error:parsed.error,value:parsed.value};
   try{
@@ -45,7 +45,7 @@ export async function assignPriceExceptionSalesRep(id:number,_state:AssignPriceE
 }
 
 export async function resolvePriceExceptionAccounts(id:number,_state:ResolvePriceExceptionState,form:FormData):Promise<ResolvePriceExceptionState>{
-  const actor=await requireMutation('users.manage');
+  const actor=await requireMutation('configuration.manage');
   for(const field of ['distributorAccountId','varAccountId','endUserAccountId']){
     if(form.get(`${field}Searching`)==='true')return {errors:{[field]:'Select an Account from the suggestions or cancel the search.'}};
   }
@@ -63,14 +63,14 @@ export async function resolvePriceExceptionAccounts(id:number,_state:ResolvePric
 }
 
 export async function archivePriceException(form:FormData){
-  const actor=await requireMutation('users.manage');
+  const actor=await requireMutation('configuration.manage');
   const id=Number(form.get('id'));
   if(!Number.isSafeInteger(id)||id<=0)throw new Error('Invalid Price Exception.');
   await prisma.priceException.update({where:{id},data:{status:'ARCHIVED',archivedAt:new Date(),updatedById:actor.id}});
   revalidatePath('/price-exceptions');revalidatePath(`/price-exceptions/${id}`);revalidatePath('/accounts');
 }
 export async function restorePriceException(form:FormData){
-  const actor=await requireMutation('users.manage');
+  const actor=await requireMutation('configuration.manage');
   const id=Number(form.get('id'));
   if(!Number.isSafeInteger(id)||id<=0)throw new Error('Invalid Price Exception.');
   const row=await prisma.priceException.findFirst({where:{id,archivedAt:{not:null}},select:{expirationDate:true}});

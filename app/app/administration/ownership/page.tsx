@@ -11,7 +11,7 @@ import { adminPage, adminPageSize, ownershipCounts, ownershipRows, ownershipType
 export const dynamic = 'force-dynamic';
 type Filters = { entity?: string; owner?: string; page?: string };
 export default async function OwnershipPage({ searchParams }: { searchParams: Promise<Filters> }) {
-  const actor = await requirePermission('users.manage'), f = await searchParams;
+  const actor = await requirePermission('configuration.manage'), f = await searchParams;
   const type = ownershipType(f.entity), owner = /^\d+$/.test(f.owner ?? '') ? Number(f.owner) || undefined : undefined;
   const counts = await ownershipCounts(prisma, actor, owner);
   const pages = Math.max(1, Math.ceil(counts[type] / adminPageSize)), page = Math.min(adminPage(f.page), pages);

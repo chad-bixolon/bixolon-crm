@@ -26,7 +26,7 @@ test('user persistence independently rejects unauthorized/unavailable actors, in
 });
 function userDb(users) {
   const state = { writes: 0, locks: 0 };
-  const tx = { $queryRaw: async () => { state.locks++; return []; }, user: {
+  const tx = { adminMaintenanceEvent: { create: async () => ({}) }, task: { count: async () => 0 }, supportCase: { count: async () => 0 }, $queryRaw: async () => { state.locks++; return []; }, user: {
     findUnique: async ({ where }) => users.find(user => user.id === where.id) ?? null,
     count: async ({ where }) => users.filter(user => user.id !== where.id.not && user.role === 'ADMIN' && user.active && !user.archivedAt).length,
     create: async ({ data }) => { state.writes++; const row = { ...data, id: 100 }; users.push(row); return row; },
@@ -43,7 +43,7 @@ test('persisted actor defeats stale/forged Admin role, active status, or archive
 });
 test('Admin service validates roles/status and whitelists fields without identity writes', async () => {
   const db = userDb([actor('ADMIN')]);
-  await assert.rejects(saveUser(db, actor('ADMIN'), { ...input, role: 'EXECUTIVE' }), /Invalid user/);
+  await assert.rejects(saveUser(db, actor('ADMIN'), { ...input, role: 'NOT_A_ROLE' }), /Invalid user/);
   await assert.rejects(saveUser(db, actor('ADMIN'), { ...input, active: 'ADMIN' }), /Invalid user/);
   assert.equal(await saveUser(db, actor('ADMIN'), { ...input, archivedAt: new Date(), externalIdentities: { create: {} } }), 100);
   const saved = await db.user.findUnique({ where: { id: 100 } });
@@ -61,7 +61,7 @@ test('last usable Admin cannot be demoted, deactivated, or archived; a second us
   assert.equal((await db.user.findUnique({ where: { id: 1 } })).active, false);
 });
 test('eligibility populations are explicit, independent of capabilities, and exclude inactive/archived users', () => {
-  const expected = { 'account-owner': ['SALES','SALES_MANAGER'], 'opportunity-owner': ['SALES','SALES_MANAGER'], 'project-owner': ['SALES','SALES_MANAGER'], 'sales-plan-owner': ['SALES','SALES_MANAGER'], 'general-task': ['ADMIN','SALES','SALES_MANAGER','MARKETING_MANAGER'], 'support-task': ['ADMIN','SALES','SALES_MANAGER','MARKETING_MANAGER','SUPPORT'], 'support-case': ['ADMIN','SUPPORT'], 'trade-show-sales': ['SALES','SALES_MANAGER'], 'marketing-owner': ['MARKETING_MANAGER'] };
+  const expected = { 'account-owner': ['SALES','SALES_MANAGER'], 'opportunity-owner': ['SALES','SALES_MANAGER'], 'project-owner': ['SALES','SALES_MANAGER'], 'sales-plan-owner': ['SALES','SALES_MANAGER'], 'general-task': ['ADMIN','SALES','SALES_MANAGER','MARKETING_MANAGER'], 'support-task': ['ADMIN','SALES','SALES_MANAGER','MARKETING_MANAGER','SUPPORT','SUPPORT_MANAGER'], 'support-case': ['ADMIN','SUPPORT','SUPPORT_MANAGER'], 'trade-show-sales': ['SALES','SALES_MANAGER'], 'marketing-owner': ['MARKETING_MANAGER'] };
   for (const policy of Object.keys(eligibilityRoles)) {
     assert.deepEqual(eligibleUserWhere(policy).role.in, expected[policy]);
     for (const role of Object.keys(predefinedCapabilities)) {
@@ -83,10 +83,12 @@ test('Product data excludes negotiated fields and does not fetch them, retaining
   const sensitive = { customerPrice: '987.65', previousPrice: '876.54', tariffPercent: '25', tariffAmount: '246.91', finalUnitPrice: '1234.56', notes: 'Private negotiated note' };
   let query;
   const db = { product: { findUnique: async request => { query = request; return { id: 1, skus: [{ prices: [{ amount: '10', tier: 'LIST' }], odmCustomers: [{ account: { name: 'Customer' }, prices: [sensitive] }] }] }; } } };
-  const denied = await productDetailData(db, actor('SUPPORT'), 1);
+  for (const role of ['SUPPORT', 'SUPPORT_MANAGER', 'EXECUTIVE']) {
+  const denied = await productDetailData(db, actor(role), 1);
   assert.equal(query.include.skus.include.odmCustomers.include.prices, false);
   for (const key of Object.keys(sensitive)) assert.equal(JSON.stringify(denied).includes(key), false, key);
   assert.equal(denied.skus[0].prices[0].amount, '10');
+  }
   for (const role of ['ADMIN','SALES_MANAGER','SALES','MARKETING_MANAGER','READ_ONLY']) assert.equal((await productDetailData(db, actor(role), 1)).skus[0].odmCustomers[0].prices[0].notes, sensitive.notes);
 });
 function matches(row, where) {
@@ -138,7 +140,8 @@ const actions = {};
 try {
   for (const name of ['accounts','contacts','opportunities','projects','products','tasks','activities','notes','administration/users','support/cases','price-exceptions/[id]']) actions[name] = require(path.join(root, 'app', name, 'actions.ts'));
 } finally { Module._load = originalLoad; }
-test('READ_ONLY direct business action invocations are denied without touching persistence', async () => {
+for (const role of ['READ_ONLY', 'EXECUTIVE']) test(`${role} direct business action invocations are denied without touching persistence`, async () => {
+  effective = actor(role);
   const form = new FormData();
   for (const [key,value] of Object.entries({ subject:'Work', status:'OPEN', priority:'NORMAL', createKey:'d7054358-5d57-4398-8550-506157266184', role:'ADMIN', active:'true', supportCaseId:'5' })) form.set(key,value);
   const calls = [
@@ -148,6 +151,7 @@ test('READ_ONLY direct business action invocations are denied without touching p
     () => actions.products.submitProductSku(1, null, {}, form), () => actions.products.changeProductState(1, 'archived', {}),
     () => actions.tasks.submitTask(null, {}, form), () => actions.tasks.submitTask(1, {}, form), () => actions.tasks.archiveTask(1, {}), () => actions.tasks.reactivateTask(1, {}),
     () => actions.activities.setActivityArchived(form), () => actions.notes.archiveNote(1, {}), () => actions.notes.reactivateNote(1, {}),
+    () => actions['administration/users'].resetGoogleIdentity(1, 1, {}, form),
     () => actions['administration/users'].submitUser(null, {}, form), () => actions['support/cases'].saveSupportCase(null, {}, form),
     () => actions['price-exceptions/[id]'].archivePriceException(form),
   ];

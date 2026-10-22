@@ -195,7 +195,7 @@ test('encrypted connection and Google adapter only call Gmail read endpoints wit
     return { ok: true, json: async () => data };
   };
   try {
-    await saveSupportGmailConnection('test@example.test', 'refresh', actor('SUPPORT'));
+    await saveSupportGmailConnection('test@example.test', 'refresh', actor('ADMIN'));
     assert.equal((await connectionStatus()).email, 'test@example.test');
     assert.doesNotMatch(credentials.record.refreshTokenEncrypted, /refresh/);
     const verifier = crypto.randomBytes(32).toString('base64url');
@@ -220,7 +220,7 @@ test('encrypted connection and Google adapter only call Gmail read endpoints wit
     }
     global.fetch = async () => { throw Object.assign(new Error('aborted'), { name: 'TimeoutError' }); };
     await assert.rejects(new GoogleGmailSupportMailbox(undefined, new SupportGmailRuntime()).recent(), /timed out/);
-    await disconnectSupportGmail(actor('SUPPORT'));
+    await disconnectSupportGmail(actor('ADMIN'));
     assert.equal((await connectionStatus()).connected, false);
   } finally {
     global.fetch = originalFetch;

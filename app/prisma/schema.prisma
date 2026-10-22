@@ -9,6 +9,8 @@ datasource db {
 }
 
 enum UserRole {
+  SUPPORT_MANAGER
+  EXECUTIVE
   ADMIN
   SUPPORT
   SALES_MANAGER
@@ -298,6 +300,7 @@ model User {
   lastName                String
   timeZone                String             @default("America/New_York")
   active                  Boolean            @default(true)
+  delegatedUserAdministrationEnabled Boolean @default(false)
   role                    UserRole           @default(READ_ONLY)
   archivedAt              DateTime?
   identities              ExternalIdentity[]
@@ -2556,6 +2559,8 @@ model SupportGmailConnection {
 
 /// Operational maintenance only. Append-only; no arbitrary payloads or secrets.
 model AdminMaintenanceEvent {
+  oldValue String?
+  newValue String?
   id Int @id @default(autoincrement())
   occurredAt DateTime @default(now())
   actorId Int

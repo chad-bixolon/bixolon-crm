@@ -6,7 +6,7 @@ export const weeklySnapshotService = Object.freeze({ service: 'weekly-snapshots'
 export type SnapshotActor = Actor | typeof weeklySnapshotService;
 export function assertSnapshotCaptureActor(actor: SnapshotActor) {
   if (actor === weeklySnapshotService) return;
-  if (!('role' in actor) || actor.role !== 'ADMIN' || !can(actor, 'users.manage')) throw new Error('Access denied');
+  if (!('role' in actor) || actor.role !== 'ADMIN' || !can(actor, 'configuration.manage')) throw new Error('Access denied');
 }
 export async function snapshotCreator(tx: Prisma.TransactionClient, actor: SnapshotActor) {
   assertSnapshotCaptureActor(actor);

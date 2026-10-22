@@ -5,7 +5,7 @@ import { assertPermission, type Actor } from './authorization';
 
 export type MaintenanceField = 'distributorAccountId'|'varAccountId'|'endUserAccountId'|'assignedSalesRepUserId'|'productSkuId';
 export async function correctPriceExceptionReference(db:PrismaClient,actor:Actor,peId:number,field:MaintenanceField,targetId:number,expectedUpdatedAt:Date,lineId?:number){
-  assertPermission(actor,'users.manage');
+  assertPermission(actor,'configuration.manage');
   if(actor.role!=='ADMIN')throw new Error('Administrator access required.');
   if(!Number.isSafeInteger(peId)||peId<=0||!Number.isSafeInteger(targetId)||targetId<=0||!Number.isFinite(expectedUpdatedAt.getTime()))throw new Error('Invalid correction.');
   if(!['distributorAccountId','varAccountId','endUserAccountId','assignedSalesRepUserId','productSkuId'].includes(field))throw new Error('Invalid correction field.');

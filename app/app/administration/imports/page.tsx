@@ -32,7 +32,7 @@ const workflows = [
 ] as const;
 
 export default async function ImportsPage() {
-  await requirePermission('users.manage');
+  await requirePermission('configuration.manage');
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.administration} title="Imports" description="Choose the records you want to import." action={<Link className="btn-secondary" href="/administration">Administration</Link>}/>
     <div className="grid gap-5 md:grid-cols-2">

@@ -13,7 +13,7 @@ import { roleLabels } from '@/lib/role-labels';
 export const dynamic='force-dynamic';
 const roles:UserRole[]=['ADMIN','SALES_MANAGER','SALES','MARKETING_MANAGER','READ_ONLY'];
 export default async function DashboardViewsPage({searchParams}:{searchParams:Promise<{role?:string;saved?:string}>}){
-  const admin=await requirePermission('users.manage'),params=await searchParams;
+  const admin=await requirePermission('configuration.manage'),params=await searchParams;
   const role=roles.includes(params.role as UserRole)?params.role as UserRole:'SALES_MANAGER';
   const target={id:admin.id,role,active:true,archivedAt:null};
   const configuration=await getRoleDashboardLayout(prisma,target);

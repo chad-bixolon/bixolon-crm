@@ -28,7 +28,7 @@ export function validSupportTransition(from: SupportCaseStatus, to: SupportCaseS
 export function supportCaseReadWhere(actor: Actor, includeArchived = false): Prisma.SupportCaseWhereInput {
   assertPermission(actor, 'support-cases.read');
   assertPermission(actor, 'accounts.read');
-  const scope = can(actor, 'support-cases.write') ? {} : { accountId: { not: null } };
+  const scope = can(actor, 'support-cases.all.read') ? {} : { accountId: { not: null } };
   return includeArchived ? scope : { ...scope, archivedAt: null };
 }
 export type SupportCaseInput = {
@@ -131,6 +131,14 @@ async function appendChanges(tx: Prisma.TransactionClient, caseId: number, actor
   const stored = events.length ? await tx.supportCaseLifecycleEvent.findMany({ where: { supportCaseId: caseId }, orderBy: { id: 'desc' }, take: events.length, select: { id: true, field: true } }) : [];
   return new Map(stored.map(event => [event.field, event.id]));
 }
+// Assignment is independent of permission to work a Case. Support may keep the
+// current assignee or take the Case themselves; only oversight may distribute it.
+export function assertSupportCaseAssignment(actor: Actor, next: number | null | undefined, current: number | null = null) {
+  assertPermission(actor, 'support-cases.write');
+  if (next !== undefined && next !== current && next !== actor.id && !can(actor, 'support-oversight.manage')) {
+    throw new Error('Only a Support Manager or Administrator may change the assignee to another rep or unassign a Case.');
+  }
+}
 export async function createSupportCase(db: PrismaClient, actor: Actor, input: SupportCaseInput) {
   return db.$transaction(tx => createSupportCaseInTransaction(tx, actor, input));
 }
@@ -141,6 +149,7 @@ export async function createSupportCaseInTransaction(tx: Prisma.TransactionClien
   const clean = cleanPatch(input);
   input = clean as SupportCaseInput;
   validateFields(input);
+  assertSupportCaseAssignment(actor, input.assignedToId);
   const status = input.status ?? 'NEW';
   validateResolution(status, input.resolutionSummary);
   id(input.accountId, 'Account');
@@ -173,6 +182,8 @@ export async function updateSupportCaseInTransaction(tx: Prisma.TransactionClien
   const before = await tx.supportCase.findUnique({ where: { id: caseId } });
   if (!before) throw new Error('Case not found.');
   if (before.archivedAt) throw new Error('Restore the case before editing.');
+  assertSupportCaseAssignment(actor, patch.assignedToId, before.assignedToId);
+  if (before.status === 'CLOSED' && patch.status !== undefined && patch.status !== before.status) assertPermission(actor, 'support-oversight.manage');
   if (editToken !== undefined) assertEditToken(before.updatedAt, editToken);
   if (!(patch.customerNameText === undefined ? before.customerNameText : patch.customerNameText) && !(patch.accountId === undefined ? before.accountId : patch.accountId)) throw new Error('Enter a customer/end user or link a CRM Account.');
   if (patch.status !== undefined && !validSupportTransition(before.status, patch.status)) throw new Error('Invalid status transition.');
@@ -199,7 +210,7 @@ export function changeSupportCaseStatus(db: PrismaClient, actor: Actor, caseId: 
   return updateSupportCase(db, actor, caseId, { status, ...(resolutionSummary === undefined ? {} : { resolutionSummary }) });
 }
 async function setArchived(db: PrismaClient, actor: Actor, caseId: number, archived: boolean) {
-  assertPermission(actor, 'support-cases.write');
+  assertPermission(actor, 'support-oversight.manage');
   id(caseId, 'case');
   return db.$transaction(async tx => {
     await tx.$queryRaw`SELECT id FROM "SupportCase" WHERE id = ${caseId} FOR UPDATE`;

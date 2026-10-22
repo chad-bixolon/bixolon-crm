@@ -1,3 +1,4 @@
+import { isCaseOnlyWorker } from './authorization';
 import type { PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { operationalActivityWhere, operationalOpportunityWhere, operationalTaskWhere } from './operational-where';
@@ -15,10 +16,10 @@ export type AccountDetailParams = {
 };
 export function resolveAccountTab(raw: string | undefined, actor: Actor): AccountTab {
   const tab = accountTabs.find(tab => tab.toLowerCase() === (raw ?? 'Overview').toLowerCase()) ?? 'Overview';
-  return actor.role === 'SUPPORT' && !['Overview', 'Contacts', 'Support'].includes(tab) ? 'Overview' : tab;
+  return isCaseOnlyWorker(actor) && !['Overview', 'Contacts', 'Support'].includes(tab) ? 'Overview' : tab;
 }
 export function visibleAccountTabs(actor: Actor) {
-  return accountTabs.filter(tab => (actor.role !== 'SUPPORT' || ['Overview', 'Contacts', 'Support'].includes(tab)) &&
+  return accountTabs.filter(tab => (!isCaseOnlyWorker(actor) || ['Overview', 'Contacts', 'Support'].includes(tab)) &&
     (tab !== 'Demos' || can(actor, 'sales.read')) && (tab !== 'Support' || can(actor, 'support-cases.read')));
 }
 
@@ -32,7 +33,7 @@ export async function loadAccountContext(db: PrismaClient, id: number, actor: Ac
     industryCategory: { select: { name: true } }, territoryCategory: { select: { name: true } },
     _count: { select: {
       contacts: { where: { archivedAt: null } },
-      ...(actor.role !== 'SUPPORT' ? {
+      ...(!isCaseOnlyWorker(actor) ? {
         opportunityMemberships: { where: { opportunity: operationalOpportunityWhere } },
         activities: { where: operationalActivityWhere }, tasks: { where: operationalTaskWhere }, notes: { where: { archivedAt: null } },
       } : {}),
@@ -41,7 +42,7 @@ export async function loadAccountContext(db: PrismaClient, id: number, actor: Ac
   } });
   if (!account) return null;
   // Projects include archived history, as before; a primary/participant OR avoids double counting.
-  const projects = actor.role !== 'SUPPORT' ? await db.project.count({ where: accountProjectsWhere(id, actor) }) : 0;
+  const projects = !isCaseOnlyWorker(actor) ? await db.project.count({ where: accountProjectsWhere(id, actor) }) : 0;
   return { account, counts: {
     Contacts: account._count.contacts, Opportunities: account._count.opportunityMemberships ?? 0,
     Projects: projects, Demos: account._count.demoRequests ?? 0,
@@ -53,7 +54,7 @@ export async function loadAccountContext(db: PrismaClient, id: number, actor: Ac
 export async function loadAccountTab(db: PrismaClient, id: number, actor: Actor, tab: AccountTab,
   params: AccountDetailParams, counts: Record<string, number>) {
   const overview = tab === 'Overview';
-  const engagement = overview && actor.role !== 'SUPPORT';
+  const engagement = overview && !isCaseOnlyWorker(actor);
   const pricing = overview && can(actor, 'pricing.read');
   const demoContext = ['linked', 'unlinked'].includes(params.demoContext ?? '') ? params.demoContext : '';
   const demoWhere = { accountId: id, ...(demoContext === 'linked' ? { OR: [{ projectId: { not: null } }, { opportunityId: { not: null } }] } : demoContext === 'unlinked' ? { projectId: null, opportunityId: null } : {}) };

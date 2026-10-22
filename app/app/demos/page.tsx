@@ -4,6 +4,7 @@ import { countActiveFilters } from '../../lib/filter-count';
 import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
+import { can } from '../../lib/authorization';
 import { requirePermission } from '@/lib/current-user';
 import { demoSummary } from '@/lib/demo-operations';
 import { demoStatusLabel } from '@/lib/demo-display';
@@ -13,7 +14,7 @@ export const dynamic = 'force-dynamic';
 const displayDate = (value: Date) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(value);
 
 export default async function DemosPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string }> }) {
-  await requirePermission('users.manage');
+  const actor = await requirePermission('demos.read');
   const params = await searchParams;
   const q = (params.q ?? '').trim().slice(0, 100);
   const status = ['PENDING', 'APPROVED', 'SHIPPED', 'CANCELLED'].includes(params.status ?? '') ? params.status as 'PENDING' | 'APPROVED' | 'SHIPPED' | 'CANCELLED' : undefined;
@@ -34,7 +35,7 @@ export default async function DemosPage({ searchParams }: { searchParams: Promis
   ] as const;
 
   return <Content>
-    <PageHeader eyebrow={NAV_CATEGORIES.sales} title="Demo Requests" description="Track imported demo requests, shipment status, and deployed units." action={<Link className="btn-secondary" href="/administration/imports/demos">Import demos</Link>}/>
+    <PageHeader eyebrow={NAV_CATEGORIES.sales} title="Demo Requests" description="Track imported demo requests, shipment status, and deployed units." action={can(actor, "configuration.manage") ? <Link className="btn-secondary" href="/administration/imports/demos">Import demos</Link> : undefined}/>
     <SavedViews routeKey="demos" query={params}/>
     <form className="responsive-filter-form panel filter-panel filter-grid filter-row mb-5" method="get">
       <label className="filter-primary-search min-w-64 flex-1"><span className="sr-only">Search demos</span><input className="field w-full" name="q" placeholder="Search demo #, customer, requester, or SKU" defaultValue={q}/></label>

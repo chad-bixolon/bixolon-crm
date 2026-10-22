@@ -13,7 +13,7 @@ import { RecoverableActionForm } from '@/components/recoverable-action-form';
 export const dynamic = 'force-dynamic';
 type Filters = { userId?: string; year?: string; quarter?: string; currencyCode?: string; status?: string; error?: string; edit?: string };
 export default async function SalesTargetsPage({ searchParams }: { searchParams: Promise<Filters> }) {
-  const actor = await requirePermission('users.manage');const currencyConfig = await companyCurrency();
+  const actor = await requirePermission('configuration.manage');const currencyConfig = await companyCurrency();
   if (actor.role !== 'ADMIN') return <Content><PageHeader title="Sales Targets" eyebrow={NAV_CATEGORIES.administration}/><p>Access denied.</p></Content>;
   const f = await searchParams;
   const [users, currencies, targets] = await Promise.all([

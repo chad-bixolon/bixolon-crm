@@ -83,7 +83,7 @@ test('Task validation failure after an earlier write rolls back changes and assi
 });
 
 test('server Case assignment and priority retain per-record history and notifications; invalid selections roll back', async () => {
-  const admin = await user('admin'), support = await user('support');
+  const admin = await user('admin'), support = await user('supportManager');
   const f = await cases();
   expect(await bulkSupportCases(db, support, request(f.rows, 'assign', String(support.id)))).toBe(2);
   const assigned = await db.supportCase.findMany({ where: { id: { in: f.rows.map(row => row.id) } } });
@@ -157,7 +157,7 @@ test('Task page selection, confirmation, filtering, pagination and all three mut
 test('Case UI assignment/priority and role filtering, including Test as user', async ({ page }) => {
   test.setTimeout(120_000);
   const f = await cases(), support = await user('support'), sales = await user('sales');
-  await signInAs(page, 'support');
+  await signInAs(page, 'supportManager');
   const url = `/support/cases?q=${encodeURIComponent(f.subject)}&sort=oldest&page=1`;
   await page.goto(url);
   for (const [button, field, value] of [['Assign', 'Support Rep', String(support.id)], ['Change priority', 'Priority', 'HIGH']] as const) {
@@ -168,7 +168,7 @@ test('Case UI assignment/priority and role filtering, including Test as user', a
     await expect(page.getByRole('dialog')).not.toBeVisible();
     await expect(page).toHaveURL(url);
   }
-  for (const role of ['readOnly', 'sales', 'marketing'] as const) {
+  for (const role of ['readOnly', 'sales', 'marketing', 'support'] as const) {
     await signInAs(page, role); await page.goto(url);
     await expect(page.getByRole('checkbox')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Assign', exact: true })).toHaveCount(0);

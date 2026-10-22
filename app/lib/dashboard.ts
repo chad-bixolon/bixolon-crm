@@ -54,7 +54,7 @@ export const dashboardWidgetRegistry: Record<DashboardWidgetKey,WidgetDefinition
   ADMIN_HEALTH:{title:'System Health',description:'Recorded notification and Calendar job health.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'admin',presentationSection:'ADMINISTRATION',roles:['ADMIN'],drillDown:'/administration/system-health'},
   SUPPORT_MY_OPEN:{title:'My Open Cases',description:'Your active Support Cases by status.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN'],drillDown:'/reports/support-cases'},
   SUPPORT_INTAKE:{title:'New / Unassigned Cases',description:'Active new or unassigned cases in your permitted scope.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN'],drillDown:'/support/cases'},
-  SUPPORT_TASKS:{title:'My Support Tasks',description:'Your overdue and next-seven-day case-linked Tasks.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN']},
+  SUPPORT_TASKS:{title:'Support Tasks',description:'Overdue and next-seven-day case-linked Tasks in your permitted scope.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN']},
   SUPPORT_ACTIVITY:{title:'Recent Support Activity',description:'Latest activity on permitted Support Cases.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN']},
   SUPPORT_PRIORITY:{title:'High / Critical Cases',description:'High priority Support Cases needing attention.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN'],drillDown:'/reports/support-cases'},
   SUPPORT_OVERDUE:{title:'Overdue Follow-ups',description:'Support follow-ups due before today.',sizes:['HALF','FULL'],defaultSize:'HALF',hideable:true,section:'support',presentationSection:'SUPPORT',roles:['SUPPORT','ADMIN'],drillDown:'/reports/support-cases?followUp=overdue'},
@@ -79,6 +79,8 @@ export function composeDashboardSections(items:readonly DashboardLayoutItem[]) {
 export const dashboardRoleDescriptions:Record<UserRole,string> = {
   SALES:'Your day, open Opportunities, and follow-ups.',
   SALES_MANAGER:'Team pipeline, forecast, and follow-up visibility.',
+  SUPPORT_MANAGER:'Team Support workload, aging, backlog, and follow-ups.',
+  EXECUTIVE:'Company pipeline, forecasts, Sales Plans, Support, and Marketing.',
   SUPPORT:'Your cases, incoming work, and Support follow-ups.',
   ADMIN:'Data quality, recorded system health, and administration.',
   MARKETING_MANAGER:'Campaign activity, Trade Show leads, and attribution.',
@@ -88,6 +90,8 @@ export const dashboardRoleDescriptions:Record<UserRole,string> = {
 // A role chooses the default presentation. Authorization still decides which
 // data and actions are accessible; future role-view settings must not grant access.
 const views: Record<UserRole, DashboardView> = {
+  SUPPORT_MANAGER: { title: 'Support team overview', sections: ['support'] },
+  EXECUTIVE: { title: 'Company overview', sections: ['forecast','stage','closing','support','marketing'] },
   SUPPORT: { title: 'Support overview', sections: ['support'] },
   SALES: { title: 'My sales dashboard', sections: ['forecast','closing','stale','tasks','activities','tradeShowLeads','priceExceptions','stage'] },
   SALES_MANAGER: { title: 'Team sales dashboard', sections: ['forecast','reps','closing','stale','tasks','activities','tradeShowLeads','priceExceptions','stage','category'] },
@@ -98,6 +102,8 @@ const views: Record<UserRole, DashboardView> = {
 
 const item=(key:DashboardWidgetKey,size?:DashboardWidgetSize):DashboardBuiltinItem=>({kind:'BUILTIN',key,size:size??dashboardWidgetRegistry[key].defaultSize});
 export const systemDashboardDefaults: Record<UserRole,DashboardLayoutConfiguration> = {
+  SUPPORT_MANAGER:{version:1,items:[item('SUPPORT_INTAKE'),item('SUPPORT_PRIORITY'),item('SUPPORT_OVERDUE'),item('SUPPORT_TASKS'),item('SUPPORT_OLDEST'),item('SUPPORT_ACTIVITY')]},
+  EXECUTIVE:{version:1,items:[item('FORECAST_SUMMARY'),item('PIPELINE_BY_STAGE'),item('FORECAST_MOVEMENT'),item('SALES_PLAN_STATUS'),item('SUPPORT_PRIORITY'),item('SUPPORT_OLDEST'),item('MARKETING_ACTIVITY')]},
   SUPPORT:{version:1,items:[item('SUPPORT_MY_OPEN'),item('SUPPORT_INTAKE'),item('SUPPORT_PRIORITY'),item('SUPPORT_OVERDUE'),item('SUPPORT_TASKS'),item('SUPPORT_OLDEST'),item('SUPPORT_ACTIVITY')]},
   SALES:{version:1,items:[item('MY_DAY'),item('OVERDUE_TASKS'),item('CLOSING_OPPORTUNITIES'),item('FORECAST_SUMMARY'),item('PIPELINE_BY_STAGE'),item('FORECAST_ATTENTION'),item('MY_TRADE_SHOW_LEADS'),item('RECENT_ACTIVITY')]},
   SALES_MANAGER:{version:1,items:[item('FORECAST_SUMMARY'),item('PIPELINE_BY_REP','FULL'),item('PIPELINE_BY_STAGE'),item('CLOSING_OPPORTUNITIES'),item('FORECAST_ATTENTION'),item('RECENT_ACTIVITY'),item('FORECAST_MOVEMENT'),item('OVERDUE_TASKS'),item('MY_DAY')]},
@@ -108,7 +114,8 @@ export const systemDashboardDefaults: Record<UserRole,DashboardLayoutConfigurati
 
 export function canUseDashboardWidget(actor:Actor,key:DashboardWidgetKey) {
   const definition=dashboardWidgetRegistry[key];
-  return definition.roles.includes(actor.role)&&canShowDashboardSection(actor,definition.section)
+  const leadership = actor.role === 'EXECUTIVE' && ['FORECAST_SUMMARY','FORECAST_ATTENTION','FORECAST_MOVEMENT','SALES_PLAN_STATUS','PIPELINE_BY_STAGE','PIPELINE_BY_PRODUCT_CATEGORY','CLOSING_OPPORTUNITIES','SUPPORT_PRIORITY','SUPPORT_OVERDUE','SUPPORT_OLDEST','MARKETING_ACTIVITY'].includes(key);
+  return (definition.roles.includes(actor.role) || leadership || (can(actor, 'support-oversight.manage') && definition.section === 'support'))&&canShowDashboardSection(actor,definition.section)
     &&(definition.section!=='support'||can(actor,'support-cases.read'))
     &&(key!=='EXPIRING_PRICE_EXCEPTIONS'||(can(actor,'pricing.read')&&can(actor,'sales.read')))
     &&(key!=='SALES_PLAN_STATUS'||can(actor,'sales-plan.read'));
@@ -177,7 +184,7 @@ export function canShowDashboardSection(actor: Actor, section: DashboardSection)
   if (section === 'tasks' || section === 'activities') return can(actor, 'tasks.read');
   if (section === 'tradeShowLeads') return canViewSalesLeadQueue(actor);
   if (section === 'support') return can(actor, 'support-cases.read');
-  if (section === 'admin') return can(actor, 'users.manage');
+  if (section === 'admin') return can(actor, 'configuration.manage');
   return can(actor, 'marketing.read') && can(actor, 'accounts.read');
 }
 

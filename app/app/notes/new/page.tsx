@@ -1,3 +1,4 @@
+import { isCaseOnlyWorker } from '../../../lib/authorization';
 import { NAV_CATEGORIES } from '@/lib/navigation-categories';
 import { Content, PageHeader } from '@/components/shell';
 import { WorkForm } from '@/components/work-form';
@@ -10,9 +11,9 @@ export const dynamic = 'force-dynamic';
 export default async function Page({searchParams}: {searchParams: Promise<{accountId?:string;opportunityId?:string;projectId?:string;supportCaseId?:string}>}) {
   const p=await searchParams, actor=await currentUser(), caseId=Number(p.supportCaseId);
   if (p.supportCaseId && (!Number.isSafeInteger(caseId)||caseId<1)) notFound();
-  if (actor.role==='SUPPORT' && !p.supportCaseId) notFound();
+  if (isCaseOnlyWorker(actor) && !p.supportCaseId) notFound();
   const supportCase=p.supportCaseId ? await caseWorkContext(prisma,actor,caseId) : null;
   const options=await workOptions({accountId:supportCase?.accountId ?? (Number(p.accountId)||undefined),opportunityId:supportCase?undefined:(Number(p.opportunityId)||undefined),projectId:supportCase?undefined:(Number(p.projectId)||undefined),supportCaseId:supportCase?.id});
-  if (actor.role==='SUPPORT') { options.opportunities=[]; options.projects=[]; }
-  return <Content><PageHeader title="New note" eyebrow={supportCase?NAV_CATEGORIES.support:NAV_CATEGORIES.sales}/><WorkForm caseRelationshipsLocked={actor.role === 'SUPPORT'} kind="note" {...options} supportCase={supportCase?{id:supportCase.id,caseNumber:supportCase.caseNumber,contactName:supportCase.contact?`${supportCase.contact.firstName} ${supportCase.contact.lastName}`:null}:undefined} lockAccountId={supportCase?.accountId ?? undefined} initial={{accountId:supportCase?.accountId??p.accountId??'',opportunityId:supportCase?'':p.opportunityId??'',projectId:supportCase?'':p.projectId??''}}/></Content>;
+  if (isCaseOnlyWorker(actor)) { options.opportunities=[]; options.projects=[]; }
+  return <Content><PageHeader title="New note" eyebrow={supportCase?NAV_CATEGORIES.support:NAV_CATEGORIES.sales}/><WorkForm caseRelationshipsLocked={isCaseOnlyWorker(actor)} kind="note" {...options} supportCase={supportCase?{id:supportCase.id,caseNumber:supportCase.caseNumber,contactName:supportCase.contact?`${supportCase.contact.firstName} ${supportCase.contact.lastName}`:null}:undefined} lockAccountId={supportCase?.accountId ?? undefined} initial={{accountId:supportCase?.accountId??p.accountId??'',opportunityId:supportCase?'':p.opportunityId??'',projectId:supportCase?'':p.projectId??''}}/></Content>;
 }

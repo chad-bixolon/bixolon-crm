@@ -158,12 +158,12 @@ function ProductResults({result,config,groupKey}:{result:ProductPerformanceResul
   const groupHref=(key?:string)=>{const query=new URLSearchParams(searchParams.toString());if(key)query.set('group',key);else query.delete('group');return `${pathname}?${query}`;};
   const detail=groupKey?result.rows.filter(row=>row.groupKeys.includes(groupKey)):result.rows;
   const labels:Record<string,string>={lineValue:'Line Value',quantity:'Quantity',opportunityCount:'Opportunity Count',productLineCount:'Product Line Count',averageUnitPrice:'Average Unit Price'};
-  const display=(metric:string,values:typeof result.summary[number])=>metric==='lineValue'||metric==='averageUnitPrice'?formatCurrency(Number(values[metric]),values.currency,true):values[metric as 'quantity'|'opportunityCount'|'productLineCount'];
+  const display=(metric:string,values:typeof result.summary[number])=>metric==='lineValue'||metric==='averageUnitPrice'?(values[metric]===null?'—':formatCurrency(Number(values[metric]),values.currency,true)):values[metric as 'quantity'|'opportunityCount'|'productLineCount'];
   const cell=(row:typeof detail[number],column:string)=>{
     if(column==='opportunity')return <TruncatedText value={row.opportunity}><Link className="text-orange-800 underline" href={`/opportunities/${row.opportunityId}`}>{row.opportunity}</Link></TruncatedText>;
     if(column==='account')return row.accounts.length?row.accounts.map((account,index)=><span key={account.id}>{index?', ':''}<Link className="text-orange-800 underline" href={`/accounts/${account.id}`}>{account.name}</Link></span>):'—';
     if(column==='product'||column==='sku')return <TruncatedText value={String(row[column])}/>;
-    if(column==='unitPrice'||column==='lineValue')return formatCurrency(Number(row[column]),row.currency,true);
+    if(column==='unitPrice'||column==='lineValue')return row[column]===null?'—':formatCurrency(Number(row[column]),row.currency,true);
     return <TruncatedText value={String(row[column as keyof typeof row]??'—')}/>;
   };
   return <div className="mt-4 min-w-0 max-w-full space-y-4"><p className="text-sm text-slate-600">{result.semanticNote} Average Unit Price is Line Value divided by Quantity. Account and Project groups can contain a line in more than one group.</p>

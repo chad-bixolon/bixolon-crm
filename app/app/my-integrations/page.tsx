@@ -5,7 +5,7 @@ import { getRealAuthenticatedUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { connectGoogleCalendar, disconnectGoogleCalendar, saveMyTimeZone, syncMyGoogleCalendar } from './actions';
 import { formatDateTimeForUser } from '@/lib/display-format';
-import { USER_TIME_ZONE_OPTIONS } from '@/lib/user-time-zone';
+import { IANA_TIME_ZONES } from '@/lib/user-time-zone';
 
 const notices: Record<string, string> = {
   connected: 'Google Calendar connected.',
@@ -38,7 +38,7 @@ export default async function MyIntegrationsPage({ searchParams }: { searchParam
       <RecoverableActionForm action={saveMyTimeZone} className="inline-field-action">
         <label className="label">Time Zone
           <select className="field mt-1" name="timeZone" defaultValue={user.timeZone} required>
-            {USER_TIME_ZONE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label} ({option.value})</option>)}
+            {IANA_TIME_ZONES.map(option => <option key={option} value={option}>{option}</option>)}
           </select>
         </label>
         <button className="btn-primary" type="submit">Save</button>

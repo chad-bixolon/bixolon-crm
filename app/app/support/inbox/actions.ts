@@ -13,11 +13,11 @@ import { assertLiveSupportGmailRequest } from '@/lib/support-gmail-config';
 import { SUPPORT_GMAIL_STATE_COOKIE, SUPPORT_GMAIL_VERIFIER_COOKIE, supportGmailCookieOptions, disconnectSupportGmail, beginSupportGmailAuthorization } from '@/lib/support-gmail-connection';
 
 export async function connectSupportGmail() {
-  const actor = await requireMutation('support-inbox.write');
+  const actor = await requireMutation('support-mailbox.manage');
   assertInboxActor(actor);
   assertLiveSupportGmailRequest((await headers()).get('host'));
   const real = await getRealAuthenticatedUser();
-  if (!can(real, 'support-inbox.write')) throw new Error('Sign in as Support or Admin to connect Support Gmail.');
+  if (!can(real, 'support-mailbox.manage')) throw new Error('Sign in as an Administrator to connect Support Gmail.');
   const { state, verifier, url } = beginSupportGmailAuthorization(real!.id);
   const jar = await cookies();
   jar.set(SUPPORT_GMAIL_STATE_COOKIE, state, supportGmailCookieOptions());
@@ -26,11 +26,11 @@ export async function connectSupportGmail() {
 }
 
 export async function disconnectInboxGmail() {
-  const actor = await requireMutation('support-inbox.write');
+  const actor = await requireMutation('support-mailbox.manage');
   assertInboxActor(actor);
   assertLiveSupportGmailRequest((await headers()).get('host'));
   const real = await getRealAuthenticatedUser();
-  if (!can(real, 'support-inbox.write')) throw new Error('Access denied');
+  if (!can(real, 'support-mailbox.manage')) throw new Error('Access denied');
   await trackIntegrationAttempt(prisma, gmailContext('DISCONNECT', inboxMailboxIdentity(), 'connection', real!.id), () => disconnectSupportGmail(real!));
   revalidatePath('/support/inbox');
   redirect('/support/inbox?connection=disconnected');

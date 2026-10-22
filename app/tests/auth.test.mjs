@@ -17,7 +17,7 @@ const form = (entries) => { const result = new FormData(); for (const [key,value
 const googleProfile = { sub: 'stable-google-subject', iss: GOOGLE_ISSUER, hd: 'bixolon.example', email: 'approved@bixolon.example', email_verified: true };
 function identityFixture({ user = { ...actor('SALES'), email: googleProfile.email }, identity = null } = {}) {
   const state = { user, identity, lookups: [], creates: [], userCreates: 0 };
-  const client = {
+  const client = { adminMaintenanceEvent: { create: async () => ({}) },
     user: {
       findUnique: async ({ where }) => { state.lookups.push(where); return state.user?.email === where.email ? state.user : null; },
       create: async () => { state.userCreates++; throw new Error('CRM user must never be created'); },
@@ -88,7 +88,7 @@ test('ADMIN can pre-create and edit a CRM user without creating an identity', as
   assert.deepEqual(parsed.errors, {});
   assert.equal(parsed.value.email, 'test@bixolon.example');
   let user;
-  const client = { user: {
+  const client = { adminMaintenanceEvent: { create: async () => ({}) }, account: { count: async () => 0 }, opportunity: { count: async () => 0 }, project: { count: async () => 0 }, task: { count: async () => 0 }, tradeShowLead: { count: async () => 0 }, priceException: { count: async () => 0 }, demoRequest: { count: async () => 0 }, salesPlan: { count: async () => 0 }, salesTarget: { count: async () => 0 }, user: {
     create: async ({ data }) => { user = { id: 7, archivedAt: null, ...data }; return user; },
     findUnique: async ({ where }) => where.id === 1 ? { ...actor('ADMIN'), id: 1 } : user,
     update: async ({ data }) => { user = { ...user, ...data }; return user; },
@@ -103,7 +103,7 @@ test('ADMIN can pre-create and edit a CRM user without creating an identity', as
 });
 test('reset requires exact CRM email and deletes only the selected Google link', async () => {
   let deleted = 0;
-  const client = {
+  const client = { adminMaintenanceEvent: { create: async () => ({}) },
     user: { findUnique: async () => ({ email: 'approved@bixolon.example' }) },
     externalIdentity: { deleteMany: async ({ where }) => { assert.deepEqual(where, { id: 21, userId: 7, provider: 'GOOGLE' }); deleted++; return { count: 1 }; } },
   };
@@ -114,7 +114,7 @@ test('reset requires exact CRM email and deletes only the selected Google link',
 });
 test('removed identity invalidates its existing signed session', async () => {
   let linked = true;
-  const client = {
+  const client = { adminMaintenanceEvent: { create: async () => ({}) },
     externalIdentity: { findUnique: async ({ where }) => where.id === 21 && linked ? { userId: 7, provider: 'GOOGLE' } : null },
     user: { findUnique: async () => ({ ...actor('SALES'), email: googleProfile.email }) },
   };

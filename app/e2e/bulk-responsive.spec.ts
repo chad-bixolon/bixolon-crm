@@ -9,12 +9,12 @@ for (const kind of ['tasks', 'cases'] as const) {
   test(`bulk ${kind} controls and confirmation fit the viewport`, async ({ page }, info) => {
     test.setTimeout(90_000);
     const subject = uniqueName(`E2E responsive bulk ${kind}`);
-    const actor = await db.user.findUniqueOrThrow({ where: { email: emails[kind === 'tasks' ? 'admin' : 'support'] } });
+    const actor = await db.user.findUniqueOrThrow({ where: { email: emails[kind === 'tasks' ? 'admin' : 'supportManager'] } });
     for (let i = 0; i < 2; i++) {
       if (kind === 'tasks') await db.task.create({ data: { subject: `${subject} ${i}`, assignedToId: actor.id } });
       else await db.supportCase.create({ data: { subject: `${subject} ${i}`, customerNameText: 'Responsive customer', description: 'Responsive test', caseNumber: uniqueName('BULK-RESP'), source: 'PHONE', createdById: actor.id, updatedById: actor.id } });
     }
-    await signInAs(page, kind === 'tasks' ? 'admin' : 'support');
+    await signInAs(page, kind === 'tasks' ? 'admin' : 'supportManager');
     const url = `${kind === 'tasks' ? '/tasks' : '/support/cases'}?q=${encodeURIComponent(subject)}&page=1`;
     await page.goto(url);
     await expect(page.getByRole('button', { name: 'Assign', exact: true })).toHaveCount(0);

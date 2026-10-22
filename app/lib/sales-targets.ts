@@ -14,7 +14,7 @@ export function parseSalesTarget(form: FormData) {
 }
 
 export async function saveSalesTarget(client: PrismaClient, actor: Actor, form: FormData, id?: number) {
-  if (!can(actor, 'users.manage') || actor.role !== 'ADMIN') throw new Error('Access denied');
+  if (!can(actor, 'configuration.manage') || actor.role !== 'ADMIN') throw new Error('Access denied');
   const data = parseSalesTarget(form);
   const [user, currency, old] = await Promise.all([
     client.user.findUnique({ where: { id: data.userId } }),
@@ -28,7 +28,7 @@ export async function saveSalesTarget(client: PrismaClient, actor: Actor, form: 
 }
 
 export async function archiveSalesTarget(client: PrismaClient, actor: Actor, id: number) {
-  if (!can(actor, 'users.manage') || actor.role !== 'ADMIN') throw new Error('Access denied');
+  if (!can(actor, 'configuration.manage') || actor.role !== 'ADMIN') throw new Error('Access denied');
   if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Invalid target.');
   return client.salesTarget.update({ where: { id, archivedAt: null }, data: { archivedAt: new Date(), updatedById: actor.id } });
 }

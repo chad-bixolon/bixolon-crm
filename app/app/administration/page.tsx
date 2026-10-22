@@ -44,7 +44,7 @@ const groups = [
 ] as const;
 
 export default async function AdministrationPage() {
-  await requirePermission("users.manage");
+  await requirePermission("configuration.manage");
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.administration} title="Administration" description="Manage users, CRM configuration, sales settings, and system tools."/>
     <div className="space-y-7">{groups.map((group, index) => <section aria-labelledby={`admin-group-${index}`} key={group.title}>

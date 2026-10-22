@@ -43,7 +43,7 @@ test.beforeEach(async t => {
   t.mock.method(shared, 'random', () => 0);
   t.mock.method(console, 'info', (...args) => logs.push(args.join(' ')));
   t.mock.method(console, 'error', (...args) => logs.push(args.join(' ')));
-  await connection.saveSupportGmailConnection('support@example.test', 'private-refresh', actor);
+  await connection.saveSupportGmailConnection('support@example.test', 'private-refresh', { ...actor, role: 'ADMIN' });
 });
 test.afterEach(() => {for (const [key, value] of Object.entries(original)) if (value === undefined) delete process.env[key]; else process.env[key] = value;});
 function provider(count = 50) {
@@ -72,10 +72,10 @@ test('50-message cold inbox costs 53 metadata requests; cache copies, TTL and co
   assert.notEqual((await gmail.recentSupportMail())[0].subject, 'mutated');
   assert.equal(google.calls.length, 53);
   now += 10001; await gmail.recentSupportMail(); assert.equal(google.calls.length, 106);
-  await connection.disconnectSupportGmail(actor);
+  await connection.disconnectSupportGmail({...actor,role:'ADMIN'});
   await assert.rejects(gmail.recentSupportMail(), /Connect Support Gmail/);
   assert.equal(google.calls.length, 106);
-  await connection.saveSupportGmailConnection('support@example.test', 'replacement-refresh', actor);
+  await connection.saveSupportGmailConnection('support@example.test', 'replacement-refresh', { ...actor, role: 'ADMIN' });
   await gmail.recentSupportMail(); assert.equal(google.calls.length, 159);
   assert.doesNotMatch(JSON.stringify([...shared.cache]), /private-access|private-refresh|PRIVATE MESSAGE BODY/);
 });
@@ -211,7 +211,7 @@ test('separate replica runtimes revalidate source and connection independently; 
   await a.recent(); await b.recent(); assert.equal(google.calls.length,10);
   google.removed.add('m0');
   assert.equal(await a.get('m0'),null); assert.equal(await b.get('m0'),null);
-  await connection.disconnectSupportGmail(actor);
+  await connection.disconnectSupportGmail({...actor,role:'ADMIN'});
   await assert.rejects(a.recent(),/Connect Support Gmail/); await assert.rejects(b.recent(),/Connect Support Gmail/);
 });
 
@@ -255,7 +255,7 @@ test('connection replacement during an in-flight read fails closed and never pop
     return google.fetcher(url,init);
   },runtime);
   const read = mailbox.recent(); await entered.promise;
-  await connection.disconnectSupportGmail(actor); release.resolve();
+  await connection.disconnectSupportGmail({...actor,role:'ADMIN'}); release.resolve();
   await assert.rejects(read,/Connect Support Gmail/);
   assert.equal(runtime.cache.size,0);
 });

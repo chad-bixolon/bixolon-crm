@@ -23,7 +23,7 @@ test('bulk selection requires explicit confirmation, unique positive IDs, versio
 test('unauthorized effective actors fail before touching the database, independently of the UI', async () => {
   const db = new Proxy({}, { get() { throw new Error('Database must not be accessed'); } });
   for (const role of ['READ_ONLY', 'SUPPORT']) await assert.rejects(bulkTasks(db, { id: 1, role, active: true }, request([row(1)])), /Access denied/);
-  for (const role of ['READ_ONLY', 'SALES', 'SALES_MANAGER', 'MARKETING_MANAGER']) await assert.rejects(bulkSupportCases(db, { id: 1, role, active: true }, request([row(1)])), /Access denied/);
+  for (const role of ['READ_ONLY', 'SUPPORT', 'SALES', 'SALES_MANAGER', 'MARKETING_MANAGER']) await assert.rejects(bulkSupportCases(db, { id: 1, role, active: true }, request([row(1)])), /Access denied/);
   for (const actor of [{ id: 1, role: 'ADMIN', active: false }, { id: 1, role: 'ADMIN', active: true, archivedAt: new Date() }]) {
     await assert.rejects(bulkTasks(db, actor, request([row(1)])), /Access denied/);
     await assert.rejects(bulkSupportCases(db, actor, request([row(1)])), /Access denied/);

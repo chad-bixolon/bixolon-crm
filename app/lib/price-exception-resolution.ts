@@ -38,7 +38,7 @@ export function parseAssignedSalesRepUserId(form: FormData) {
 }
 
 export async function updatePriceExceptionSalesRep(db: Db, priceExceptionId: number, actor: Actor, assignedSalesRepUserId: number | null) {
-  assertPermission(actor, 'users.manage');
+  assertPermission(actor, 'configuration.manage');
   if (!Number.isSafeInteger(priceExceptionId) || priceExceptionId <= 0) throw new PriceExceptionAccountValidationError({ form: 'Invalid Price Exception.' });
   const [priceException, user] = await Promise.all([
     db.priceException.findUnique({ where: { id: priceExceptionId }, select: { id: true, assignedSalesRepUserId: true } }),
@@ -51,7 +51,7 @@ export async function updatePriceExceptionSalesRep(db: Db, priceExceptionId: num
 
 type Db = PrismaClient | Prisma.TransactionClient;
 export async function updatePriceExceptionAccountLinks(db: Db, priceExceptionId: number, actor: Actor, patch: PriceExceptionAccountPatch) {
-  assertPermission(actor, 'users.manage');
+  assertPermission(actor, 'configuration.manage');
   if (!Number.isSafeInteger(priceExceptionId) || priceExceptionId <= 0) throw new PriceExceptionAccountValidationError({ form: 'Invalid Price Exception.' });
   const entries = Object.entries(patch) as [PriceExceptionAccountField, number | null][];
   if (!entries.length || entries.some(([field]) => !priceExceptionAccountFields.includes(field))) throw new PriceExceptionAccountValidationError({ form: 'No valid Account links were submitted.' });

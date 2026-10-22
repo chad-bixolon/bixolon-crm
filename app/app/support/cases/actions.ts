@@ -90,7 +90,7 @@ export async function saveSupportCase(id: number | null, _state: SupportFormStat
 }
 export async function changeSupportArchive(id: number, archive: boolean, _state: SupportFormState): Promise<SupportFormState> {
   void _state;
-  const actor = await requireMutation('support-cases.write');
+  const actor = await requireMutation('support-oversight.manage');
   try { if (archive) await archiveSupportCase(prisma, actor, id); else await restoreSupportCase(prisma, actor, id); }
   catch (error) { return { message: error instanceof Error ? error.message : 'Could not update archive state.' }; }
   revalidatePath('/support/cases');

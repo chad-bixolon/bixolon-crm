@@ -4,7 +4,7 @@ import { businessToday } from './price-exception-expiration';
 import { scopedPriceExceptionWhere } from './price-exception-visibility';
 
 export function canManagePriceExceptionLifecycle(actor: Actor) {
-  return actor.role === 'ADMIN' && can(actor, 'users.manage') ||
+  return actor.role === 'ADMIN' && can(actor, 'configuration.manage') ||
     actor.role === 'SALES_MANAGER' && can(actor, 'sales.write');
 }
 

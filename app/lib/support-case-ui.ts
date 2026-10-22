@@ -1,4 +1,4 @@
-import type { Actor } from './authorization';
+import { can, type Actor } from './authorization';
 import { prisma } from './prisma';
 import { eligibleUserWhere, defaultEligibleUserId } from './assignment-eligibility';
 import { listSupportCaseCategories } from './support-case-categories';
@@ -10,6 +10,6 @@ export async function supportFormOptions(actor: Actor) {
     prisma.user.findMany({ where: eligibleUserWhere('support-case'), select: { id: true, firstName: true, lastName: true }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
     prisma.user.findUnique({ where: { id: actor.id }, select: { timeZone: true } }),
   ]);
-  return { categories: categories.map(c => ({ id: c.id, name: c.name, active: c.active })), assignees: users.map(u => ({ id: u.id, name: `${u.firstName} ${u.lastName}` })), defaultAssigneeId: defaultEligibleUserId(users, actor.id), zone: profile?.timeZone ?? DEFAULT_USER_TIME_ZONE };
+  return { canManageTeam: can(actor, 'support-oversight.manage'), actorId: actor.id, categories: categories.map(c => ({ id: c.id, name: c.name, active: c.active })), assignees: users.map(u => ({ id: u.id, name: `${u.firstName} ${u.lastName}` })), defaultAssigneeId: defaultEligibleUserId(users, actor.id), zone: profile?.timeZone ?? DEFAULT_USER_TIME_ZONE };
 }
 export async function supportUserZone(actor: Actor) { return (await prisma.user.findUnique({ where: { id: actor.id }, select: { timeZone: true } }))?.timeZone ?? DEFAULT_USER_TIME_ZONE; }

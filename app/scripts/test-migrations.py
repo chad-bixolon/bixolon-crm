@@ -417,7 +417,22 @@ try:
                       INSERT INTO "Note" (id,"accountId","supportCaseId",body,"updatedAt") VALUES (98000,100,98000,'Existing Account Note',now());''')
                     case_notes_before = all_table_fingerprints('backfill')
                     case_notes_keys = foreign_keys('backfill')
+                lifecycle_before = None
+                if directory.name in ('20261022120000_user_lifecycle_roles', '20261022121000_user_lifecycle_administration'):
+                    lifecycle_before = all_table_fingerprints('backfill')
+                    lifecycle_keys = foreign_keys('backfill')
                 sql("backfill", (directory / "migration.sql").read_text())
+                if lifecycle_before is not None:
+                    lifecycle_after = all_table_fingerprints('backfill')
+                    if directory.name == '20261022121000_user_lifecycle_administration':
+                        for table, expression in [('User', "to_jsonb(t) - 'delegatedUserAdministrationEnabled'"), ('AdminMaintenanceEvent', "to_jsonb(t) - 'oldValue' - 'newValue'")]:
+                            lifecycle_after[table] = sql_values('backfill', f"SELECT count(*) || ':' || md5(COALESCE(jsonb_agg({expression} ORDER BY ({expression})::text)::text, '[]')) FROM \"{table}\" t;")[0]
+                        assert sql_values('backfill', 'SELECT count(*) FROM "User" WHERE "delegatedUserAdministrationEnabled";') == ['0']
+                        assert sql_values('backfill', 'SELECT count(*) FROM "AdminMaintenanceEvent" WHERE "oldValue" IS NOT NULL OR "newValue" IS NOT NULL;') == ['0']
+                    assert lifecycle_before == lifecycle_after, 'User lifecycle migration modified existing data'
+                    assert lifecycle_keys == foreign_keys('backfill'), 'User lifecycle migration changed foreign keys'
+                    print('PASS: User lifecycle additive migration preserves all existing users, history, business data, and foreign keys', flush=True)
+
                 if case_notes_before is not None:
                     assert case_notes_before == all_table_fingerprints('backfill'), 'Case Note constraint changed existing data'
                     assert case_notes_keys == foreign_keys('backfill'), 'Case Note constraint changed foreign keys'

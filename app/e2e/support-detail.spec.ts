@@ -62,6 +62,10 @@ test('Support detail separates a concise timeline from complete audit history', 
   await expect(closedAudit.getByRole('heading', { name: 'Closed at changed' })).toBeVisible();
 
   await page.getByRole('link', { name: 'Edit', exact: true }).click();
+  await expect(page).toHaveURL(/\/edit$/);
+  const editUrl = page.url();
+  await signInAs(page, 'supportManager');
+  await page.goto(editUrl);
   await page.getByLabel('Status').selectOption('OPEN');
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page).toHaveURL(/\/support\/cases\/\d+$/);

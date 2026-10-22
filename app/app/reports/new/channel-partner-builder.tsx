@@ -11,7 +11,7 @@ import { ReportEntityFilter } from '@/components/report-entity-filter';
 import {ReportCloseDateFields} from '@/components/report-close-date-fields';
 import {prisma} from '@/lib/prisma';
 import {channelPartnerConfigFromParams,filterValue} from '@/lib/report-builder';
-import {canShareReport,executeChannelPartnerReport,reportRegistry} from '@/lib/reporting';
+import {canCreateReport,canShareReport,executeChannelPartnerReport,reportRegistry} from '@/lib/reporting';
 import {saveReportAction} from '../actions';
 
 type Params=Record<string,string|string[]|undefined>;
@@ -60,6 +60,6 @@ export async function ChannelPartnerBuilder({params,actor,saved}:{params:Params;
       <div className="report-preview"><button className="btn-primary">Preview</button></div>
     </form>
     <ReportResults result={result} config={config} groupKey={typeof params.group==='string'?params.group:undefined}/>
-    <RecoverableActionForm action={saveReportAction} className="panel mt-4 grid gap-3 p-4 sm:grid-cols-2 md:p-5"><h2 className="text-lg font-semibold sm:col-span-2">Save This Report</h2><input type="hidden" name="reportType" value="CHANNEL_PARTNER"/><input type="hidden" name="configuration" value={JSON.stringify(config)}/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}<label className="label">Report name<input className="field" name="name" required maxLength={120} defaultValue={saved?.name??''}/></label><label className="label">Visibility<select className="field" name="visibility" defaultValue={saved?.visibility??'PERSONAL'}><option value="PERSONAL">Personal</option>{canShareReport(actor)&&<option value="SHARED">Shared</option>}</select></label><label className="label sm:col-span-2">Description<textarea className="field" name="description" maxLength={1000} defaultValue={saved?.description??''}/></label><div><button className="btn-primary">{saved?'Save changes':'Save report'}</button></div></RecoverableActionForm>
+    {canCreateReport(actor)&&<RecoverableActionForm action={saveReportAction} className="panel mt-4 grid gap-3 p-4 sm:grid-cols-2 md:p-5"><h2 className="text-lg font-semibold sm:col-span-2">Save This Report</h2><input type="hidden" name="reportType" value="CHANNEL_PARTNER"/><input type="hidden" name="configuration" value={JSON.stringify(config)}/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}<label className="label">Report name<input className="field" name="name" required maxLength={120} defaultValue={saved?.name??''}/></label><label className="label">Visibility<select className="field" name="visibility" defaultValue={saved?.visibility??'PERSONAL'}><option value="PERSONAL">Personal</option>{canShareReport(actor)&&<option value="SHARED">Shared</option>}</select></label><label className="label sm:col-span-2">Description<textarea className="field" name="description" maxLength={1000} defaultValue={saved?.description??''}/></label><div><button className="btn-primary">{saved?'Save changes':'Save report'}</button></div></RecoverableActionForm>}
   </Content>;
 }

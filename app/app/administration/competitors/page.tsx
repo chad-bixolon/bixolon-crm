@@ -7,7 +7,7 @@ import { requirePermission } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 export default async function CompetitorsPage() {
-  await requirePermission("users.manage");
+  await requirePermission("configuration.manage");
   const values = await prisma.competitorOption.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }], include: { _count: { select: { opportunities: true } } } });
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Competitors" description="Manage competitor options available on Opportunities." action={<Link className="btn-secondary" href="/administration">Administration</Link>}/><div className="mb-3"><HelpLink topic="manage-choices">Help with choices and stages</HelpLink></div>
     <section className="panel mb-5 p-5"><h2 className="mb-4 text-lg font-semibold">Add competitor</h2><CompetitorForm/></section>

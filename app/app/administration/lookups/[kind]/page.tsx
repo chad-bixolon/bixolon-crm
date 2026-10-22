@@ -9,7 +9,7 @@ import { listLookups, lookupKind, lookupTitle } from "@/lib/lookups";
 import { requirePermission } from "@/lib/current-user";
 export const dynamic = "force-dynamic";
 export default async function LookupPage({ params }: { params: Promise<{ kind: string }> }) {
-  await requirePermission("users.manage");
+  await requirePermission("configuration.manage");
   const { kind } = await params;
   if (!lookupKind(kind)) notFound();
   const values = await listLookups(prisma, kind);

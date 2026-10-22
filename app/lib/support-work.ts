@@ -9,7 +9,7 @@ type CaseTask = Pick<Task, 'supportCaseId' | 'archivedAt' | 'assignedToId' | 'cr
 export function canEditCaseTask(actor: Actor, task: CaseTask) {
   return can(actor, 'support-work.write') && !!task.supportCaseId && !task.archivedAt &&
     !task.opportunityId && !task.projectId && !task.tradeShowLeadId &&
-    (task.assignedToId === actor.id || (!task.assignedToId && task.createdById === actor.id));
+    (can(actor, 'support-oversight.manage') || task.assignedToId === actor.id || (!task.assignedToId && task.createdById === actor.id));
 }
 
 export async function assertTaskRead(db: PrismaClient | Prisma.TransactionClient, actor: Actor, task: CaseTask) {
@@ -32,7 +32,7 @@ export async function saveSupportCaseTask(db: PrismaClient, actor: Actor, value:
     const task = await tx.task.findUnique({ where: { id } });
     if (!task || !canEditCaseTask(user, task)) throw new Error('Task not found or unavailable for editing.');
     for (const key of ['supportCaseId', 'accountId', 'opportunityId', 'projectId', 'contactId', 'assignedToId', 'priority'] as const) {
-      if ((value[key] ?? null) !== task[key]) throw new Error('Case Task relationships, assignment, and priority cannot change here.');
+      if (!(can(user, 'support-oversight.manage') && (key === 'assignedToId' || key === 'priority')) && (value[key] ?? null) !== task[key]) throw new Error('Case Task relationships, assignment, and priority cannot change here.');
     }
     await tx.$queryRaw`SELECT id FROM "SupportCase" WHERE id = ${task.supportCaseId} FOR SHARE`;
     await caseWorkContext(tx, user, task.supportCaseId!);

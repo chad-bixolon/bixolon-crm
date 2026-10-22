@@ -1,8 +1,10 @@
 import { Prisma, UserRole, type PrismaClient } from "@prisma/client";
 import { field, required, type Errors } from "./crm-validation";
 import { assertPermission, type Actor } from "./authorization";
+import { isUserTimeZone, DEFAULT_USER_TIME_ZONE } from "./user-time-zone";
+import { userChangeImpact, impactConfirmation, UserImpactRequired, recordUserHistory, type UserHistoryAction } from "./user-lifecycle";
 export { unlinkGoogleIdentity } from "./identity";
-export type UserInput = { firstName: string; lastName: string; email: string; role: UserRole; active: boolean };
+export type UserInput = { firstName: string; lastName: string; email: string; role: UserRole; active: boolean; timeZone?: string; delegatedUserAdministrationEnabled?: boolean };
 export function parseUser(form: FormData) {
   const errors: Errors = {};
   const firstName = required(form, "firstName", "First name", 100, errors);
@@ -11,9 +13,13 @@ export function parseUser(form: FormData) {
   if (!email || email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "Enter a valid email address.";
   const roleRaw = field(form, "role");
   if (!Object.values(UserRole).includes(roleRaw as UserRole)) errors.role = "Choose a valid role.";
+  const timeZone = field(form, "timeZone") || DEFAULT_USER_TIME_ZONE;
+  if (!isUserTimeZone(timeZone)) errors.timeZone = "Choose a valid IANA timezone.";
+  const delegation = field(form, "delegatedUserAdministrationEnabled");
+  if (delegation && !["true", "false"].includes(delegation)) errors.delegatedUserAdministrationEnabled = "Invalid delegation.";
   const activeRaw = field(form, "active");
   if (!["true", "false"].includes(activeRaw)) errors.active = "Choose a valid status.";
-  return { errors, value: Object.keys(errors).length ? undefined : { firstName, lastName, email, role: roleRaw as UserRole, active: activeRaw === "true" } satisfies UserInput };
+  return { errors, value: Object.keys(errors).length ? undefined : { firstName, lastName, email, role: roleRaw as UserRole, active: activeRaw === "true", timeZone, ...(delegation ? { delegatedUserAdministrationEnabled: delegation === "true" } : {}) } satisfies UserInput };
 }
 export const lastAdminMessage = "Keep at least one active, unarchived Administrator. Activate another Administrator before changing this user.";
 
@@ -28,11 +34,11 @@ export async function assertUsableAdminRemains(tx: Prisma.TransactionClient, id:
       !await tx.user.count({ where: { id: { not: id }, role: 'ADMIN', active: true, archivedAt: null } })) throw new Error(lastAdminMessage);
 }
 
-export async function saveUser(client: PrismaClient, actor: Actor, input: UserInput, id?: number) {
+export async function saveUser(client: PrismaClient, actor: Actor, input: UserInput, id?: number, confirmation?: string) {
   assertPermission(actor, 'users.manage');
   // Whitelist fields at the service boundary as well as validating form input.
   const form = new FormData();
-  for (const key of ['firstName', 'lastName', 'email', 'role', 'active'] as const) form.set(key, String(input[key]));
+  for (const key of ['firstName', 'lastName', 'email', 'role', 'active', 'timeZone', 'delegatedUserAdministrationEnabled'] as const) if (input[key] !== undefined) form.set(key, String(input[key]));
   const parsed = parseUser(form);
   if (!parsed.value) throw new Error('Invalid user fields.');
   const value = parsed.value;
@@ -45,13 +51,35 @@ export async function saveUser(client: PrismaClient, actor: Actor, input: UserIn
       if (id) {
         const existing = await tx.user.findUnique({ where: { id } });
         if (!existing || existing.archivedAt) throw new Error("User not found.");
+        if (input.timeZone === undefined) value.timeZone = existing.timeZone;
+        assertUserAdministrationTarget(persistedActor!, existing, value);
         await assertUsableAdminRemains(tx, id, value);
+        const next = { ...existing, ...value };
+        const impact = await userChangeImpact(tx, persistedActor!, existing, next);
+        const digest = impactConfirmation(existing, next, impact);
+        if (impact.length && confirmation !== digest) throw new UserImpactRequired(impact, digest);
+        const changes = { role: 'Role changed', active: 'Status changed', email: 'Email changed', timeZone: 'Timezone changed', delegatedUserAdministrationEnabled: 'Delegation changed' } as const;
+        for (const [key, action] of Object.entries(changes)) {
+          const field = key as keyof typeof changes;
+          if (existing[field] !== next[field]) await recordUserHistory(tx, actor.id, id, action as UserHistoryAction, String(existing[field]), String(next[field]));
+        }
         return (await tx.user.update({ where: { id }, data: value })).id;
       }
-      return (await tx.user.create({ data: value })).id;
+      assertUserAdministrationTarget(persistedActor!, null, value);
+      const created = await tx.user.create({ data: value });
+      await recordUserHistory(tx, actor.id, created.id, 'User created', undefined, value.role);
+      if (value.delegatedUserAdministrationEnabled) await recordUserHistory(tx, actor.id, created.id, 'Delegation changed', 'false', 'true');
+      return created.id;
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new Error("That email address is already in use.");
     throw error;
   }
+}
+
+// Delegation cannot create, recover, or modify an administrative identity.
+export function assertUserAdministrationTarget(actor: Actor, existing: { role: UserRole; delegatedUserAdministrationEnabled?: boolean } | null, next: UserInput) {
+  assertPermission(actor, 'users.manage');
+  if (actor.role === 'ADMIN') return;
+  if (existing?.role === 'ADMIN' || existing?.delegatedUserAdministrationEnabled || next.role === 'ADMIN' || next.delegatedUserAdministrationEnabled === true || (next.delegatedUserAdministrationEnabled !== undefined && next.delegatedUserAdministrationEnabled !== (existing?.delegatedUserAdministrationEnabled ?? false))) throw new Error('Only an Administrator may manage administrative access.');
 }

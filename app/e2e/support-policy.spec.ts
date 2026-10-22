@@ -1,0 +1,72 @@
+import { PrismaClient } from '@prisma/client';
+import { test, expect } from './fixtures';
+import { databaseUrl, emails } from './constants.mjs';
+import { signInAs, uniqueName } from './helpers';
+import { createSupportCase, updateSupportCase, archiveSupportCase, restoreSupportCase } from '../lib/support-cases';
+import { bulkSupportCases } from '../lib/bulk-actions';
+import { canEditCaseTask } from '../lib/support-work';
+import { can } from '../lib/authorization';
+const db = new PrismaClient({datasources:{db:{url:databaseUrl}}});
+test.afterAll(()=>db.$disconnect());
+test('Support works another rep’s Case and takes it; only Manager redistributes team work', async ({page}) => {
+  test.setTimeout(120_000);
+  const support = await db.user.findUniqueOrThrow({where:{email:emails.support}});
+  const manager = await db.user.findUniqueOrThrow({where:{email:emails.supportManager}});
+  const repA = await db.user.create({data:{email:uniqueName('rep-a').replaceAll(' ','')+'@e2e.saleshub.local',firstName:'Policy',lastName:'Rep A',role:'SUPPORT'}});
+  const repB = await db.user.create({data:{email:uniqueName('rep-b').replaceAll(' ','')+'@e2e.saleshub.local',firstName:'Policy',lastName:'Rep B',role:'SUPPORT'}});
+  const row = await createSupportCase(db,manager,{subject:uniqueName('Policy case'),description:'Original case',customerNameText:'Policy customer',source:'PHONE',assignedToId:repA.id});
+  const task = await db.task.create({data:{subject:uniqueName('Other rep task'),supportCaseId:row.id,assignedToId:repA.id,createdById:repA.id}});
+  expect(canEditCaseTask(support,task)).toBe(false);
+  expect(canEditCaseTask(manager,task)).toBe(true);
+  await signInAs(page,'support');
+  await page.goto(`/support/cases/${row.id}`);
+  for (const name of ['Log Activity','Create Task','Add Note']) await expect(page.getByRole('link',{name,exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Archive',exact:true})).toHaveCount(0);
+  await page.getByRole('link',{name:'Edit',exact:true}).click();
+  await expect(page.getByLabel('Assigned Support Rep')).toHaveValue(String(repA.id));
+  await expect(page.getByLabel('Assigned Support Rep').locator(`option[value="${repB.id}"]`)).toHaveCount(0);
+  await page.getByLabel('Description').fill('Support helped without taking ownership');
+  await page.getByRole('button',{name:'Save changes',exact:true}).click();
+  await expect(page).toHaveURL(`/support/cases/${row.id}`);
+  expect((await db.supportCase.findUniqueOrThrow({where:{id:row.id}})).assignedToId).toBe(repA.id);
+  await expect(updateSupportCase(db,support,row.id,{assignedToId:repB.id})).rejects.toThrow(/Only a Support Manager/);
+  await page.getByRole('link',{name:'Edit',exact:true}).click();
+  await page.getByLabel('Assigned Support Rep').selectOption(String(support.id));
+  await page.getByRole('button',{name:'Save changes',exact:true}).click();
+  await expect.poll(async()=>(await db.supportCase.findUniqueOrThrow({where:{id:row.id}})).assignedToId).toBe(support.id);
+  await updateSupportCase(db,manager,row.id,{assignedToId:repA.id});
+  await signInAs(page,'supportManager');
+  await page.goto(`/support/cases/${row.id}/edit`);
+  await page.getByLabel('Assigned Support Rep').selectOption(String(repB.id));
+  await page.getByRole('button',{name:'Save changes',exact:true}).click();
+  await expect.poll(async()=>(await db.supportCase.findUniqueOrThrow({where:{id:row.id}})).assignedToId).toBe(repB.id);
+  for (const action of [archiveSupportCase,restoreSupportCase]) await expect(action(db,support,row.id)).rejects.toThrow(/Access denied/);
+  await archiveSupportCase(db,manager,row.id);
+  await restoreSupportCase(db,manager,row.id);
+  const current = await db.supportCase.findUniqueOrThrow({where:{id:row.id}});
+  for (const [action,value] of [['assign',String(repA.id)],['priority','HIGH']] as const) {
+    const request = {records:[{id:row.id,updatedAt:current.updatedAt.toISOString()}],action,value,confirmed:true};
+    await expect(bulkSupportCases(db,support,request)).rejects.toThrow(/Access denied/);
+  }
+  await signInAs(page,'support');
+  await page.goto(`/support/cases?q=${encodeURIComponent(row.subject)}`);
+  await expect(page.getByRole('checkbox',{name:'Select eligible records on this page'})).toHaveCount(0);
+  await signInAs(page,'supportManager');
+  await page.goto(`/support/cases?q=${encodeURIComponent(row.subject)}`);
+  await page.getByRole('checkbox',{name:'Select eligible records on this page'}).check();
+  await page.getByRole('button',{name:'Assign',exact:true}).click();
+  const dialog = page.getByRole('dialog',{name:'Confirm bulk update'});
+  await dialog.getByRole('combobox').selectOption(String(repA.id));
+  await dialog.getByRole('button',{name:'Confirm 1 updates'}).click();
+  await expect.poll(async()=>(await db.supportCase.findUniqueOrThrow({where:{id:row.id}})).assignedToId).toBe(repA.id);
+});
+test('both Support roles use Inbox and neither has Gmail administration', async ({page})=>{
+  for (const role of ['support','supportManager','admin'] as const) {
+    const user = await db.user.findUniqueOrThrow({where:{email:emails[role]}});
+    expect(can(user,'support-mailbox.manage')).toBe(role==='admin');
+    await signInAs(page,role);
+    await page.goto('/support/inbox');
+    await expect(page.getByRole('heading',{name:'Support Inbox',exact:true})).toBeVisible();
+    if (role !== 'admin') await expect(page.getByRole('button',{name:/Connect Support Gmail|Reconnect Support Gmail|Disconnect Gmail/})).toHaveCount(0);
+  }
+});

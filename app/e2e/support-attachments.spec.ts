@@ -94,6 +94,8 @@ test('case attachments upload, download, validate, remove, and follow permission
   await expect(attachments).toContainText('sample.txt');
   await expect(attachments.getByRole('button', { name: 'Add Attachment' })).toHaveCount(0);
   await expect(attachments.getByRole('button', { name: 'Remove' })).toHaveCount(0);
+  await signInAs(page, 'supportManager');
+  await page.goto(caseUrl);
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Archive', exact: true }).click();
   await expect(page.getByText('Archived Support Case')).toBeVisible();

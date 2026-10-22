@@ -30,6 +30,10 @@ test('Support additions use bounded queries, case visibility, personal task scop
   assert.equal(seen.tasks[0].take,6);assert.equal(seen.activity[0].take,5);
   assert.deepEqual(seen.cases[3].where.OR,[{status:'NEW'},{assignedToId:null}]);
   assert.deepEqual(seen.cases[3].where.status.in,['NEW','OPEN','WAITING_ON_CUSTOMER','WAITING_ON_INTERNAL']);
+  for (const role of ['ADMIN','SUPPORT_MANAGER']) {
+    await supportDashboard(db,{...actor,role},now,{tasks:true});
+    assert.equal(seen.tasks.at(-1).where.assignedToId,role==='ADMIN'?actor.id:undefined);
+  }
 });
 
 test('hidden Support additions run no work queries and reject unauthorized actors before querying',async()=>{

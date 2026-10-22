@@ -22,7 +22,7 @@ test.beforeEach(()=>{
   Object.assign(process.env, productionEnv());
 });
 test.afterEach(()=>{for(const [key,value] of Object.entries(original))if(value===undefined)delete process.env[key];else process.env[key]=value;});
-const actor=(role='SUPPORT',id=5)=>({id,role,active:true});
+const actor=(role='ADMIN',id=5)=>({id,role,active:true});
 const input=flow=>({actor:actor(),state:flow.state,cookie:flow.state,verifier:flow.verifier,code:'code',error:null});
 
 test('dedicated client, exact read-only scope, callback, mailbox hint and S256 PKCE',()=>{
@@ -45,7 +45,7 @@ test('callback success, denied roles, decline, missing code, wrong mailbox and f
   let saves=0,exchanges=0;
   const deps={exchange:async()=>{exchanges++;return {accessToken:'access',refreshToken:'refresh'}},profile:async()=> 'support@example.test',save:async()=>{saves++;}};
   const request=input(connection.beginSupportGmailAuthorization(5));
-  for(const user of [actor('SALES'),null,{...actor(),active:false}])assert.equal(await connection.completeSupportGmailAuthorization({...request,actor:user},deps),'invalid-state');
+  for(const user of [actor('SUPPORT'),actor('SUPPORT_MANAGER'),actor('SALES'),null,{...actor(),active:false}])assert.equal(await connection.completeSupportGmailAuthorization({...request,actor:user},deps),'invalid-state');
   assert.equal(await connection.completeSupportGmailAuthorization(request,deps),'connected');
   assert.equal(await connection.completeSupportGmailAuthorization(request,deps),'invalid-state');
   assert.equal(exchanges,1);assert.equal(saves,1);
@@ -292,4 +292,20 @@ test('authenticated encryption rejects token copying across mailbox, host, datab
   }
   process.env.SUPPORT_GMAIL_ENCRYPTION_KEY = 'invalid';
   assert.throws(() => encryptSupportGmailToken('private-bound-token','support@example.test'),/32-byte key/);
+});
+
+test('both Support roles use Inbox but only Admin may administer Gmail', async () => {
+  const {can,routeAccess} = require(path.join(root,'lib/authorization.ts'));
+  for (const role of ['SUPPORT','SUPPORT_MANAGER','ADMIN']) {
+    const who = actor(role);
+    assert.equal(can(who,'support-inbox.write'),true);
+    assert.equal(routeAccess('/support/inbox',who),'allowed');
+    assert.equal(can(who,'support-mailbox.manage'),role==='ADMIN');
+    assert.equal(routeAccess('/api/support-gmail/callback',who),role==='ADMIN'?'allowed':'denied');
+    if (role !== 'ADMIN') {
+      const trap = new Proxy({}, {get(){throw new Error('Unexpected credential database access');}});
+      await assert.rejects(connection.disconnectSupportGmail(who,trap), /Access denied/);
+      await assert.rejects(connection.saveSupportGmailConnection('support@example.test','secret',who,trap), /Access denied/);
+    }
+  }
 });

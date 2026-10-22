@@ -8,14 +8,14 @@ import { correctPriceExceptionReference, type MaintenanceField } from '@/lib/pri
 import { createPeReviewAccount } from '@/lib/price-exception-account-create';
 
 export async function previewCleanup(request: CleanupRequest) {
-  const actor = await requireMutation('users.manage');
+  const actor = await requireMutation('configuration.manage');
   try {
     const plan = await previewPriceExceptionCleanup(prisma, actor, request);
     return { ok: true as const, fingerprint: plan.fingerprint, count: plan.rows.length, skipped:plan.skipped, changes: plan.changes };
   } catch (error) { return { ok: false as const, message: error instanceof Error ? error.message : 'Preview failed.' }; }
 }
 export async function confirmCleanup(request: CleanupRequest, fingerprint: string, confirmedCount: number, confirmed: boolean) {
-  const actor = await requireMutation('users.manage');
+  const actor = await requireMutation('configuration.manage');
   try {
     const count = await applyPriceExceptionCleanup(prisma, actor, request, fingerprint, confirmedCount, confirmed);
     revalidatePath('/administration/price-exceptions'); revalidatePath('/price-exceptions'); revalidatePath('/accounts'); revalidatePath('/reports/price-exceptions-expiring'); revalidatePath('/');
@@ -23,7 +23,7 @@ export async function confirmCleanup(request: CleanupRequest, fingerprint: strin
   } catch (error) { return { ok: false as const, message: error instanceof Error ? error.message : 'Update failed. Preview again.' }; }
 }
 export async function correctReference(id: number, field: MaintenanceField, targetId: number, updatedAt: string, lineId?: number) {
-  const actor = await requireMutation('users.manage');
+  const actor = await requireMutation('configuration.manage');
   try {
     const tokenForm = new FormData();
     tokenForm.set('editToken', updatedAt);

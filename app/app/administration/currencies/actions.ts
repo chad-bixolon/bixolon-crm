@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { configureCurrency } from '@/lib/currency-configuration';
 
 export async function currencyAction(form: FormData) {
-  const actor = await requireMutation('users.manage');
+  const actor = await requireMutation('configuration.manage');
   let error: string | undefined;
   try { await configureCurrency(prisma, actor, String(form.get('action')), String(form.get('code'))); }
   catch (cause) { error = cause instanceof Prisma.PrismaClientKnownRequestError || cause instanceof Prisma.PrismaClientValidationError ? 'Currency could not be saved. Refresh and try again.' : cause instanceof Error ? cause.message : 'Currency could not be saved.'; }

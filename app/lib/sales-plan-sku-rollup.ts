@@ -15,7 +15,7 @@ const emptyMeasures = ():Measures => ({units:null,revenue:null});
 const emptyQuarters = () => quarters.map(emptyMeasures);
 const add = (a:Amount,b:Amount):Amount => b===null?a:(a??zero).add(b);
 function addMeasures(target:Measures, source:Measures) { target.units=add(target.units,source.units); target.revenue=add(target.revenue,source.revenue); }
-export function rollupAccess(actor:Actor) { return can(actor,'sales-plan.manage') && (actor.role==='ADMIN'||actor.role==='SALES_MANAGER'); }
+export function rollupAccess(actor:Actor) { return can(actor,'sales-plan.sku.read'); }
 export function skuRollupFilename(year:number,currencyCode:string,rep?:string) {
   const suffix=rep?`_${rep.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,70)}`:'';
   return `SalesHub_Sales_Plan_SKU_Rollup_${year}${suffix}_${currencyCode}.xlsx`;

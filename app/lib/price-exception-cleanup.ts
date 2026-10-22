@@ -51,7 +51,7 @@ export function duplicatePeCodes(rows: Pick<CleanupRecord, 'peCode'>[]) {
 const accountFields = { linkDistributor: 'distributorAccountId', linkVar: 'varAccountId', linkEndUser: 'endUserAccountId' } as const;
 const safeIds = (ids: number[]) => [...new Set(ids)].sort((a,b) => a-b);
 export function validateCleanupRequest(actor: Actor, request: CleanupRequest) {
-  assertPermission(actor, 'users.manage');
+  assertPermission(actor, 'configuration.manage');
   if (actor.role !== 'ADMIN') throw new Error('Administrator access required.');
   if (!Array.isArray(request.ids) || request.ids.length === 0 || request.ids.length > 500 || request.ids.some(id => !Number.isSafeInteger(id) || id <= 0)) throw new Error('Select 1 to 500 Price Exceptions.');
   if (!['assignOwner','linkDistributor','linkVar','linkEndUser','expire','archive'].includes(request.action)) throw new Error('Invalid bulk action.');

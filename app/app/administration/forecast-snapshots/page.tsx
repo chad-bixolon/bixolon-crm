@@ -13,7 +13,7 @@ import { businessQuarter } from '@/lib/business-quarter';
 import { ForecastSnapshotWorkflow } from './workflow';
 export const dynamic = 'force-dynamic';
 export default async function ForecastSnapshotAdministration({ searchParams }: { searchParams: Promise<{ snapshot?: string }> }) {
-  const actor = await requirePermission('users.manage'); assertSnapshotAdmin(actor);
+  const actor = await requirePermission('configuration.manage'); assertSnapshotAdmin(actor);
   const [sources, runs] = await Promise.all([
     prisma.opportunitySnapshotRun.findMany({ where: { scopeVersion: FORECAST_SNAPSHOT_SCOPE, status: 'COMPLETE' }, orderBy: [{ snapshotAt: 'desc' }, { id: 'desc' }], take: 104 }),
     prisma.forecastSnapshotRun.findMany({ orderBy: [{ snapshotAt: 'desc' }, { id: 'desc' }], take: 12 }),

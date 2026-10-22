@@ -21,7 +21,7 @@ export function canReadOpportunitySnapshots(actor: Actor) {
   return can(actor, 'snapshots.read');
 }
 export function assertSnapshotAdmin(actor: Actor) {
-  if (actor.role !== 'ADMIN' || !can(actor, 'users.manage')) throw new Error('Access denied');
+  if (actor.role !== 'ADMIN' || !can(actor, 'configuration.manage')) throw new Error('Access denied');
 }
 export function snapshotWeek(at: Date) {
   return businessWeekBounds(at).start;
@@ -182,8 +182,12 @@ export async function compareSnapshotRuns(client: PrismaClient, actor: Actor, be
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
 }
 
+export function canReadOpportunitySnapshotHistory(actor: Actor) {
+  return can(actor, 'snapshots.read') || can(actor, 'sales.write');
+}
+
 export async function opportunitySnapshotHistory(client: PrismaClient, actor: Actor, opportunityId: number) {
-  if (!can(actor, 'sales.read') || !['ADMIN', 'SALES_MANAGER', 'SALES'].includes(actor.role)) return [];
+  if (!canReadOpportunitySnapshotHistory(actor)) return [];
   // Keep the existing live detail usable during a staged schema/client rollout.
   // New reporting/capture pages still require the migration before use.
   if (!client.opportunitySnapshot) return [];

@@ -1,6 +1,6 @@
 # Authorization Correctness & Policy Foundation v1
 
-SalesHub uses six predefined roles: Administrator, Sales Manager, Sales, Support, Marketing Manager, and Read Only. No custom roles, permission overrides, or future roles are implemented.
+SalesHub uses eight predefined functional roles: Administrator, Sales Manager, Sales, Support Manager, Support, Marketing Manager, Executive, and Read Only. A fixed delegated User Administration flag is available only to Sales Managers; it is not a custom role or arbitrary permission override. The lifecycle extension below documents its boundary and audit history.
 
 ## Three separate decisions
 
@@ -16,33 +16,34 @@ The complete, executable matrix is `predefinedCapabilities`; this table summariz
 
 | Area / capability | Current access |
 | --- | --- |
-| Accounts / Contacts read | All six roles |
+| Accounts / Contacts read | All eight roles |
 | Accounts / Contacts write | Admin and Sales roles |
-| Opportunities read | Admin, Sales roles, Marketing Manager, Read Only |
-| Pipeline / `sales.read` | Admin, Sales roles, Read Only |
+| Opportunities read | Admin, Sales roles, Marketing Manager, Executive, Read Only |
+| Pipeline / `sales.read` | Admin, Sales roles, Executive, Read Only |
 | Sales / Opportunity write | Admin and Sales roles; record policy still applies |
-| Projects read | Admin, Sales roles, Marketing Manager, Read Only |
+| Projects read | Admin, Sales roles, Marketing Manager, Executive, Read Only |
 | Projects write | Admin and Sales roles; record policy still applies |
-| Tasks / Activities / Notes read | Admin, Sales roles, Marketing Manager, Read Only; Support has case-context access |
+| Tasks / Activities / Notes read | Admin, Sales roles, Marketing Manager, Executive, Read Only; Support and Support Manager have case-context access |
 | General Task / Activity / Note write | Admin, Sales roles, Marketing Manager |
-| `support-work.write` | Admin, Sales roles, Marketing Manager, Support; case and record checks still apply |
+| `support-work.write` | Admin, Sales roles, Marketing Manager, Support, Support Manager; case and record checks still apply |
 | Reports | Report-type read checks remain in `reporting.ts` |
-| `reports.engagement.read`, `reports.operational.read` | Admin and Sales roles; preserves existing report reader populations independently of write access |
+| `reports.engagement.read`, `reports.operational.read` | Admin, Sales roles, Executive; read access is independent of report-definition management |
 | `reports.create` | Admin, Sales roles, Marketing Manager; report-type access still required |
 | `reports.share` | Admin, Sales Manager, Marketing Manager |
-| `forecast.read` | Admin, Sales roles, Read Only |
-| `snapshots.read` | Admin and Sales Manager |
-| `pipeline-movement.read` | Admin and Sales roles |
+| `forecast.read` | Admin, Sales roles, Executive, Read Only |
+| `snapshots.read` | Admin, Sales Manager, Executive |
+| `pipeline-movement.read` | Admin, Sales roles, Executive |
 | Support Cases read | All roles, with case-context query policy |
-| Support Cases write / categories | Admin and Support / Admin only for categories |
-| `support-inbox.write` | Admin and Support; Gmail feature flag and real-identity connection checks remain |
-| Marketing read/write | Admin and Marketing Manager |
+| Support Cases write / categories | Admin, Support, Support Manager / Admin and Support Manager for categories |
+| `support-inbox.write` | Admin, Support, Support Manager; Gmail feature flag and real-identity connection checks remain |
+| Marketing read/write | Admin, Marketing Manager, Executive read / Admin and Marketing Manager write |
 | Trade Shows | Existing read/manage/lead/assign/resolve/route grants retained |
-| `pricing.read` | Admin, Sales roles, Marketing Manager, Read Only |
+| `pricing.read` | Admin, Sales roles, Marketing Manager, Read Only; Executive excluded |
 | Products read / write | All roles / Admin only |
-| Sales Plans read | Admin, Sales roles, Read Only |
+| Sales Plans read | Admin, Sales roles, Executive, Read Only |
 | Sales Plans allocate / manage | Admin and Sales roles / Admin and Sales Manager |
-| `users.manage`, `integrations.manage` | Admin only |
+| `users.manage` | Admin and explicitly delegated Sales Managers |
+| `integrations.manage`, `configuration.manage` | Admin only |
 | `data-quality.manage`, `system-health.read`, `maintenance.manage` | Admin only |
 
 Ordinary catalog tiers remain available with `products.read`. Customer/ODM price rows (including previous prices, tariff fields, final unit prices, effective dates, and negotiated notes) require `pricing.read`. The Product data loader excludes the customer-price relation from its query for unauthorized actors and returns no customer price rows; the server component also gates the negotiated pricing section. Product maintenance continues to require `products.write`.
@@ -55,8 +56,8 @@ Every population requires `active: true` and `archivedAt: null`.
 | --- | --- |
 | `account-owner`, `opportunity-owner`, `project-owner`, `sales-plan-owner` | Sales, Sales Manager |
 | `general-task` | Admin, Sales, Sales Manager, Marketing Manager |
-| `support-task` | General Task roles plus Support |
-| `support-case` | Admin, Support |
+| `support-task` | General Task roles plus Support and Support Manager |
+| `support-case` | Admin, Support, Support Manager |
 | `trade-show-sales` | Sales, Sales Manager |
 | `marketing-owner` | Marketing Manager |
 
@@ -90,6 +91,30 @@ Exceptions are restricted to the authenticated user's own state: Saved Views, no
 
 Add future role capabilities to the predefined matrix and explicitly choose eligibility populations. Never infer owner/assignee eligibility from a module's edit capability. Add negative direct-call tests, query/output tests for sensitive reads, and record-policy parity tests. Do not broaden shared browsing into owner-only read access.
 
-Direct role checks intentionally remain where they express record responsibility (Sales own-record rules), personal dashboard/filter defaults, report-definition ownership/Admin override, identity impersonation restrictions, or the distinction between an authenticated Admin and the trusted snapshot automation actor. Presentation-only role labels/defaults are unchanged. Snapshot/movement readers and consequential report read/create/share decisions now use named capabilities. Existing configuration/maintenance modules may retain `users.manage` as a compatible Admin capability pending narrower module changes.
+Direct role checks intentionally remain where they express record responsibility (Sales own-record rules), personal dashboard/filter defaults, report-definition ownership/Admin override, identity impersonation restrictions, or the distinction between an authenticated Admin and the trusted snapshot automation actor. Presentation-only role labels/defaults are unchanged. Snapshot/movement readers and consequential report read/create/share decisions now use named capabilities. Configuration/maintenance modules formerly using `users.manage` now use `configuration.manage` so delegated user administration does not grant configuration access.
 
-No schema migration, new role, custom role system, affected-work preview, user import/export, infrastructure change, or historical ownership rewrite is part of v1.
+The original Authorization Foundation had no schema changes. The approved User Lifecycle extension below adds two migrations, role policies, impact previews, and administration history. User import/export and historical ownership rewriting remain excluded.
+
+## User Lifecycle Administration v1
+
+Eight predefined functional roles are implemented. Roles describe SalesHub responsibilities, not job titles, location, or email domain. A VP carrying accounts normally remains Sales Manager. Executive is a parallel reader role, not a higher Sales Manager.
+
+Support Manager has `support-cases.all.read`, `support-cases.read`, `support-cases.write`, `support-work.write`, `support-oversight.manage`, `support-categories.manage`, `support-inbox.write`, and Account/Contact/Product read. This covers all Cases, assignment, priority, lifecycle correction, team workload reporting, case Task assignment/priority edits, and case Activity work. It does not grant general Tasks, Sales administration, pricing, Marketing, users, system health, maintenance, or integration configuration. Mailbox connection administration uses `support-mailbox.manage`, separate from inbox use. Existing Admin/Support connection rights are preserved; Support Manager receives inbox use only.
+
+Executive has Account, Contact, Opportunity/Pipeline, Project, Task/Activity, Product/catalog, Demo directory, Sales Plan/report/SKU, Forecast, Snapshot, Movement, operational/engagement report, Support Case, Marketing, and Trade Show read capabilities. Shared saved reports remain readable subject to report type. No report-definition management, operational writes, inbox, negotiated pricing (`pricing.read`), configuration, or administration is granted. Existing parent authorization controls Documents and Notes.
+
+Executive can run the permitted built-in reports without saving report definitions. Price Exception Usage execution and shared definitions require `pricing.read`. Opportunity details omit unit prices and pricing provenance without that capability; Product Performance results redact unit-price fields, average unit prices, and pricing provenance before returning data to the browser. Business revenue totals remain readable.
+
+Eligibility remains independent of capabilities: Support Manager joins only `support-case` and `support-task`. Executive joins no operational population. Sales Manager remains in Sales owner, task, quota, target, forecast, and attribution populations regardless of delegated user administration. Historical filters may include prior owners. Shared Sales browsing and effective-user Pipeline defaults remain unchanged.
+
+## Support policy
+
+Support may work any Support Case and may claim/reassign a Case to themselves for continued follow-up. Support Manager may assign/reassign Cases between eligible Support users, bulk assign Cases and change team priorities, manage team case-linked Tasks, correct case Activities, manage categories, archive/restore Cases, and reopen closed Cases. Support can reopen resolved Cases as part of normal follow-up. Both roles may use the Support Inbox. Gmail connection, OAuth, and configuration administration are Admin-only. These boundaries are checked in server actions and services, independently of visible controls.
+
+## User Administration
+
+`User.delegatedUserAdministrationEnabled` is a fixed, optional bundle evaluated only for active, unarchived Sales Managers. It adds only `users.manage`. `configuration.manage` now protects previously overloaded configuration/import/maintenance entry points. Only true Admins may grant/revoke delegation or manage Admin/delegated identities. Delegated managers cannot create Admins, recover Admin/delegated identities, or change their own delegation. Persisted authority is rechecked inside the user-write transaction. Delegated managers never count as true Admins in the final-Admin safeguard.
+
+User changes calculate lost-eligibility impact transactionally before saving, with counts for Accounts, open Opportunities, active Projects, open general/case Tasks, unresolved Cases, actionable Trade Show leads, current Trade Show Marketing ownership, active Price Exception follow-up, outstanding Demos, and current/future Sales Plans/targets. Confirmation is bound to the persisted user, submitted values, and current counts; a changed preview requires acknowledgment again. Ordinary transitions can proceed without reassignment; historical attribution is not rewritten. User archive/delete is still not an application action; any future path must reuse the existing lock and last-Admin guard and the impact policy.
+
+Whitelisted user changes are appended to `AdminMaintenanceEvent` in the same transaction: creation, role, status, email, timezone, delegation, and identity reset. `oldValue`/`newValue` store only those non-secret values. The existing append-only database protections apply. User detail shows the most recent 100 events; older events remain retained in the database. No separate audit table was added.

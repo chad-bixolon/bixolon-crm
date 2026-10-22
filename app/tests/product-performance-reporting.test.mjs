@@ -16,6 +16,16 @@ const actor=(role,id=7)=>({id,role,active:true,archivedAt:null});
 const config=()=>reporting.defaultReportConfiguration('PRODUCT_PERFORMANCE');
 const line=(id,category,name,qty,price,currency='USD',overrides={})=>({id,opportunityId:1,productId:id,skuId:id,quantity:qty,estimatedUnitPrice:new Prisma.Decimal(price),priceSource:'MANUAL',priceExceptionCode:null,archivedAt:null,product:{id,name,sku:`LEGACY-${id}`,categoryId:id,category:{id, name:category}},sku:{id,partNumber:`SKU-${id}`,odmCustomers:[]},opportunity:{id:1,name:'Deal A',ownerId:7,owner:{firstName:'Sales',lastName:'Rep'},stageId:1,stage:{name:'Open'},forecastCategory:'PIPELINE',expectedCloseDate:new Date('2026-09-30'),currencyCode:currency,participants:[{accountId:8,account:{name:'Customer'}}],projects:[{projectId:9,project:{name:'Launch'}}]},...overrides});
 const run=(rows,cfg=config(),role='ADMIN')=>reporting.executeProductPerformanceReport({opportunityProduct:{findMany:async args=>{run.where=args.where;return rows;}}},actor(role),cfg,new Date('2026-09-21'));
+test('Executive Product reporting retains revenue but redacts unit pricing and negotiated provenance', async () => {
+ const result=await run([line(1,'POS','Printer',3,'187.43','USD',{priceSource:'PRICE_EXCEPTION',priceExceptionCode:'SECRET-PE'})],config(),'EXECUTIVE');
+ assert.equal(result.rows[0].unitPrice,null);
+ assert.equal(result.rows[0].priceSource,'—');
+ assert.equal(result.rows[0].peCode,'—');
+ assert.equal(result.summary[0].averageUnitPrice,null);
+ assert.equal(result.groups[0].metrics[0].averageUnitPrice,null);
+ assert.equal(result.summary[0].lineValue,'562.29');
+ assert.doesNotMatch(JSON.stringify(result),/187\.43|SECRET-PE/);
+});
 
 test('Product lines split a 100K Opportunity into additive 40K, 35K and 25K categories',async()=>{
  const rows=[line(1,'Mobile','M',4,'10000'),line(2,'POS','P',7,'5000'),line(3,'Label','L',10,'2500')];

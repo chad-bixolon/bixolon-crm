@@ -22,7 +22,7 @@ export async function findAccountNameMatches(client: Pick<PrismaClient, "account
   return candidates.filter((account) => normalizeAccountName(account.name) === key);
 }
 export async function createAccountFromImport(client: PrismaClient, actor: Actor, form: FormData) {
-  assertPermission(actor, 'users.manage');
+  assertPermission(actor, 'configuration.manage');
   if (actor.role !== 'ADMIN') throw new Error('Access denied');
   const parsed = parseAccountForm(form);
   if (!parsed.value) return {kind:'validation' as const,errors:parsed.errors,message:'Please correct the Account name.'};

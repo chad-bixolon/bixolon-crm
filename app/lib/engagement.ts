@@ -1,4 +1,4 @@
-import type { Actor } from './authorization';
+import { assertPermission, type Actor } from './authorization';
 import type { Prisma } from '@prisma/client';
 
 export const openStatuses = ['OPEN', 'IN_PROGRESS'] as const;
@@ -17,7 +17,7 @@ export function repAccountSummary(accounts: { activities: { activityDate: Date }
   return { owned: accounts.length, withoutRecentActivity: accounts.filter(a => hasNoActivityInDays(a.activities[0]?.activityDate ?? null, threshold, now)).length };
 }
 export function reportAccountScope(actor: Actor) {
-  if (!['ADMIN', 'SALES_MANAGER', 'SALES'].includes(actor.role)) throw new Error('Access denied');
+  assertPermission(actor, 'reports.engagement.read');
   return actor.role === 'SALES' ? { ownerId: actor.id } : {};
 }
 export function engagementAccountWhere(actor: Actor): Prisma.AccountWhereInput {

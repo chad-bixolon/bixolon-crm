@@ -153,7 +153,7 @@ test('Create Case from Email prefills normal form, retains context on failure an
   // Force server-side validation, then verify the signed source and entered fields survived.
   await page.locator('select[name="assignedToId"]').evaluate(select => { const option = new Option('Invalid', '999999'); select.append(option); (select as HTMLSelectElement).value = '999999'; });
   await page.getByRole('button', { name: 'Create case', exact: true }).click();
-  await expect(page.getByRole('main').getByRole('alert')).toContainText('Support Rep');
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('Only a Support Manager or Administrator');
   await expect(page.locator('input[name="emailSource"]')).toHaveValue(token);
   await expect(description).toHaveValue(importedThread);
   await expect(page.getByLabel('Subject', { exact: true })).toHaveValue('POC intake matched request');

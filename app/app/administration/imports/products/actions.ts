@@ -10,7 +10,7 @@ import { ProductCatalogSource, OdmCustomizationSubtype } from '@prisma/client';
 import { createAccountFromImport } from '@/lib/accounts';
 
 export async function createAccountForProductImport(form:FormData) {
-  const actor=await requireMutation('users.manage');
+  const actor=await requireMutation('configuration.manage');
   try {
     const result=await createAccountFromImport(prisma,actor,form);
     if(result.kind==='created') revalidatePath('/accounts');
@@ -21,21 +21,21 @@ export async function createAccountForProductImport(form:FormData) {
 }
 
 export async function searchProductImportBaseSkus(term:string) {
-  await requireMutation('users.manage');
+  await requireMutation('configuration.manage');
   const query=term.trim().toUpperCase().slice(0,60);
   if(query.length<2) return [];
   return prisma.productSku.findMany({where:{normalizedPartNumber:{contains:query},catalogSource:{not:'ODM'},active:true,product:{archivedAt:null}},select:{partNumber:true,product:{select:{name:true}}},take:15,orderBy:{partNumber:'asc'}});
 }
 
 export async function searchProductImportSkus(term:string) {
-  await requireMutation('users.manage');
+  await requireMutation('configuration.manage');
   const query=term.trim().toUpperCase().slice(0,60);
   if(query.length<2) return [];
   return prisma.productSku.findMany({where:{normalizedPartNumber:{contains:query},product:{archivedAt:null}},select:{partNumber:true,product:{select:{name:true}}},take:15,orderBy:{partNumber:'asc'}});
 }
 
 export async function searchProductImportProducts(term:string) {
-  await requireMutation('users.manage');
+  await requireMutation('configuration.manage');
   const query=term.trim().slice(0,60);
   if(query.length<2) return [];
   return prisma.product.findMany({where:{archivedAt:null,name:{contains:query,mode:'insensitive'}},select:{id:true,name:true},take:15,orderBy:{name:'asc'}});
@@ -66,7 +66,7 @@ async function readProductUpload(form:FormData) {
 }
 
 export async function previewProductUpload(form:FormData) {
-  await requireMutation('users.manage');
+  await requireMutation('configuration.manage');
   if (form.get('catalogSource') === 'SPECIAL_SKU_LIST') return {error:'Use ODM with a subtype for custom SKUs.',sheets:[]};
   const upload=await readProductUpload(form);
   if (!upload.csv) return {error:upload.error ?? 'Upload could not be read.',sheets:'sheets' in upload ? upload.sheets : []};
@@ -74,7 +74,7 @@ export async function previewProductUpload(form:FormData) {
   catch { return {error:'Could not prepare the catalog preview. Check the file and try again.',sheets:[]}; }
 }
 export async function confirmProductUpload(form:FormData,digest:string) {
-  await requireMutation('users.manage');
+  await requireMutation('configuration.manage');
   if (form.get('catalogSource') === 'SPECIAL_SKU_LIST') return {ok:false as const,message:'Use ODM with a subtype for custom SKUs.'};
   const upload=await readProductUpload(form);
   if (!upload.csv) return {ok:false as const,message:upload.error ?? 'Upload could not be read.'};
@@ -87,7 +87,7 @@ export async function confirmProductUpload(form:FormData,digest:string) {
   }
 }
 export async function createProductImportCatalogRecords(form:FormData,digest:string,keys:string[]) {
-  await requireMutation('users.manage');
+  await requireMutation('configuration.manage');
   if (form.get('catalogSource') === 'SPECIAL_SKU_LIST') return {ok:false as const,message:'Use ODM with a subtype for custom SKUs.'};
   const upload=await readProductUpload(form);
   if (!upload.csv) return {ok:false as const,message:upload.error ?? 'Upload could not be read.'};
@@ -100,7 +100,7 @@ export async function createProductImportCatalogRecords(form:FormData,digest:str
   }
 }
 export async function createProductImportAccountRecords(form:FormData,digest:string,candidates:AccountCreationCandidate[]) {
-  const actor=await requireMutation('users.manage');
+  const actor=await requireMutation('configuration.manage');
   if(actor.role!=='ADMIN') return {ok:false as const,message:'Only an administrator can create Accounts.'};
   const upload=await readProductUpload(form);
   if(!upload.csv) return {ok:false as const,message:upload.error??'Upload could not be read.'};

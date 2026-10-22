@@ -7,7 +7,7 @@ import { requirePermission } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 export default async function OutcomeReasonsPage() {
-  await requirePermission("users.manage");
+  await requirePermission("configuration.manage");
   const values = await prisma.outcomeReason.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }], include: { _count: { select: { opportunities: true } } } });
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Outcome Reasons" description="Choose the reasons available when closing an Opportunity as won or lost." action={<Link className="btn-secondary" href="/administration">Administration</Link>}/><div className="mb-3"><HelpLink topic="manage-choices">Help with choices and stages</HelpLink></div>
     <section className="panel mb-5 p-5"><h2 className="mb-4 text-lg font-semibold">Add Outcome Reason</h2><OutcomeReasonForm/></section>

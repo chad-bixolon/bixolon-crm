@@ -73,7 +73,7 @@ export async function captureForecastWeek(client: PrismaClient, actor: Actor, in
 }
 
 export async function restoreHistoryBatch(client: PrismaClient, actor: Actor, batchId: string) {
-  if (actor.role !== 'ADMIN' || !can(actor, 'users.manage') || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(batchId)) throw new Error('Access denied or invalid batch');
+  if (actor.role !== 'ADMIN' || !can(actor, 'configuration.manage') || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(batchId)) throw new Error('Access denied or invalid batch');
   return client.$transaction(async tx => {
     const [events, snapshots] = await Promise.all([
       tx.opportunityHistoryArchive.findMany({ where: { archiveBatchId: batchId }, take: 1001 }),
@@ -111,7 +111,7 @@ export function archiveCutoff(now: Date, years: number) {
 }
 
 export async function previewHistoryArchive(client: PrismaClient, actor: Actor, now = new Date()) {
-  if (actor.role !== 'ADMIN' || !can(actor, 'users.manage')) throw new Error('Access denied');
+  if (actor.role !== 'ADMIN' || !can(actor, 'configuration.manage')) throw new Error('Access denied');
   const years = (await getSettings(client)).HISTORY_RETENTION_YEARS, cutoff = archiveCutoff(now, years);
   const [events, snapshots, firstEvent, lastEvent, firstSnapshot, lastSnapshot] = await Promise.all([
     client.opportunityHistoryEvent.count({ where: { occurredAt: { lt: cutoff } } }),
@@ -126,7 +126,7 @@ export async function previewHistoryArchive(client: PrismaClient, actor: Actor, 
 
 // Each bounded batch is copied, checked and removed in one database transaction.
 export async function archiveHistoryBatch(client: PrismaClient, actor: Actor, cutoff: Date, limit = 500) {
-  if (actor.role !== 'ADMIN' || !can(actor, 'users.manage')) throw new Error('Access denied');
+  if (actor.role !== 'ADMIN' || !can(actor, 'configuration.manage')) throw new Error('Access denied');
   if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error('Invalid batch size');
   const eligible = archiveCutoff(new Date(), (await getSettings(client)).HISTORY_RETENTION_YEARS);
   if (cutoff.getTime() > eligible.getTime()) throw new Error('Cutoff exceeds retention policy');

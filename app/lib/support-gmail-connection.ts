@@ -135,7 +135,7 @@ export async function connectedRefreshToken(db?: ConnectionDb): Promise<StoredCo
 }
 export async function saveSupportGmailConnection(email: string, refreshToken: string, actor: Actor, db?: ConnectionDb) {
   assertOAuthAvailable();
-  if (!can(actor, 'support-inbox.write')) throw new Error('Access denied');
+  if (!can(actor, 'support-mailbox.manage')) throw new Error('Access denied');
   assertExpectedMailbox(email);
   const mailbox = email.trim().toLowerCase();
   const data = { mailbox, refreshTokenEncrypted: encryptSupportGmailToken(refreshToken, mailbox), grantedScope: SUPPORT_GMAIL_SCOPE, connectedAt: new Date(), connectedByUserId: actor.id, lastSyncedAt: null };
@@ -143,7 +143,7 @@ export async function saveSupportGmailConnection(email: string, refreshToken: st
 }
 export async function disconnectSupportGmail(actor: Actor, db?: ConnectionDb) {
   assertOAuthAvailable();
-  if (!can(actor, 'support-inbox.write')) throw new Error('Access denied');
+  if (!can(actor, 'support-mailbox.manage')) throw new Error('Access denied');
   await (db ?? await connectionDb()).supportGmailConnection.deleteMany({ where: { id: 'support' } });
 }
 export async function recordSupportGmailFetch(at: Date, db?: ConnectionDb) {
@@ -170,7 +170,7 @@ export async function completeSupportGmailAuthorization(input: OAuthInput, depen
     stateSecret();
     assertExpectedMailbox(process.env.SUPPORT_GMAIL_MAILBOX || '');
     stage = 'OAuth state/PKCE validation';
-    if (!can(input.actor, 'support-inbox.write') || !consumeSupportGmailState(input.state, input.cookie, input.actor!.id, input.verifier)) {
+    if (!can(input.actor, 'support-mailbox.manage') || !consumeSupportGmailState(input.state, input.cookie, input.actor!.id, input.verifier)) {
       logSupportGmailAuthorizationFailure(stage);
       return 'invalid-state';
     }

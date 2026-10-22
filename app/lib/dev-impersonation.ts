@@ -1,7 +1,7 @@
 import type { PrismaClient, UserRole } from '@prisma/client';
 
 export const DEV_IMPERSONATION_COOKIE = 'saleshub-dev-impersonate-user';
-export type SessionUser = { id: number; name: string; email: string; role: UserRole; active: boolean; archivedAt?: Date | null };
+export type SessionUser = { id: number; name: string; email: string; role: UserRole; active: boolean; delegatedUserAdministrationEnabled?: boolean; archivedAt?: Date | null };
 type DevEnvironment = { NODE_ENV?: string; ENABLE_DEV_IMPERSONATION?: string };
 
 export function devImpersonationEnabled(env: DevEnvironment = process.env) {
@@ -28,9 +28,9 @@ export async function resolveUserContext(
   if (!impersonationAdminAllowed(real, env) || !rawId) return { real: real ?? null, effective: real ?? null, impersonating: false, clearCookie: !!rawId };
   const id = parseImpersonationId(rawId);
   if (id === null) return { real: real!, effective: real!, impersonating: false, clearCookie: true };
-  const target = await client.user.findUnique({ where: { id }, select: { id: true, firstName: true, lastName: true, email: true, role: true, active: true, archivedAt: true } });
+  const target = await client.user.findUnique({ where: { id }, select: { id: true, firstName: true, lastName: true, email: true, role: true, delegatedUserAdministrationEnabled: true, active: true, archivedAt: true } });
   if (!target?.active || target.archivedAt) return { real: real!, effective: real!, impersonating: false, clearCookie: true };
-  const effective: SessionUser = { id: target.id, name: `${target.firstName} ${target.lastName}`, email: target.email, role: target.role, active: target.active, archivedAt: target.archivedAt };
+  const effective: SessionUser = { id: target.id, name: `${target.firstName} ${target.lastName}`, email: target.email, role: target.role, delegatedUserAdministrationEnabled: target.delegatedUserAdministrationEnabled, active: target.active, archivedAt: target.archivedAt };
   return { real: real!, effective, impersonating: true, clearCookie: false };
 }
 

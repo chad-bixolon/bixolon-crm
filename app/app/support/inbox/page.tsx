@@ -1,3 +1,4 @@
+import { can } from '@/lib/authorization';
 import { HelpLink } from '@/components/help-link';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -54,7 +55,7 @@ export default async function SupportInboxPage({ searchParams }: { searchParams:
             <div><dt className="inline font-medium">Last fetch result: </dt><dd className="inline">{fetch.result}</dd></div>
           </dl>
           {!mock && !status.connected && !supportGmailClientConfigured() && <p className="mt-2 text-sm">Ask the system administrator to complete the Support mailbox setup before connecting.</p>}
-          {!mock && !fixture && <div key="gmail-actions" className="mt-3 flex flex-wrap gap-2">
+          {!mock && !fixture && can(actor, "support-mailbox.manage") && <div key="gmail-actions" className="mt-3 flex flex-wrap gap-2">
             <form key="connect" action={connectSupportGmail}><button className="btn-secondary" disabled={!supportGmailClientConfigured()} type="submit">{status.connected ? 'Reconnect Support Gmail' : 'Connect Support Gmail'}</button></form>
             {status.connected && <form key="disconnect" action={disconnectInboxGmail}><button className="btn-secondary" type="submit">Disconnect Gmail</button></form>}
           </div>}
@@ -64,7 +65,7 @@ export default async function SupportInboxPage({ searchParams }: { searchParams:
       <p className="mt-1 text-xs text-slate-500" role="note">Gmail is read-only. SalesHub actions do not modify the mailbox.</p>
     </section>;
   };
-  if (!mock && !status.connected) return <Content>{heading}{connectionPanel()}<p className="panel p-4 text-sm text-slate-600">Connect Support Gmail from Manage to view recent messages.</p></Content>;
+  if (!mock && !status.connected) return <Content>{heading}{connectionPanel()}<p className="panel p-4 text-sm text-slate-600">An Administrator must connect Support Gmail to make recent messages available.</p></Content>;
   let messages;
   try { messages = await trackIntegrationAttempt(prisma, gmailContext('INBOX_FETCH', inboxMailboxIdentity(), 'inbox', actor.id), () => recentSupportMail()); }
   catch (error) { return <Content>{heading}{connectionPanel()}<p role="alert" className="panel p-5 text-red-700">{error instanceof Error ? error.message : 'Could not read Support mailbox.'}</p></Content>; }

@@ -42,7 +42,7 @@ const expectedSections = {
   Marketing: ['/trade-shows', '/marketing/campaigns', '/marketing/audiences'],
   'Catalog & Pricing': ['/products', '/price-exceptions'],
   Reports: ['/reports'],
-  Administration: ['/administration', '/administration/maintenance-history?view=integrations'],
+  Administration: ['/administration', '/administration/users', '/administration/maintenance-history?view=integrations'],
 };
 
 function shellUser(role) {
@@ -78,7 +78,7 @@ test('desktop shell bounds both panes and gives the navigation independent verti
     assert.match(html, /role="status"/);
   }
   const adminLinks = navigation(render(shellUser('ADMIN'))).Administration;
-  assert.deepEqual(adminLinks, ['/administration', '/administration/maintenance-history?view=integrations']);
+  assert.deepEqual(adminLinks, ['/administration', '/administration/users', '/administration/maintenance-history?view=integrations']);
 });
 
 test('development switcher is Admin-only and impersonation banner keeps return control for Sales', () => {
@@ -134,7 +134,7 @@ test('navigation groups preserve every route once and match effective role acces
       (route !== '/opportunities' || can(actor, 'opportunities.read')) &&
       (!['/pipeline', '/sales-plan', '/calendar-matches'].includes(route) || can(actor, route === '/sales-plan' ? 'sales-plan.read' : 'sales.read')) &&
       (route !== '/marketing/audiences' || can(actor, 'marketing.read')) &&
-      (!['/administration', '/administration/maintenance-history?view=integrations'].includes(route) || can(actor, route === '/administration' ? 'users.manage' : 'integrations.manage'))
+      (!['/administration', '/administration/users', '/administration/maintenance-history?view=integrations'].includes(route) || can(actor, route === '/administration' ? 'users.manage' : 'integrations.manage'))
     )]).filter(([, routes]) => routes.length));
     assert.deepEqual(actual, expected, role);
     for (const route of Object.values(actual).flat()) assert.equal(routeAccess(route, actor), 'allowed', `${role}: ${route}`);

@@ -10,8 +10,8 @@ export const eligibilityRoles = {
   'project-owner': ['SALES', 'SALES_MANAGER'],
   'sales-plan-owner': ['SALES', 'SALES_MANAGER'],
   'general-task': ['ADMIN', 'SALES', 'SALES_MANAGER', 'MARKETING_MANAGER'],
-  'support-task': ['ADMIN', 'SALES', 'SALES_MANAGER', 'MARKETING_MANAGER', 'SUPPORT'],
-  'support-case': ['ADMIN', 'SUPPORT'],
+  'support-task': ['ADMIN', 'SALES', 'SALES_MANAGER', 'MARKETING_MANAGER', 'SUPPORT', 'SUPPORT_MANAGER'],
+  'support-case': ['ADMIN', 'SUPPORT', 'SUPPORT_MANAGER'],
   'trade-show-sales': ['SALES', 'SALES_MANAGER'],
   'marketing-owner': ['MARKETING_MANAGER'],
 } as const satisfies Record<string, readonly UserRole[]>;

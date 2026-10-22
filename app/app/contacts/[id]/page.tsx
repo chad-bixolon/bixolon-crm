@@ -1,3 +1,4 @@
+import { isCaseOnlyWorker } from '../../../lib/authorization';
 import { RecentView } from '@/components/recent-view';
 import { contactDisplayName, contactDisplayContext } from '@/lib/entity-display';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
@@ -23,9 +24,9 @@ export default async function ContactPage({ params, searchParams }: { params: Pr
   const c = await prisma.contact.findUnique({ where: { id }, include: { account: true, marketingPreferenceUpdatedBy: true } }); if (!c) notFound();
   const actor = await currentUser();
   const support = can(actor, 'support-cases.read') ? await contactSupportSummary(prisma, actor, id) : null;
-  const attribution = actor.role === 'SUPPORT' ? null : await contactAttribution(prisma, id);
+  const attribution = isCaseOnlyWorker(actor) ? null : await contactAttribution(prisma, id);
   const [sources, campaigns] = canManageAttribution(actor) ? await Promise.all([prisma.leadSourceOption.findMany({ where: { active: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }), prisma.marketingCampaign.findMany({ where: { archivedAt: null }, select: { id: true, name: true }, orderBy: { name: 'asc' } })]) : [[], []];
-  const followUpTasks = actor.role !== 'SUPPORT' && can(actor, 'tasks.read') ? await prisma.task.findMany({ where: { contactId: id, archivedAt: null, ...taskScope(actor) }, orderBy: [{ dueDate: 'asc' }, { id: 'desc' }], take: 10, select: { id: true, subject: true, status: true, dueDate: true } }) : [];
+  const followUpTasks = !isCaseOnlyWorker(actor) && can(actor, 'tasks.read') ? await prisma.task.findMany({ where: { contactId: id, archivedAt: null, ...taskScope(actor) }, orderBy: [{ dueDate: 'asc' }, { id: 'desc' }], take: 10, select: { id: true, subject: true, status: true, dueDate: true } }) : [];
   const state = c.archivedAt ? "archived" : c.active ? "active" : "inactive";
   const saveMessage = saveFeedbackMessage((await searchParams).saved, 'Contact');
   const address = effectiveContactAddress(c);

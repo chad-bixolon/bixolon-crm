@@ -12,7 +12,7 @@ import { SnapshotWorkflow } from './workflow';
 
 export const dynamic = 'force-dynamic';
 export default async function SnapshotAdministrationPage({ searchParams }: { searchParams: Promise<{ snapshot?: string }> }) {
-  const actor = await requirePermission('users.manage');
+  const actor = await requirePermission('configuration.manage');
   assertSnapshotAdmin(actor);
   const runs = await prisma.opportunitySnapshotRun.findMany({ orderBy: [{ snapshotAt: 'desc' }, { id: 'desc' }], take: 12 });
   const selected = (await searchParams).snapshot;

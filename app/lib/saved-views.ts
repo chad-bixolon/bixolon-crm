@@ -27,7 +27,7 @@ const dateKeys = new Set(['closeFrom','closeTo','dueFrom','dueTo','openedFrom','
 export function isSavedViewRoute(value: string): value is SavedViewRoute { return Object.hasOwn(savedViewRoutes, value); }
 export function canUseSavedViews(actor: Actor, route: SavedViewRoute) {
   if (route === 'trade-show-follow-up' && !['ADMIN','SALES_MANAGER','SALES','MARKETING_MANAGER'].includes(actor.role)) return false;
-  if (route === 'demos' && actor.role !== 'ADMIN') return false;
+  if (route === 'demos' && !can(actor, 'demos.read')) return false;
   const permission = permissionForPath(savedViewRoutes[route].path);
   return !!permission && can(actor, permission);
 }

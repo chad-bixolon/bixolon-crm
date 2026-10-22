@@ -18,7 +18,7 @@ export function likelyAccountMatches(accounts: {id:number;name:string}[], name:s
 }
 
 export async function createPeReviewAccount(client:PrismaClient, actor:Actor, form:FormData, confirmed:boolean, acknowledgeDuplicate:boolean, reviewedToken?:string) {
-  if (!can(actor,'users.manage') || actor.role!=='ADMIN' || !can(actor,'accounts.write')) throw new Error('Access denied');
+  if (!can(actor,'configuration.manage') || actor.role!=='ADMIN' || !can(actor,'accounts.write')) throw new Error('Access denied');
   const parsed=parseAccountForm(form);
   if (!parsed.value) return {kind:'validation' as const,errors:parsed.errors};
   if (parsed.value.status !== 'ACTIVE') return {kind:'validation' as const,errors:{status:'Choose Active so this Account can resolve the Price Exception.'}};

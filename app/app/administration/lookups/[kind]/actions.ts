@@ -6,7 +6,7 @@ import { lookupKind, parseLookup, saveLookup } from "@/lib/lookups";
 
 export type LookupState = { errors: Record<string, string>; message?: string; success?: boolean };
 export async function submitLookup(kind: string, editing: boolean, _state: LookupState, form: FormData): Promise<LookupState> {
-  await requireMutation("users.manage");
+  await requireMutation("configuration.manage");
   if (!lookupKind(kind)) return { errors: {}, message: "Unknown lookup type." };
   const parsed = parseLookup(form, editing);
   if (!parsed.value) return { errors: parsed.errors, message: "Please correct the highlighted fields." };

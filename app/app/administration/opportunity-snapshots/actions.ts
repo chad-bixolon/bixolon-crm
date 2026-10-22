@@ -11,7 +11,7 @@ function safeMessage(error: unknown) {
     ? message : 'Could not capture the snapshot. No partial snapshot was saved. Try again.';
 }
 export async function previewSnapshotAction(forecastReady = false) {
-  const actor = await requireMutation('users.manage');
+  const actor = await requireMutation('configuration.manage');
   assertSnapshotAdmin(actor);
   try {
     const preview = await previewOpportunitySnapshot(prisma, actor, forecastReady);
@@ -19,7 +19,7 @@ export async function previewSnapshotAction(forecastReady = false) {
   } catch (error) { return { error: safeMessage(error) }; }
 }
 export async function confirmSnapshotAction(token: string, confirmed: boolean) {
-  const actor = await requireMutation('users.manage');
+  const actor = await requireMutation('configuration.manage');
   assertSnapshotAdmin(actor);
   try {
     const preview = verifySnapshotPreview(token, actor.id, process.env.AUTH_SECRET ?? '');

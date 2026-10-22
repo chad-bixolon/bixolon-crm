@@ -37,7 +37,7 @@ export default async function ActivityPage({ params }: { params: Promise<{ id: s
     ...row.contacts.map(({ contact }) => ({ label: 'Contact', name: `${contact.firstName} ${contact.lastName}`, href: `/contacts/${contact.id}` })),
   ];
   return <Content><RecentView entityType="ACTIVITY" recordId={id}/>
-    <PageHeader title={row.subject} eyebrow={NAV_CATEGORIES.sales} action={<div className="page-header-actions"><Link className="btn-secondary" href="/">Dashboard</Link>{can(actor, 'tasks.write') && !row.archivedAt && <Link className="btn-primary" href={`/activities/${id}/edit`}>Edit activity</Link>}</div>}/>
+    <PageHeader title={row.subject} eyebrow={NAV_CATEGORIES.sales} action={<div className="page-header-actions"><Link className="btn-secondary" href="/">Dashboard</Link>{(can(actor, 'tasks.write') || (can(actor, 'support-oversight.manage') && !!row.supportCaseId)) && !row.archivedAt && <Link className="btn-primary" href={`/activities/${id}/edit`}>Edit activity</Link>}</div>}/>
     <section className="panel space-y-5 p-6">
       {row.archivedAt && <span className="rounded bg-slate-100 px-3 py-1 text-sm font-semibold">Archived</span>}
       {row.description && <p className="whitespace-pre-wrap break-words text-sm">{row.description}</p>}

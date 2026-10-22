@@ -165,7 +165,7 @@ test('opportunity parser rejects duplicate participants', () => {
 test('user validation requires identity, role, and status without credentials', () => {
   const parsed = users.parseUser(form([['firstName', ' Ada '], ['lastName', 'Lovelace'], ['email', 'ADA@EXAMPLE.COM'], ['role', 'SALES'], ['active', 'true']]));
   assert.deepEqual(parsed.errors, {});
-  assert.deepEqual(parsed.value, { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', role: 'SALES', active: true });
+  assert.deepEqual(parsed.value, { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', role: 'SALES', active: true, timeZone: 'America/New_York' });
   assert.deepEqual(Object.keys(users.parseUser(form([['firstName', ''], ['lastName', ''], ['email', 'bad'], ['role', 'OWNER'], ['active', 'maybe']])).errors).sort(), ['active', 'email', 'firstName', 'lastName', 'role']);
 });
 test('opportunity value excludes archived lines and weights by probability', () => {

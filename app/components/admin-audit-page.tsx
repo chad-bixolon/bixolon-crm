@@ -10,7 +10,7 @@ import { prisma } from '@/lib/prisma';
 import { adminAudit, normalizeAuditFilters, auditActions, auditEntities, auditHref, auditValue, type AuditFilters } from '@/lib/admin-audit';
 import { formatEasternDateTime } from '@/lib/display-format';
 export async function AdminAuditPage({ filters: rawFilters, maintenance = false }: { filters: AuditFilters; maintenance?: boolean }) {
-  const actor = await requirePermission('users.manage');
+  const actor = await requirePermission('configuration.manage');
   const filters = normalizeAuditFilters(rawFilters);
   const [result, users] = await Promise.all([adminAudit(prisma, actor, filters, maintenance), prisma.user.findMany({ select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } })]);
   const base = maintenance ? '/administration/maintenance-history' : '/administration/audit-history';

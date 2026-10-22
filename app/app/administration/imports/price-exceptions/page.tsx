@@ -3,4 +3,4 @@ import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
 import { requirePermission } from '@/lib/current-user';
 import { PriceExceptionImportWorkflow } from './workflow';
-export default async function PriceExceptionImportPage(){await requirePermission('users.manage');return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Price Exceptions" description="Import finalized Price Exception records from the BIXOLON workbook." action={<Link className="btn-secondary" href="/administration/imports">All imports</Link>}/><PriceExceptionImportWorkflow/></Content>}
+export default async function PriceExceptionImportPage(){await requirePermission('configuration.manage');return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Price Exceptions" description="Import finalized Price Exception records from the BIXOLON workbook." action={<Link className="btn-secondary" href="/administration/imports">All imports</Link>}/><PriceExceptionImportWorkflow/></Content>}

@@ -20,7 +20,7 @@ Module._load = function(request, parent, isMain) {
   if (request === '@/components/saved-views') return { SavedViews: () => null };
   if (request === 'next/link') return function Link({ href, children, ...props }) { return React.createElement('a', { href, ...props }, children); };
   if (request === '@/components/shell') return { Content: ({ children }) => React.createElement('main', null, children), PageHeader: ({ title, description, action }) => React.createElement('header', null, React.createElement('h1', null, title), React.createElement('p', null, description), action) };
-  if (request === '@/lib/current-user') return { requirePermission: async permission => { assert.equal(permission, 'users.manage'); return { role: 'ADMIN' }; } };
+  if (request === '@/lib/current-user') return { requirePermission: async permission => { assert.equal(permission, 'demos.read'); return { id: 1, role: 'ADMIN', active: true }; } };
   if (request === '@/lib/prisma') return { prisma: { demoRequest: { findMany: async query => { queries.push(query); return query.take ? listRows : metricRows; } } } };
   if (request === '@/lib/demo-operations') return { demoSummary: request => ({ open: request.open, overdue: request.overdue }) };
   if (request === '@/lib/demo-display') return require(path.join(root, 'lib/demo-display.ts'));

@@ -10,7 +10,7 @@ import { businessToday } from '@/lib/price-exception-expiration';
 
 export const dynamic = 'force-dynamic';
 export default async function PriceExceptionCleanupPage() {
-  const actor = await requirePermission('users.manage');
+  const actor = await requirePermission('configuration.manage');
   if (actor.role !== 'ADMIN') return <Content><p>Administrator access required.</p></Content>;
   const [records, salesReps, skus, options] = await Promise.all([
     prisma.priceException.findMany({

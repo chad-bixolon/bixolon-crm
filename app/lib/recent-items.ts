@@ -1,3 +1,4 @@
+import { isCaseOnlyWorker } from './authorization';
 import { RecentEntityType, type Prisma, type PrismaClient } from '@prisma/client';
 import { can, opportunityReadWhere, taskScope, type Actor } from './authorization';
 import { operationalAccountWhere, operationalContactWhere, operationalOpportunityWhere, operationalProjectWhere, operationalTaskWhere, operationalActivityWhere } from './operational-where';
@@ -33,8 +34,8 @@ export async function resolveRecentTargets(db: Db, actor: Actor, type: RecentEnt
     case 'SUPPORT_CASE': return can(actor, 'support-cases.read') && can(actor, 'accounts.read') ? (await db.supportCase.findMany({ where: { AND: [{ id }, supportCaseReadWhere(actor)] }, select: { id: true, caseNumber: true, subject: true }, take: RECENT_HISTORY_LIMIT })).map(row => ({ id: row.id, label: `${row.caseNumber} · ${row.subject}` })) : [];
     case 'PRICE_EXCEPTION': return can(actor, 'pricing.read') ? (await db.priceException.findMany({ where: scopedPriceExceptionWhere(actor, { id, archivedAt: null }), select: { id: true, peCode: true }, take: RECENT_HISTORY_LIMIT })).map(row => ({ id: row.id, label: row.peCode ?? 'Unnumbered Price Exception' })) : [];
     case 'TASK': {
-      const scope: Prisma.TaskWhereInput = actor.role === 'SUPPORT' ? { supportCase: { is: supportCaseReadWhere(actor) } } : taskScope(actor);
-      return can(actor, 'tasks.read') || actor.role === 'SUPPORT' ? (await db.task.findMany({ where: { AND: [{ id }, operationalTaskWhere, scope] }, select: { id: true, subject: true }, take: RECENT_HISTORY_LIMIT })).map(row => ({ id: row.id, label: row.subject })) : [];
+      const scope: Prisma.TaskWhereInput = isCaseOnlyWorker(actor) ? { supportCase: { is: supportCaseReadWhere(actor) } } : taskScope(actor);
+      return can(actor, 'tasks.read') || isCaseOnlyWorker(actor) ? (await db.task.findMany({ where: { AND: [{ id }, operationalTaskWhere, scope] }, select: { id: true, subject: true }, take: RECENT_HISTORY_LIMIT })).map(row => ({ id: row.id, label: row.subject })) : [];
     }
     case 'ACTIVITY': return can(actor, 'tasks.read') ? (await db.activity.findMany({ where: { AND: [{ id }, operationalActivityWhere] }, select: { id: true, subject: true }, take: RECENT_HISTORY_LIMIT })).map(row => ({ id: row.id, label: row.subject })) : [];
   }

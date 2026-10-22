@@ -84,5 +84,5 @@ test('Administration keeps the effective-user management permission gate', async
   effective = actor('ADMIN');
   assert.equal(routeAccess('/administration', effective), 'allowed');
   assert.match(renderToStaticMarkup(await AdministrationPage()), /<h1>Administration<\/h1>/);
-  assert.deepEqual(permissions, Array(6).fill('users.manage'));
+  assert.deepEqual(permissions, Array(6).fill('configuration.manage'));
 });

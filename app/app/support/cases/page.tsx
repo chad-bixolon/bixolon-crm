@@ -27,8 +27,8 @@ export default async function SupportCasesPage({ searchParams }: { searchParams:
   const href = (page: number) => { const p = new URLSearchParams(); Object.entries(selected).forEach(([key, value]) => { if (key !== 'page' && value) p.set(key, value); }); p.set('page', String(page)); return `/support/cases?${p}`; };
   const filtered = Object.entries(selected).some(([key, value]) => key !== 'page' && value && value !== 'active' && value !== 'current');
   const zone = choices.zone;
-  const bulkEnabled = can(actor, 'support-cases.write');
-  return <Content><PageHeader eyebrow={NAV_CATEGORIES.support} title="Support Cases" description="Track and resolve customer issues." action={<div className="page-header-actions"><Link className="btn-secondary" href="/reports/support-cases">Case report</Link>{can(actor, 'support-cases.write') && <>{supportGmailEnabled() && <Link className="btn-secondary" href="/support/inbox">Support Inbox</Link>}<Link className="btn-primary" href="/support/cases/new">New case</Link></>}</div>}/>
+  const bulkEnabled = can(actor, 'support-oversight.manage');
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.support} title="Support Cases" description="Track and resolve customer issues." action={<div className="page-header-actions">{can(actor, "support-categories.manage") && <Link className="btn-secondary" href="/administration/support-case-categories">Categories</Link>}<Link className="btn-secondary" href="/reports/support-cases">Case report</Link>{can(actor, 'support-cases.write') && <>{supportGmailEnabled() && <Link className="btn-secondary" href="/support/inbox">Support Inbox</Link>}<Link className="btn-primary" href="/support/cases/new">New case</Link></>}</div>}/>
     <SavedViews routeKey="support-cases" query={selected}/>
     <form method="get" className="responsive-filter-form filter-panel filter-grid filter-row mb-4" aria-label="Filter Support Cases">
       <label className="filter-primary-search label">Search<input className="field filter-control" name="q" defaultValue={selected.q} placeholder="Case, contact, subject, serial"/></label>

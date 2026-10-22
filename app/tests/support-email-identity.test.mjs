@@ -43,7 +43,7 @@ async function withMessages(run) {
   const prior = Object.fromEntries(Object.keys(env).map(key => [key, process.env[key]]));
   Object.assign(process.env, env);
   try {
-    await saveSupportGmailConnection('support@example.test', 'unit-refresh', {id:5, role:'SUPPORT', active:true});
+    await saveSupportGmailConnection('support@example.test', 'unit-refresh', {id:5, role:'ADMIN', active:true});
     const raw = rawMessages(), calls = [];
     const mailbox = new GoogleGmailSupportMailbox(async (url, init = {}) => {
       const value = String(url); calls.push({ url: value, method: init.method ?? 'GET' });
@@ -138,7 +138,7 @@ test('a recent reply surfaces an older thread without importing dormant messages
   const prior = Object.fromEntries(Object.keys(env).map(key => [key,process.env[key]]));
   Object.assign(process.env,env);
   try {
-    await saveSupportGmailConnection('support@example.test','synthetic-refresh',{id:5,role:'SUPPORT',active:true});
+    await saveSupportGmailConnection('support@example.test','synthetic-refresh',{id:5,role:'ADMIN',active:true});
     const quoted = 'New problem.\n> Original request from three months ago.';
     const rows = [
       {id:'recent-reply',threadId:'old-thread',internalDate:String(Date.now()-1000)},

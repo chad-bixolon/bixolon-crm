@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
-import type { Actor } from './authorization';
+import { can, type Actor } from './authorization';
 import { supportCaseReadWhere } from './support-cases';
 import { activeSupportStatuses, supportToday } from './support-report';
 import { operationalActivityWhere } from './operational-where';
@@ -19,7 +19,7 @@ export async function supportDashboard(db:PrismaClient,actor:Actor,now=new Date(
     db.supportCase.findMany({where:active,select:{id:true,caseNumber:true,status:true,openedAt:true,customerNameText:true,account:{select:{name:true}}},orderBy:[{openedAt:'asc'},{id:'asc'}],take:5}),
     options.intake?db.supportCase.count({where:intakeWhere}):0,
     options.intake?db.supportCase.findMany({where:intakeWhere,select:{id:true,caseNumber:true,subject:true,status:true,assignedToId:true},orderBy:[{openedAt:'asc'},{id:'asc'}],take:5}):[],
-    options.tasks?db.task.findMany({where:{...dashboardOpenTaskWhere(),assignedToId:actor.id,dueDate:{lt:dueBefore},supportCase:{is:base}},select:{id:true,subject:true,dueDate:true,supportCase:{select:{id:true,caseNumber:true}}},orderBy:[{dueDate:'asc'},{id:'asc'}],take:6}):[],
+    options.tasks?db.task.findMany({where:{...dashboardOpenTaskWhere(),...(can(actor, 'support-oversight.manage') && !can(actor, 'tasks.read') ? {} : {assignedToId:actor.id}),dueDate:{lt:dueBefore},supportCase:{is:base}},select:{id:true,subject:true,dueDate:true,supportCase:{select:{id:true,caseNumber:true}}},orderBy:[{dueDate:'asc'},{id:'asc'}],take:6}):[],
     options.activity?db.activity.findMany({where:{AND:[operationalActivityWhere],supportCase:{is:base},activityDate:{gte:new Date(now.getTime()-7*86400000),lte:now}},select:{id:true,subject:true,activityDate:true,supportCase:{select:{id:true,caseNumber:true}}},orderBy:[{activityDate:'desc'},{id:'desc'}],take:5}):[],
   ]);
   const byStatus=Object.fromEntries(mineGroups.map(g=>[g.status,g._count._all]));

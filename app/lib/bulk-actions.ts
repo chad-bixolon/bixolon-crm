@@ -55,7 +55,7 @@ export async function bulkTasks(db: PrismaClient, actor: Actor, request: BulkReq
 }
 
 export async function bulkSupportCases(db: PrismaClient, actor: Actor, request: BulkRequest) {
-  assertPermission(actor, 'support-cases.write');
+  assertPermission(actor, 'support-oversight.manage');
   const scope = supportCaseReadWhere(actor);
   const ids = validateBulkRequest(request);
   if (!['assign', 'priority'].includes(request.action)) throw new Error('Invalid Support Case bulk action.');

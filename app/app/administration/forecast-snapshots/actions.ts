@@ -11,7 +11,7 @@ function safeMessage(error: unknown) {
     ? message : 'Could not capture the Forecast Snapshot. No partial snapshot was saved. Try again.';
 }
 export async function previewForecastAction(input: { sourceRunId: number; year: number; quarter: SalesQuarter }) {
-  const actor = await requireMutation('users.manage');
+  const actor = await requireMutation('configuration.manage');
   try {
     const result = await previewForecastSnapshot(prisma, actor, input);
     const currencies = [...new Set(result.rows.map(row => row.currencyCode))].sort();
@@ -24,7 +24,7 @@ export async function previewForecastAction(input: { sourceRunId: number; year: 
   } catch (error) { return { error: safeMessage(error) }; }
 }
 export async function confirmForecastAction(token: string, confirmed: boolean) {
-  const actor = await requireMutation('users.manage');
+  const actor = await requireMutation('configuration.manage');
   try {
     const run = await captureForecastSnapshot(prisma, actor, verifyForecastPreview(token, actor.id, process.env.AUTH_SECRET ?? ''), confirmed);
     revalidatePath('/administration/forecast-snapshots'); revalidatePath('/reports/forecast-snapshots');

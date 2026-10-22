@@ -39,7 +39,7 @@ const rowInclude = {account:{select:{name:true}},contact:{select:{firstName:true
 // are transferred merely to calculate management KPIs.
 function supportAverageWhere(filters:SupportReportFilters,now:Date,actor:Actor) {
   const parts:Prisma.Sql[]=[];
-  if(!can(actor,'support-cases.write'))parts.push(Prisma.sql`c."accountId" IS NOT NULL`);
+  if(!can(actor,'support-cases.all.read'))parts.push(Prisma.sql`c."accountId" IS NOT NULL`);
   if(filters.archive!=='all'&&filters.archive!=='archived')parts.push(Prisma.sql`c."archivedAt" IS NULL`);
   if(filters.archive==='archived')parts.push(Prisma.sql`c."archivedAt" IS NOT NULL`);
   if(numeric(filters.rep))parts.push(Prisma.sql`c."assignedToId" = ${numeric(filters.rep)}`);

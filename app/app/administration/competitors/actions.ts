@@ -7,7 +7,7 @@ import { Prisma } from "@prisma/client";
 
 export type CompetitorState = { message?: string; success?: boolean };
 export async function submitCompetitor(id: number | null, _state: CompetitorState, form: FormData): Promise<CompetitorState> {
-  await requireMutation("users.manage");
+  await requireMutation("configuration.manage");
   try {
     await saveCompetitor(prisma, parseCompetitor(form), id ?? undefined);
   } catch (error) {

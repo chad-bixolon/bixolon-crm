@@ -22,7 +22,7 @@ function fixture() {
     contact: { findFirst: async ({ where }) => where.id === 12 && where.accountId === 11 ? { id: 12 } : null, findMany: async () => [{ id: 12, firstName: 'Jane', lastName: 'Smith' }] },
     supportCaseCategory: { findFirst: async ({ where }) => where.id === 13 ? { id: 13 } : null, findMany: async () => [{ id: 13, name: 'Hardware' }] },
     productSku: { findFirst: async ({ where }) => where.id === 14 ? { id: 14 } : null, findMany: async () => [{ id: 14, partNumber: 'SKU-14' }] },
-    user: { findFirst: async ({ where }) => where.id === 2 ? { id: 2 } : null, findMany: async () => [{ id: 2, firstName: 'Support', lastName: 'Rep' }] },
+    user: { findFirst: async ({ where }) => [2, 3, 4].includes(where.id) ? { id: where.id } : null, findMany: async () => [{ id: 2, firstName: 'Support', lastName: 'Rep' }] },
     $queryRaw: async (strings, year) => {
       if (!String(strings[0]).startsWith('INSERT')) return [{ id: 1 }];
       const lastNumber = (sequenceByYear.get(year) ?? 0) + 1;
@@ -59,7 +59,7 @@ test('Support role and existing CRM permissions remain separate', () => {
   assert.equal(can(actor('SUPPORT'), 'support-categories.manage'), false);
   assert.equal(routeAccess('/administration', actor('SUPPORT')), 'denied');
   assert.equal(routeAccess('/sales-plan', actor('SUPPORT')), 'denied');
-  assert.deepEqual(eligibleUserWhere('support-case').role.in.sort(), ['ADMIN', 'SUPPORT']);
+  assert.deepEqual(eligibleUserWhere('support-case').role.in.sort(), ['ADMIN', 'SUPPORT', 'SUPPORT_MANAGER']);
 });
 test('creation validates Account and relationships and records baseline', async () => {
   const f = fixture();
@@ -157,10 +157,10 @@ test('status, field edits, no-op, archive, and restore are audited', async () =>
   await service.changeSupportCaseStatus(f.db, actor('SUPPORT'), row.id, 'RESOLVED', 'Replaced cable');
   assert.ok(f.rows.get(row.id).resolvedAt); assert.ok(f.events.some(e => e.field === 'resolutionSummary'));
   await service.changeSupportCaseStatus(f.db, actor('SUPPORT'), row.id, 'CLOSED'); assert.ok(f.rows.get(row.id).closedAt);
-  await service.changeSupportCaseStatus(f.db, actor('SUPPORT'), row.id, 'OPEN'); assert.equal(f.rows.get(row.id).closedAt, null); assert.equal(f.rows.get(row.id).resolvedAt, null);
-  await service.archiveSupportCase(f.db, actor('SUPPORT'), row.id); assert.ok(f.rows.get(row.id).archivedAt);
+  await service.changeSupportCaseStatus(f.db, actor('SUPPORT_MANAGER'), row.id, 'OPEN'); assert.equal(f.rows.get(row.id).closedAt, null); assert.equal(f.rows.get(row.id).resolvedAt, null);
+  await service.archiveSupportCase(f.db, actor('SUPPORT_MANAGER'), row.id); assert.ok(f.rows.get(row.id).archivedAt);
   await assert.rejects(service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { subject: 'x' }), /Restore/);
-  await service.restoreSupportCase(f.db, actor('SUPPORT'), row.id); assert.equal(f.rows.get(row.id).archivedAt, null);
+  await service.restoreSupportCase(f.db, actor('SUPPORT_MANAGER'), row.id); assert.equal(f.rows.get(row.id).archivedAt, null);
   assert.ok(f.events.some(e => e.source === 'ARCHIVE'));
   assert.ok(f.events.some(e => e.source === 'RESTORE'));
 });
@@ -218,7 +218,7 @@ test('Account changes require a Contact on the new Account; status transitions a
   await assert.rejects(service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { accountId: 99 }), /active Account/);
   assert.equal(service.validSupportTransition('CLOSED', 'WAITING_ON_CUSTOMER'), false);
   await service.changeSupportCaseStatus(f.db, actor('SUPPORT'), row.id, 'CLOSED', 'Closed issue');
-  await assert.rejects(service.changeSupportCaseStatus(f.db, actor('SUPPORT'), row.id, 'WAITING_ON_CUSTOMER'), /transition/);
+  await assert.rejects(service.changeSupportCaseStatus(f.db, actor('SUPPORT_MANAGER'), row.id, 'WAITING_ON_CUSTOMER'), /transition/);
   await service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { serialNumber: 'SN-2', subject: 'Updated', description: 'More details', source: 'EMAIL' });
   for (const field of ['serialNumber', 'subject', 'description', 'source']) assert.ok(f.events.some(e => e.field === field));
   assert.equal(f.rows.get(row.id).caseNumber, row.caseNumber);
@@ -261,4 +261,43 @@ test('Purchased From sparse edits audit text and Account names; no-op and permis
   await assert.rejects(service.updateSupportCase(f.db, actor('SALES'), row.id, { purchaseSourceText: 'Other' }), /Access denied/);
   await assert.rejects(service.updateSupportCase(f.db, actor('SUPPORT'), row.id, { purchasedFromAccountId: 99 }), /active purchased-from Account/);
   assert.equal(f.events.length, count);
+});
+
+test('Support works any Case and takes it without redistributing other reps work', async () => {
+  const f = fixture(), support = actor('SUPPORT'), manager = actor('SUPPORT_MANAGER');
+  const row = await service.createSupportCase(f.db, manager, {...input, assignedToId:3});
+  assert.ok(await service.getSupportCaseById(f.db, support, row.id));
+  await service.updateSupportCase(f.db, support, row.id, {description:'Helping another rep', assignedToId:3});
+  assert.equal(f.rows.get(row.id).assignedToId, 3);
+  const before = f.events.length;
+  for (const assignedToId of [4, null]) await assert.rejects(service.updateSupportCase(f.db, support, row.id, {assignedToId}), /Only a Support Manager/);
+  assert.equal(f.events.length, before);
+  await assert.rejects(service.createSupportCase(f.db, support, {...input,assignedToId:4}), /Only a Support Manager/);
+  await service.updateSupportCase(f.db, support, row.id, {assignedToId:support.id});
+  assert.equal(f.rows.get(row.id).assignedToId, support.id);
+  await service.updateSupportCase(f.db, manager, row.id, {assignedToId:4});
+  assert.equal(f.rows.get(row.id).assignedToId, 4);
+  await service.updateSupportCase(f.db, manager, row.id, {assignedToId:null});
+  await service.updateSupportCase(f.db, support, row.id, {assignedToId:support.id});
+  assert.equal(f.rows.get(row.id).assignedToId, support.id);
+  for (const action of [service.archiveSupportCase, service.restoreSupportCase]) await assert.rejects(action(f.db,support,row.id), /Access denied/);
+  await service.changeSupportCaseStatus(f.db,support,row.id,'CLOSED','Finished');
+  await assert.rejects(service.changeSupportCaseStatus(f.db,support,row.id,'OPEN'), /Access denied/);
+  await service.changeSupportCaseStatus(f.db,manager,row.id,'OPEN');
+});
+test('only oversight can bulk distribute Cases and adjust team priorities', async () => {
+  const {bulkSupportCases} = require(path.join(root,'lib/bulk-actions.ts'));
+  const f = fixture(), manager = actor('SUPPORT_MANAGER');
+  f.db.adminMaintenanceEvent = {create:async()=>({})};
+  // Fixture transaction shares the same in-memory services.
+  f.db.$transaction = async fn => fn(f.db);
+  const row = await service.createSupportCase(f.db,manager,{...input,assignedToId:3});
+  f.rows.set(row.id,{...row,updatedAt:new Date()});
+  for (const [action,value] of [['assign','4'],['priority','HIGH']]) {
+    const request = {records:[{id:row.id,updatedAt:f.rows.get(row.id).updatedAt.toISOString()}], action,value,confirmed:true};
+    await assert.rejects(bulkSupportCases(f.db,actor('SUPPORT'),request), /Access denied/);
+    assert.equal(await bulkSupportCases(f.db,manager,request),1);
+  }
+  assert.equal(f.rows.get(row.id).assignedToId,4);
+  assert.equal(f.rows.get(row.id).priority,'HIGH');
 });

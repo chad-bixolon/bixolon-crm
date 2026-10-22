@@ -9,7 +9,7 @@ export function parseOutcomeReason(form: FormData) {
   return { ...value, isWon: status === 'won' };
 }
 export async function saveOutcomeReason(client: PrismaClient, actor: Actor, input: ReturnType<typeof parseOutcomeReason>, id?: number) {
-  assertPermission(actor, 'users.manage');
+  assertPermission(actor, 'configuration.manage');
   return client.$transaction(async tx => {
     const existing = id ? await tx.outcomeReason.findUnique({ where: { id } }) : null;
     if (id && !existing) throw new Error('Outcome Reason not found.');

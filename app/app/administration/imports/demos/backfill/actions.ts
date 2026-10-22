@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { backfillExistingRosaDemo, ExistingDemoError } from '@/lib/demo-backfill';
 
 export async function saveRosaBackfill(form: FormData) {
-  const actor = await requireMutation('users.manage');
+  const actor = await requireMutation('configuration.manage');
   if (actor.role !== 'ADMIN') throw new Error('Administrator access required.');
   let destination: string;
   try {

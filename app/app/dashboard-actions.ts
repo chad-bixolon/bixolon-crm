@@ -24,7 +24,7 @@ export async function resetPersonalDashboardAction(){
 }
 
 export async function saveRoleDashboardAction(role:UserRole,_state:DashboardActionState,form:FormData):Promise<DashboardActionState>{
-  const admin=await requireMutation('users.manage');
+  const admin=await requireMutation('configuration.manage');
   try{
     const target={id:admin.id,role,active:true,archivedAt:null};
     const configuration=await validateDashboardLayout(prisma,target,parse(form),{roleDefault:true});
@@ -34,7 +34,7 @@ export async function saveRoleDashboardAction(role:UserRole,_state:DashboardActi
 }
 
 export async function restoreSystemDashboardAction(form:FormData){
-  await requireMutation('users.manage');const role=String(form.get('role')??'') as UserRole;
+  await requireMutation('configuration.manage');const role=String(form.get('role')??'') as UserRole;
   if(!Object.hasOwn(systemDashboardDefaults,role))throw new Error('Unknown role.');
   await prisma.roleDashboardLayout.deleteMany({where:{role}});revalidatePath('/');revalidatePath('/administration/dashboard-views');redirect(`/administration/dashboard-views?role=${role}&saved=system-default`);
 }

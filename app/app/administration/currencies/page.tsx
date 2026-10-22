@@ -8,7 +8,7 @@ import { supportedCurrencies } from '@/lib/currency-configuration';
 import { currencyAction } from './actions';
 
 export default async function CurrencySettings({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string }> }) {
-  await requirePermission('users.manage');
+  await requirePermission('configuration.manage');
   const [config, params] = await Promise.all([companyCurrency(), searchParams]);
   const available = supportedCurrencies().filter(currency => !config.currencies.some(row => row.code === currency.code));
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Currency Settings" description="Choose the currencies available to your company." action={<Link href="/administration" className="btn-secondary">Administration</Link>}/><div className="mb-3"><HelpLink topic="currency-settings">Help with Currency Settings</HelpLink></div>

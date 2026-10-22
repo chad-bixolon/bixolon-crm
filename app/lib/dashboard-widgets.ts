@@ -10,7 +10,7 @@ import { audienceListWhere } from './marketing-audiences';
 
 const zero = new Prisma.Decimal(0);
 export async function dashboardForecastMovement(client:PrismaClient,actor:Actor,input:{year:number;quarter:SalesQuarter;currencyCode:string}) {
-  if (!can(actor,'sales.read') || !['SALES','SALES_MANAGER','ADMIN'].includes(actor.role)) throw new Error('Access denied');
+  if (!can(actor,'sales.read')) throw new Error('Access denied');
   const repIds=actor.role==='SALES'?[actor.id]:(await client.user.findMany({where:activeSalesRepWhere(),select:{id:true}})).map(row=>row.id);
   if (!repIds.length) return null;
   const where={...input,repId:{in:repIds}};
@@ -38,7 +38,7 @@ export async function dashboardForecastMovement(client:PrismaClient,actor:Actor,
 }
 
 export async function dashboardSalesPlanStatus(client:PrismaClient,actor:Actor,input:{year:number;currencyCode:string}) {
-  if (!can(actor,'sales-plan.read') || !['SALES','SALES_MANAGER','ADMIN'].includes(actor.role)) throw new Error('Access denied');
+  if (!can(actor,'sales-plan.read')) throw new Error('Access denied');
   const reps=actor.role==='SALES'?[{id:actor.id}]:await client.user.findMany({where:activeSalesRepWhere(),select:{id:true}});
   const repIds=reps.map(row=>row.id);
   const plans=await client.salesPlan.findMany({where:{planYear:input.year,currencyCode:input.currencyCode,status:'ACTIVE',ownerId:{in:repIds},owner:activeSalesRepWhere()},select:{ownerId:true}});
@@ -63,7 +63,7 @@ export async function dashboardSalesPlanStatus(client:PrismaClient,actor:Actor,i
 }
 
 export async function dashboardMarketingActivity(client:PrismaClient,actor:Actor,now=new Date()) {
-  if (!can(actor,'marketing.read') || !['ADMIN','MARKETING_MANAGER'].includes(actor.role)) throw new Error('Access denied');
+  if (!can(actor,'marketing.read')) throw new Error('Access denied');
   const recentStart=new Date(now.getTime()-7*86400000);
   const [campaigns,influences,leads,audiences]=await Promise.all([
     client.marketingCampaign.count({where:{status:'ACTIVE',archivedAt:null}}),

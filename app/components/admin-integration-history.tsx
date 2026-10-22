@@ -19,7 +19,7 @@ export function AttemptLinks({ row }: { row: IntegrationRow }) {
   </div>;
 }
 export async function AdminIntegrationHistoryPage({ filters: raw }: { filters: IntegrationFilters }) {
-  const actor = await requirePermission('users.manage');
+  const actor = await requirePermission('configuration.manage');
   const filters = normalizeIntegrationFilters(raw);
   const [result, users] = await Promise.all([adminIntegrationHistory(prisma, actor, filters), prisma.user.findMany({ select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } })]);
   const activeCount = countActiveFilters(filters);

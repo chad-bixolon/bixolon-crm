@@ -10,7 +10,7 @@ import { ReportSalesRepFilter } from '@/components/report-sales-rep-filter';
 import { ReportEntityFilter } from '@/components/report-entity-filter';
 import {prisma} from '@/lib/prisma';
 import {projectInitiativeConfigFromParams,filterValue} from '@/lib/report-builder';
-import {canShareReport,executeProjectInitiativeReport,reportRegistry} from '@/lib/reporting';
+import {canCreateReport,canShareReport,executeProjectInitiativeReport,reportRegistry} from '@/lib/reporting';
 import {projectStatusLabels} from '@/lib/project-labels';
 import {saveReportAction} from '../actions';
 
@@ -57,6 +57,6 @@ export async function ProjectInitiativeBuilder({params,actor,saved}:{params:Para
       <button className="btn-primary mt-3">Preview</button>
     </form>
     <ReportResults result={result} config={config} groupKey={Array.isArray(params.group)?params.group[0]:params.group}/>
-    <RecoverableActionForm action={saveReportAction} className="panel mt-4 grid gap-3 p-4 sm:grid-cols-2 md:p-5"><h2 className="text-lg font-semibold sm:col-span-2">Save This Report</h2><input type="hidden" name="reportType" value="PROJECT_INITIATIVE"/><input type="hidden" name="configuration" value={JSON.stringify(config)}/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}<label className="label">Report name<input className="field" name="name" required maxLength={120} defaultValue={saved?.name??''}/></label><label className="label">Visibility<select className="field" name="visibility" defaultValue={saved?.visibility??'PERSONAL'}><option value="PERSONAL">Personal</option>{canShareReport(actor)&&<option value="SHARED">Shared</option>}</select></label><label className="label sm:col-span-2">Description<textarea className="field" name="description" maxLength={1000} defaultValue={saved?.description??''}/></label><div><button className="btn-primary">{saved?'Save changes':'Save report'}</button></div></RecoverableActionForm>
+    {canCreateReport(actor)&&<RecoverableActionForm action={saveReportAction} className="panel mt-4 grid gap-3 p-4 sm:grid-cols-2 md:p-5"><h2 className="text-lg font-semibold sm:col-span-2">Save This Report</h2><input type="hidden" name="reportType" value="PROJECT_INITIATIVE"/><input type="hidden" name="configuration" value={JSON.stringify(config)}/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}<label className="label">Report name<input className="field" name="name" required maxLength={120} defaultValue={saved?.name??''}/></label><label className="label">Visibility<select className="field" name="visibility" defaultValue={saved?.visibility??'PERSONAL'}><option value="PERSONAL">Personal</option>{canShareReport(actor)&&<option value="SHARED">Shared</option>}</select></label><label className="label sm:col-span-2">Description<textarea className="field" name="description" maxLength={1000} defaultValue={saved?.description??''}/></label><div><button className="btn-primary">{saved?'Save changes':'Save report'}</button></div></RecoverableActionForm>}
   </Content>;
 }

@@ -6,6 +6,8 @@ export const databaseUrl = baseDatabaseUrl.replace(/saleshub_e2e$/, databaseName
 export const baseURL = 'http://127.0.0.1:3100';
 export const authToken = 'saleshub-local-e2e-only';
 export const emails = {
+  executive: 'executive@e2e.saleshub.local',
+  supportManager: 'support-manager@e2e.saleshub.local',
   admin: 'admin@e2e.saleshub.local',
   support: 'support@e2e.saleshub.local',
   sales: 'sales@e2e.saleshub.local',

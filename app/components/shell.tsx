@@ -2,6 +2,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { can, permissionForPath } from "../lib/authorization";
 import type { UserRole } from "@prisma/client";
 import { roleLabels } from "@/lib/role-labels";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -23,19 +24,22 @@ const navSections = [
   { label: NAV_CATEGORIES.marketing, items: ["Trade Shows", "Campaigns", "Marketing Audiences"] },
   { label: NAV_CATEGORIES.catalogPricing, items: ["Products", "Price Exceptions"] },
   { label: NAV_CATEGORIES.reports, items: ["Reports"] },
-  { label: NAV_CATEGORIES.administration, items: ["Administration", "Integrations"] },
+  { label: NAV_CATEGORIES.administration, items: ["Administration", "Users", "Integrations"] },
 ] as const;
-const hrefFor = (item: string) => item === "Integrations" ? "/administration/maintenance-history?view=integrations" : item === "Dashboard" ? "/" : item === "Support Cases" ? "/support/cases" : item === "Sales Plan" ? "/sales-plan" : item === "Calendar Matches" ? "/calendar-matches" : item === "Price Exceptions" ? "/price-exceptions" : item === "Trade Shows" ? "/trade-shows" : item === "Campaigns" ? "/marketing/campaigns" : item === "Marketing Audiences" ? "/marketing/audiences" : `/${item.toLowerCase()}`;
+const hrefFor = (item: string) => item === "Users" ? "/administration/users" : item === "Integrations" ? "/administration/maintenance-history?view=integrations" : item === "Dashboard" ? "/" : item === "Support Cases" ? "/support/cases" : item === "Sales Plan" ? "/sales-plan" : item === "Calendar Matches" ? "/calendar-matches" : item === "Price Exceptions" ? "/price-exceptions" : item === "Trade Shows" ? "/trade-shows" : item === "Campaigns" ? "/marketing/campaigns" : item === "Marketing Audiences" ? "/marketing/audiences" : `/${item.toLowerCase()}`;
 const navLabelKeys: Partial<Record<string, keyof LabelMap>> = { Accounts: "ACCOUNT", Contacts: "CONTACT", Projects: "PROJECT", Opportunities: "OPPORTUNITY", Tasks: "TASK" };
-type ShellUser = { id: number; name: string; role: UserRole; canManageUsers: boolean; canViewReports: boolean; canViewMarketing:boolean; canViewSales:boolean; canViewOpportunities:boolean; canViewSupport:boolean; canCreateAccount:boolean; canCreateContact:boolean; canCreateOpportunity:boolean; canCreateTask:boolean };
+type ShellUser = { id: number; name: string; role: UserRole; delegatedUserAdministrationEnabled?: boolean; canManageUsers: boolean; canViewReports: boolean; canViewMarketing:boolean; canViewSales:boolean; canViewOpportunities:boolean; canViewSupport:boolean; canCreateAccount:boolean; canCreateContact:boolean; canCreateOpportunity:boolean; canCreateTask:boolean };
 type NavItem = (typeof navSections)[number]["items"][number];
 function canSeeNavItem(item: NavItem, user: ShellUser | null) {
   if (!user) return false;
-  if (user.role === 'SUPPORT') return ['Dashboard', 'Accounts', 'Contacts', 'Products', 'Support Cases'].includes(item);
+  const actor = { ...user, active: true };
+  if (item === 'Users') return can(actor, 'users.manage');
+  if (item === 'Administration') return can(actor, 'configuration.manage');
+  if (item === 'Integrations') return can(actor, 'integrations.manage');
+  if (item === 'Reports') return user.canViewReports;
+  const permission = permissionForPath(hrefFor(item));
+  if (permission && !can(actor, permission)) return false;
   switch (item) {
-    case "Administration":
-    case "Integrations": return user.canManageUsers;
-    case "Reports": return user.canViewReports;
     case "Support Cases": return user.canViewSupport;
     case "Opportunities": return user.canViewOpportunities;
     case "Pipeline":
@@ -43,7 +47,7 @@ function canSeeNavItem(item: NavItem, user: ShellUser | null) {
     case "Calendar Matches": return user.canViewSales;
     case "Campaigns": return true;
     case "Marketing Audiences": return user.canViewMarketing;
-    case "Demos": return user.role === "ADMIN";
+    case "Demos": return can(actor, "demos.read");
     default: return true;
   }
 }
