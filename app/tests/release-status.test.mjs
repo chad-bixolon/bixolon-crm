@@ -4,11 +4,14 @@ import fs from 'node:fs';
 import Module from 'node:module';
 import ts from 'typescript';
 import { createHash } from 'node:crypto';
+import { schemaFingerprint } from '../lib/prisma-schema-fingerprint.mjs';
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
 const require = Module.createRequire(import.meta.url);
 const { migrationStatus, runtimeStatus, overallStatus, jobSummary, releaseStatus } = require('../lib/release-status.ts');
 const checksum = 'a'.repeat(64), expected = [{ name: 'one', checksum }];
 const applied = { migration_name: 'one', checksum, finished_at: new Date(), rolled_back_at: null };
+const sourceSchema = 'model Item {\n id Int @id\n name String?\n}\n';
+const generatedSchema = 'model Item {\n  id   Int @id\n  name String?\n}\n';
 test('migration verification checks names and checksums, pending, failed, rolled back and unavailable evidence', () => {
   assert.equal(migrationStatus(expected, [applied]).status, 'Up to date');
   assert.equal(migrationStatus(expected, []).status, 'Migration pending');
@@ -18,12 +21,23 @@ test('migration verification checks names and checksums, pending, failed, rolled
   assert.equal(migrationStatus(expected, [applied, { ...applied, migration_name: 'extra' }]).status, 'Unable to verify');
   assert.equal(migrationStatus(null, null).status, 'Unable to verify');
 });
-test('runtime must match source, normalized generated schema, embedded runtime and pinned versions', () => {
+test('runtime must match source, locally normalized generated schema, embedded runtime and pinned versions', () => {
   const hash = s => createHash('sha256').update(s).digest('hex');
-  const m = { schemaHash: hash('source'), normalizedSchemaHash: hash('normalized'), prismaVersion: '6.19.3' };
-  assert.equal(runtimeStatus(m, 'source', 'normalized', 'normalized', '6.19.3', '6.19.3'), 'Verified');
-  for (const args of [['changed', 'normalized', 'normalized', '6.19.3', '6.19.3'], ['source', 'normalized', 'stale', '6.19.3', '6.19.3'], ['source', 'normalized', 'normalized', '6.19.3', '6.18.0']]) assert.equal(runtimeStatus(m, ...args), 'Attention needed');
-  assert.equal(runtimeStatus(m, 'source', 'normalized', null, '6.19.3', '6.19.3'), 'Unable to verify');
+  const m = { format: 2, schemaHash: hash(sourceSchema), normalizedSchemaHash: schemaFingerprint(sourceSchema), prismaVersion: '6.19.3' };
+  assert.equal(runtimeStatus(m, sourceSchema, generatedSchema, generatedSchema, '6.19.3', '6.19.3'), 'Verified');
+  const stale = generatedSchema.replace('name String?', 'name Int?');
+  for (const args of [
+    [sourceSchema + '// changed source', generatedSchema, generatedSchema, '6.19.3', '6.19.3'],
+    [sourceSchema, stale, generatedSchema, '6.19.3', '6.19.3'],
+    [sourceSchema, stale, stale, '6.19.3', '6.19.3'],
+    [sourceSchema, generatedSchema, stale, '6.19.3', '6.19.3'],
+    [sourceSchema, generatedSchema, generatedSchema, '6.19.3', '6.18.0'],
+    [sourceSchema, generatedSchema, generatedSchema, '6.18.0', '6.18.0'],
+  ]) assert.equal(runtimeStatus(m, ...args), 'Attention needed');
+  assert.equal(runtimeStatus({ ...m, normalizedSchemaHash: schemaFingerprint(stale) }, sourceSchema, stale, stale, '6.19.3', '6.19.3'), 'Attention needed', 'a stale generated client cannot define its own expected source fingerprint');
+  assert.equal(runtimeStatus(m, sourceSchema, generatedSchema, null, '6.19.3', '6.19.3'), 'Unable to verify');
+  assert.equal(runtimeStatus({ ...m, format: 1 }, sourceSchema, generatedSchema, generatedSchema, '6.19.3', '6.19.3'), 'Unable to verify');
+  assert.equal(runtimeStatus(m, sourceSchema, '"unterminated', '"unterminated', '6.19.3', '6.19.3'), 'Unable to verify');
 });
 test('overall verified requires identity and both core checks; unknowns never produce a false green', () => {
   assert.equal(overallStatus(true, 'Up to date', 'Verified'), 'Verified');
@@ -63,15 +77,15 @@ test('running release resolves validated deployed identity and preserves build e
   const savedEnv = { RELEASE_GIT_SHA: process.env.RELEASE_GIT_SHA, RELEASE_BRANCH: process.env.RELEASE_BRANCH };
   const hash = s => createHash('sha256').update(s).digest('hex');
   const buildSha = 'a'.repeat(40), runtimeSha = 'B'.repeat(40), builtAt = '2026-10-21T12:34:56.000Z';
-  const manifest = { format: 1, commit: buildSha, branch: 'build-branch', builtAt, version: '0.1.0', migrations: expected, schemaHash: hash('source'), normalizedSchemaHash: hash('normalized'), prismaVersion: Prisma.prismaVersion.client };
+  const manifest = { format: 2, commit: buildSha, branch: 'build-branch', builtAt, version: '0.1.0', migrations: expected, schemaHash: hash(sourceSchema), normalizedSchemaHash: schemaFingerprint(sourceSchema), prismaVersion: Prisma.prismaVersion.client };
   const setEnv = (key, value) => { if (value === undefined) delete process.env[key]; else process.env[key] = value; };
   try {
     process.chdir(temp);
     for (const dir of ['prisma', 'node_modules/.prisma/client', 'node_modules/@prisma/client']) mkdirSync(dir, { recursive: true });
-    writeFileSync('prisma/schema.prisma', 'source');
-    writeFileSync('node_modules/.prisma/client/schema.prisma', 'normalized');
+    writeFileSync('prisma/schema.prisma', sourceSchema);
+    writeFileSync('node_modules/.prisma/client/schema.prisma', generatedSchema);
     writeFileSync('node_modules/@prisma/client/package.json', JSON.stringify({ version: Prisma.prismaVersion.client }));
-    const db = { $queryRaw: async () => [applied], _engineConfig: { inlineSchema: 'normalized' } }, actor = { id: 1, role: 'ADMIN', active: true };
+    const db = { $queryRaw: async () => [applied], _engineConfig: { inlineSchema: generatedSchema } }, actor = { id: 1, role: 'ADMIN', active: true };
     const cases = [
       { name: 'runtime SHA overrides build SHA', runtime: runtimeSha, build: buildSha, commit: runtimeSha },
       { name: 'runtime SHA works when build identity is missing', runtime: runtimeSha, build: null, commit: runtimeSha },
@@ -122,6 +136,15 @@ test('running release resolves validated deployed identity and preserves build e
       assert.equal((await releaseStatus(db, actor)).overall, 'Partially verified');
       setEnv('RELEASE_GIT_SHA', undefined);
       assert.equal((await releaseStatus(db, actor)).overall, 'Unable to verify');
+    });
+    await t.test('legacy or unsupported manifest algorithms never verify', async () => {
+      setEnv('RELEASE_GIT_SHA', runtimeSha);
+      for (const format of [1, 3]) {
+        writeFileSync('release-metadata.json', JSON.stringify({ ...manifest, format }));
+        const release = await releaseStatus(db, actor);
+        assert.equal(release.runtime, 'Unable to verify');
+        assert.equal(release.overall, 'Partially verified');
+      }
     });
   } finally {
     process.chdir(cwd);

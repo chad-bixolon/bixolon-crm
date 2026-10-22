@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { assertAdmin } from './admin-maintenance';
 import type { Actor } from './authorization';
+import { schemaFingerprint } from './prisma-schema-fingerprint.mjs';
 
 export type Manifest = { format: number; commit: string | null; branch: string | null; builtAt: string; version: string; schemaHash: string; normalizedSchemaHash: string; prismaVersion: string; migrations: { name: string; checksum: string }[] };
 export type Migration = { migration_name: string; checksum: string; finished_at: Date | null; rolled_back_at: Date | null };
@@ -19,8 +20,10 @@ export function migrationStatus(expected: Manifest['migrations'] | null, rows: M
   return { status, expected: expected?.length ?? null, applied: rows ? applied.length : null, failed };
 }
 export function runtimeStatus(manifest: Manifest | null, source: string | null, generated: string | null, embedded: string | null, installed: string | null, running: string | null) {
-  if (!manifest || !source || !generated || !embedded || !installed || !running) return 'Unable to verify';
-  return hash(source) === manifest.schemaHash && hash(generated) === manifest.normalizedSchemaHash && generated === embedded && installed === manifest.prismaVersion && installed === running ? 'Verified' : 'Attention needed';
+  if (!manifest || manifest.format !== 2 || !source || !generated || !embedded || !installed || !running) return 'Unable to verify';
+  try {
+    return hash(source) === manifest.schemaHash && schemaFingerprint(source) === manifest.normalizedSchemaHash && schemaFingerprint(generated) === manifest.normalizedSchemaHash && generated === embedded && installed === manifest.prismaVersion && installed === running ? 'Verified' : 'Attention needed';
+  } catch { return 'Unable to verify'; }
 }
 export function overallStatus(identity: boolean, migration: string, runtime: string) {
   if (['Migration pending', 'Migration failed'].includes(migration) || runtime === 'Attention needed') return 'Attention needed';
@@ -30,7 +33,7 @@ export function overallStatus(identity: boolean, migration: string, runtime: str
 export function readManifest(): Manifest | null {
   try {
     const m = JSON.parse(readFileSync(resolve(process.cwd(), 'release-metadata.json'), 'utf8'));
-    if (m.format !== 1 || !Array.isArray(m.migrations) || !m.migrations.every((r: { name: unknown; checksum: string }) => typeof r.name === 'string' && /^[a-f0-9]{64}$/.test(r.checksum)) || !m.schemaHash || !m.normalizedSchemaHash) return null;
+    if (m.format !== 2 || !Array.isArray(m.migrations) || !m.migrations.every((r: { name: unknown; checksum: string }) => typeof r.name === 'string' && /^[a-f0-9]{64}$/.test(r.checksum)) || !/^[a-f0-9]{64}$/.test(m.schemaHash) || !/^[a-f0-9]{64}$/.test(m.normalizedSchemaHash)) return null;
     return m;
   } catch { return null; }
 }

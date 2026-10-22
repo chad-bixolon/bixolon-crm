@@ -44,11 +44,20 @@ non-rolled-back attempts are failures. Missing expected migrations are pending;
 unknown or modified migrations cannot be verified. Counts exclude rolled-back
 attempts. This verifies recorded migration state, not manual database drift.
 
-Prisma verification compares the source schema hash, build-time Prisma-normalized
-schema hash, generated schema, embedded running client schema and pinned client
-version, following `release:check`'s alignment approach. Missing files or unsupported
-runtime introspection yield Unable to verify; mismatches need attention. No
-Prisma generation occurs during a page request.
+Release metadata generation reads local schema/migration files and package metadata
+only. It does not invoke Prisma CLI, load `prisma.config.ts`, resolve `DATABASE_URL`
+or connect to a database. The existing Prisma generation helper uses a process-local
+placeholder for generation; no database secret is needed during the Docker build.
+
+Prisma verification compares the exact source-file hash and a shared lexical schema
+fingerprint against the generated schema, then requires the generated and embedded
+running schemas to match exactly and verifies the pinned client/runtime versions.
+Lexical normalization ignores layout outside strings/comments while preserving
+tokens, token boundaries, literal contents and comments. Format-2 manifests identify
+this algorithm; older/unsupported manifests cannot verify. Missing files, malformed
+strings or unsupported runtime introspection yield Unable to verify; mismatches
+need attention. No Prisma generation occurs during a page request. Migration
+verification and runtime-first release identity are unchanged.
 
 Verified requires commit identity, current migrations and verified runtime.
 Pending/failed migrations or runtime mismatch need attention. Some proven core

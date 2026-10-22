@@ -11,6 +11,7 @@ for (const width of [1440, 768, 390]) test(`Release Status healthy and warning o
   const region = page.getByRole('region', { name: 'Release Status' });
   await expect(region).toBeVisible(); await expect(region).toContainText('8 connections processed');
   await expect(region).toContainText('Migration status'); await expect(region).toContainText('Runtime/schema status');
+  await expect(region.getByText('Runtime/schema status', { exact: true }).locator('..').locator('dd')).toHaveText('Verified');
   // The test runner can inject identity only into the server environment, just
   // as App Platform does for a Docker-based service (no metadata rebuild).
   const runtimeSha = process.env.RELEASE_GIT_SHA;
