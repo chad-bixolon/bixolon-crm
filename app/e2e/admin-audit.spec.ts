@@ -95,7 +95,7 @@ for (const width of [1440, 768, 390]) test(`Administration tools fit ${width}px 
   for (const [route, title] of [['ownership', 'Ownership & Reassignment'], ['audit-history', 'Audit History'], ['maintenance-history', 'Maintenance History'], ['system-health', 'System Health']]) {
     await page.goto(`/administration/${route}`); await page.waitForLoadState('networkidle'); await expect(page.locator('main h1')).toHaveText(title);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-    if (route === 'system-health') { await expect(page.locator('main')).toContainText('Support Gmail'); await expect(page.locator('main')).toContainText('Calendar integration'); }
+    if (route === 'system-health') { await expect(page.locator('main')).toContainText('Support Email Connection'); await expect(page.locator('main')).toContainText('Calendar connections'); }
     await page.screenshot({ path: `test-results/admin-${route}-${width}.png`, fullPage: true, caret: 'initial' });
   }
 });

@@ -1,6 +1,6 @@
 # System health
 
-`/administration/system-health` is Admin-only and read-only. It shows a connection-backed database check, database name and PostgreSQL version, current size, five largest tables and indexes, approximate table row counts, and applied/failed migration counts. It never displays connection strings, hosts, credentials, or arbitrary environment values. Release Status may display the explicitly configured, validated release SHA and branch.
+`/administration/system-health` is Admin-only and read-only. It shows a connection-backed database check, database name and PostgreSQL version, current size, five largest tables and indexes, approximate table row counts, and applied/failed migration counts. It never displays connection strings, hosts, credentials, or arbitrary environment values. Deployment Status may display the explicitly configured, validated release SHA and branch.
 
 Object Storage uses a five-second S3 `HeadBucket` request against the configured Spaces bucket. It lists no objects. The page reports Healthy, Not configured, or Problem without rendering SDK error details or credentials.
 
@@ -12,7 +12,7 @@ Calendar connection/sync status and Support Gmail connection/fetch evidence rema
 
 Weekly Opportunity + Forecast Snapshot automation also appears in scheduled-job health (eight-day stale threshold). Unlike best-effort notification/calendar monitoring, its execution history is required before captures start. Snapshot pages and Maintenance History show exact linked run IDs and safe failures. See [Weekly Snapshot Automation](../../docs/weekly-snapshot-automation.md) for configuration and recovery.
 
-## Release Status
+## Deployment Status
 
 Admins see a read-only post-deployment check above service health. The effective
 user must retain System Health permission while impersonating. No deployment,
@@ -70,6 +70,65 @@ Fixture operations do not count as production evidence. Per-connection Calendar
 results remain in the existing panels and Integration & Job History.
 
 Pre-deploy: `npm run release:check` validates the local candidate. Post-deploy:
-Release Status checks the running environment's evidence. Verification is computed
+Deployment Status checks the running environment's evidence. Verification is computed
 on each view; no new release-history model or migration was added. Historical
 release verification persistence and provider control are outside v1.
+
+## Admin wording polish v2
+
+This is a presentation-only mapping of existing results. Release verification,
+Prisma/runtime/schema and migration checks, job and integration state calculations,
+staleness thresholds, authorization, queries and routes are unchanged.
+
+The main panel retains the overall badge: Verified, Attention needed, Partially
+verified or Unable to verify. Each has its own plain-language summary. Database
+updates maps Up to date → Current, Migration pending → Pending, Migration failed
+→ Failed, with unavailable evidence remaining Unable to verify. Application &
+database compatibility displays the existing runtime result with a short action
+when it is not Verified. Failure states stay visible with the disclosure closed.
+
+Labels are Deployed version (10-character SHA, full SHA in title and disclosure),
+Source branch, Deployed, SalesHub version and Last checked. Deployed continues to
+use the build timestamp: no deployment timestamp is inferred or generated.
+Technical details preserves exact migration counts/status, the runtime/schema
+result, build metadata and SHA, expected Prisma version, running Prisma
+client/runtime version, expected source schema SHA-256 and normalized fingerprint.
+Hashes are expected build evidence; the existing runtime check still determines
+whether source, generated and embedded schemas match. No new verification runs.
+
+Weekly Sales Snapshots, Calendar Automation and Support Email Connection use
+business wording. Job summaries still come from the existing jobSummary parser;
+Healthy translates its successful/completed results, and failures remain Attention
+needed. Unknown connection counts and zero active connections remain explicit.
+Calendar connection totals retain the fixed writer grammar and singular/plural
+wording. These summaries describe recorded work; the existing cadence-based
+service cards still show stale or failed jobs independently. Gmail connection
+metadata and unresolved errors remain separate visible evidence.
+Successful attempts show one completion timestamp; failed/incomplete attempts keep
+attempt and most recent successful completion context. Existing snapshot/history
+links, database/file storage checks and native keyboard-accessible details/summary
+disclosures remain available. See System Health Help for Admin-facing guidance.
+
+### Validation (2026-10-22)
+
+- Lint and typecheck passed; production `npm run build -- --webpack` passed.
+- 68 focused unit checks passed across release-status, release-check,
+  build-release-metadata, operational-maturity, integration-attempts, Help and
+  system-health-presentation tests. Coverage includes all four deployment summary
+  states, visible database/compatibility failures with details closed, exact
+  migration evidence, short/full SHA, operational failures and connection grammar.
+- 29 distinct Playwright checks passed across release-status, integration-history,
+  operational-maturity and admin-audit. Deployment checks cover 1440, 1024, 820,
+  768 and 390 px, native disclosure Enter/Space controls, hidden technical evidence,
+  full/short runtime SHA, singular/plural connection counts, failed-attempt context,
+  safe errors, responsive overflow and Admin-only access.
+- The affected browser checks were rerun successfully after updating a legacy
+  wording assertion and completing concurrent local Prisma generation. The initial
+  generation overlap caused a transient package-read error; no application logic
+  was changed to suppress it. Unit subprocess output and Webpack's TypeScript
+  configuration read required running outside this host's sandbox.
+- Screenshots are retained in `app/reports/system-health-wording/` (ignored).
+  Validation used the isolated E2E database and synthetic provider fixtures.
+- Diff review confirms unchanged health rules, thresholds, evidence queries,
+  permissions, schema/migrations, release tooling and hosting configuration.
+  Generated framework edits were restored. No deployment, commit or push occurred.

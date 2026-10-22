@@ -12,6 +12,15 @@ Tasks and Support Cases offer confirmed reassignment on the current page through
 
 ## System Health
 
+Start with Deployment Status: Verified confirms the expected application and
+database versions. Review Database updates and Application & database
+compatibility when attention is needed. Technical details contains the full
+version identifier and engineering evidence for your system maintainer.
+Weekly Sales Snapshots, Calendar Automation and Support Email Connection show
+recorded operational activity. Compare a failed attempt with the most recent
+successful completion, then open Integration & Job History for troubleshooting.
+See [System Health](system-health.md) for maintainer details.
+
 `/administration/system-health` reuses database/migration, Spaces HeadBucket and recorded scheduler checks. Adds paginated Calendar connections (25), successful/attempt/failed-sync timestamps when recorded, inactive-user indication, disconnected-user count and up to 10 currently unresolved connection errors. Errors use fixed business labels and never display provider text. A failed-sync timestamp is shown only if a completed attempt postdates the last successful sync; authorization failures without a trustworthy timestamp show Not recorded. Successful retries clear current connection errors. The separate Integration / job history section preserves durable failed attempts and their recovery evidence.
 
 Support Gmail shows disabled, fixture, connected, disconnected or unavailable based on existing configuration/status checks and persisted last successful fetch. A stored connection does not prove live authorization. Gmail actions now have durable attempt evidence in Integration / Job History; the inbox also retains its existing transient fetch status. Links go to Support Inbox and My Integrations; no setup controls are duplicated. Calendar credentials remain user-managed. Uninstrumented jobs are not represented as healthy. Applied/failed migration counts do not prove every expected migration is installed.

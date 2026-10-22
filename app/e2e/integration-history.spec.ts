@@ -92,7 +92,7 @@ for (const width of [1440, 768, 390]) test(`history and durable System Health fi
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.waitForLoadState('networkidle');
   await page.screenshot({ path: `reports/integration-history/history-${width}.png`, fullPage: true, caret: 'initial' });
-  await page.goto('/administration/system-health'); const region = page.getByRole('region', { name: 'Recorded integration status' }); await expect(region).toContainText('Last successful action'); await expect(region).toContainText('Most recent unresolved failure'); await expect(region).not.toContainText('NEVER_SAVE');
+  await page.goto('/administration/system-health'); const region = page.getByRole('region', { name: 'Recorded integration status' }); await expect(region).toContainText('Most recent successful completion'); await expect(region).toContainText('Most recent unresolved failure'); await expect(region).not.toContainText('NEVER_SAVE');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.waitForLoadState('networkidle');
   await page.screenshot({ path: `reports/integration-history/health-${width}.png`, fullPage: true, caret: 'initial' });

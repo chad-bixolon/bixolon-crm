@@ -131,13 +131,17 @@ runtime configuration must deploy/restart the service with the new environment;
 the SHA mapping needs no manual update on later source deployments. The original
 `builtAt` continues to describe the build, not deployment or restart time.
 
-As an Admin, open **Administration → System Health → Release Status**. Compare
-**Commit** with the full source SHA in DigitalOcean's deployed release. **Branch**
-is optional; **Build time** remains the generated build timestamp. Overall
-**Verified** requires the resolved SHA, **Migration status: Up to date**, and
-**Runtime/schema status: Verified**. A malformed runtime SHA is discarded; a
-valid build SHA is used next, otherwise **Commit** shows **Unable to verify** and
-the release cannot be fully verified. Setting branch alone cannot verify it.
+As an Admin, open **Administration → System Health → Deployment Status**.
+**Deployed version** shows the first 10 characters of the source SHA; open
+**Technical details → Full commit SHA** to compare all 40 characters with the
+source SHA in the deployed release. **Source branch** is optional. **Deployed**
+uses the generated build timestamp; the actual deployment time is not recorded.
+Overall **Verified** still requires the resolved SHA, **Database updates: Current**
+and **Application & database compatibility: Verified**. Technical details retains
+the migration status/counts and Prisma runtime/schema evidence. A malformed
+runtime SHA is discarded; a valid build SHA is used next, otherwise **Deployed
+version** shows **Unable to verify** and the release cannot be fully verified.
+Setting branch alone cannot verify it.
 
 See [DigitalOcean bindable variables](https://docs.digitalocean.com/products/app-platform/how-to/use-environment-variables/#component-specific-variables)
 and the [Dockerfile binding restriction](https://docs.digitalocean.com/support/why-cant-i-access-my-environment-variables-at-build-time-when-building-from-a-dockerfile-on-app-platform/).
