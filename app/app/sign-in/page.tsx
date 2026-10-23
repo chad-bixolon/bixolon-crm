@@ -1,18 +1,22 @@
 import { signIn } from '@/auth';
+import { getBranding, defaultBranding } from '@/lib/deployment-branding';
+import { prisma } from '@/lib/prisma';
 
-export default function SignInPage() {
+export default async function SignInPage() {
+  const branding = await getBranding(prisma);
+  const isDefault = branding.companyName === defaultBranding.companyName && branding.productName === defaultBranding.productName;
   return <main className="flex min-h-dvh items-center justify-center px-4 py-6 sm:px-6">
     <div className="panel w-full max-w-sm border-t-2 border-t-orange-700 px-6 pb-6 pt-7 shadow-sm sm:px-8 sm:pb-7 sm:pt-8">
       <div className="text-center">
         {/* The public asset is served directly so the browser requests the PNG URL. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/brand/bixolon-logo.png" alt="BIXOLON" width={500} height={40} className="mx-auto block h-auto w-full max-w-[260px]" />
-        <p className="mt-3 text-[11px] font-semibold tracking-[0.18em] text-slate-500">AMERICA | SALESHUB</p>
+        <img src={branding.logoStorageKey ? '/api/branding/logo' : '/brand/bixolon-logo.png'} alt={isDefault ? 'BIXOLON' : branding.companyName} width={500} height={40} className="mx-auto block max-h-24 h-auto w-full max-w-[260px] object-contain" />
+        <p className="mt-3 break-words text-[11px] font-semibold tracking-[0.18em] text-slate-500">{isDefault ? 'AMERICA | SALESHUB' : `${branding.companyName} | ${branding.productName}`}</p>
       </div>
 
       <div className="mt-7">
         <h1 className="text-2xl font-semibold tracking-tight text-slate-950">Welcome back</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Sign in to BIXOLON America SalesHub using your corporate account.</p>
+        <p className="mt-2 break-words text-sm leading-6 text-slate-600">{isDefault ? 'Sign in to BIXOLON America SalesHub using your corporate account.' : `Sign in to ${branding.productName} for ${branding.companyName} using your corporate account.`}</p>
       </div>
 
       <form className="mt-6" action={async () => { 'use server'; await signIn('google', { redirectTo: '/' }); }}>
@@ -26,7 +30,7 @@ export default function SignInPage() {
           <span>Continue with Google</span>
         </button>
       </form>
-      <p className="mt-6 border-t border-slate-200 pt-4 text-center text-xs text-slate-500">Authorized BIXOLON America users only.</p>
+      <p className="mt-6 break-words border-t border-slate-200 pt-4 text-center text-xs text-slate-500">{isDefault ? 'Authorized BIXOLON America users only.' : `Authorized ${branding.companyName} users only.`}</p>
     </div>
   </main>;
 }

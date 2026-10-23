@@ -29,7 +29,7 @@ function finding(message:string) {
     'Historical source evidence is already imported.':'This workbook row has already been imported.',
     'Source evidence and active customer price are already imported.':'This workbook row and customer price are already in the CRM.',
     'New Product or SKU: confirm catalog creation or select an existing catalog record.':'Confirm the new Product or SKU in the catalog section, or choose an existing one.',
-    'Customer-specific ODM needs an existing SalesHub Account before import.':'Choose a CRM Account for this Customer-Specific SKU.',
+    'Customer-specific ODM needs an existing CRM Account before import.':'Choose a CRM Account for this Customer-Specific SKU.',
     'A price in Notes differs from the structured New Price. Choose which value to use.':'The price in Notes differs from the New Price in the workbook. Choose which price to use.',
     'Notes mention a different tariff rate; choose structured tariff, Notes rate, or a correction.':'The tariff in Notes differs from the workbook tariff. Choose which tariff to use.',
     'New Price is unavailable; choose a usable current price or historical-only handling.':'The workbook has no usable New Price. Choose another price or keep this row for history only.',

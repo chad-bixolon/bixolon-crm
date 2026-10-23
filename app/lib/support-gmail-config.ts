@@ -15,7 +15,7 @@ export function supportGmailLookbackDays() {
 }
 export function supportGmailOrigin() {
   let url: URL;
-  try { url = new URL(process.env.AUTH_URL || ''); } catch { throw new Error('AUTH_URL must be the canonical SalesHub origin.'); }
+  try { url = new URL(process.env.AUTH_URL || ''); } catch { throw new Error('AUTH_URL must be the canonical CRM origin.'); }
   if (url.username || url.password || url.pathname !== '/' || url.search || url.hash || url.protocol !== 'https:') throw new Error('Support Gmail requires a canonical HTTPS AUTH_URL origin.');
   return url.origin;
 }
@@ -37,18 +37,18 @@ export function assertLiveSupportGmailEnvironment() {
   assertSupportGmailEnabled();
   if (process.env.NODE_ENV !== 'production' || process.env.SUPPORT_GMAIL_MOCK === 'true' || process.env.SUPPORT_GMAIL_TEST_FIXTURE === 'true' || process.env.E2E_AUTH_ENABLED === 'true') throw new Error('Live Support Gmail requires production with test modes disabled.');
   const origin = new URL(supportGmailOrigin());
-  if (['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname) || /^\d+\.\d+\.\d+\.\d+$/.test(origin.hostname)) throw new Error('Live Support Gmail requires the production SalesHub hostname.');
+  if (['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname) || /^\d+\.\d+\.\d+\.\d+$/.test(origin.hostname)) throw new Error('Live Support Gmail requires the production CRM hostname.');
   supportGmailCallback();
   const identity = supportGmailDatabaseIdentity();
   const db = new URL(process.env.DATABASE_URL!);
   if (identity !== process.env.SUPPORT_GMAIL_EXPECTED_DATABASE_IDENTITY || ['localhost', '127.0.0.1', '[::1]', 'db'].includes(db.hostname) || /(?:support_poc|saleshub_e2e)/i.test(db.pathname) || !['require', 'verify-ca', 'verify-full'].includes(db.searchParams.get('sslmode') || '')) throw new Error('Support Gmail database must match its configured production identity and require TLS.');
 }
 export function supportGmailEnvironmentIssue() {
-  if (process.env.NODE_ENV !== 'production') return 'Live Support Gmail is unavailable on this development instance. Use the production SalesHub site to connect the Support mailbox.';
+  if (process.env.NODE_ENV !== 'production') return 'Live Support Gmail is unavailable on this development instance. Use the production CRM site to connect the Support mailbox.';
   try { assertLiveSupportGmailEnvironment(); return null; }
   catch { return 'Support Gmail is not configured for this environment. Ask an administrator to check the production Gmail runtime settings.'; }
 }
 export function assertLiveSupportGmailRequest(host: string | null) {
   assertLiveSupportGmailEnvironment();
-  if (host?.toLowerCase() !== new URL(supportGmailOrigin()).host.toLowerCase()) throw new Error('Open Support Gmail from the canonical SalesHub production URL.');
+  if (host?.toLowerCase() !== new URL(supportGmailOrigin()).host.toLowerCase()) throw new Error('Open Support Gmail from the canonical CRM production URL.');
 }

@@ -47,7 +47,16 @@ export function createSupportAttachmentKey(prefix: string, id = randomUUID()) {
   return key.replace('/documents/', '/support-cases/');
 }
 
+export function createBrandingKey(prefix: string, id = randomUUID()) {
+  return createDocumentStorageKey(prefix, id).replace('/documents/', '/branding/');
+}
+
+export function assertBrandingKey(storageKey: string, prefix: string) {
+  const root = `${normalizeStoragePrefix(prefix)}/branding/`;
+  if (!storageKey.startsWith(root) || !/^[0-9a-f-]{36}$/.test(storageKey.slice(root.length))) throw new Error('Invalid branding object key.');
+}
+
 export function assertStorageKeyInPrefix(storageKey: string, prefix: string) {
-  const roots = ['documents', 'support-cases'].map(kind => `${normalizeStoragePrefix(prefix)}/${kind}/`);
+  const roots = ['documents', 'support-cases', 'branding'].map(kind => `${normalizeStoragePrefix(prefix)}/${kind}/`);
   if (!roots.some(root => storageKey.startsWith(root) && !storageKey.slice(root.length).includes('/'))) throw new Error('Document storage key is outside the configured prefix.');
 }

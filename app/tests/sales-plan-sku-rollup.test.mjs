@@ -41,6 +41,6 @@ test('workbook has three numeric sheets and predictable filenames',async()=>{
   assert.equal(read.Sheets['SKU Rollup'].C12.t,'n');assert.equal(read.Sheets['SKU Rollup'].C12.v,150);assert.equal(read.Sheets['SKU Rollup'].F12.v,350);
   assert.equal(read.Sheets['Account Rep Detail'].F2.t,'n');assert.equal(read.Sheets['Unresolved SKU Lines'].E4.v,10);
   assert.match(read.Sheets['Unresolved SKU Lines'].A1.v,/excluded from exact SKU rollup totals/);
-  assert.equal(skuRollupFilename(2027,'USD'),'SalesHub_Sales_Plan_SKU_Rollup_2027_USD.xlsx');assert.equal(skuRollupFilename(2027,'USD','Ryan Persaud'),'SalesHub_Sales_Plan_SKU_Rollup_2027_Ryan_Persaud_USD.xlsx');
+  assert.equal(skuRollupFilename(2027,'USD'),'SalesHub_Sales_Plan_SKU_Rollup_2027_USD.xlsx');assert.equal(skuRollupFilename(2027,'USD','Ryan Persaud'),'SalesHub_Sales_Plan_SKU_Rollup_2027_Ryan_Persaud_USD.xlsx');assert.equal(skuRollupFilename(2027,'USD',undefined,'Acme CRM'),'Acme_CRM_Sales_Plan_SKU_Rollup_2027_USD.xlsx');
   assert.ok(!JSON.stringify(XLSX.utils.sheet_to_json(read.Sheets['SKU Rollup'])).includes('skuId'));
 });

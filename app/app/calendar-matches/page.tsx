@@ -47,7 +47,7 @@ export default async function CalendarMatchesPage({ searchParams }: { searchPara
   const name = (list: { id: number; name: string }[], id: number | null, fallback: string) => id ? list.find(x => x.id === id)?.name || fallback : '—';
   const contactNames = contacts.map(c => ({ id: c.id, name: `${c.firstName} ${c.lastName}` }));
   const link = (next: number) => `/calendar-matches?${new URLSearchParams({ status, page: String(next), ...(q ? { q } : {}), ...(p.from ? { from: p.from } : {}), ...(p.to ? { to: p.to } : {}), ...(accountId > 0 ? { accountId: String(accountId) } : {}) })}`;
-  return <Content><PageHeader title="Calendar Matches" eyebrow={NAV_CATEGORIES.sales} description="Review customer meetings from Google Calendar before logging them as SalesHub Activities." action={<Link className="btn-secondary" href="/my-integrations">My integrations</Link>}/>
+  return <Content><PageHeader title="Calendar Matches" eyebrow={NAV_CATEGORIES.sales} description="Review customer meetings from Google Calendar before logging them as CRM Activities." action={<Link className="btn-secondary" href="/my-integrations">My integrations</Link>}/>
     {!connection ? <div className="panel p-6"><p>Connect your Google Calendar in My integrations to review meetings here.</p><Link className="btn-primary mt-4" href="/my-integrations">Connect Calendar</Link></div> : <>
       <nav aria-label="Review status" className="mb-4 flex flex-wrap gap-2">{statuses.map(s => <Link key={s} className={s === status ? 'btn-primary' : 'btn-secondary'} href={`/calendar-matches?status=${s}`}>{s === 'review' ? 'Needs Review' : s[0].toUpperCase() + s.slice(1)}</Link>)}</nav>
       <SavedViews routeKey="calendar-matches" query={p}/>

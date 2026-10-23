@@ -10,6 +10,8 @@ const groups = [
     ["Data Quality", "/administration/data-quality", "Review CRM records that may need cleanup or follow-up."],
   ] },
   { title: "Users & Access", tools: [
+    ["Company & Branding", "/administration/company-branding", "Set company and product names and upload a company logo."],
+    ["Trusted Sign-In Domains", "/administration/trusted-domains", "Choose corporate Google domains allowed to sign in."],
     ["Ownership & Reassignment", "/administration/ownership", "Review records assigned to inactive or ineligible users and safely reassign work."],
     ["Users", "/administration/users", "Manage user access and record owners."],
     ["Dashboard Views", "/administration/dashboard-views", "Configure the default Dashboard for each role."],

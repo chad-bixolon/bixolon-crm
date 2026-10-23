@@ -800,6 +800,25 @@ model SystemSetting {
   changedAt   DateTime @default(now())
 }
 
+/// One deployment's user-facing company and product identity.
+model DeploymentBranding {
+  id             Int      @id @default(1)
+  companyName    String   @db.VarChar(200)
+  productName    String   @db.VarChar(200)
+  logoStorageKey String?  @db.VarChar(500)
+  logoMimeType   String?  @db.VarChar(30)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+/// Google hosted domains allowed to attempt sign-in; User approval remains separate.
+model TrustedSignInDomain {
+  domain    String   @id @db.VarChar(253)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Contact {
   supportCases SupportCase[]
   leadSourceId Int?

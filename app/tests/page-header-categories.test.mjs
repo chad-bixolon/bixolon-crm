@@ -47,7 +47,7 @@ test('shared section labels match the primary sidebar and preserve personal exce
     assert.ok(labels.includes(`${key}: '${value}'`));
     assert.ok(shell.includes(`label: NAV_CATEGORIES.${key}`));
   }
-  assert.match(read('app/page.tsx'), /eyebrow="BIXOLON SalesHub" title="Dashboard"/);
+  assert.match(read('app/page.tsx'), /eyebrow=\{brandedTitle\(branding\)\} title="Dashboard"/);
   assert.match(read('app/my-integrations/page.tsx'), /eyebrow="Personal integrations"/);
   assert.match(read('app/notifications/page.tsx'), /eyebrow="Notifications"/);
 });

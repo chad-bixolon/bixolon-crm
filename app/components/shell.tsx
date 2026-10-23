@@ -51,7 +51,7 @@ function canSeeNavItem(item: NavItem, user: ShellUser | null) {
     default: return true;
   }
 }
-export function Shell({ children, user, labels, notifications, developmentAdmin = false, impersonating = null }: { children: ReactNode; user: ShellUser | null; labels?: LabelMap; notifications?: { unread: number; rows: NotificationItem[] } | null; developmentAdmin?: boolean; impersonating?: { realName: string; effectiveName: string; role: UserRole } | null }) {
+export function Shell({ children, user, labels, notifications, branding, developmentAdmin = false, impersonating = null }: { children: ReactNode; user: ShellUser | null; labels?: LabelMap; notifications?: { unread: number; rows: NotificationItem[] } | null; branding?: { companyName: string; productName: string; logoSrc: string }; developmentAdmin?: boolean; impersonating?: { realName: string; effectiveName: string; role: UserRole } | null }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const quickCreate = useRef<HTMLDetailsElement>(null);
@@ -65,7 +65,7 @@ export function Shell({ children, user, labels, notifications, developmentAdmin 
   const drawer = useRef<HTMLElement>(null);
   const currentItem = navSections.flatMap(section => section.items).filter(item => canSeeNavItem(item, user)).find(item => { const href = hrefFor(item); return href === '/' ? pathname === '/' : pathname.startsWith(href); });
   const currentKey = currentItem && navLabelKeys[currentItem];
-  const currentTitle = currentItem && currentKey && labels ? currentKey === 'OPPORTUNITY' && labels[currentKey] === 'Opportunity' ? 'Opportunities' : `${labels[currentKey]}s` : currentItem ?? (pathname.startsWith('/help') ? 'Help & Guide' : 'SalesHub');
+  const currentTitle = currentItem && currentKey && labels ? currentKey === 'OPPORTUNITY' && labels[currentKey] === 'Opportunity' ? 'Opportunities' : `${labels[currentKey]}s` : currentItem ?? (pathname.startsWith('/help') ? 'Help & Guide' : branding?.productName ?? 'SalesHub');
   useEffect(() => { if (menuOpen) closeButton.current?.focus(); }, [menuOpen]);
   useEffect(() => {
     if (!menuOpen) return;
@@ -86,7 +86,7 @@ export function Shell({ children, user, labels, notifications, developmentAdmin 
     {menuOpen && <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-slate-950/50 lg:hidden" onClick={() => setMenuOpen(false)}/>}
     <aside ref={drawer} id="primary-navigation-drawer" className={`${menuOpen ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-50 w-[min(18rem,calc(100vw-3rem))] flex-col border-r border-slate-200 bg-white shadow-xl lg:static lg:flex lg:h-full lg:min-h-0 lg:w-60 lg:shrink-0 lg:shadow-none`}>
       <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-5 py-5 lg:shrink-0">
-        <Image src="/brand/bixolon-logo.png" alt="BIXOLON" width={500} height={40} priority className="h-6 w-44 object-cover object-center" />
+        <Image src={branding?.logoSrc ?? '/brand/bixolon-logo.png'} alt={branding?.companyName ?? 'BIXOLON'} width={500} height={40} unoptimized={branding?.logoSrc === '/api/branding/logo'} priority className={`h-6 w-44 ${branding?.logoSrc === '/api/branding/logo' ? 'object-contain' : 'object-cover'} object-center`} />
         <button ref={closeButton} type="button" aria-label="Close menu" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-xl text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-orange-600 lg:hidden" onClick={() => { setMenuOpen(false); menuButton.current?.focus(); }}>×</button>
       </div>
       <nav aria-label="Primary navigation" className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-3 py-5">
@@ -103,7 +103,7 @@ export function Shell({ children, user, labels, notifications, developmentAdmin 
         <button ref={menuButton} type="button" aria-label="Open menu" aria-expanded={menuOpen} aria-controls="primary-navigation-drawer" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-2xl text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-orange-600 lg:hidden" onClick={() => setMenuOpen(true)}>☰</button>
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 lg:hidden">{currentTitle}</span>
         {user && <div className="flex min-w-0 items-center gap-2 max-[360px]:gap-1 sm:gap-4">
-          <GlobalSearchPalette/>
+          <GlobalSearchPalette productName={branding?.productName}/>
           <RecentItems key={`${user.id}:${user.role}`}/>
           {(user.canCreateAccount || user.canCreateContact || user.canCreateOpportunity || user.canCreateTask) && <details ref={quickCreate} className="relative shrink-0 group"><summary className="btn-secondary min-h-11 cursor-pointer list-none" aria-label="New record">+ <span className="hidden sm:inline">New</span></summary><nav aria-label="Quick Create" className="absolute right-0 z-30 mt-2 w-48 max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white p-2 shadow-lg group-open:block">{[
             user.canCreateAccount && ['New Account', '/accounts/new'],

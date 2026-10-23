@@ -5,12 +5,14 @@ import { LabelForm } from "@/components/label-form";
 import { defaultLabels, labelMap } from "@/lib/configuration";
 import { requirePermission } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
+import { getBranding } from "@/lib/deployment-branding";
 export const dynamic = "force-dynamic";
 export default async function LabelsPage() {
   await requirePermission("configuration.manage");
   const rows = await prisma.terminologyLabel.findMany();
   const labels = labelMap(rows);
+  const branding = await getBranding(prisma);
   const editors=await prisma.user.findMany({where:{id:{in:[...new Set(rows.map(row=>row.changedById).filter((id):id is number=>id!==null))]}},select:{id:true,firstName:true,lastName:true}});
   const editorName=(id:number|null)=>{const user=editors.find(item=>item.id===id);return user?`${user.firstName} ${user.lastName}`:'System';};
-  return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Labels & Terminology" description="Change the display labels used in supported SalesHub screens." action={<Link className="btn-secondary" href="/administration">Administration</Link>}/><section className="panel p-5"><h2 className="mb-4 text-lg font-semibold">Display labels</h2>{Object.keys(defaultLabels).map(key => <div key={key}><LabelForm key={`${key}-${labels[key as keyof typeof labels]}`} labelKey={key} value={labels[key as keyof typeof labels]} overridden={labels[key as keyof typeof labels] !== defaultLabels[key as keyof typeof defaultLabels]}/>{rows.find(row => row.key === key) && <p className="mb-4 text-xs text-slate-500">Last changed by {editorName(rows.find(row => row.key === key)?.changedById ?? null)} at {rows.find(row => row.key === key)?.changedAt.toISOString()}</p>}</div>)}</section><p className="mt-4 text-sm text-slate-600">Labels apply only to screens that support customization. They do not rename saved values or web addresses. Each change records who made it and when, including restoring a default.</p></Content>;
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.administration} title="Labels & Terminology" description={`Change the display labels used in supported ${branding.productName} screens.`} action={<Link className="btn-secondary" href="/administration">Administration</Link>}/><section className="panel p-5"><h2 className="mb-4 text-lg font-semibold">Display labels</h2>{Object.keys(defaultLabels).map(key => <div key={key}><LabelForm key={`${key}-${labels[key as keyof typeof labels]}`} labelKey={key} value={labels[key as keyof typeof labels]} overridden={labels[key as keyof typeof labels] !== defaultLabels[key as keyof typeof defaultLabels]}/>{rows.find(row => row.key === key) && <p className="mb-4 text-xs text-slate-500">Last changed by {editorName(rows.find(row => row.key === key)?.changedById ?? null)} at {rows.find(row => row.key === key)?.changedAt.toISOString()}</p>}</div>)}</section><p className="mt-4 text-sm text-slate-600">Labels apply only to screens that support customization. They do not rename saved values or web addresses. Each change records who made it and when, including restoring a default.</p></Content>;
 }

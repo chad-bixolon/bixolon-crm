@@ -74,8 +74,8 @@ test('connection is scoped to real login identity; reconnect retains existing re
   const f = fixture();
   const identity = { googleAccountId: 'google-7', googleEmail: 'user@example.com' };
   const token = { refresh_token: 'refresh-1', scope: oauth.CALENDAR_SCOPE };
-  await assert.rejects(oauth.storeCalendarConnection(f.client, 8, identity, token), /SalesHub sign-in/);
-  await assert.rejects(oauth.storeCalendarConnection(f.client, 7, { ...identity, googleAccountId: 'other' }, token), /SalesHub sign-in/);
+  await assert.rejects(oauth.storeCalendarConnection(f.client, 8, identity, token), /CRM sign-in/);
+  await assert.rejects(oauth.storeCalendarConnection(f.client, 7, { ...identity, googleAccountId: 'other' }, token), /CRM sign-in/);
   await assert.rejects(oauth.storeCalendarConnection(f.client, 7, identity, { refresh_token: 'refresh-1', scope: 'openid email profile' }), /Calendar read permission/);
   assert.equal(f.mutations(), 0);
   await oauth.storeCalendarConnection(f.client, 7, identity, token);

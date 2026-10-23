@@ -66,6 +66,28 @@ test('wrong or missing Workspace domain is rejected before database lookup', asy
   assert.deepEqual(state.lookups, []);
   assert.equal(state.creates.length, 0);
 });
+test('approved HQ user with Korean name signs in independently of role', async () => {
+  const hqProfile = { ...googleProfile, sub: googleProfile.sub, hd: 'bixolon.com', email: '지민@bixolon.com' };
+  const { client, state } = identityFixture({ user: { ...actor('EXECUTIVE'), firstName: '지민', lastName: '김', email: hqProfile.email } });
+  const result = await resolveGoogleIdentity(client, hqProfile, ['bixolonusa.com', 'bixolon.com']);
+  assert.equal(result.user.firstName, '지민');
+  assert.equal(result.user.lastName, '김');
+  assert.equal(result.user.role, 'EXECUTIVE');
+  assert.equal(state.creates.length, 1);
+});
+test('current bixolonusa.com user remains approved under the bootstrap domain', async () => {
+  const current = { ...googleProfile, hd: 'bixolonusa.com', email: 'approved@bixolonusa.com' };
+  const { client } = identityFixture({ user: { ...actor('SALES'), email: current.email } });
+  assert.equal((await resolveGoogleIdentity(client, current, ['bixolonusa.com'])).user.role, 'SALES');
+});
+test('trusted hosted domain still requires trusted email domain and approved active User', async () => {
+  const { client } = identityFixture({ user: null });
+  assert.equal((await resolveGoogleIdentity(client, { ...googleProfile, hd: 'bixolon.com', email: 'guest@bixolon.com' }, ['bixolonusa.com', 'bixolon.com'])).reason, 'unapproved');
+  assert.equal((await resolveGoogleIdentity(client, { ...googleProfile, hd: 'bixolon.com', email: 'guest@outside.com' }, ['bixolonusa.com', 'bixolon.com'])).reason, 'workspace');
+  assert.equal((await resolveGoogleIdentity(client, { ...googleProfile, hd: 'outside.com', email: 'guest@outside.com' }, ['bixolonusa.com', 'bixolon.com'])).reason, 'workspace');
+  const archived = identityFixture({ user: { ...actor('SUPPORT'), email: googleProfile.email, archivedAt: new Date() } });
+  assert.equal((await resolveGoogleIdentity(archived.client, googleProfile, ['bixolon.example'])).reason, 'inactive');
+});
 test('unverified Google email is rejected before database lookup', async () => {
   const { client, state } = identityFixture();
   assert.equal((await resolveGoogleIdentity(client, { ...googleProfile, email_verified: false }, 'bixolon.example')).reason, 'invalid');

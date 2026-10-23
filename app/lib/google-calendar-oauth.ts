@@ -69,7 +69,7 @@ export async function calendarGoogleIdentity(accessToken: string, fetcher: typeo
 
 export async function storeCalendarConnection(client: Pick<PrismaClient, 'externalIdentity' | 'googleCalendarConnection'>, realUserId: number, identity: { googleAccountId: string; googleEmail: string }, token: GoogleTokenResponse) {
   const loginIdentity = await client.externalIdentity.findFirst({ where: { userId: realUserId, provider: 'GOOGLE', issuer: 'https://accounts.google.com', subject: identity.googleAccountId }, select: { id: true } });
-  if (!loginIdentity) throw new Error('Connect the Google account used for SalesHub sign-in.');
+  if (!loginIdentity) throw new Error('Connect the Google account used for CRM sign-in.');
   const existing = await client.googleCalendarConnection.findUnique({ where: { userId: realUserId }, select: { googleAccountId: true, refreshTokenEncrypted: true } });
   const refreshTokenEncrypted = token.refresh_token ? encryptCalendarToken(token.refresh_token) : existing?.googleAccountId === identity.googleAccountId ? existing.refreshTokenEncrypted : null;
   if (!refreshTokenEncrypted) throw new Error('Google did not provide offline access. Please reauthorize.');

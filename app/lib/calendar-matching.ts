@@ -37,8 +37,8 @@ export function matchCalendarAttendees(attendees: Pick<GoogleCalendarAttendee, '
       explanations.push(`Matched ${candidates[0].firstName} ${candidates[0].lastName} by email ${attendee.email}`);
     } else if (candidates.length > 1) {
       ambiguous = true;
-      explanations.push(`Multiple SalesHub Contacts use ${attendee.email} — select one`);
-    } else explanations.push(`No SalesHub Contact found for ${attendee.email}`);
+      explanations.push(`Multiple CRM Contacts use ${attendee.email} — select one`);
+    } else explanations.push(`No CRM Contact found for ${attendee.email}`);
   }
   const accountIds = [...new Set(matched.map(c => c.accountId).filter((id): id is number => id !== null))];
   if (accountIds.length > 1) { ambiguous = true; explanations.push('Matched Contacts belong to multiple Accounts — select one'); }

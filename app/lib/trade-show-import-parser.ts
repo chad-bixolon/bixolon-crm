@@ -241,7 +241,7 @@ export function validateMapping(headers:string[],mapping:MappingDefinition){
   for(const column of mapping.columns){
     if(!column||typeof column.sourceHeader!=='string'||(column.destination!==null&&!MAPPING_DESTINATIONS.some(([value])=>value===column.destination)))throw new Error('Mapping definition is invalid.');
     if(!normalizedHeaders.has(key(column.sourceHeader))&&column.destination)missing.push(column.sourceHeader);
-    if(column.destination){if(destinations.has(column.destination))throw new Error(`SalesHub field “${MAPPING_DESTINATIONS.find(([value])=>value===column.destination)?.[1]}” may only be mapped once.`);destinations.add(column.destination);}
+    if(column.destination){if(destinations.has(column.destination))throw new Error(`CRM field “${MAPPING_DESTINATIONS.find(([value])=>value===column.destination)?.[1]}” may only be mapped once.`);destinations.add(column.destination);}
   }
   if(missing.length)throw new Error(`Mapping review required. Missing mapped source column${missing.length===1?'':'s'}: ${missing.join(', ')}.`);
   const absent:string[]=requiredDestinations.filter(destination=>!destinations.has(destination)).map(destination=>MAPPING_DESTINATIONS.find(([value])=>value===destination)![1]);

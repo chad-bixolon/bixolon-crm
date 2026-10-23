@@ -2,7 +2,7 @@
 
 Personal Google Calendar consent and credentials use a separate flow. See [Google Calendar connection](google-calendar-connection.md). Normal sign-in continues to request `openid email profile` only.
 
-Set `AUTH_SECRET` to a long random secret. Set `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` to the OAuth web application's credentials. Set `GOOGLE_WORKSPACE_DOMAIN` to the actual BIXOLON Workspace hosted domain; this checks Google's signed `hd` claim. `AUTH_URL` must be the exact browser origin used for each environment. None of these values belongs in Git.
+Set `AUTH_SECRET` to a long random secret. Set `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` to the OAuth web application's credentials. Set `GOOGLE_WORKSPACE_DOMAIN` to the initial trusted Google hosted domain. It is the bootstrap fallback only while no `TrustedSignInDomain` rows exist. `AUTH_URL` must be the exact browser origin used for each environment. None of these values belongs in Git.
 
 ## Local development through SSH
 
@@ -16,11 +16,11 @@ When rebuilding after a dependency change, run `docker compose up -d --build --r
 | `AUTH_SECRET` | A private value generated with `openssl rand -base64 32` |
 | `AUTH_GOOGLE_ID` | Web OAuth client ID from Google Cloud |
 | `AUTH_GOOGLE_SECRET` | Secret for that OAuth client |
-| `GOOGLE_WORKSPACE_DOMAIN` | The actual BIXOLON Google Workspace hosted domain; do not use the CRM server hostname |
+| `GOOGLE_WORKSPACE_DOMAIN` | Initial approved corporate Google hosted domain; do not use the CRM server hostname |
 
 From the browser computer, forward local port 3000 to the CRM host, for example `ssh -L 3000:127.0.0.1:3000 <ssh-user>@192.168.60.18`. Open **`http://localhost:3000` in that same computer's browser**. Register **`http://localhost:3000/api/auth/callback/google`** as the exact authorized redirect URI for the Google web OAuth client. `AUTH_URL`, the browser origin, and the redirect URI must agree. The application listens on the remote host; `localhost` in the OAuth redirect belongs to the browser computer and reaches the app through the tunnel.
 
-Google Cloud setup is manual: create a Web application OAuth client, configure its consent screen for the BIXOLON Workspace audience, register the localhost callback, and supply the client ID and secret. Normal sign-in requests `openid email profile` only. Set `GOOGLE_WORKSPACE_DOMAIN` to the domain present in Google's signed `hd` claim. Restart the app after changing environment variables. Do not register the LAN IP as a Google redirect URI.
+Google Cloud setup is manual: create a Web application OAuth client, configure its consent screen for the intended corporate audience, register the localhost callback, and supply the client ID and secret. Normal sign-in requests `openid email profile` only. Set `GOOGLE_WORKSPACE_DOMAIN` to the initial domain present in Google's signed `hd` claim. Restart the app after changing environment variables. Do not register the LAN IP as a Google redirect URI.
 
 ## Create and verify a test user
 
@@ -84,9 +84,11 @@ The standalone Pipeline defaults to **My pipeline** for the effective Sales user
 
 Creating a SalesHub user approves application access; it does not create a Google account. User Administration displays only whether a Google account is linked. Recovery unlinks that identity, invalidating linked sessions without modifying the Google account. Changing a SalesHub email does not transfer the stable Google identity link. Recovery requires the target email confirmation and current authorized administrator authority, and records a non-secret history event transactionally.
 
-Unicode first/last names, including Korean names, are supported. Names do not determine authorization. Google authentication continues to use verified identity and the configured hosted-domain policy, followed by stable issuer/subject linkage. This build does not change trusted domains.
+Unicode first/last names, including Korean names, are supported. Names do not determine authorization. Google authentication requires verified email, an active trusted hosted and email domain, an approved active User, and stable issuer/subject linkage. Inactive and archived Users are denied.
 
-Future corporate access must evaluate multiple approved domains, including `bixolonusa.com` and `bixolon.com`, through configuration or carefully authorized settings. This is an identity-policy requirement, independent of permission roles. HQ leaders may be Executive, HQ salespeople Sales, HQ Sales leaders Sales Manager, HQ Support staff Support/Support Manager, and HQ Marketing staff Marketing Manager. Admin is reserved for actual SalesHub administration. A future Business Viewer role may be evaluated once concrete HQ read requirements exist; it is not implemented.
+An Administrator can manage multiple corporate domains in **Administration → Trusted Sign-In Domains**. Domains are normalized to lowercase. On the first change, the environment bootstrap domain is written as an active row in the same transaction; then persisted rows become authoritative. At least one must remain active. Existing linked sessions recheck active domains. Roles remain independent of domain. HQ staff receive roles for their work, not their address or language. The domain list controls sign-in trust only; Calendar meeting and Support email classification retain their existing separate rules.
+
+The Google account chooser no longer sends a single-domain `hd` hint because multiple domains may be active. The server checks the signed hosted-domain claim and verified email domain against current active domains; it never provisions a User from domain membership. Pre-v1 JWT sessions lack a stored hosted-domain claim; those sessions use their signed Google email domain under the former single-domain login check until renewed. A removed domain is checked on each session resolution, with no long-lived allowlist cache.
 
 Admin and personal preferences use the same `User.timeZone`. Validation accepts named IANA timezones supported by the pinned Node/Intl runtime, including Asia/Seoul. UTC and existing U.S. defaults remain supported. Business-date, quarterly reporting, and scheduler semantics are unchanged; they may deliberately retain the existing business timezone rather than follow personal display preferences.
 

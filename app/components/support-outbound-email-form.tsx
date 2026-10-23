@@ -16,7 +16,7 @@ function EmailResponseForm({ caseId, context, userName, zone, close }: Props & {
   const attributes = (field: keyof typeof values) => ({ id: `${prefix}-${field}`, value: values[field], onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setValues(previous => ({ ...previous, [field]: event.target.value })), 'aria-invalid': !!state.errors?.[field], 'aria-describedby': state.errors?.[field] ? `${prefix}-${field}-error` : undefined });
   return <section className="panel mt-3 p-4 sm:p-5" aria-label="Log Email Response">
     <h2 className="font-semibold">Log Email Response</h2>
-    <p className="mt-1 text-sm text-slate-600">Send your reply from Gmail first, then record a short summary here. SalesHub doesn’t send email.</p>
+    <p className="mt-1 text-sm text-slate-600">Send your reply from Gmail first, then record a short summary here. CRM doesn’t send email.</p>
     <HelpLink topic="log-email-response">Help with Log Email Response</HelpLink>
     {state.success ? <><p role="status" className="mt-3 text-sm">{state.message}</p><button type="button" className="btn-secondary mt-3" onClick={close}>Done</button></> : <form action={action} className="mt-4">
       <dl className="mb-4 grid gap-2 text-sm sm:grid-cols-2">

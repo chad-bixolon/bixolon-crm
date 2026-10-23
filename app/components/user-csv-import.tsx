@@ -7,7 +7,7 @@ export function UserCsvImport() {
   const preview = state.preview;
   const errors = (preview?.rows.filter(r => r.action === 'Error').length ?? 0) + (preview?.errors.length ?? 0);
   return <div className="space-y-4 min-w-0">
-    <div className="panel space-y-3 p-4 text-sm"><p>Importing users approves or updates SalesHub access. It does not create Google accounts or bypass Google sign-in.</p>
+    <div className="panel space-y-3 p-4 text-sm"><p>Importing users approves or updates CRM access. It does not create Google accounts or bypass Google sign-in.</p>
     <p>Use UTF-8 CSV with headers: <strong>First Name, Last Name, Email, Role, Active, Timezone</strong>. Maximum 500 KB, 500 rows, and 320 characters per column (names: 100).</p>
     <p>Email is trimmed and lowercased to match an existing user. A different email creates a new user; change email addresses on the individual User form. Duplicate emails and archived users are rejected.</p>
     <p>Roles: ADMIN (Administrator), SALES_MANAGER (Sales Manager), SALES, SUPPORT_MANAGER (Support Manager), SUPPORT, MARKETING_MANAGER (Marketing Manager), EXECUTIVE, READ_ONLY (Read Only). Friendly labels are also accepted.</p>

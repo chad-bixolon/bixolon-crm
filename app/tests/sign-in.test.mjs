@@ -13,6 +13,8 @@ const signInCalls = [];
 const originalLoad = Module._load;
 Module._load = function(request, parent, isMain) {
   if (request === '@/auth') return { signIn: async (...args) => { signInCalls.push(args); } };
+  if (request === '@/lib/deployment-branding') return { getBranding: async () => ({ companyName: 'BIXOLON America, Inc.', productName: 'SalesHub', logoStorageKey: null }), defaultBranding: { companyName: 'BIXOLON America, Inc.', productName: 'SalesHub' } };
+  if (request === '@/lib/prisma') return { prisma: {} };
   return originalLoad.call(this, request, parent, isMain);
 };
 Module._extensions['.tsx'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText, filename);
@@ -30,15 +32,15 @@ function find(element, type) {
   return null;
 }
 
-test('sign-in page shows compact SalesHub branding and one Google action', () => {
-  const page = SignInPage();
+test('sign-in page shows compact SalesHub branding and one Google action', async () => {
+  const page = await SignInPage();
   const html = renderToStaticMarkup(page);
   assert.match(html, /min-h-dvh items-center justify-center/);
   assert.match(html, /BIXOLON America/);
   assert.match(html, /src="\/brand\/bixolon-logo.png"/);
   assert.match(html, /width="500" height="40"/);
   assert.match(html, /max-w-sm border-t-2 border-t-orange-700/);
-  assert.match(html, /class="mx-auto block h-auto w-full max-w-\[260px\]"/);
+  assert.match(html, /max-w-\[260px\] object-contain/);
   assert.match(html, /AMERICA \| SALESHUB/);
   assert.match(html, /<h1[^>]*>Welcome back<\/h1>/);
   assert.match(html, /Sign in to BIXOLON America SalesHub using your corporate account\./);
@@ -50,7 +52,7 @@ test('sign-in page shows compact SalesHub branding and one Google action', () =>
 });
 
 test('Google button retains the existing OAuth action and redirect', async () => {
-  const form = find(SignInPage(), 'form');
+  const form = find(await SignInPage(), 'form');
   assert.ok(form);
   await form.props.action();
   assert.deepEqual(signInCalls, [['google', { redirectTo: '/' }]]);

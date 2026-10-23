@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { connectGoogleCalendar, disconnectGoogleCalendar, saveMyTimeZone, syncMyGoogleCalendar } from './actions';
 import { formatDateTimeForUser } from '@/lib/display-format';
 import { IANA_TIME_ZONES } from '@/lib/user-time-zone';
+import { getBranding } from '@/lib/deployment-branding';
 
 const notices: Record<string, string> = {
   connected: 'Google Calendar connected.',
@@ -24,15 +25,16 @@ const notices: Record<string, string> = {
 export default async function MyIntegrationsPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
   const real = await getRealAuthenticatedUser();
   if (!real) redirect('/sign-in');
-  const [user, connection] = await Promise.all([
+  const [user, connection, branding] = await Promise.all([
     prisma.user.findUnique({ where: { id: real.id }, select: { timeZone: true } }),
     prisma.googleCalendarConnection.findUnique({ where: { userId: real.id }, select: { googleEmail: true, connectionStatus: true, lastConnectedAt: true, lastSuccessfulSyncAt: true, lastSyncCompletedAt: true, lastError: true } }),
+    getBranding(prisma),
   ]);
   if (!user) redirect('/access-denied?reason=inactive');
   const displayTime = (value: Date) => formatDateTimeForUser(value, user.timeZone);
   const result = (await searchParams).result;
-  return <Content><PageHeader eyebrow="Personal integrations" title="My integrations" description={`Connections belong to your signed-in SalesHub account (${real.email}).`} />
-    {result && notices[result] && <p role="status" className="mb-5 rounded-md bg-slate-100 p-3 text-sm">{notices[result]}</p>}
+  return <Content><PageHeader eyebrow="Personal integrations" title="My integrations" description={`Connections belong to your signed-in ${branding.productName} account (${real.email}).`} />
+    {result && notices[result] && <p role="status" className="mb-5 rounded-md bg-slate-100 p-3 text-sm">{notices[result].replaceAll('SalesHub', () => branding.productName)}</p>}
     <section className="panel mb-5 max-w-2xl space-y-4 p-6" aria-labelledby="personal-settings-heading">
       <h2 id="personal-settings-heading" className="text-xl font-semibold">Personal settings</h2>
       <RecoverableActionForm action={saveMyTimeZone} className="inline-field-action">
@@ -47,7 +49,7 @@ export default async function MyIntegrationsPage({ searchParams }: { searchParam
     </section>
     <section className="panel max-w-2xl space-y-4 p-6" aria-labelledby="google-calendar-heading">
       <h2 id="google-calendar-heading" className="text-xl font-semibold">Google Calendar</h2>
-      {!connection ? <><p>Connect your Google Calendar to sync events for future Activity review.</p><p className="text-sm text-slate-600">Read-only access. SalesHub does not create or edit Google Calendar events.</p><form action={connectGoogleCalendar}><button className="btn-primary" type="submit">Connect Google Calendar</button></form></> : <>
+      {!connection ? <><p>Connect your Google Calendar to sync events for future Activity review.</p><p className="text-sm text-slate-600">Read-only access. {branding.productName} does not create or edit Google Calendar events.</p><form action={connectGoogleCalendar}><button className="btn-primary" type="submit">Connect Google Calendar</button></form></> : <>
         <p className="text-sm">Google account: <strong>{connection.googleEmail}</strong></p>
         <p className="text-sm">Status: <strong>{connection.connectionStatus === 'CONNECTED' ? 'Connected' : 'Needs reauthorization'}</strong></p>
         <p className="text-sm">Last connected: {displayTime(connection.lastConnectedAt)}</p>

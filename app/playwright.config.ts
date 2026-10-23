@@ -50,6 +50,7 @@ export default defineConfig({
       AUTH_SECRET: 'saleshub-e2e-auth-secret-local-only',
       AUTH_GOOGLE_ID: 'unused-e2e-google-id',
       AUTH_GOOGLE_SECRET: 'unused-e2e-google-secret',
+      GOOGLE_WORKSPACE_DOMAIN: 'bixolonusa.com',
       E2E_AUTH_ENABLED: 'true',
       WEEKLY_SNAPSHOT_SECRET: 'saleshub-weekly-snapshot-e2e-only-secret',
       SUPPORT_GMAIL_ENABLED: 'true',

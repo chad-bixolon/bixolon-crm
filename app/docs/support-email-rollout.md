@@ -19,7 +19,7 @@ Use App Platform **runtime** variables; encrypt secrets, never pass them as buil
 | `AUTH_URL` | Existing normal | Exact canonical production HTTPS origin, without path/query/credentials |
 | `DATABASE_URL` | Existing encrypted secret | Production external PostgreSQL URL; `sslmode=require`, `verify-ca` or `verify-full`; preserve existing pool/TLS settings |
 | `AUTH_SECRET` | Existing encrypted secret | Existing SalesHub session/state secret |
-| `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `GOOGLE_WORKSPACE_DOMAIN` | Existing login settings | Continue existing SalesHub sign-in configuration; no Support scope added |
+| `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `GOOGLE_WORKSPACE_DOMAIN` | Login settings | The domain is the sign-in bootstrap while no trusted-domain rows exist; no Support scope is added |
 | `SPACES_BUCKET`, `SPACES_REGION`, `SPACES_ENDPOINT`, `SPACES_PREFIX` | Existing normal | Existing private production Support object store; prefix `prod` |
 | `SPACES_ACCESS_KEY_ID`, `SPACES_SECRET_ACCESS_KEY` | Existing encrypted secrets | Existing private Spaces credentials |
 | `NODE_ENV` | Image setting | `production` from the production Docker target |

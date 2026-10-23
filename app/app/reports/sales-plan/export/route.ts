@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { buildSalesPlanManagementExport, exportAccess, exportSelection, writeSalesPlanWorkbook } from '@/lib/sales-plan-export';
+import { getBranding } from '@/lib/deployment-branding';
 
 export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
   catch { return new NextResponse('Choose a valid year, currency, and sales rep.', { status: 400 }); }
   const currency = await prisma.currency.findUnique({ where: { code: selection.currencyCode }, select: { active: true } });
   if (!currency) return new NextResponse('Choose a configured currency.', { status: 400 });
-  const result = await buildSalesPlanManagementExport(prisma, actor, selection);
+  const result = await buildSalesPlanManagementExport(prisma, actor, selection, new Date(), (await getBranding(prisma)).productName);
   const buffer = writeSalesPlanWorkbook(result.workbook);
   return new NextResponse(new Uint8Array(buffer), { headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${result.filename}"`, 'Cache-Control': 'private, no-store' } });
 }

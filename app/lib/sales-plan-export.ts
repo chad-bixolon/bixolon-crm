@@ -9,6 +9,7 @@ import { forecastForTeam, quarters } from './forecast';
 import { operationalOpportunityWhere } from './operational-where';
 import { lineTotal, opportunityTotal } from './opportunities';
 import { salesPlanManagementWorkbook } from './sales-plan-export-workbook';
+import { exportProductPrefix } from './deployment-branding';
 
 const zero = new Prisma.Decimal(0);
 const sum = (values: (Prisma.Decimal | null | undefined)[]) => values.reduce<Prisma.Decimal>((total, value) => total.add(value ?? zero), zero);
@@ -21,12 +22,12 @@ export function exportSelection(raw: { year?: string | null; currencyCode?: stri
   if (!Number.isInteger(year) || year < 2000 || year > 2100 || !/^[A-Z]{3}$/.test(currencyCode) || (userId !== null && (!Number.isSafeInteger(userId) || userId <= 0))) throw new Error('Choose a valid year, currency, and sales rep.');
   return { year, currencyCode, userId };
 }
-export function exportFilename(year: number, currencyCode: string, rep?: string) {
+export function exportFilename(year: number, currencyCode: string, rep?: string, productName = 'SalesHub') {
   const suffix = rep ? `_${rep.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 70)}` : '';
-  return `SalesHub_Sales_Plan_Status_${year}${suffix}_${currencyCode}.xlsx`;
+  return `${exportProductPrefix(productName)}_Sales_Plan_Status_${year}${suffix}_${currencyCode}.xlsx`;
 }
 
-export async function buildSalesPlanManagementExport(client: PrismaClient, actor: Actor & { name?: string }, selection: { year: number; currencyCode: string; userId: number | null }, generatedAt = new Date()) {
+export async function buildSalesPlanManagementExport(client: PrismaClient, actor: Actor & { name?: string }, selection: { year: number; currencyCode: string; userId: number | null }, generatedAt = new Date(), productName = 'SalesHub') {
   if (!exportAccess(actor)) throw new Error('Access denied');
   const { year, currencyCode, userId } = exportSelection({ year: String(selection.year), currencyCode: selection.currencyCode, userId: selection.userId === null ? null : String(selection.userId) });
   const [users, plans] = await Promise.all([
@@ -88,8 +89,8 @@ export async function buildSalesPlanManagementExport(client: PrismaClient, actor
   });
   const comparison = [...grouped.values()].map(row => ({ ...row, planned: row.hasPlannedRevenue ? amount(row.planned) : null, units: row.hasPlannedUnits ? amount(row.units) : null, pipeline: amount(row.pipeline)!, bestCase: amount(row.bestCase)!, commit: amount(row.commit)!, pipelineDifference: row.hasPlannedRevenue ? amount(row.pipeline.sub(row.planned)) : null, commitDifference: row.hasPlannedRevenue ? amount(row.commit.sub(row.planned)) : null, classification: row.matchStatus ?? (!row.hasPlan ? 'Unplanned Upside' : !row.hasPlannedRevenue ? 'Planned — Revenue Unavailable' : row.pipeline.isZero() ? 'No Current Pipeline' : row.pipeline.lt(row.planned) ? 'Plan Gap' : 'Pipeline Supports Plan') }));
   const scope = userId === null ? 'All planned reps' : repName(selectedUsers[0] ?? users.find(u => u.id === userId) ?? { firstName: 'Selected', lastName: 'rep' });
-  const filename = exportFilename(year, currencyCode, userId === null ? undefined : scope);
-  const workbook = salesPlanManagementWorkbook({ year, currencyCode, scope, generatedAt, generatedBy: actor.name ?? 'SalesHub user', missingPlanReps: userId === null ? population.missingPlanReps : 0, summary, approved, pipeline, comparison });
+  const filename = exportFilename(year, currencyCode, userId === null ? undefined : scope, productName);
+  const workbook = salesPlanManagementWorkbook({ year, currencyCode, scope, generatedAt, generatedBy: actor.name ?? `${productName} user`, missingPlanReps: userId === null ? population.missingPlanReps : 0, summary, approved, pipeline, comparison, productName });
   return { filename, workbook, data: { summary, approved, pipeline, comparison } };
 }
 

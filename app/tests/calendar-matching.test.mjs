@@ -132,7 +132,7 @@ test('external attendee without a Contact is UNMATCHED, including with an intern
   const fixture = evaluationClient({ attendees: [internal('owner@bixolonusa.com'), attendee('vendor@example.com')], organizerEmail: 'owner@bixolonusa.com' });
   const result = await evaluateWithDomain(fixture);
   assert.equal(result.status, 'UNMATCHED');
-  assert.deepEqual(result.explanations, ['No SalesHub Contact found for vendor@example.com']);
+  assert.deepEqual(result.explanations, ['No CRM Contact found for vendor@example.com']);
 });
 
 test('external organizer and incomplete attendee data are never classified INTERNAL', async () => {

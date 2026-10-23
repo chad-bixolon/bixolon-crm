@@ -20,7 +20,7 @@ test('main Sales Plan shortcut reuses the protected report export and selected m
   assert.match(main,/exportAccess\(actor\).*?\/reports\/sales-plan\/export\?year=\$\{year\}&currencyCode=\$\{currencyCode\}/);
   assert.match(main,/userId\?`&userId=\$\{userId\}`/);
   assert.ok(!/f\.(account|sku|status|search|history).*?\/reports\/sales-plan\/export/.test(main));
-  assert.match(route,/buildSalesPlanManagementExport\(prisma, actor, selection\)/);
+  assert.match(route,/buildSalesPlanManagementExport\(prisma, actor, selection, new Date\(\), \(await getBranding\(prisma\)\)\.productName\)/);
   assert.match(main,/action=\{.*?flex flex-wrap items-center gap-2/);
   for(const page of [report,sku])assert.match(page,/action=\{<div className="page-header-actions"/);
 });
@@ -40,6 +40,7 @@ test('export is restricted to effective management roles and validates scope',as
   const {db}=client();await assert.rejects(buildSalesPlanManagementExport(db,actor('READ_ONLY'),{year:2027,currencyCode:'USD',userId:null}),/Access denied/);
   assert.throws(()=>exportSelection({year:'2027',currencyCode:'USD',userId:'1x'}));
   assert.equal(exportFilename(2027,'USD','Ryan / Persaud'),'SalesHub_Sales_Plan_Status_2027_Ryan_Persaud_USD.xlsx');
+  assert.equal(exportFilename(2027,'USD',undefined,'Acme CRM'),'Acme_CRM_Sales_Plan_Status_2027_USD.xlsx');
 });
 
 test('management workbook uses active plans, live quarterly forecast, exact matches and one Account per product',async()=>{
@@ -98,4 +99,13 @@ test('selected rep, forecast filtering, and plan gap preserve scope',async()=>{
   const gap=client();gap.db.opportunity.findMany=async args=>{const filter=args.where.AND.find(x=>x.expectedCloseDate);return filter.ownerId.in.includes(1)&&filter.expectedCloseDate.gte.getUTCMonth()===0?[{...opportunities[0],products:[opportunities[0].products[0]]}]:[];};
   const below=await buildSalesPlanManagementExport(gap.db,actor('ADMIN'),{year:2027,currencyCode:'USD',userId:1});
   assert.equal(below.data.comparison.find(x=>x.sku==='XD5-40').classification,'Plan Gap');
+});
+
+test('management workbook uses the configured product name in exported copy',async()=>{
+  const {db}=client();
+  const result=await buildSalesPlanManagementExport(db,actor('ADMIN'),{year:2027,currencyCode:'USD',userId:1},new Date('2026-10-03T12:00:00Z'),'Acme CRM');
+  const summary=result.workbook.Sheets['Executive Summary'];
+  assert.equal(summary.A1.v,'Acme CRM');
+  assert.match(summary.B7.v,/Acme CRM Opportunities/);
+  assert.match(summary.B8.v,/Acme CRM Opportunity data/);
 });

@@ -39,7 +39,7 @@ export async function previewUserCsv(tx: Prisma.TransactionClient, actor: Actor,
     const matches = emails.get(email) ?? [], existing = matches[0];
     if (Object.values(v).some(value => value.length > userCsvLimits.cell || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffd]/u.test(value))) row.messages.push('A value is too long or contains invalid text. Maximum column length is 320 characters.');
     if ((counts.get(email) ?? 0) > 1) row.messages.push('Email appears more than once in this file.');
-    if (matches.length > 1) row.messages.push('Multiple SalesHub users have this email. Resolve the conflict before importing.');
+    if (matches.length > 1) row.messages.push('Multiple CRM users have this email. Resolve the conflict before importing.');
     if (existing?.archivedAt) row.messages.push('Archived users cannot be changed or reactivated by import.');
     if (existing) { row.id = existing.id; row.current = status(existing); }
     const active = v.active?.toLowerCase();

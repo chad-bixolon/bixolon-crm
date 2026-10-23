@@ -12,7 +12,7 @@ export const roleLabels: Record<UserRole, string> = {
 };
 
 export const roleDescriptions: Record<UserRole, string> = {
- ADMIN: 'Manages SalesHub configuration and administration.',
+ ADMIN: 'Manages CRM configuration and administration.',
  SALES_MANAGER: 'Manages Sales work, team oversight and may own customer business.',
  SALES: 'Manages customer Sales work and assigned opportunities.',
  SUPPORT_MANAGER: 'Support work plus team workload oversight.',

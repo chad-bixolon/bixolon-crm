@@ -80,7 +80,7 @@ export async function prepareTradeShowImport(client:PrismaClient,showId:number,b
   const suggested=ranked[0]??null;
   const destinationByHeader=new Map(suggested?.definition.columns.map(column=>[column.sourceHeader.toLowerCase().replace(/[^a-z0-9]/g,''),column.destination])??[]);
   const definition:MappingDefinition={version:1,columns:inspected.headers.map(sourceHeader=>({sourceHeader,destination:destinationByHeader.get(sourceHeader.toLowerCase().replace(/[^a-z0-9]/g,''))??null}))};
-  return {plan:null,mappingRequired:{title:'Column Mapping Required',helper:'This Trade Show export is not recognized yet. Map the spreadsheet columns to SalesHub fields, then preview the leads.',sheet:inspected.sheet,sha256:inspected.sha256,headerFingerprint:inspected.headerFingerprint,columns:inspected.columns,definition,suggested:suggested?{id:suggested.id,name:suggested.name,status:suggested.status}:null}};
+  return {plan:null,mappingRequired:{title:'Column Mapping Required',helper:'This Trade Show export is not recognized yet. Map the spreadsheet columns to CRM fields, then preview the leads.',sheet:inspected.sheet,sha256:inspected.sha256,headerFingerprint:inspected.headerFingerprint,columns:inspected.columns,definition,suggested:suggested?{id:suggested.id,name:suggested.name,status:suggested.status}:null}};
 }
 
 export async function previewMappedTradeShowImport(client:PrismaClient,showId:number,buffer:Buffer,filename:string,actor:Actor,definition:MappingDefinition,saveName:string|null){

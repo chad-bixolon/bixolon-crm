@@ -61,8 +61,8 @@ export default async function SupportInboxPage({ searchParams }: { searchParams:
           </div>}
         </div>
       </InboxDisclosure>
-      {result && result !== 'connected' && <p role="alert" className="mt-2 text-sm text-red-700">{result === 'declined' ? 'Google access was declined.' : result === 'invalid-state' ? 'Connection expired. Try again.' : result === 'disconnected' ? 'Mailbox disconnected from SalesHub.' : 'Connection failed. Ask an administrator to check the mailbox connection and access.'}</p>}
-      <p className="mt-1 text-xs text-slate-500" role="note">Gmail is read-only. SalesHub actions do not modify the mailbox.</p>
+      {result && result !== 'connected' && <p role="alert" className="mt-2 text-sm text-red-700">{result === 'declined' ? 'Google access was declined.' : result === 'invalid-state' ? 'Connection expired. Try again.' : result === 'disconnected' ? 'Mailbox disconnected from CRM.' : 'Connection failed. Ask an administrator to check the mailbox connection and access.'}</p>}
+      <p className="mt-1 text-xs text-slate-500" role="note">Gmail is read-only. CRM actions do not modify the mailbox.</p>
     </section>;
   };
   if (!mock && !status.connected) return <Content>{heading}{connectionPanel()}<p className="panel p-4 text-sm text-slate-600">An Administrator must connect Support Gmail to make recent messages available.</p></Content>;

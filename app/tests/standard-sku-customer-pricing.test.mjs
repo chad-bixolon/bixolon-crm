@@ -68,5 +68,5 @@ test('standard to ODM conversion is explicit; existing ODM and Special Configura
   assert.equal(noAccount.items[0].after.odmSubtype,'SPECIAL_CONFIGURATION');assert.ok(!noAccount.items[0].messages.some(message=>message.includes('Customer-specific ODM needs')));
   const specific=fixture({classification:'ODM'});specific.sku.odmSubtype='CUSTOMER_SPECIFIC';
   const missing=await planProductImport(specific.db,input(row('SRP-275IIIAOSG','','150.65')),undefined,review);
-  assert.match(missing.items[0].messages.join(' '),/Customer-specific ODM needs an existing SalesHub Account/);
+  assert.match(missing.items[0].messages.join(' '),/Customer-specific ODM needs an existing CRM Account/);
 });

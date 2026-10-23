@@ -4,16 +4,18 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { assertStorageKeyInPrefix, createDocumentStorageKey, createSupportAttachmentKey, readDocumentStorageConfig } from './document-storage-config';
+import { assertBrandingKey, assertStorageKeyInPrefix, createBrandingKey, createDocumentStorageKey, createSupportAttachmentKey, readDocumentStorageConfig } from './document-storage-config';
 
 export type DocumentObjectUpload = { storageKey: string; body: Uint8Array; mimeType: string };
 export type DocumentSignedUrlInput = { storageKey: string; fileName: string; mimeType: string };
 export interface DocumentStorage {
   createKey(): string;
   createSupportKey(): string;
+  createBrandingKey(): string;
   uploadDocumentObject(input: DocumentObjectUpload): Promise<void>;
   createSignedDocumentUrl(input: DocumentSignedUrlInput): Promise<string>;
   deleteDocumentObject(storageKey: string): Promise<void>;
+  readBrandingObject(storageKey: string): Promise<Uint8Array>;
 }
 
 const localRoot = '/tmp/saleshub-e2e-storage';
@@ -43,6 +45,7 @@ export const documentStorage: DocumentStorage = {
     return createDocumentStorageKey(localEnabled() ? 'e2e' : readDocumentStorageConfig().prefix);
   },
   createSupportKey() { return createSupportAttachmentKey(localEnabled() ? 'e2e' : readDocumentStorageConfig().prefix); },
+  createBrandingKey() { return createBrandingKey(localEnabled() ? 'e2e' : readDocumentStorageConfig().prefix); },
   async uploadDocumentObject(input) {
     if (localEnabled()) { assertStorageKeyInPrefix(input.storageKey, 'e2e'); await mkdir(localRoot, { recursive: true }); await writeFile(localPath(input.storageKey), input.body); return; }
     const { config, s3 } = client();
@@ -76,5 +79,15 @@ export const documentStorage: DocumentStorage = {
     const { config, s3 } = client();
     assertStorageKeyInPrefix(storageKey, config.prefix);
     await s3.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: storageKey }));
+  },
+  async readBrandingObject(storageKey) {
+    if (localEnabled()) { assertBrandingKey(storageKey, 'e2e'); return readFile(localPath(storageKey)); }
+    const { config, s3 } = client();
+    assertBrandingKey(storageKey, config.prefix);
+    const object = await s3.send(new GetObjectCommand({ Bucket: config.bucket, Key: storageKey }));
+    if (!object.Body) throw new Error('Branding object unavailable.');
+    const bytes = await object.Body.transformToByteArray();
+    if (bytes.length > 2 * 1024 * 1024) throw new Error('Branding object is too large.');
+    return bytes;
   },
 };

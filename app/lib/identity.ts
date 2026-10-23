@@ -1,4 +1,5 @@
 import type { PrismaClient, User } from '@prisma/client';
+import { trustedGoogleDomain } from './trusted-domains';
 
 export const GOOGLE_ISSUER = 'https://accounts.google.com';
 type GoogleProfile = { sub?: unknown; iss?: unknown; hd?: unknown; email?: unknown; email_verified?: unknown };
@@ -7,7 +8,7 @@ type IdentityResult = { user: User; identityId: number; reason?: never } | { rea
 export async function resolveGoogleIdentity(
   client: Pick<PrismaClient, 'externalIdentity' | 'user'>,
   profile: GoogleProfile,
-  workspaceDomain?: string,
+  workspaceDomains?: string | readonly string[],
 ): Promise<IdentityResult> {
   if (typeof profile.sub !== 'string' || !profile.sub ||
       typeof profile.email !== 'string' || !profile.email ||
@@ -15,7 +16,8 @@ export async function resolveGoogleIdentity(
       (profile.iss !== undefined && profile.iss !== GOOGLE_ISSUER && profile.iss !== 'accounts.google.com')) {
     return { reason: 'invalid' };
   }
-  if (!workspaceDomain || typeof profile.hd !== 'string' || profile.hd.toLowerCase() !== workspaceDomain.toLowerCase()) {
+  const domains = typeof workspaceDomains === 'string' ? [workspaceDomains.toLowerCase()] : workspaceDomains ?? [];
+  if (!trustedGoogleDomain(typeof profile.hd === 'string' ? profile.hd : undefined, profile.email, domains)) {
     return { reason: 'workspace' };
   }
 

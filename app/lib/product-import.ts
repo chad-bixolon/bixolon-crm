@@ -190,8 +190,8 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
       after.odmCustomer=customer || undefined;
       after.odmCustomerAccountId=(existingStandard && !reclassifying || ['CUSTOMER_SPECIFIC','SPECIAL_CONFIGURATION'].includes(after.odmSubtype ?? '')) ? rowAccount?.id ?? mapped?.id ?? (matches.length===1?matches[0].id:undefined) ?? relationshipAccount?.id ?? (!customer && !fromOdm?before?.odmCustomerAccountId:undefined) : undefined;
       if (after.catalogSource==='ODM') after.odmCustomerSourceName=customer || before?.odmCustomerSourceName;
-      if (after.odmSubtype==='CUSTOMER_SPECIFIC' && !after.odmCustomerAccountId) messages.push('Customer-specific ODM needs an existing SalesHub Account before import.');
-      if (existingStandard && !reclassifying && fromOdm && !after.odmCustomerAccountId && !skipped) messages.push('Customer pricing needs an existing SalesHub Account before import.');
+      if (after.odmSubtype==='CUSTOMER_SPECIFIC' && !after.odmCustomerAccountId) messages.push('Customer-specific ODM needs an existing CRM Account before import.');
+      if (existingStandard && !reclassifying && fromOdm && !after.odmCustomerAccountId && !skipped) messages.push('Customer pricing needs an existing CRM Account before import.');
       if (after.catalogSource==='ODM') {
       const base=review.baseSkus?.[reviewKey] ?? review.baseSkus?.[key] ?? (get('base_sku') || (review.applyRecommendations && !incomingOdmKeys.has(stem) ? uniqueBase?.sku.partNumber : undefined));
       if (base) {

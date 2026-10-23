@@ -42,6 +42,8 @@ does not query PostgreSQL; database health and migration status need separate mo
 | `SPACES_SECRET_ACCESS_KEY` | Encrypted runtime credential; never a build argument. |
 | `SPACES_PREFIX` | Environment boundary: `dev` locally and `prod` in production. |
 
+Generic Configuration v1 stores deployment branding in the singleton `DeploymentBranding` row and trusted sign-in domains in `TrustedSignInDomain`. Apply `20261023010000_generic_configuration_v1` before running this application version. With no branding row, the BIXOLON America, Inc. / SalesHub defaults and bundled BIXOLON logo apply. With no domain rows, `GOOGLE_WORKSPACE_DOMAIN` remains the initial trusted domain; keep it configured for fresh deployments. The first Admin domain change persists it, after which database rows are authoritative. The browser title and favicon are static BIXOLON assets in v1; sign-in, navigation, Dashboard, and Help use runtime branding. Branding logos use the existing private object store under its `branding/` prefix. Do not change production data during build or test validation.
+
 For the single App Platform container on a 22-connection DigitalOcean database,
 the runtime Prisma client defaults to `connection_limit=4` when the URL has no
 explicit limit. This leaves connections for migrations, administration, and

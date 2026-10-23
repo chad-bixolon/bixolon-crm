@@ -164,7 +164,7 @@ test('ODM import keeps LABEL category, resolves only an exact Account, and remai
   assert.equal(unresolved.counts.errors,1);
   assert.equal(unresolved.items[0].after.odmCustomerAccountId,undefined);
   assert.equal(unresolved.items[0].after.odmCustomerSourceName,'Unknown');
-  assert.match(unresolved.items[0].messages.join(' '),/needs an existing SalesHub Account/);
+  assert.match(unresolved.items[0].messages.join(' '),/needs an existing CRM Account/);
   const fresh=await planProductImport(db([model],categories,accounts),'model,part_number,catalog_source,odm_customer\nXT5-40,XT5-NEW,ODM,Unknown\n');
   assert.equal(fresh.counts.errors,1);
   assert.equal(fresh.items[0].classes.includes('ERROR'),true);

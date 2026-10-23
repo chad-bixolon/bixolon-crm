@@ -34,7 +34,7 @@ export function parseAssignedSalesRepUserId(form: FormData) {
   const raw = String(form.get('assignedSalesRepUserId') ?? '').trim();
   if (!raw) return { value: '', assignedSalesRepUserId: null as number | null };
   const id = positiveId(raw);
-  return id ? { value: raw, assignedSalesRepUserId: id } : { value: raw, error: 'Choose a valid SalesHub user.' };
+  return id ? { value: raw, assignedSalesRepUserId: id } : { value: raw, error: 'Choose a valid CRM user.' };
 }
 
 export async function updatePriceExceptionSalesRep(db: Db, priceExceptionId: number, actor: Actor, assignedSalesRepUserId: number | null) {

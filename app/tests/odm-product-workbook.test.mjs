@@ -124,7 +124,7 @@ test('blank customers are not carried forward and uncertain part numbers block r
   const blank=plan.items.find(item=>item.line===85);
   assert.equal(blank.source.customerCell,'');
   assert.equal(blank.after.odmCustomerAccountId,undefined);
-  assert.match(blank.messages.join(' '),/needs an existing SalesHub Account/);
+  assert.match(blank.messages.join(' '),/needs an existing CRM Account/);
   assert.match(blank.messages.join(' '),/Annotated source part number/);
   const multiline=plan.items.filter(item=>item.line===66);
   assert.equal(multiline.length,2);
@@ -238,7 +238,7 @@ test('classification and import decisions remain per SKU and repeats consolidate
   assert.ok(rdu.every(item=>!item.classes.includes('ERROR')));
   assert.ok(nsu.messages.every(message=>!message.includes('Choose an ODM subtype')));
   const unresolved=await planProductImport(fakeDb([{id:2,name:'UPS'}]),csv,undefined,review);
-  assert.match(unresolved.items.find(item=>item.line===3&&item.after.partNumber==='SRP-S300LOEK/RDU').messages.join(' '),/needs an existing SalesHub Account/);
+  assert.match(unresolved.items.find(item=>item.line===3&&item.after.partNumber==='SRP-S300LOEK/RDU').messages.join(' '),/needs an existing CRM Account/);
   assert.equal(unresolved.items.find(item=>item.line===3&&item.after.partNumber==='SRP-S300LOEK/NSU').classes.includes('ERROR'),false);
   const createdSkus=[];
   const links=[];
