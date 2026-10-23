@@ -113,6 +113,13 @@ test('Opportunity save records Project link and unlink once, with preserved name
   assert.deepEqual(db.events, []);
 });
 
+test('Opportunity edit preserves hidden Project links when Projects is unavailable', async () => {
+  const db = fixture({ projects: [20] });
+  await saveOpportunity(db.client, input(undefined, [], []), 5, actor, undefined, { projects: true, products: true });
+  assert.deepEqual([...db.state.projects], [20]);
+  assert.equal(db.events.some(event => event.eventType === 'PROJECT_UNLINKED'), false);
+});
+
 test('history failure rolls back relationship mutations with the Opportunity save', async () => {
   const db = fixture({ failHistory: true });
   await assert.rejects(saveOpportunity(db.client, input([participant(1, 'DISTRIBUTOR'), participant(3, 'OEM')]), 5, actor), /history unavailable/);

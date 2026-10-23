@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
@@ -13,6 +14,7 @@ import { assertLiveSupportGmailRequest } from '@/lib/support-gmail-config';
 import { SUPPORT_GMAIL_STATE_COOKIE, SUPPORT_GMAIL_VERIFIER_COOKIE, supportGmailCookieOptions, disconnectSupportGmail, beginSupportGmailAuthorization } from '@/lib/support-gmail-connection';
 
 export async function connectSupportGmail() {
+  await assertModuleEnabled('SUPPORT_INBOX');
   const actor = await requireMutation('support-mailbox.manage');
   assertInboxActor(actor);
   assertLiveSupportGmailRequest((await headers()).get('host'));
@@ -26,6 +28,7 @@ export async function connectSupportGmail() {
 }
 
 export async function disconnectInboxGmail() {
+  await assertModuleEnabled('SUPPORT_INBOX');
   const actor = await requireMutation('support-mailbox.manage');
   assertInboxActor(actor);
   assertLiveSupportGmailRequest((await headers()).get('host'));
@@ -42,6 +45,7 @@ function safeInboxError(error: unknown) {
   return /^(Choose a |Support Case |This email |This Gmail thread |Gmail message |Support Gmail |Connect Gmail |Invalid Support inbox |Invalid or expired Support email |This message )/.test(value) ? value : 'Could not save this inbox action. Try again.';
 }
 export async function linkInboxMessage(_state: InboxActionState, form: FormData): Promise<InboxActionState> {
+  await assertModuleEnabled('SUPPORT_INBOX');
   const actor = await requireMutation('support-inbox.write');
   assertInboxActor(actor);
   let linkedCaseId: number;
@@ -70,6 +74,7 @@ export async function linkInboxMessage(_state: InboxActionState, form: FormData)
 }
 
 export async function ignoreInboxMessage(_state: InboxActionState, form: FormData): Promise<InboxActionState> {
+  await assertModuleEnabled('SUPPORT_INBOX');
   const actor = await requireMutation('support-inbox.write');
   assertInboxActor(actor);
   try {
@@ -85,6 +90,7 @@ export async function ignoreInboxMessage(_state: InboxActionState, form: FormDat
 }
 
 export async function restoreInboxMessage(_state: InboxActionState, form: FormData): Promise<InboxActionState> {
+  await assertModuleEnabled('SUPPORT_INBOX');
   const actor = await requireMutation('support-inbox.write');
   assertInboxActor(actor);
   try {

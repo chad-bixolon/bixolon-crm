@@ -14,11 +14,13 @@ import { eligibleUserWhere } from '@/lib/assignment-eligibility';
 import { can } from '@/lib/authorization';
 import { tradeShowLeadReadWhere } from '@/lib/trade-shows';
 import { canViewTradeShowFollowUpQueue, loadTradeShowQueue, type TradeShowQueueFilters } from '@/lib/trade-show-queue';
+import { getModuleAvailability } from '@/lib/module-availability';
 
 export const dynamic = 'force-dynamic';
 const statusLabels = { NEW: 'New', CONTACTED: 'Contacted', QUALIFIED: 'Qualified', CONVERTED: 'Converted', DISQUALIFIED: 'Disqualified' };
 export default async function MyTradeShowLeadsPage({ searchParams }: { searchParams: Promise<TradeShowQueueFilters> }) {
   const actor = await currentUser();
+  const availability = await getModuleAvailability();
   if (!canViewTradeShowFollowUpQueue(actor)) redirect('/access-denied');
   const f = await searchParams, now = new Date();
   const [{ leads, count, page, pages }, shows, reps] = await Promise.all([
@@ -50,7 +52,7 @@ export default async function MyTradeShowLeadsPage({ searchParams }: { searchPar
       <div className="filter-actions"><button className="btn-filter-primary">Filter</button><Link className="btn-filter-secondary" href={clear}>Clear</Link></div>
     </form>
     <section className="panel min-w-0 max-w-full overflow-hidden"><TableScroll label="Trade Show follow-up queue"><table className="w-full min-w-[960px] text-left text-sm"><thead className="border-b bg-slate-50 text-xs uppercase text-slate-500"><tr>{['Lead / CRM','Trade Show','Lead status','Lead owner','Lead follow-up metadata','Follow-up Task'].map(label => <th className="px-4 py-3" key={label}>{label}</th>)}</tr></thead><tbody className="divide-y">{leads.map(lead => <tr className="align-top even:bg-slate-50/60 hover:bg-orange-50/50" key={lead.id}>
-      <td className="max-w-64 break-words px-4 py-3"><Link className="font-semibold text-orange-800 underline" href={`/trade-shows/${lead.tradeShowId}/leads/${lead.id}`}>{lead.firstName} {lead.lastName}</Link><div>{lead.sourceCompany}</div><div className="mt-1 space-y-1 text-xs">{lead.account && can(actor, 'accounts.read') && <Link className="block text-orange-800 underline" href={`/accounts/${lead.account.id}`}>{lead.account.name}</Link>}{lead.contact && can(actor, 'contacts.read') && <Link className="block text-orange-800 underline" href={`/contacts/${lead.contact.id}`}>{lead.contact.firstName} {lead.contact.lastName}</Link>}{lead.convertedOpportunity && can(actor, 'opportunities.read') && <Link className="block text-orange-800 underline" href={`/opportunities/${lead.convertedOpportunity.id}`}>{lead.convertedOpportunity.name}</Link>}</div></td>
+      <td className="max-w-64 break-words px-4 py-3"><Link className="font-semibold text-orange-800 underline" href={`/trade-shows/${lead.tradeShowId}/leads/${lead.id}`}>{lead.firstName} {lead.lastName}</Link><div>{lead.sourceCompany}</div><div className="mt-1 space-y-1 text-xs">{lead.account && can(actor, 'accounts.read') && <Link className="block text-orange-800 underline" href={`/accounts/${lead.account.id}`}>{lead.account.name}</Link>}{lead.contact && can(actor, 'contacts.read') && <Link className="block text-orange-800 underline" href={`/contacts/${lead.contact.id}`}>{lead.contact.firstName} {lead.contact.lastName}</Link>}{availability.effective.has('OPPORTUNITIES') && lead.convertedOpportunity && can(actor, 'opportunities.read') && <Link className="block text-orange-800 underline" href={`/opportunities/${lead.convertedOpportunity.id}`}>{lead.convertedOpportunity.name}</Link>}</div></td>
       <td className="max-w-48 break-words px-4 py-3"><Link className="text-orange-800 underline" href={`/trade-shows/${lead.tradeShowId}`}>{lead.tradeShow.name}</Link></td>
       <td className="px-4 py-3">{statusLabels[lead.status]}</td><td className="px-4 py-3">{lead.assignedSalesRep ? `${lead.assignedSalesRep.firstName} ${lead.assignedSalesRep.lastName}` : 'Unassigned'}</td>
       <td className="px-4 py-3 text-xs">Lead follow-up: {date(lead.followUpAt)}{lead.lastContactedAt && <div className="mt-1 text-slate-500">Last contact: {date(lead.lastContactedAt)}</div>}</td>

@@ -4,6 +4,9 @@ import { can, opportunityScope, taskScope } from './authorization';
 import { scopedPriceExceptionWhere } from './price-exception-visibility';
 import { supportCaseReadWhere } from './support-cases';
 import { calendarLocalInput, calendarLocalToUtc } from './calendar-time';
+import { getModuleAvailability, readModules } from './module-availability';
+import { moduleForNotificationCategory } from './module-policy';
+import { prisma } from './prisma';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 export type NotificationView = 'active' | 'unread' | 'all' | 'dismissed' | 'resolved';
@@ -48,9 +51,12 @@ async function surfacedPreferenceWhere(db: Db, userId: number): Promise<Prisma.N
 
 /** Entity permission is checked on reads as well as at the normal deep link. */
 async function visibleEntityWhere(db: Db, actor: Actor, category: NotificationCategory = 'all'): Promise<Prisma.NotificationWhereInput> {
+  const availability = db === prisma ? await getModuleAvailability() : await readModules(db as PrismaClient);
   const types = category === 'all' ? ['PRICE_EXCEPTION', 'TASK', 'OPPORTUNITY', 'SUPPORT_CASE'] as const : [category === 'price-exceptions' ? 'PRICE_EXCEPTION' : category === 'tasks' ? 'TASK' : category === 'support' ? 'SUPPORT_CASE' : 'OPPORTUNITY'] as const;
   const clauses: Prisma.NotificationWhereInput[] = [];
   for (const entityType of types) {
+    const feature = moduleForNotificationCategory(entityType);
+    if (feature && !availability.effective.has(feature)) continue;
     const permission = entityType === 'PRICE_EXCEPTION' ? 'pricing.read' : entityType === 'TASK' ? 'tasks.read' : entityType === 'SUPPORT_CASE' ? 'support-cases.read' : 'opportunities.read';
     if (!can(actor, permission) && !(entityType === 'TASK' && can(actor, 'support-work.write'))) continue;
     const candidates = await db.notification.findMany({ where: { userId: actor.id, entityType }, select: { entityId: true }, distinct: ['entityId'] });

@@ -23,8 +23,8 @@ export function CalendarMatchForm({ eventId, options, initial }: { eventId: numb
   }
   return <RecoverableActionForm action={saveCalendarSelection} className="panel grid gap-4 p-5 sm:grid-cols-2"><input type="hidden" name="eventId" value={eventId}/>
     <EntityPicker type="account" label="Account" name="accountId" value={account} onChange={selectAccount}/>
-    <EntityPicker type="opportunity" label="Opportunity" name="opportunityId" value={opportunity} filters={{ accountId: account?.id }} disabled={!account} onChange={item => { setOpportunity(item); if (project && item && !project.opportunityIds?.includes(item.id)) setProject(null); }}/>
-    <EntityPicker type="project" label="Project" name="projectId" value={project} filters={{ accountId: account?.id, opportunityId: opportunity?.id }} disabled={!account} onChange={setProject}/>
+    {options.optionalModules.opportunities ? <EntityPicker type="opportunity" label="Opportunity" name="opportunityId" value={opportunity} filters={{ accountId: account?.id }} disabled={!account} onChange={item => { setOpportunity(item); if (project && item && !project.opportunityIds?.includes(item.id)) setProject(null); }}/> : <input type="hidden" name="opportunityId" value={initial.opportunityId ?? ''}/>}
+    {options.optionalModules.projects ? <EntityPicker type="project" label="Project" name="projectId" value={project} filters={{ accountId: account?.id, opportunityId: opportunity?.id }} disabled={!account} onChange={setProject}/> : <input type="hidden" name="projectId" value={initial.projectId ?? ''}/>}
     <ActivityContactPicker contacts={knownContacts} selectedIds={contactIds} onChange={setContactIds} onFound={contact => setKnownContacts(old => old.some(row => row.id === contact.id) ? old : [...old, contact])} accountId={account?.id ?? 0}/>
     <div className="sm:col-span-2"><button className="btn-primary">Save match</button></div>
   </RecoverableActionForm>;

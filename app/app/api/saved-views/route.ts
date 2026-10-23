@@ -4,6 +4,7 @@ import { currentUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { canUseSavedViews, isSavedViewRoute, normalizeSavedQuery } from '@/lib/saved-views';
 import { listSavedViews, savedStateForDb, setSavedViewDefault } from '@/lib/saved-view-store';
+import { getModuleAvailability, moduleForSavedView } from '@/lib/module-availability';
 
 const error = (message: string, status = 400) => NextResponse.json({ error: message }, { status });
 function route(value: unknown) { return typeof value === 'string' && isSavedViewRoute(value) ? value : null; }
@@ -22,6 +23,8 @@ async function body(request: NextRequest) {
 async function actorFor(routeKey: string) {
   const actor = await currentUser();
   if (!isSavedViewRoute(routeKey) || !canUseSavedViews(actor, routeKey)) return null;
+  const feature = moduleForSavedView(routeKey);
+  if (feature && !(await getModuleAvailability()).effective.has(feature)) return null;
   return actor;
 }
 function responseViews(routeKey: keyof typeof import('@/lib/saved-views').savedViewRoutes, actor: Awaited<ReturnType<typeof currentUser>>) {

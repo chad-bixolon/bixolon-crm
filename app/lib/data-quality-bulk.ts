@@ -7,6 +7,7 @@ import { validateBulkRequest, type BulkRequest } from './bulk-action-contract';
 import { assertVersions } from './bulk-actions';
 import { qualityBulkSupported, qualityPage, qualityRows, qualityWhere } from './data-quality';
 import { assignOpportunityOwnerInTransaction } from './opportunities';
+import { readModules, qualityIssueAvailable } from './module-availability';
 
 export type QualityBulkScope = { issue: string; q: string; page: number };
 
@@ -16,6 +17,7 @@ export async function bulkQualityOwners(db: PrismaClient, actor: Actor, scope: Q
   const ids = validateBulkRequest(request);
   if (!scope || !qualityBulkSupported(scope.issue) || request.action !== 'assign') throw new Error('This check requires individual review.');
   const issue = scope.issue;
+  if (!qualityIssueAvailable(issue, await readModules(db))) throw new Error('Data Quality check unavailable.');
   const account = issue !== 'opportunity-owner';
   if (typeof scope.q !== 'string' || scope.q.length > 100 || qualityPage(String(scope.page)) !== scope.page) throw new Error('Refresh the list and select again.');
   const ownerId = /^\d+$/.test(request.value) ? Number(request.value) : 0;

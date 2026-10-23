@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { revalidatePath } from 'next/cache';
 import type { SalesQuarter } from '@prisma/client';
 import { requireMutation } from '@/lib/current-user';
@@ -11,6 +12,7 @@ function safeMessage(error: unknown) {
     ? message : 'Could not capture the Forecast Snapshot. No partial snapshot was saved. Try again.';
 }
 export async function previewForecastAction(input: { sourceRunId: number; year: number; quarter: SalesQuarter }) {
+  await assertModuleEnabled('FORECASTING');
   const actor = await requireMutation('configuration.manage');
   try {
     const result = await previewForecastSnapshot(prisma, actor, input);
@@ -24,6 +26,7 @@ export async function previewForecastAction(input: { sourceRunId: number; year: 
   } catch (error) { return { error: safeMessage(error) }; }
 }
 export async function confirmForecastAction(token: string, confirmed: boolean) {
+  await assertModuleEnabled('FORECASTING');
   const actor = await requireMutation('configuration.manage');
   try {
     const run = await captureForecastSnapshot(prisma, actor, verifyForecastPreview(token, actor.id, process.env.AUTH_SECRET ?? ''), confirmed);

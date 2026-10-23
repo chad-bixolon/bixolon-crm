@@ -11,6 +11,9 @@ export type MarketingAudienceConfig = {
   assignedSalesRepId?:number; referralPartnerId?:number; converted?:boolean; productInterest?:string; competitorId?:number;
 };
 export const defaultAudienceConfig:MarketingAudienceConfig={preference:"OPTED_IN"};
+export function audienceRequiresTradeShows(config:MarketingAudienceConfig) {
+  return ['tradeShowId','showDateFrom','showDateTo','leadStatus','routing','assignedSalesRepId','referralPartnerId','converted','productInterest','competitorId'].some(key => config[key as keyof MarketingAudienceConfig] !== undefined);
+}
 const keys=new Set<keyof MarketingAudienceConfig>(["search","title","preference","emailPresence","accountId","industry","businessRole","territory","accountOwnerId","activeAccount","tradeShowId","showDateFrom","showDateTo","leadStatus","routing","assignedSalesRepId","referralPartnerId","converted","productInterest","competitorId"]);
 const idKeys=new Set(["accountId","accountOwnerId","tradeShowId","assignedSalesRepId","referralPartnerId","competitorId"]);
 const textKeys=new Set(["search","title","industry","territory","productInterest"]);
@@ -104,14 +107,14 @@ export function contactsCsv(rows:Prisma.ContactGetPayload<{include:typeof audien
   return [header,...lines].map(row=>row.map(csvCell).join(",")).join("\r\n")+"\r\n";
 }
 
-export async function audienceBuilderOptions(client:PrismaClient, selected: { accountId?: number; referralPartnerId?: number } = {}){
+export async function audienceBuilderOptions(client:PrismaClient, selected: { accountId?: number; referralPartnerId?: number } = {}, tradeShowsEnabled=true){
   const [accounts,industries,territories,users,partners,tradeShows,competitors]=await Promise.all([
     client.account.findMany({where:{id:selected.accountId ?? -1},select:{id:true,name:true}}),
     client.industry.findMany({where:{active:true},orderBy:[{sortOrder:"asc"},{name:"asc"}],select:{code:true,name:true}}),
     client.territory.findMany({where:{active:true},orderBy:[{sortOrder:"asc"},{name:"asc"}],select:{code:true,name:true}}),
     client.user.findMany({where:{active:true,archivedAt:null},orderBy:[{lastName:"asc"},{firstName:"asc"}],select:{id:true,firstName:true,lastName:true}}),
     client.account.findMany({where:{id:selected.referralPartnerId ?? -1},select:{id:true,name:true}}),
-    client.tradeShow.findMany({where:{archivedAt:null},orderBy:[{startDate:"desc"},{name:"asc"}],select:{id:true,name:true,startDate:true}}),
+    tradeShowsEnabled?client.tradeShow.findMany({where:{archivedAt:null},orderBy:[{startDate:"desc"},{name:"asc"}],select:{id:true,name:true,startDate:true}}):[],
     client.competitorOption.findMany({where:{active:true},orderBy:[{sortOrder:"asc"},{name:"asc"}],select:{id:true,name:true}}),
   ]);
   return {accounts:accounts.map(x=>({value:x.id,label:x.name})),industries:industries.map(x=>({value:x.code,label:x.name})),territories:territories.map(x=>({value:x.code,label:x.name})),users:users.map(x=>({value:x.id,label:`${x.firstName} ${x.lastName}`})),partners:partners.map(x=>({value:x.id,label:x.name})),tradeShows:tradeShows.map(x=>({value:x.id,label:`${x.name}${x.startDate?` (${x.startDate.toISOString().slice(0,4)})`:""}`})),competitors:competitors.map(x=>({value:x.id,label:x.name}))};

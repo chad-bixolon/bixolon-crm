@@ -43,7 +43,7 @@ const render = async params => renderToStaticMarkup(await NotificationsPage({ se
 test('Notification Center groups server filters and uses polished wording', async () => {
   const html = await render({ view: 'active' });
   assert.match(html, /<p>Notifications<\/p><h1>Notification Center<\/h1>/);
-  assert.match(html, /Stay on top of tasks, opportunities, price exceptions, and Support Cases that need your attention\./);
+  assert.match(html, /Stay on top of work that needs your attention\./);
   assert.match(html, /aria-label="Notification filters"/);
   assert.match(html, />Status<\/h2>.*aria-label="Notification state"/);
   assert.match(html, />Category<\/h2>.*aria-label="Notification category"/);

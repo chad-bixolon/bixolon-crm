@@ -64,16 +64,16 @@ export async function correctLeadSource(client: PrismaClient, target: { contactI
   });
 }
 
-export async function contactAttribution(client: PrismaClient, contactId: number) {
+export async function contactAttribution(client: PrismaClient, contactId: number, tradeShowsEnabled = true, opportunitiesEnabled = true) {
   const contact = await client.contact.findUniqueOrThrow({ where: { id: contactId }, select: { leadSource: { select: { name: true } } } });
-  const influences = await client.campaignInfluence.findMany({ where: { voidedAt: null, OR: [{ contactId }, { tradeShowLead: { contactId } }] }, include: { campaign: { select: { name: true, archivedAt: true } } }, orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }] });
+  const influences = await client.campaignInfluence.findMany({ where: { voidedAt: null, ...(tradeShowsEnabled ? {} : { tradeShowLeadId: null, campaign: { tradeShowId: null } }), ...(opportunitiesEnabled ? {} : { opportunityId: null }), OR: [{ contactId }, ...(tradeShowsEnabled ? [{ tradeShowLead: { contactId } }] : [])] }, include: { campaign: { select: { name: true, archivedAt: true } } }, orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }] });
   return { leadSource: contact.leadSource?.name ?? null, influences };
 }
 
-export async function opportunityAttribution(client: PrismaClient, opportunityId: number, contactIds: number[], originatingLeadId: number | null) {
+export async function opportunityAttribution(client: PrismaClient, opportunityId: number, contactIds: number[], originatingLeadId: number | null, tradeShowsEnabled = true) {
   const contacts = contactIds.length ? await client.contact.findMany({ where: { id: { in: contactIds } }, select: { id: true, leadSource: { select: { name: true } } } }) : [];
-  const lead = originatingLeadId ? await client.tradeShowLead.findUnique({ where: { id: originatingLeadId }, select: { leadSource: { select: { name: true } } } }) : null;
-  const influences = await client.campaignInfluence.findMany({ where: { voidedAt: null, OR: [{ opportunityId }, ...(originatingLeadId ? [{ tradeShowLeadId: originatingLeadId }] : []), ...(contactIds.length ? [{ contactId: { in: contactIds } }, { tradeShowLead: { contactId: { in: contactIds } } }] : [])] }, include: { campaign: { select: { name: true, archivedAt: true } } }, orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }] });
+  const lead = tradeShowsEnabled && originatingLeadId ? await client.tradeShowLead.findUnique({ where: { id: originatingLeadId }, select: { leadSource: { select: { name: true } } } }) : null;
+  const influences = await client.campaignInfluence.findMany({ where: { voidedAt: null, ...(tradeShowsEnabled ? {} : { tradeShowLeadId: null, campaign: { tradeShowId: null } }), OR: [{ opportunityId }, ...(tradeShowsEnabled && originatingLeadId ? [{ tradeShowLeadId: originatingLeadId }] : []), ...(contactIds.length ? [{ contactId: { in: contactIds } }, ...(tradeShowsEnabled ? [{ tradeShowLead: { contactId: { in: contactIds } } }] : [])] : [])] }, include: { campaign: { select: { name: true, archivedAt: true } } }, orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }] });
   const names = [...new Set([lead?.leadSource?.name, ...contacts.map(c => c.leadSource?.name)].filter((name): name is string => !!name))];
   return { leadSource: names.join(', ') || null, influences };
 }

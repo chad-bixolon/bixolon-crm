@@ -5,6 +5,8 @@ SalesHub uses eight predefined functional roles: Administrator, Sales Manager, S
 ## Three separate decisions
 
 1. **Capability:** `lib/authorization.ts` owns `predefinedCapabilities`. `can` rejects missing, inactive, and archived actors, then checks the role's explicit capability set. `requirePermission` protects page reads; `requireMutation` protects server actions; `assertPermission` protects services accepting an actor. Existing module permission names remain compatible. No write permission implicitly grants another capability.
+
+Optional module visibility adds a separate deployment-availability condition. The centralized policy resolves configured choices and required parent modules before normal pages, APIs, mutations, search, and reports expose an optional feature. It does not rewrite this capability matrix or record scopes. `deployment.manage` remains true-Admin-only, so delegated User Administration, Executive, and other roles cannot change Modules. See [Optional Module Visibility v1](optional-module-visibility-v1.md).
 2. **Record policy:** after the capability check, persisted ownership, assignment, relationships, and operational state determine whether the actor may change a specific record. Read scopes and edit scopes are independent. `taskEditWhere` and `assertTaskEdit` centralize general Task edit responsibility. Project and Opportunity policies retain their existing ownership rules.
 3. **Eligibility:** `lib/assignment-eligibility.ts` defines named business populations, without consulting `can`. `eligibleUserWhere` supplies queries; `eligibleUser` validates selected users. Current eligibility applies to new assignments, not historical attribution.
 

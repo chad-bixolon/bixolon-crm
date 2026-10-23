@@ -4,9 +4,11 @@ import { currentUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { bulkSupportCases } from '@/lib/bulk-actions';
 import type { BulkRequest, BulkResult } from '@/lib/bulk-action-contract';
+import { assertModuleEnabled } from '@/lib/module-availability';
 
 export async function changeCases(request: BulkRequest): Promise<BulkResult> {
   try {
+    await assertModuleEnabled('SUPPORT_CASES');
     const count = await bulkSupportCases(prisma, await currentUser(), request);
     revalidatePath('/support/cases');
     for (const record of request.records) revalidatePath(`/support/cases/${record.id}`);

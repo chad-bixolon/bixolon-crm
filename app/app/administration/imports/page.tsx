@@ -2,6 +2,7 @@ import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import Link from 'next/link';
 import { Content, PageHeader } from '@/components/shell';
 import { requirePermission } from '@/lib/current-user';
+import { getModuleAvailability, moduleForPath } from '@/lib/module-availability';
 
 const workflows = [
   {
@@ -33,10 +34,11 @@ const workflows = [
 
 export default async function ImportsPage() {
   await requirePermission('configuration.manage');
+  const availability = await getModuleAvailability();
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.administration} title="Imports" description="Choose the records you want to import." action={<Link className="btn-secondary" href="/administration">Administration</Link>}/>
     <div className="grid gap-5 md:grid-cols-2">
-      {workflows.map(({ title, href, description }) => <Link className="panel block p-6 hover:border-orange-300 hover:bg-orange-50" href={href} key={href}>
+      {workflows.filter(({href}) => { const feature=moduleForPath(href); return !feature || availability.effective.has(feature); }).map(({ title, href, description }) => <Link className="panel block p-6 hover:border-orange-300 hover:bg-orange-50" href={href} key={href}>
         <h2 className="text-lg font-semibold">{title}</h2>
         <p className="mt-2 text-sm text-slate-600">{description}</p>
         <span className="mt-4 inline-block text-sm font-semibold text-orange-800">Open →</span>

@@ -7,6 +7,48 @@ import { getSettings } from './configuration';
 import { projectReadWhere } from './projects';
 import { projectStatusLabels } from './project-labels';
 import { canViewPriceException } from './price-exception-visibility';
+import { getModuleAvailability, readModules, reportTypeAvailable, type ModuleAvailability } from './module-availability';
+import { prisma } from './prisma';
+
+async function assertReportModule(client: PrismaClient, type: string) {
+  const availability = client === prisma ? await getModuleAvailability() : await readModules(client);
+  if (!reportTypeAvailable(type, availability)) throw new Error('Report unavailable.');
+  return availability;
+}
+
+const tradeShowOpportunityFields = new Set(['stageId','forecastCategory','currency','opportunity','opportunityOwner','opportunityStage','opportunityValue','weightedValue','opportunityCount','pipeline','weightedPipeline','commit','closedWonValue','closedWonOpportunityCount']);
+export function withoutTradeShowOpportunityFields(input: unknown): unknown {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return input;
+  const config = input as Record<string, unknown>;
+  if (!Array.isArray(config.filters) || !Array.isArray(config.sort) || !Array.isArray(config.columns) || !Array.isArray(config.metrics)) return input;
+  const columns = config.columns.filter(field => !tradeShowOpportunityFields.has(String(field)));
+  const metrics = config.metrics.filter(field => !tradeShowOpportunityFields.has(String(field)));
+  return { ...config,
+    filters: config.filters.filter(field => !field || typeof field !== 'object' || !tradeShowOpportunityFields.has(String((field as Record<string, unknown>).field))),
+    groupBy: tradeShowOpportunityFields.has(String(config.groupBy)) ? null : config.groupBy,
+    sort: config.sort.filter(field => !field || typeof field !== 'object' || !tradeShowOpportunityFields.has(String((field as Record<string, unknown>).field))),
+    columns: columns.length ? columns : ['tradeShow','lead','leadStatus'],
+    metrics: metrics.length ? metrics : ['totalLeads'],
+  };
+}
+
+/** Remove optional relationship controls from a still-available report without editing its saved definition. */
+export function visibleReportConfiguration(type: string, config: ReportConfiguration, availability: ModuleAvailability): ReportConfiguration {
+  if (type === 'TRADE_SHOW' && !availability.effective.has('OPPORTUNITIES'))
+    return validateReportConfiguration(type, withoutTradeShowOpportunityFields(config));
+  const hidden = new Set<string>();
+  if (!availability.effective.has('PRODUCTS') && ['PIPELINE','CHANNEL_PARTNER','PROJECT_INITIATIVE'].includes(type)) {
+    for (const field of ['productCategoryId','productId','skuId','productCategory','productCategories']) hidden.add(field);
+  }
+  if (!availability.effective.has('PROJECTS') && ['PIPELINE','CHANNEL_PARTNER','PRODUCT_PERFORMANCE'].includes(type)) {
+    for (const field of ['projectId','project','projects']) hidden.add(field);
+  }
+  if (!availability.effective.has('PRICE_EXCEPTIONS') && type === 'PRODUCT_PERFORMANCE') hidden.add('peCode');
+  if (!hidden.size) return config;
+  return { ...config, filters: config.filters.filter(filter => !hidden.has(filter.field)),
+    groupBy: hidden.has(config.groupBy ?? '') ? null : config.groupBy,
+    columns: config.columns.filter(column => !hidden.has(column)) };
+}
 
 export const reportTypes = ['PIPELINE','ACCOUNT_ACTIVITY','PRODUCT_PERFORMANCE','CHANNEL_PARTNER','PROJECT_INITIATIVE','PRICE_EXCEPTION_USAGE','TRADE_SHOW'] as const;
 export type CuratedReportType = typeof reportTypes[number];
@@ -289,8 +331,9 @@ function projectGroups(project:ProjectDbRow, groupBy:string|null):{key:string;la
   return map.size?[...map.values()]:one('none','No Opportunities');
 }
 export async function executeProjectInitiativeReport(client:PrismaClient,actor:Actor,rawConfig:unknown,now=new Date()):Promise<ProjectReportResult>{
+  const availability=await assertReportModule(client,'PROJECT_INITIATIVE');
   if(!canRunReportType(actor,'PROJECT_INITIATIVE')||!can(actor,'projects.read'))throw new Error('Access denied');
-  const config=validateReportConfiguration('PROJECT_INITIATIVE',rawConfig);
+  const config=visibleReportConfiguration('PROJECT_INITIATIVE',validateReportConfiguration('PROJECT_INITIATIVE',rawConfig),availability);
   const projectClauses:Prisma.ProjectWhereInput[]=[operationalProjectWhere,projectReadWhere(actor)];
   const opportunityFilters=config.filters.filter(f=>['ownerId','stageId','competitorId','forecastCategory','status','closeDate','productCategoryId','currency'].includes(f.field));
   for(const filter of config.filters){const value=filter.value;
@@ -319,7 +362,7 @@ export async function executeProjectInitiativeReport(client:PrismaClient,actor:A
   for(const project of projects)for(const group of projectGroups(project,config.groupBy)){const found=groups.get(group.key)??{key:group.key,label:group.label,projects:[],items:[],contributions:[]};found.projects.push(project);found.items.push(...group.items);found.contributions.push({projectId:project.id,amounts:projectMetrics([project],group.items),opportunityIds:group.items.map(item=>item.id)});groups.set(group.key,found);}
   const sort=config.sort[0];
   const sorted=[...projects].sort((a,b)=>{const read=(p:ProjectDbRow)=>sort?.field==='projectOwner'?projectName(p.owner):sort?.field==='projectStatus'?p.status:sort?.field==='targetEndDate'?(p.targetEndDate?.getTime()??Number.MAX_SAFE_INTEGER):sort?.field==='opportunityCount'?p.opportunities.length:sort?.field==='pipeline'?p.opportunities.reduce((v,l)=>v+opportunityTotal(l.opportunity.products).toNumber(),0):p.name;const x=read(a),y=read(b),n=x<y?-1:x>y?1:0;return (sort?.direction==='desc'?-n:n)||a.id-b.id;});
-  return {reportType:'PROJECT_INITIATIVE',summary:projectMetrics(projects,all),groups:[...groups.values()].sort((a,b)=>a.label.localeCompare(b.label)).map(group=>({key:group.key,label:group.label,metrics:projectMetrics(group.projects,group.items),contributions:group.contributions})),rows:sorted.map(project=>{const items=uniqueOpportunities(project.opportunities.map(link=>link.opportunity));return {id:project.id,project:project.name,projectOwner:projectName(project.owner),projectStatus:projectStatusLabels[project.status],primaryAccount:project.primaryAccount?{id:project.primaryAccount.id,name:project.primaryAccount.name}:null,participantAccounts:project.participants.map(p=>({id:p.accountId,name:p.account.name})),startDate:project.startDate?.toISOString().slice(0,10)??null,targetEndDate:project.targetEndDate?.toISOString().slice(0,10)??null,opportunityCount:items.length,amounts:projectMetrics([project],items),productCategories:[...new Set(items.flatMap(item=>item.products.map(p=>p.product.category?.name??'No Product Category')))].join(', ')||'—',partnerAccounts:[...new Map(items.flatMap(item=>item.participants.filter(p=>p.roles.some(r=>channelPartnerParticipantRoles.includes(r.role as typeof channelPartnerParticipantRoles[number]))).map(p=>[p.accountId,{id:p.accountId,name:p.account.name}] as const))).values()],linkedOpportunities:items.map(item=>({id:item.id,name:item.name,currency:item.currencyCode})),groupKeys:projectGroups(project,config.groupBy).map(group=>group.key)};}),currencies:[...new Set(all.map(item=>item.currencyCode))].sort(),semanticNote:reportRegistry.PROJECT_INITIATIVE.semanticNote};
+  return {reportType:'PROJECT_INITIATIVE',summary:projectMetrics(projects,all),groups:[...groups.values()].sort((a,b)=>a.label.localeCompare(b.label)).map(group=>({key:group.key,label:group.label,metrics:projectMetrics(group.projects,group.items),contributions:group.contributions})),rows:sorted.map(project=>{const items=uniqueOpportunities(project.opportunities.map(link=>link.opportunity));return {id:project.id,project:project.name,projectOwner:projectName(project.owner),projectStatus:projectStatusLabels[project.status],primaryAccount:project.primaryAccount?{id:project.primaryAccount.id,name:project.primaryAccount.name}:null,participantAccounts:project.participants.map(p=>({id:p.accountId,name:p.account.name})),startDate:project.startDate?.toISOString().slice(0,10)??null,targetEndDate:project.targetEndDate?.toISOString().slice(0,10)??null,opportunityCount:items.length,amounts:projectMetrics([project],items),productCategories:availability.effective.has('PRODUCTS')?[...new Set(items.flatMap(item=>item.products.map(p=>p.product.category?.name??'No Product Category')))].join(', ')||'—':'—',partnerAccounts:[...new Map(items.flatMap(item=>item.participants.filter(p=>p.roles.some(r=>channelPartnerParticipantRoles.includes(r.role as typeof channelPartnerParticipantRoles[number]))).map(p=>[p.accountId,{id:p.accountId,name:p.account.name}] as const))).values()],linkedOpportunities:items.map(item=>({id:item.id,name:item.name,currency:item.currencyCode})),groupKeys:projectGroups(project,config.groupBy).map(group=>group.key)};}),currencies:[...new Set(all.map(item=>item.currencyCode))].sort(),semanticNote:reportRegistry.PROJECT_INITIATIVE.semanticNote};
 }
 
 type PipelineDbRow = Prisma.OpportunityGetPayload<{ include: { stage: true; competitor: true; owner: true; participants: { include: { account: { include: { owner: true; industryCategory: true; territoryCategory: true } }; roles: true } }; products: { include: { product: { include: { category: true } }; sku: true } }; projects: { include: { project: { include: { owner: true } } } } } }>;
@@ -349,8 +392,9 @@ function sortRows(rows: PipelineDbRow[], sort: ReportSort[]) {
 }
 
 export async function executePipelineReport(client: PrismaClient, actor: Actor, rawConfig: unknown, now = new Date()): Promise<PipelineReportResult> {
+  const availability=await assertReportModule(client,'PIPELINE');
   if (!canRunReportType(actor,'PIPELINE')) throw new Error('Access denied');
-  const config=validateReportConfiguration('PIPELINE',rawConfig);
+  const config=visibleReportConfiguration('PIPELINE',validateReportConfiguration('PIPELINE',rawConfig),availability);
   const rows=sortRows(await client.opportunity.findMany({ where:pipelineWhere(config,actor,now), include:{ stage:true, competitor:true, owner:true, participants:{include:{account:{include:{owner:true,industryCategory:true,territoryCategory:true}},roles:true}}, products:{where:{archivedAt:null},include:{product:{include:{category:true}},sku:true}}, projects:{include:{project:{include:{owner:true}}}} } }),config.sort);
   const groups=new Map<string,{key:string;label:string;rows:PipelineDbRow[]}>();
   for(const row of rows) for(const group of groupValues(row,config.groupBy)){ const existing=groups.get(group.key)??{...group,rows:[]}; if(!existing.rows.some(item=>item.id===row.id))existing.rows.push(row); groups.set(group.key,existing); }
@@ -386,8 +430,9 @@ function channelMetrics(members:ChannelMember[]):ChannelMetrics[]{
   });
 }
 export async function executeChannelPartnerReport(client:PrismaClient,actor:Actor,rawConfig:unknown,now=new Date()):Promise<ChannelReportResult>{
+  const availability=await assertReportModule(client,'CHANNEL_PARTNER');
   if(!canRunReportType(actor,'CHANNEL_PARTNER'))throw new Error('Access denied');
-  const config=validateReportConfiguration('CHANNEL_PARTNER',rawConfig);
+  const config=visibleReportConfiguration('CHANNEL_PARTNER',validateReportConfiguration('CHANNEL_PARTNER',rawConfig),availability);
   const partnerFields=new Set(['accountId','participantRole','industry','territory','strategicAccount']);
   const opportunityConfig={...config,filters:config.filters.filter(filter=>!partnerFields.has(filter.field))};
   const opportunities:PipelineDbRow[]=await client.opportunity.findMany({where:pipelineWhere(opportunityConfig,actor,now),include:{stage:true,competitor:true,owner:true,participants:{include:{account:{include:{owner:true,industryCategory:true,territoryCategory:true}},roles:true}},products:{where:{archivedAt:null},include:{product:{include:{category:true}},sku:true}},projects:{include:{project:{include:{owner:true}}}}}});
@@ -403,7 +448,7 @@ export async function executeChannelPartnerReport(client:PrismaClient,actor:Acto
   for(const member of members)for(const group of channelGroups(member,config.groupBy)){const found=groups.get(group.key)??{...group,members:[]};if(!found.members.includes(member))found.members.push(member);groups.set(group.key,found);}
   const read=(member:ChannelMember,field:string):string|number=>{const row=member.opportunity;return field==='partner'?member.participant.account.name:field==='opportunity'?row.name:field==='owner'?row.owner?.lastName??'':field==='stage'?row.stage.name:field==='closeDate'?row.expectedCloseDate?.getTime()??Number.MAX_SAFE_INTEGER:opportunityTotal(row.products).toNumber();};
   members.sort((a,b)=>{for(const sort of config.sort){const left=read(a,sort.field),right=read(b,sort.field),order=left<right?-1:left>right?1:0;if(order)return sort.direction==='asc'?order:-order;}return a.opportunity.id-b.opportunity.id||a.participant.accountId-b.participant.accountId;});
-  const rows=members.map(({opportunity:row,participant,groupKeys}):ChannelDetailRow=>{const value=opportunityTotal(row.products),probability=row.probability??row.stage.probability;return {id:`${row.id}:${participant.accountId}`,opportunityId:row.id,accountId:participant.accountId,opportunity:row.name,partner:participant.account.name,participantRoles:participant.roles.map(item=>channelRoleLabels[item.role]??item.role).join(', '),owner:row.owner?`${row.owner.firstName} ${row.owner.lastName}`:'Unassigned',stage:row.stage.name,forecastCategory:row.forecastCategory.replaceAll('_',' '),closeDate:row.expectedCloseDate?.toISOString().slice(0,10)??null,value:value.toFixed(2),weightedValue:weightedValue(value,probability).toFixed(2),probability,currency:row.currencyCode,productCategories:[...new Set(row.products.map(product=>product.product.category?.name??'No Product Category'))].join(', ')||'—',projects:[...new Set(row.projects.map(project=>project.project.name))].join(', ')||'—',groupKeys};});
+  const rows=members.map(({opportunity:row,participant,groupKeys}):ChannelDetailRow=>{const value=opportunityTotal(row.products),probability=row.probability??row.stage.probability;return {id:`${row.id}:${participant.accountId}`,opportunityId:row.id,accountId:participant.accountId,opportunity:row.name,partner:participant.account.name,participantRoles:participant.roles.map(item=>channelRoleLabels[item.role]??item.role).join(', '),owner:row.owner?`${row.owner.firstName} ${row.owner.lastName}`:'Unassigned',stage:row.stage.name,forecastCategory:row.forecastCategory.replaceAll('_',' '),closeDate:row.expectedCloseDate?.toISOString().slice(0,10)??null,value:value.toFixed(2),weightedValue:weightedValue(value,probability).toFixed(2),probability,currency:row.currencyCode,productCategories:availability.effective.has('PRODUCTS')?[...new Set(row.products.map(product=>product.product.category?.name??'No Product Category'))].join(', ')||'—':'—',projects:availability.effective.has('PROJECTS')?[...new Set(row.projects.map(project=>project.project.name))].join(', ')||'—':'—',groupKeys};});
   return {reportType:'CHANNEL_PARTNER',summary:channelMetrics(members),groups:[...groups.values()].sort((a,b)=>a.label.localeCompare(b.label)).map(group=>({key:group.key,label:group.label,metrics:channelMetrics(group.members)})),rows,currencies:[...new Set(members.map(member=>member.opportunity.currencyCode))].sort(),semanticNote:reportRegistry.CHANNEL_PARTNER.semanticNote};
 }
 
@@ -444,8 +489,9 @@ function productMetrics(rows:ProductLineDbRow[]):ProductMetrics[] {
   });
 }
 export async function executeProductPerformanceReport(client:PrismaClient, actor:Actor, rawConfig:unknown, now=new Date()):Promise<ProductPerformanceResult> {
+  const availability=await assertReportModule(client,'PRODUCT_PERFORMANCE');
   if(!canRunReportType(actor,'PRODUCT_PERFORMANCE'))throw new Error('Access denied');
-  const config=validateReportConfiguration('PRODUCT_PERFORMANCE',rawConfig);
+  const config=visibleReportConfiguration('PRODUCT_PERFORMANCE',validateReportConfiguration('PRODUCT_PERFORMANCE',rawConfig),availability);
   const pricing = can(actor, 'pricing.read');
   const metrics = (items: ProductLineDbRow[]) => productMetrics(items).map(value => ({...value, averageUnitPrice: pricing ? value.averageUnitPrice : null}));
   const opportunityConfig={...config,filters:config.filters.filter(filter=>!['productCategoryId','productId','skuId','catalogSource','odmCustomerAccountId','priceSource'].includes(filter.field))};
@@ -467,7 +513,7 @@ export async function executeProductPerformanceReport(client:PrismaClient, actor
   rows.sort((a,b)=>{for(const spec of specs){const x=read(a,spec.field),y=read(b,spec.field),cmp=x<y?-1:x>y?1:0;if(cmp)return spec.direction==='asc'?cmp:-cmp;}return a.id-b.id;});
   const comparableTotals=new Set(rows.map(row=>`${row.opportunity.currencyCode}|${row.sku?.priceUnit??'EACH'}`)).size<=1;
   const sortedGroups=[...groups.values()].sort((a,b)=>{if(!comparableTotals)return a.label.localeCompare(b.label);for(const spec of specs){const metric=(items:ProductLineDbRow[])=>{const value=items.reduce((sum,row)=>sum.add(lineTotal(row)),new Prisma.Decimal(0));const qty=items.reduce((sum,row)=>sum+row.quantity,0);return spec.field==='quantity'?qty:spec.field==='opportunityCount'?new Set(items.map(row=>row.opportunityId)).size:spec.field==='averageUnitPrice'?(qty?value.div(qty).toNumber():0):value.toNumber();};if(['quantity','lineValue','opportunityCount','averageUnitPrice'].includes(spec.field)){const x=metric(a.rows),y=metric(b.rows);if(x!==y)return spec.direction==='asc'?x-y:y-x;}}return a.label.localeCompare(b.label);});
-  return {reportType:'PRODUCT_PERFORMANCE',summary:metrics(rows),groups:sortedGroups.map(group=>({key:group.key,label:group.label,metrics:metrics(group.rows),lineIds:group.rows.map(row=>row.id)})),rows:rows.map(row=>({id:row.id,opportunityId:row.opportunityId,opportunity:row.opportunity.name,accounts:row.opportunity.participants.map(x=>({id:x.accountId,name:x.account.name})).sort((a,b)=>a.name.localeCompare(b.name)),owner:row.opportunity.owner?`${row.opportunity.owner.firstName} ${row.opportunity.owner.lastName}`:'Unassigned',stage:row.opportunity.stage.name,forecastCategory:row.opportunity.forecastCategory,closeDate:row.opportunity.expectedCloseDate?.toISOString().slice(0,10)??null,productCategory:row.product.category?.name??'No Product Category',product:row.product.name,productId:row.productId,sku:row.sku?.partNumber??row.product.sku,catalogSource:row.sku?.catalogSource==='ODM'?'ODM':row.sku?.catalogSource?.replaceAll('_',' ')??'Unclassified',odmCustomer:row.priceSource==='ODM_CUSTOMER'&&row.odmCustomerAccountId?(row.sku?.odmCustomers.find(link=>link.accountId===row.odmCustomerAccountId)?.account.name??'Account unavailable'):row.sku?.odmCustomers.map(link=>link.account.name).join(', ')||'—',quantity:row.quantity,unit:row.sku?.priceUnit??'EACH',unitPrice:pricing?new Prisma.Decimal(row.estimatedUnitPrice).toFixed(2):null,lineValue:lineTotal(row).toFixed(2),priceSource:pricing?priceSourceLabel(row.priceSource):'—',currency:row.opportunity.currencyCode,project:row.opportunity.projects.map(x=>x.project.name).join(', ')||'—',peCode:pricing&&row.priceSource==='PRICE_EXCEPTION'?(row.priceExceptionCode??'—'):'—',groupKeys:productGroupValues(row,config.groupBy).map(x=>x.key)})),currencies:[...new Set(rows.map(row=>row.opportunity.currencyCode))].sort(),filterCount:config.filters.length,semanticNote:productPerformanceDefinition.semanticNote};
+  return {reportType:'PRODUCT_PERFORMANCE',summary:metrics(rows),groups:sortedGroups.map(group=>({key:group.key,label:group.label,metrics:metrics(group.rows),lineIds:group.rows.map(row=>row.id)})),rows:rows.map(row=>({id:row.id,opportunityId:row.opportunityId,opportunity:row.opportunity.name,accounts:row.opportunity.participants.map(x=>({id:x.accountId,name:x.account.name})).sort((a,b)=>a.name.localeCompare(b.name)),owner:row.opportunity.owner?`${row.opportunity.owner.firstName} ${row.opportunity.owner.lastName}`:'Unassigned',stage:row.opportunity.stage.name,forecastCategory:row.opportunity.forecastCategory,closeDate:row.opportunity.expectedCloseDate?.toISOString().slice(0,10)??null,productCategory:row.product.category?.name??'No Product Category',product:row.product.name,productId:row.productId,sku:row.sku?.partNumber??row.product.sku,catalogSource:row.sku?.catalogSource==='ODM'?'ODM':row.sku?.catalogSource?.replaceAll('_',' ')??'Unclassified',odmCustomer:row.priceSource==='ODM_CUSTOMER'&&row.odmCustomerAccountId?(row.sku?.odmCustomers.find(link=>link.accountId===row.odmCustomerAccountId)?.account.name??'Account unavailable'):row.sku?.odmCustomers.map(link=>link.account.name).join(', ')||'—',quantity:row.quantity,unit:row.sku?.priceUnit??'EACH',unitPrice:pricing?new Prisma.Decimal(row.estimatedUnitPrice).toFixed(2):null,lineValue:lineTotal(row).toFixed(2),priceSource:pricing?priceSourceLabel(row.priceSource):'—',currency:row.opportunity.currencyCode,project:availability.effective.has('PROJECTS')?row.opportunity.projects.map(x=>x.project.name).join(', ')||'—':'—',peCode:availability.effective.has('PRICE_EXCEPTIONS')&&pricing&&row.priceSource==='PRICE_EXCEPTION'?(row.priceExceptionCode??'—'):'—',groupKeys:productGroupValues(row,config.groupBy).map(x=>x.key)})),currencies:[...new Set(rows.map(row=>row.opportunity.currencyCode))].sort(),filterCount:config.filters.length,semanticNote:productPerformanceDefinition.semanticNote};
 }
 
 const peUsageInclude={...productLineInclude,priceExceptionLine:{select:{priceExceptionId:true,priceException:{select:{assignedSalesRepUserId:true,sourceType:true,assignedSalesRepUser:{select:{firstName:true,lastName:true}}}}}}} as const;
@@ -481,6 +527,7 @@ function peKey(row:PeUsageDbRow){return row.priceExceptionLine?.priceExceptionId
 function peGroupValues(row:PeUsageDbRow,groupBy:string|null){const pe=row.priceExceptionLine?.priceException;const one=(key:string,label:string)=>[{key,label}];if(groupBy==='priceException')return one(peKey(row)??'unknown',row.priceExceptionCode??'Unnumbered Price Exception');if(groupBy==='peSalesperson')return one(pe?.assignedSalesRepUserId?`user:${pe.assignedSalesRepUserId}`:'none',pe?.assignedSalesRepUser?`${pe.assignedSalesRepUser.firstName} ${pe.assignedSalesRepUser.lastName}`:'Unassigned');if(groupBy==='opportunity')return one(String(row.opportunityId),row.opportunity.name);if(groupBy==='currency')return one(row.opportunity.currencyCode,row.opportunity.currencyCode);return productGroupValues(row,groupBy);}
 function peMetrics(rows:PeUsageDbRow[],denominators:Map<string,Prisma.Decimal>,includeEmpty=false):PeUsageMetrics[]{return [...new Set([...(includeEmpty?denominators.keys():[]),...rows.map(row=>`${row.opportunity.currencyCode}|${row.sku?.priceUnit??'EACH'}`)])].sort().map(key=>{const [currency,unit]=key.split('|'),selected=rows.filter(row=>row.opportunity.currencyCode===currency&&(row.sku?.priceUnit??'EACH')===unit);const value=selected.reduce((sum,row)=>sum.add(lineTotal(row)),new Prisma.Decimal(0));const quantity=selected.reduce((sum,row)=>sum+row.quantity,0);const approved=selected.filter(row=>row.priceExceptionUnitPrice!==null);const approvedQty=approved.reduce((sum,row)=>sum+row.quantity,0);const approvedValue=approved.reduce((sum,row)=>sum.add(new Prisma.Decimal(row.priceExceptionUnitPrice!).mul(row.quantity)),new Prisma.Decimal(0));const denominator=denominators.get(key);return {currency,unit,lineValue:value.toFixed(2),quantity,opportunityCount:new Set(selected.map(row=>row.opportunityId)).size,productLineCount:selected.length,priceExceptionCount:new Set(selected.map(peKey).filter(Boolean)).size,averageApprovedUnitPrice:approvedQty?approvedValue.div(approvedQty).toFixed(2):null,averageActualUnitPrice:quantity?value.div(quantity).toFixed(2):null,utilizationPercent:denominator&&!denominator.isZero()?value.div(denominator).mul(100).toFixed(2):null};});}
 export async function executePriceExceptionUsageReport(client:PrismaClient,actor:Actor,rawConfig:unknown,now=new Date()):Promise<PeUsageResult>{
+  await assertReportModule(client,'PRICE_EXCEPTION_USAGE');
   if(!canRunReportType(actor,'PRICE_EXCEPTION_USAGE'))throw new Error('Access denied');const config=validateReportConfiguration('PRICE_EXCEPTION_USAGE',rawConfig);
   const lineFields=new Set(['productId','skuId','productCategoryId','priceExceptionId','peSalespersonId','moqStatus','overrideStatus']);
   const opportunityFilters=config.filters.filter(filter=>!lineFields.has(filter.field)&&filter.field!=='opportunityId');
@@ -513,6 +560,7 @@ function accountGroup(row:AccountDbRow, latest:AccountDbRow['activities'][number
   return null;
 }
 export async function executeAccountActivityReport(client:PrismaClient, actor:Actor, rawConfig:unknown, now=new Date()):Promise<AccountActivityReportResult> {
+  await assertReportModule(client,'ACCOUNT_ACTIVITY');
   if(!canRunReportType(actor,'ACCOUNT_ACTIVITY')) throw new Error('Access denied');
   const config=validateReportConfiguration('ACCOUNT_ACTIVITY',rawConfig);
   const clauses:Prisma.AccountWhereInput[]=[engagementAccountWhere(actor)];
@@ -588,7 +636,10 @@ function tradeShowGroup(row:TradeShowReportDbRow,groupBy:string|null){
 function tradeShowDateBounds(filter:ReportFilter,now:Date){return filter.operator==='preset'?reportDatePreset(filter.value as typeof presets[number],now):{gte:new Date(`${(filter.value as {from:string}).from}T00:00:00Z`),lt:new Date(new Date(`${(filter.value as {to:string}).to}T00:00:00Z`).getTime()+86400000)};}
 export async function executeTradeShowReport(client:PrismaClient,actor:Actor,rawConfig:unknown,now=new Date()):Promise<TradeShowReportResult>{
   if(!canRunReportType(actor,'TRADE_SHOW'))throw new Error('Access denied');
-  const config=validateReportConfiguration('TRADE_SHOW',rawConfig),clauses:Prisma.TradeShowLeadWhereInput[]=[{tradeShow:{archivedAt:null}}];
+  await assertReportModule(client,'TRADE_SHOW');
+  const available=client===prisma?await getModuleAvailability():await readModules(client);
+  const opportunitiesEnabled=available.effective.has('OPPORTUNITIES');
+  const config=validateReportConfiguration('TRADE_SHOW',opportunitiesEnabled?rawConfig:withoutTradeShowOpportunityFields(rawConfig)),clauses:Prisma.TradeShowLeadWhereInput[]=[{tradeShow:{archivedAt:null}}];
   if(actor.role==='SALES')clauses.push({assignedSalesRepUserId:actor.id});
   for(const filter of config.filters){const value=filter.value;
     if(filter.field==='tradeShowId')clauses.push({tradeShowId:value as number});
@@ -616,8 +667,8 @@ export async function executeTradeShowReport(client:PrismaClient,actor:Actor,raw
   }
   const rawRows=await client.tradeShowLead.findMany({where:{AND:clauses},include:tradeShowReportInclude});
   const convertedIds=[...new Set(rawRows.flatMap(row=>row.convertedOpportunityId?[row.convertedOpportunityId]:[]))];
-  const liveIds=new Set(convertedIds.length?(await client.opportunity.findMany({where:{AND:[operationalOpportunityWhere,{id:{in:convertedIds}}]},select:{id:true}})).map(row=>row.id):[]);
-  const rows=rawRows.map(row=>({...row,convertedOpportunity:row.convertedOpportunity&&liveIds.has(row.convertedOpportunity.id)?row.convertedOpportunity:null}));
+  const liveIds=new Set(opportunitiesEnabled&&convertedIds.length?(await client.opportunity.findMany({where:{AND:[operationalOpportunityWhere,{id:{in:convertedIds}}]},select:{id:true}})).map(row=>row.id):[]);
+  const rows=rawRows.map(row=>({...row,convertedOpportunity:opportunitiesEnabled&&row.convertedOpportunity&&liveIds.has(row.convertedOpportunity.id)?row.convertedOpportunity:null}));
   const read=(row:TradeShowReportDbRow,field:string):string|number=>field==='tradeShow'?row.tradeShow.name:field==='lead'?`${row.lastName} ${row.firstName}`:field==='company'?row.sourceCompany??'':field==='assignedRep'?row.assignedSalesRep?.lastName??'':field==='leadStatus'?row.status:field==='capturedDate'?row.capturedAt?.getTime()??0:field==='followUp'?row.followUpAt?.getTime()??0:field==='opportunityStage'?row.convertedOpportunity?.stage.name??'':field==='opportunityValue'?(row.convertedOpportunity?opportunityTotal(row.convertedOpportunity.products).toNumber():0):field==='conversionDate'?row.convertedAt?.getTime()??0:row.id;
   rows.sort((a,b)=>{for(const spec of config.sort){const x=read(a,spec.field),y=read(b,spec.field),cmp=x<y?-1:x>y?1:0;if(cmp)return spec.direction==='asc'?cmp:-cmp;}return a.id-b.id;});
   const groups=new Map<string,{key:string;label:string;rows:TradeShowReportDbRow[]}>();

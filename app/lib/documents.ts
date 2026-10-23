@@ -3,6 +3,8 @@ import { can, opportunityScope, opportunityReadWhere, type Actor } from './autho
 import { canEditProject, projectReadWhere } from './projects';
 import type { DocumentStorage } from './document-storage';
 import type { ValidatedDocumentFile } from './document-validation';
+import { getModuleAvailability, readModules } from './module-availability';
+import { prisma } from './prisma';
 
 export type DocumentParentType = 'account' | 'project' | 'opportunity';
 export const documentTypeLabels: Record<DocumentType, string> = {
@@ -30,6 +32,11 @@ export function documentParentData(parent: { type: DocumentParentType; id: numbe
 
 type ParentClient = Pick<PrismaClient, 'account' | 'project' | 'opportunity'>;
 export async function assertDocumentParentAccess(client: ParentClient, actor: Actor, parent: { type: DocumentParentType; id: number }, operation: 'read' | 'write') {
+  if (parent.type !== 'account') {
+    const feature = parent.type === 'project' ? 'PROJECTS' : 'OPPORTUNITIES';
+    const availability = client === prisma ? await getModuleAvailability() : await readModules(client as PrismaClient);
+    if (!availability.effective.has(feature)) throw new Error('Document parent not found.');
+  }
   if (parent.type === 'account') {
     if (!can(actor, operation === 'read' ? 'accounts.read' : 'accounts.write')) throw new Error('Access denied');
     const account = await client.account.findUnique({ where: { id: parent.id }, select: { id: true, archivedAt: true, status: true } });

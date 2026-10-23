@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { revalidatePath } from 'next/cache';
 import { requireMutation } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
@@ -11,6 +12,7 @@ function safeMessage(error: unknown) {
     ? message : 'Could not capture the snapshot. No partial snapshot was saved. Try again.';
 }
 export async function previewSnapshotAction(forecastReady = false) {
+  await assertModuleEnabled('FORECASTING');
   const actor = await requireMutation('configuration.manage');
   assertSnapshotAdmin(actor);
   try {
@@ -19,6 +21,7 @@ export async function previewSnapshotAction(forecastReady = false) {
   } catch (error) { return { error: safeMessage(error) }; }
 }
 export async function confirmSnapshotAction(token: string, confirmed: boolean) {
+  await assertModuleEnabled('FORECASTING');
   const actor = await requireMutation('configuration.manage');
   assertSnapshotAdmin(actor);
   try {

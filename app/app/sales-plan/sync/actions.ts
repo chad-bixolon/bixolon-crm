@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireMutation } from '@/lib/current-user';
@@ -6,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { confirmTargetSync } from '@/lib/sales-target-sync';
 
 export async function confirmSyncAction(form: FormData) {
+  await assertModuleEnabled('SALES_PLANS');
   const actor=await requireMutation('sales-plan.manage');
   const userId=Number(form.get('userId')),year=Number(form.get('year')),currencyCode=String(form.get('currencyCode')??'');
   const params=new URLSearchParams({userId:String(userId),year:String(year),currencyCode});

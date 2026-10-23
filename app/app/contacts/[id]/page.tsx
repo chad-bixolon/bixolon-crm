@@ -18,14 +18,16 @@ import { MarketingAttributionCard } from "@/components/marketing-attribution-car
 import { RelatedSupportCases } from '@/components/related-support-cases';
 import { contactSupportSummary } from '@/lib/related-support-cases';
 import { QuickActions } from '@/components/quick-actions';
+import { getModuleAvailability } from '@/lib/module-availability';
 export const dynamic = "force-dynamic";
 export default async function ContactPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string }> }) {
   const id = Number((await params).id); if (!Number.isSafeInteger(id) || id <= 0) notFound();
   const c = await prisma.contact.findUnique({ where: { id }, include: { account: true, marketingPreferenceUpdatedBy: true } }); if (!c) notFound();
   const actor = await currentUser();
-  const support = can(actor, 'support-cases.read') ? await contactSupportSummary(prisma, actor, id) : null;
-  const attribution = isCaseOnlyWorker(actor) ? null : await contactAttribution(prisma, id);
-  const [sources, campaigns] = canManageAttribution(actor) ? await Promise.all([prisma.leadSourceOption.findMany({ where: { active: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }), prisma.marketingCampaign.findMany({ where: { archivedAt: null }, select: { id: true, name: true }, orderBy: { name: 'asc' } })]) : [[], []];
+  const availability = await getModuleAvailability();
+  const support = availability.effective.has('SUPPORT_CASES') && can(actor, 'support-cases.read') ? await contactSupportSummary(prisma, actor, id) : null;
+  const attribution = availability.effective.has('MARKETING') && !isCaseOnlyWorker(actor) ? await contactAttribution(prisma, id, availability.effective.has('TRADE_SHOWS'), availability.effective.has('OPPORTUNITIES')) : null;
+  const [sources, campaigns] = availability.effective.has('MARKETING') && canManageAttribution(actor) ? await Promise.all([prisma.leadSourceOption.findMany({ where: { active: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }), prisma.marketingCampaign.findMany({ where: { archivedAt: null, ...(availability.effective.has('TRADE_SHOWS') ? {} : { tradeShowId: null }) }, select: { id: true, name: true }, orderBy: { name: 'asc' } })]) : [[], []];
   const followUpTasks = !isCaseOnlyWorker(actor) && can(actor, 'tasks.read') ? await prisma.task.findMany({ where: { contactId: id, archivedAt: null, ...taskScope(actor) }, orderBy: [{ dueDate: 'asc' }, { id: 'desc' }], take: 10, select: { id: true, subject: true, status: true, dueDate: true } }) : [];
   const state = c.archivedAt ? "archived" : c.active ? "active" : "inactive";
   const saveMessage = saveFeedbackMessage((await searchParams).saved, 'Contact');

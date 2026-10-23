@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { isPriceExceptionExpired } from '@/lib/price-exception-dates';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
@@ -9,6 +10,7 @@ import { currentUser } from '@/lib/current-user';
 import { markPriceExceptionExpired } from '@/lib/price-exception-lifecycle';
 
 export async function markExpiredPriceException(id:number) {
+  await assertModuleEnabled('PRICE_EXCEPTIONS');
   const actor=await currentUser();
   try {
     await markPriceExceptionExpired(prisma,actor,id);
@@ -21,6 +23,7 @@ export async function markExpiredPriceException(id:number) {
 export type ResolvePriceExceptionState = { errors: Record<string, string>; values?: PriceExceptionAccountValues; saved?: boolean };
 export type AssignPriceExceptionSalesRepState = { error?: string; value?: string; saved?: boolean };
 export async function savePriceExceptionFollowUp(id:number,_state:{error?:string;saved?:boolean},form:FormData):Promise<{error?:string;saved?:boolean}> {
+  await assertModuleEnabled('PRICE_EXCEPTIONS');
   const actor=await currentUser();
   try {
     const patch=parseFollowUpForm(form);
@@ -31,6 +34,7 @@ export async function savePriceExceptionFollowUp(id:number,_state:{error?:string
 }
 
 export async function assignPriceExceptionSalesRep(id:number,_state:AssignPriceExceptionSalesRepState,form:FormData):Promise<AssignPriceExceptionSalesRepState>{
+  await assertModuleEnabled('PRICE_EXCEPTIONS');
   const actor=await requireMutation('configuration.manage');
   const parsed=parseAssignedSalesRepUserId(form);
   if(parsed.error)return {error:parsed.error,value:parsed.value};
@@ -45,6 +49,7 @@ export async function assignPriceExceptionSalesRep(id:number,_state:AssignPriceE
 }
 
 export async function resolvePriceExceptionAccounts(id:number,_state:ResolvePriceExceptionState,form:FormData):Promise<ResolvePriceExceptionState>{
+  await assertModuleEnabled('PRICE_EXCEPTIONS');
   const actor=await requireMutation('configuration.manage');
   for(const field of ['distributorAccountId','varAccountId','endUserAccountId']){
     if(form.get(`${field}Searching`)==='true')return {errors:{[field]:'Select an Account from the suggestions or cancel the search.'}};
@@ -63,6 +68,7 @@ export async function resolvePriceExceptionAccounts(id:number,_state:ResolvePric
 }
 
 export async function archivePriceException(form:FormData){
+  await assertModuleEnabled('PRICE_EXCEPTIONS');
   const actor=await requireMutation('configuration.manage');
   const id=Number(form.get('id'));
   if(!Number.isSafeInteger(id)||id<=0)throw new Error('Invalid Price Exception.');
@@ -70,6 +76,7 @@ export async function archivePriceException(form:FormData){
   revalidatePath('/price-exceptions');revalidatePath(`/price-exceptions/${id}`);revalidatePath('/accounts');
 }
 export async function restorePriceException(form:FormData){
+  await assertModuleEnabled('PRICE_EXCEPTIONS');
   const actor=await requireMutation('configuration.manage');
   const id=Number(form.get('id'));
   if(!Number.isSafeInteger(id)||id<=0)throw new Error('Invalid Price Exception.');

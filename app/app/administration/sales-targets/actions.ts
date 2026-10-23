@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireMutation } from '@/lib/current-user';
@@ -6,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { archiveSalesTarget, saveSalesTarget } from '@/lib/sales-targets';
 
 export async function saveTargetAction(form: FormData) {
+  await assertModuleEnabled('SALES_PLANS');
   const actor = await requireMutation('configuration.manage');
   const rawId = String(form.get('id') ?? '');
   const id = rawId ? Number(rawId) : undefined;
@@ -18,6 +20,7 @@ export async function saveTargetAction(form: FormData) {
 }
 
 export async function archiveTargetAction(form: FormData) {
+  await assertModuleEnabled('SALES_PLANS');
   const actor = await requireMutation('configuration.manage');
   let error = '';
   try { await archiveSalesTarget(prisma, actor, Number(form.get('id'))); }

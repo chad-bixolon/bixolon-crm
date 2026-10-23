@@ -5,9 +5,12 @@ import { prisma } from "@/lib/prisma";
 import { requireMutation } from "@/lib/current-user";
 import { canEditProject } from "@/lib/projects";
 import { friendlyError } from "@/lib/crm-validation";
+import { assertModuleEnabled } from '@/lib/module-availability';
 
 export type LinkState = { message?: string };
 export async function changeProjectOpportunity(projectId: number, _state: LinkState, form: FormData): Promise<LinkState> {
+  await assertModuleEnabled('PROJECTS');
+  await assertModuleEnabled('OPPORTUNITIES');
   const actor = await requireMutation("sales.write");
   const opportunityId = Number(form.get("opportunityId"));
   const operation = form.get("operation");

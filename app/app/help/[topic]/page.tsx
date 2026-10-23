@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
 import { currentUser } from '@/lib/current-user';
 import { visibleHelpTopics } from '@/lib/help/topics';
+import { getModuleAvailability } from '@/lib/module-availability';
 import { helpHref } from '@/lib/help/links';
 import { getBranding } from '@/lib/deployment-branding';
 import { prisma } from '@/lib/prisma';
@@ -10,7 +11,7 @@ import { prisma } from '@/lib/prisma';
 export default async function HelpTopicPage({ params }: { params: Promise<{ topic: string }> }) {
   const { topic: id } = await params;
   const branding = await getBranding(prisma);
-  const topics = visibleHelpTopics(await currentUser(), branding.productName);
+  const topics = visibleHelpTopics(await currentUser(), branding.productName, await getModuleAvailability());
   const topic = topics.find(topic => topic.id === id);
   if (!topic) notFound();
   const linkClass = 'inline-flex min-h-11 items-center rounded px-1 text-sm font-medium text-orange-800 underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-orange-600';

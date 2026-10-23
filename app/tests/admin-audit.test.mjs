@@ -9,6 +9,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
 const require = Module.createRequire(import.meta.url);
 const { adminAudit, auditDate, auditValue, auditConditions, normalizeAuditFilters } = require(path.join(root, 'lib/admin-audit.ts'));
+const { resolveModules } = require(path.join(root, 'lib/module-policy.ts'));
 const { ownershipWhere, ownershipCounts, ownershipRows } = require(path.join(root, 'lib/admin-ownership.ts'));
 const { calendarConnectionHealth, databaseHealth } = require(path.join(root, 'lib/system-health.ts'));
 const { recordMaintenance } = require(path.join(root, 'lib/admin-maintenance.ts'));
@@ -49,6 +50,29 @@ test('date/actor/entity/action filters are parameterized and report pagination i
   assert.match(queries[1].strings.join(' '), /LIMIT .* OFFSET /);
   assert.deepEqual(queries[1].values.slice(-2), [25, 25]);
   assert.equal(auditValue(null), 'Not recorded'); assert.equal(auditValue('0'), '0'); assert.equal(auditValue('Old owner'), 'Old owner');
+});
+test('disabled module business history is excluded while Module change history remains queryable', async () => {
+  const queries = [];
+  const tx = { $queryRaw: async query => { queries.push(query); return queries.length % 2 ? [{ count: 0n }] : []; } };
+  const availability = resolveModules([{ module: 'OPPORTUNITIES', enabled: false }, { module: 'SUPPORT_CASES', enabled: false }]);
+  await adminAudit({ $transaction: fn => fn(tx) }, admin, { entity: 'Module' }, true, availability);
+  assert.equal(queries.length, 2);
+  assert.equal(queries[0].values.includes('Opportunity'), true);
+  assert.equal(queries[0].values.includes('Support Case'), true);
+  assert.equal(queries[0].values.includes('Module'), true);
+  assert.equal(queries[0].values.filter(value => value === 'Module').length, 1);
+});
+test('Ownership counts and direct rows skip disabled optional records', async () => {
+  const availability = resolveModules([{ module: 'OPPORTUNITIES', enabled: false }, { module: 'PROJECTS', enabled: false }, { module: 'SUPPORT_CASES', enabled: false }]);
+  const db = {
+    account: { count: async () => 1 }, contact: { count: async () => 2 },
+    task: { count: async query => { assert.equal(query.where.AND.some(part => part.supportCaseId === null), true); return 3; } },
+    opportunity: { count: () => assert.fail('disabled Opportunity count') }, project: { count: () => assert.fail('disabled Project count') },
+    supportCase: { count: () => assert.fail('disabled Support count') },
+  };
+  const counts = await ownershipCounts(db, admin, undefined, availability);
+  assert.deepEqual([counts.Account, counts.Contact, counts.Task, counts.Opportunity, counts.Project, counts['Support Case']], [1, 2, 3, 0, 0, 0]);
+  await assert.rejects(ownershipRows(db, admin, 'Opportunity', undefined, 1, availability), /unavailable/);
 });
 test('health statuses never return provider secrets or exceptions', async () => {
   const now = new Date(), base = { connectionStatus: 'CONNECTED', lastSuccessfulSyncAt: now, lastSyncStartedAt: now, lastSyncCompletedAt: now, lastError: null };

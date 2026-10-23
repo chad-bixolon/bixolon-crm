@@ -65,7 +65,8 @@ test('Contact, Opportunity, and Trade Show influence types remain distinct', asy
 test('Report landing page groups Marketing reports without Sales-only links for Marketing', () => {
   const landing = fs.readFileSync(path.join(root, 'app/reports/page.tsx'), 'utf8');
   const detail = fs.readFileSync(path.join(root, 'app/reports/marketing-attribution/page.tsx'), 'utf8');
-  assert.match(landing, /marketingReports&&<section/);
+  assert.match(landing, /marketingReports&&availability\.effective\.has\('TRADE_SHOWS'\)&&<section/);
+  assert.match(landing, /availability\.effective\.has\('MARKETING'\)&&availability\.effective\.has\('OPPORTUNITIES'\)/);
   assert.match(landing, /Trade Show Report/);
   assert.match(landing, /Marketing Attribution/);
   assert.match(landing, /actor\.role==='MARKETING_MANAGER'&&group\.title==='Trade Shows'/);

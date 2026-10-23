@@ -264,6 +264,7 @@ enum TradeShowImportFormat {
 }
 
 model User {
+  deploymentModuleUpdates DeploymentModuleVisibility[] @relation("DeploymentModuleUpdater")
   maintenanceOwnerAssignments AdminMaintenanceEvent[] @relation("MaintenanceNewOwner")
   recentItems RecentItem[]
   savedViews SavedView[]
@@ -809,6 +810,31 @@ model DeploymentBranding {
   logoMimeType   String?  @db.VarChar(30)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+enum DeploymentModule {
+  OPPORTUNITIES
+  PROJECTS
+  SUPPORT_CASES
+  SUPPORT_INBOX
+  MARKETING
+  TRADE_SHOWS
+  DEMOS
+  PRICE_EXCEPTIONS
+  PRODUCTS
+  SALES_PLANS
+  FORECASTING
+}
+
+/// Deployment availability only; permissions and record visibility are separate.
+model DeploymentModuleVisibility {
+  module DeploymentModule @id
+  enabled Boolean @default(true)
+  updatedAt DateTime @updatedAt
+  updatedById Int?
+  updatedBy User? @relation("DeploymentModuleUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([updatedById])
 }
 
 /// Google hosted domains allowed to attempt sign-in; User approval remains separate.

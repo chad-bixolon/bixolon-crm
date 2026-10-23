@@ -18,20 +18,20 @@ export function campaignInfluenceReadWhere(actor: Actor, campaignId: number): Pr
   return { campaignId, OR: visible.length ? visible : [{ id: -1 }] };
 }
 
-export function campaignContactWhere(actor: Actor, campaignId: number): Prisma.ContactWhereInput {
+export function campaignContactWhere(actor: Actor, campaignId: number, tradeShowsEnabled = true, opportunitiesEnabled = true): Prisma.ContactWhereInput {
   if (!can(actor, 'contacts.read')) return { id: -1 };
   return { OR: [
-    { campaignInfluences: { some: { campaignId, voidedAt: null } } },
-    { tradeShowLeads: { some: { campaignInfluences: { some: { campaignId, voidedAt: null } }, ...(actor.role === 'SALES' ? tradeShowLeadReadWhere(actor) : {}) } } },
+    { campaignInfluences: { some: { campaignId, voidedAt: null, ...(tradeShowsEnabled ? {} : { tradeShowLeadId: null }), ...(opportunitiesEnabled ? {} : { opportunityId: null }) } } },
+    ...(tradeShowsEnabled ? [{ tradeShowLeads: { some: { campaignInfluences: { some: { campaignId, voidedAt: null } }, ...(actor.role === 'SALES' ? tradeShowLeadReadWhere(actor) : {}) } } }] : []),
   ] };
 }
 
-export function campaignOpportunityWhere(actor: Actor, campaignId: number): Prisma.OpportunityWhereInput {
+export function campaignOpportunityWhere(actor: Actor, campaignId: number, tradeShowsEnabled = true): Prisma.OpportunityWhereInput {
   if (!can(actor, 'opportunities.read') && !canManageAttribution(actor)) return { id: -1 };
-  const contactInfluence: Prisma.ContactWhereInput = campaignContactWhere(actor, campaignId);
+  const contactInfluence: Prisma.ContactWhereInput = campaignContactWhere(actor, campaignId, tradeShowsEnabled);
   return { AND: [opportunityReadWhere(actor), { OR: [
-    { campaignInfluences: { some: { campaignId, voidedAt: null } } },
-    { originatingTradeShowLead: { is: { campaignInfluences: { some: { campaignId, voidedAt: null } }, ...(actor.role === 'SALES' ? tradeShowLeadReadWhere(actor) : {}) } } },
+    { campaignInfluences: { some: { campaignId, voidedAt: null, ...(tradeShowsEnabled ? {} : { tradeShowLeadId: null }) } } },
+    ...(tradeShowsEnabled ? [{ originatingTradeShowLead: { is: { campaignInfluences: { some: { campaignId, voidedAt: null } }, ...(actor.role === 'SALES' ? tradeShowLeadReadWhere(actor) : {}) } } }] : []),
     { contacts: { some: { contact: { is: contactInfluence } } } },
   ] }] };
 }

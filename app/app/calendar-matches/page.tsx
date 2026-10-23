@@ -13,12 +13,14 @@ import { evaluateCalendarEvent } from '@/lib/calendar-matching';
 import { formatDateTimeForUser } from '@/lib/display-format';
 import { ignoreCalendarEvent } from './actions';
 import { calendarQueueWhere, type CalendarQueueStatus } from '@/lib/calendar-queue';
+import { getModuleAvailability } from '@/lib/module-availability';
 
 export const dynamic = 'force-dynamic';
 const statuses = ['review', 'matched', 'suggested', 'unmatched', 'upcoming', 'logged', 'ignored', 'cancelled'] as const;
 export default async function CalendarMatchesPage({ searchParams }: { searchParams: Promise<{ status?: string; page?: string; q?: string; from?: string; to?: string; accountId?: string }> }) {
   const real = await getRealAuthenticatedUser(); if (!real) redirect('/sign-in');
   const actor = await currentUser();
+  const modules = await getModuleAvailability();
   const connection = await prisma.googleCalendarConnection.findUnique({ where: { userId: real.id }, select: { id: true, googleEmail: true } });
   const p = await searchParams; const status = statuses.includes(p.status as typeof statuses[number]) ? p.status! : 'review';
   const page = Math.max(1, Math.min(1000, Number(p.page) || 1)); const now = new Date();
@@ -41,8 +43,8 @@ export default async function CalendarMatchesPage({ searchParams }: { searchPara
   const [contacts, matchedAccounts, opportunities, projects] = await Promise.all([
     prisma.contact.findMany({ where: { id: { in: [...ids.contacts] } }, select: { id: true, firstName: true, lastName: true } }),
     prisma.account.findMany({ where: { id: { in: [...ids.accounts] } }, select: { id: true, name: true } }),
-    prisma.opportunity.findMany({ where: { id: { in: [...ids.opportunities] } }, select: { id: true, name: true } }),
-    prisma.project.findMany({ where: { id: { in: [...ids.projects] } }, select: { id: true, name: true } }),
+    modules.effective.has('OPPORTUNITIES') ? prisma.opportunity.findMany({ where: { id: { in: [...ids.opportunities] } }, select: { id: true, name: true } }) : [],
+    modules.effective.has('PROJECTS') ? prisma.project.findMany({ where: { id: { in: [...ids.projects] } }, select: { id: true, name: true } }) : [],
   ]);
   const name = (list: { id: number; name: string }[], id: number | null, fallback: string) => id ? list.find(x => x.id === id)?.name || fallback : '—';
   const contactNames = contacts.map(c => ({ id: c.id, name: `${c.firstName} ${c.lastName}` }));

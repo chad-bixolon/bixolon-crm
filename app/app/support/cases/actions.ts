@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { requireEditToken, isRecordChanged, recordChangedMessage } from '../../../lib/stale-edit';
 import { Prisma, SupportCasePriority, SupportCaseSource, SupportCaseStatus } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
@@ -38,6 +39,7 @@ async function readForm(form: FormData, actorId: number) {
   return { customerNameText, accountId, contactId: optionalId(form, 'contactId'), subject: String(form.get('subject') ?? '').trim(), description: String(form.get('description') ?? '').trim(), purchaseSourceText: String(form.get('purchaseSourceText') ?? '').trim() || null, purchasedFromAccountId: optionalId(form, 'purchasedFromAccountId'), status, priority, categoryId: optionalId(form, 'categoryId'), assignedToId: optionalId(form, 'assignedToId'), productSkuId: optionalId(form, 'productSkuId'), serialNumber: String(form.get('serialNumber') ?? '').trim() || null, source, nextFollowUpAt, resolutionSummary: String(form.get('resolutionSummary') ?? '').trim() || null };
 }
 export async function saveSupportCase(id: number | null, _state: SupportFormState, form: FormData): Promise<SupportFormState> {
+  await assertModuleEnabled('SUPPORT_CASES');
   const actor = await requireMutation('support-cases.write');
   let caseId: number;
   let duplicate = false;
@@ -89,6 +91,7 @@ export async function saveSupportCase(id: number | null, _state: SupportFormStat
   redirect(`/support/cases/${caseId}${params.size ? `?${params}` : ''}`);
 }
 export async function changeSupportArchive(id: number, archive: boolean, _state: SupportFormState): Promise<SupportFormState> {
+  await assertModuleEnabled('SUPPORT_CASES');
   void _state;
   const actor = await requireMutation('support-oversight.manage');
   try { if (archive) await archiveSupportCase(prisma, actor, id); else await restoreSupportCase(prisma, actor, id); }

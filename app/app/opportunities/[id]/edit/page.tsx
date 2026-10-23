@@ -1,3 +1,4 @@
+import { getModuleAvailability } from '@/lib/module-availability';
 import { NAV_CATEGORIES } from '../../../../lib/navigation-categories';
 import { notFound } from "next/navigation";
 import { Content, PageHeader } from "@/components/shell";
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function EditOpportunityPage({ params }: { params: Promise<{ id: string }> }) {
   const id = Number((await params).id); if (!Number.isSafeInteger(id) || id <= 0) notFound();
   const actor = await requirePermission('sales.write');
+  const moduleAvailability = await getModuleAvailability();
   const [opportunity, options, labels] = await Promise.all([prisma.opportunity.findUnique({ where: { id }, include: { owner: { select: { firstName: true, lastName: true } }, projects: true, contacts: true, participants: { include: { roles: true } }, products: { where: { archivedAt: null }, include: { priceExceptionLine: { select: { priceException: { select: { distributorAccountId: true, varAccountId: true, endUserAccountId: true, assignedSalesRepUserId:true, sourceType:true } } } } } } } }), opportunityOptions(prisma), getLabels(prisma)]);
   if (!opportunity || (actor.role === 'SALES' && opportunity.ownerId !== actor.id)) notFound();
   if (!options.currencies.some(currency => currency.code === opportunity.currencyCode)) {
@@ -37,5 +39,5 @@ export default async function EditOpportunityPage({ params }: { params: Promise<
   if (opportunity.projects.length) options.projects.push(...await prisma.project.findMany({ where: { id: { in: opportunity.projects.map(link => link.projectId) } }, select: { id: true, name: true } }));
   const initial = serializeOpportunityForForm(opportunity, actor);
   const linkedContacts = opportunity.contacts.length ? await prisma.contact.findMany({ where: { id: { in: opportunity.contacts.map(link => link.contactId) } }, select: { id: true, firstName: true, lastName: true, email: true, accountId: true, active: true, archivedAt: true } }) : [];
-  return <Content><PageHeader eyebrow={NAV_CATEGORIES.sales} title={`Edit ${opportunity.name}`}/>{opportunity.archivedAt ? <div className="panel p-6">Reactivate this opportunity before editing it.</div> : <OpportunityForm key={id} id={id} userId={actor.id} initial={initial} {...options} linkedContacts={linkedContacts} owners={actor.role === 'SALES' ? options.owners.filter(owner => owner.id === actor.id) : options.owners} currentOwner={opportunity.owner} labels={labels}/>}</Content>;
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.sales} title={`Edit ${opportunity.name}`}/>{opportunity.archivedAt ? <div className="panel p-6">Reactivate this opportunity before editing it.</div> : <OpportunityForm productsEnabled={moduleAvailability.effective.has('PRODUCTS')} projectsEnabled={moduleAvailability.effective.has('PROJECTS')} priceExceptionsEnabled={moduleAvailability.effective.has('PRICE_EXCEPTIONS')} key={id} id={id} userId={actor.id} initial={initial} {...options} linkedContacts={linkedContacts} owners={actor.role === 'SALES' ? options.owners.filter(owner => owner.id === actor.id) : options.owners} currentOwner={opportunity.owner} labels={labels}/>}</Content>;
 }

@@ -61,7 +61,7 @@ test('default, invalid, case-insensitive and restricted direct URLs retain their
   assert.equal(resolveAccountTab('cOnTaCtS', actor('SALES')), 'Contacts');
   for (const role of ['ADMIN', 'SALES_MANAGER', 'SALES', 'READ_ONLY']) assert.deepEqual(visibleAccountTabs(actor(role)), accountTabs);
   assert.deepEqual(visibleAccountTabs(actor('MARKETING_MANAGER')), accountTabs.filter(t => t !== 'Demos'));
-  assert.equal(resolveAccountTab('demos', actor('MARKETING_MANAGER')), 'Demos'); // Existing empty direct-tab behavior.
+  assert.equal(resolveAccountTab('demos', actor('MARKETING_MANAGER')), 'Overview');
   assert.deepEqual(visibleAccountTabs(actor('SUPPORT')), ['Overview', 'Contacts', 'Support']);
   for (const tab of accountTabs) assert.equal(resolveAccountTab(tab, actor('SUPPORT')), ['Overview', 'Contacts', 'Support'].includes(tab) ? tab : 'Overview');
 });

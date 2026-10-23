@@ -1,4 +1,5 @@
 "use server";
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { revalidatePath } from "next/cache";
 import { requireMutation } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
@@ -7,6 +8,7 @@ import { Prisma } from "@prisma/client";
 
 export type CompetitorState = { message?: string; success?: boolean };
 export async function submitCompetitor(id: number | null, _state: CompetitorState, form: FormData): Promise<CompetitorState> {
+  await assertModuleEnabled('OPPORTUNITIES');
   await requireMutation("configuration.manage");
   try {
     await saveCompetitor(prisma, parseCompetitor(form), id ?? undefined);

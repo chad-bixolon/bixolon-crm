@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { isRecordChanged, recordChangedMessage } from '@/lib/stale-edit';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
@@ -9,6 +10,7 @@ import { saveFeedbackPath } from '@/lib/save-feedback';
 export type TradeShowLeadFormState = { errors: Record<string, string>; message?: string; recordChanged?: boolean; redirectTo?: string; values?: Record<string, string> };
 
 export async function submitTradeShowLead(tradeShowId: number, leadId: number, _old: TradeShowLeadFormState, form: FormData): Promise<TradeShowLeadFormState> {
+  await assertModuleEnabled('TRADE_SHOWS');
   const actor = await currentUser();
   try {
     const result = await saveTradeShowLeadUpdate(prisma, tradeShowId, leadId, form, actor);

@@ -3,6 +3,8 @@ import { assertAdmin } from './admin-maintenance';
 import type { Actor } from './authorization';
 import { eligibleUserWhere, type Eligibility } from './assignment-eligibility';
 import { operationalAccountWhere, operationalContactWhere, operationalOpportunityWhere, operationalProjectWhere, operationalTaskWhere } from './operational-where';
+import { readModules } from './module-availability';
+import { moduleForAuditEntity, type ModuleAvailability } from './module-policy';
 
 export const ownershipTypes = ['Account', 'Contact', 'Opportunity', 'Project', 'Task', 'Support Case'] as const;
 export type OwnershipType = typeof ownershipTypes[number];
@@ -22,28 +24,38 @@ export function ownershipWhere(type: OwnershipType, owner?: number) {
   }
 }
 const userSelect = { id: true, firstName: true, lastName: true } as const;
-export async function ownershipCounts(db: PrismaClient, actor: Actor, owner?: number) {
+function taskWhere(owner: number | undefined, availability: ModuleAvailability): Prisma.TaskWhereInput {
+  return { AND: [ownershipWhere('Task', owner) as Prisma.TaskWhereInput, ...(!availability.effective.has('OPPORTUNITIES') ? [{ opportunityId: null }] : []), ...(!availability.effective.has('PROJECTS') ? [{ projectId: null }] : []), ...(!availability.effective.has('SUPPORT_CASES') ? [{ supportCaseId: null }] : [])] };
+}
+export async function ownershipCounts(db: PrismaClient, actor: Actor, owner?: number, availability?: ModuleAvailability) {
   assertAdmin(actor);
-  const counts = await Promise.all(ownershipTypes.map(type => count(db, type, owner)));
+  const available = availability ?? await readModules(db);
+  const counts = await Promise.all(ownershipTypes.map(type => {
+    const feature = moduleForAuditEntity(type);
+    return feature && !available.effective.has(feature) ? 0 : count(db, type, owner, available);
+  }));
   return Object.fromEntries(ownershipTypes.map((type, i) => [type, counts[i]])) as Record<OwnershipType, number>;
 }
-function count(db: PrismaClient, type: OwnershipType, owner?: number) {
+function count(db: PrismaClient, type: OwnershipType, owner: number | undefined, availability: ModuleAvailability) {
   const where = ownershipWhere(type, owner);
   switch (type) {
     case 'Account': return db.account.count({ where: where as Prisma.AccountWhereInput });
     case 'Contact': return db.contact.count({ where: where as Prisma.ContactWhereInput });
     case 'Opportunity': return db.opportunity.count({ where: where as Prisma.OpportunityWhereInput });
     case 'Project': return db.project.count({ where: where as Prisma.ProjectWhereInput });
-    case 'Task': return db.task.count({ where: where as Prisma.TaskWhereInput });
+    case 'Task': return db.task.count({ where: taskWhere(owner, availability) });
     case 'Support Case': return db.supportCase.count({ where: where as Prisma.SupportCaseWhereInput });
   }
 }
-export async function ownershipRows(db: PrismaClient, actor: Actor, type: OwnershipType, owner: number | undefined, page: number) {
+export async function ownershipRows(db: PrismaClient, actor: Actor, type: OwnershipType, owner: number | undefined, page: number, availability?: ModuleAvailability) {
   assertAdmin(actor);
+  const available = availability ?? await readModules(db);
+  const feature = moduleForAuditEntity(type);
+  if (feature && !available.effective.has(feature)) throw new Error('Record type unavailable.');
   const where = ownershipWhere(type, owner), paging = { take: adminPageSize, skip: (page - 1) * adminPageSize, orderBy: { id: 'asc' as const } };
   const label = (user: { firstName: string; lastName: string } | null) => user ? `${user.firstName} ${user.lastName}` : 'Unavailable user';
   if (type === 'Contact') return (await db.contact.findMany({ where: where as Prisma.ContactWhereInput, ...paging, select: { id: true, firstName: true, lastName: true, updatedAt: true, accountId: true, account: { select: { owner: { select: userSelect } } } } })).map(row => ({ id: row.id, name: `${row.firstName} ${row.lastName}`, owner: label(row.account?.owner ?? null), href: `/contacts/${row.id}`, edit: `/accounts/${row.accountId}/edit`, updatedAt: row.updatedAt.toISOString() }));
-  if (type === 'Task') return (await db.task.findMany({ where: where as Prisma.TaskWhereInput, ...paging, select: { id: true, subject: true, updatedAt: true, assignedTo: { select: userSelect } } })).map(row => ({ id: row.id, name: row.subject, owner: label(row.assignedTo), href: `/tasks/${row.id}`, edit: `/tasks/${row.id}/edit`, updatedAt: row.updatedAt.toISOString() }));
+  if (type === 'Task') return (await db.task.findMany({ where: taskWhere(owner, available), ...paging, select: { id: true, subject: true, updatedAt: true, assignedTo: { select: userSelect } } })).map(row => ({ id: row.id, name: row.subject, owner: label(row.assignedTo), href: `/tasks/${row.id}`, edit: `/tasks/${row.id}/edit`, updatedAt: row.updatedAt.toISOString() }));
   if (type === 'Support Case') return (await db.supportCase.findMany({ where: where as Prisma.SupportCaseWhereInput, ...paging, select: { id: true, caseNumber: true, subject: true, updatedAt: true, assignedTo: { select: userSelect } } })).map(row => ({ id: row.id, name: `${row.caseNumber}: ${row.subject}`, owner: label(row.assignedTo), href: `/support/cases/${row.id}`, edit: `/support/cases/${row.id}/edit`, updatedAt: row.updatedAt.toISOString() }));
   const select = { id: true, name: true, updatedAt: true, owner: { select: userSelect } } as const;
   const rows = type === 'Account' ? await db.account.findMany({ where: where as Prisma.AccountWhereInput, ...paging, select }) : type === 'Opportunity' ? await db.opportunity.findMany({ where: where as Prisma.OpportunityWhereInput, ...paging, select }) : await db.project.findMany({ where: where as Prisma.ProjectWhereInput, ...paging, select });

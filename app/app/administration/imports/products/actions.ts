@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { prisma } from '@/lib/prisma';
 import { requireMutation } from '@/lib/current-user';
 import { applyProductImport, createProductImportAccounts, createProductImportCatalog, planProductImport, type AccountCreationCandidate, type ProductImportReview } from '@/lib/product-import';
@@ -10,6 +11,7 @@ import { ProductCatalogSource, OdmCustomizationSubtype } from '@prisma/client';
 import { createAccountFromImport } from '@/lib/accounts';
 
 export async function createAccountForProductImport(form:FormData) {
+  await assertModuleEnabled('PRODUCTS');
   const actor=await requireMutation('configuration.manage');
   try {
     const result=await createAccountFromImport(prisma,actor,form);
@@ -21,6 +23,7 @@ export async function createAccountForProductImport(form:FormData) {
 }
 
 export async function searchProductImportBaseSkus(term:string) {
+  await assertModuleEnabled('PRODUCTS');
   await requireMutation('configuration.manage');
   const query=term.trim().toUpperCase().slice(0,60);
   if(query.length<2) return [];
@@ -28,6 +31,7 @@ export async function searchProductImportBaseSkus(term:string) {
 }
 
 export async function searchProductImportSkus(term:string) {
+  await assertModuleEnabled('PRODUCTS');
   await requireMutation('configuration.manage');
   const query=term.trim().toUpperCase().slice(0,60);
   if(query.length<2) return [];
@@ -35,6 +39,7 @@ export async function searchProductImportSkus(term:string) {
 }
 
 export async function searchProductImportProducts(term:string) {
+  await assertModuleEnabled('PRODUCTS');
   await requireMutation('configuration.manage');
   const query=term.trim().slice(0,60);
   if(query.length<2) return [];
@@ -66,6 +71,7 @@ async function readProductUpload(form:FormData) {
 }
 
 export async function previewProductUpload(form:FormData) {
+  await assertModuleEnabled('PRODUCTS');
   await requireMutation('configuration.manage');
   if (form.get('catalogSource') === 'SPECIAL_SKU_LIST') return {error:'Use ODM with a subtype for custom SKUs.',sheets:[]};
   const upload=await readProductUpload(form);
@@ -74,6 +80,7 @@ export async function previewProductUpload(form:FormData) {
   catch { return {error:'Could not prepare the catalog preview. Check the file and try again.',sheets:[]}; }
 }
 export async function confirmProductUpload(form:FormData,digest:string) {
+  await assertModuleEnabled('PRODUCTS');
   await requireMutation('configuration.manage');
   if (form.get('catalogSource') === 'SPECIAL_SKU_LIST') return {ok:false as const,message:'Use ODM with a subtype for custom SKUs.'};
   const upload=await readProductUpload(form);
@@ -87,6 +94,7 @@ export async function confirmProductUpload(form:FormData,digest:string) {
   }
 }
 export async function createProductImportCatalogRecords(form:FormData,digest:string,keys:string[]) {
+  await assertModuleEnabled('PRODUCTS');
   await requireMutation('configuration.manage');
   if (form.get('catalogSource') === 'SPECIAL_SKU_LIST') return {ok:false as const,message:'Use ODM with a subtype for custom SKUs.'};
   const upload=await readProductUpload(form);
@@ -100,6 +108,7 @@ export async function createProductImportCatalogRecords(form:FormData,digest:str
   }
 }
 export async function createProductImportAccountRecords(form:FormData,digest:string,candidates:AccountCreationCandidate[]) {
+  await assertModuleEnabled('PRODUCTS');
   const actor=await requireMutation('configuration.manage');
   if(actor.role!=='ADMIN') return {ok:false as const,message:'Only an administrator can create Accounts.'};
   const upload=await readProductUpload(form);

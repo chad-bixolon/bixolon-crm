@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireMutation } from '@/lib/current-user';
@@ -7,6 +8,7 @@ import { documentStorage } from '@/lib/document-storage';
 import { importSelectedEmailFiles, recordEmailFileImport } from '@/lib/support-email-file-import';
 export type EmailFilesState = { message?: string; failures?: { name: string; reason: string }[] };
 export async function saveEmailFiles(caseId: number, _state: EmailFilesState, form: FormData): Promise<EmailFilesState> {
+  await assertModuleEnabled('SUPPORT_CASES');
   const actor = await requireMutation('support-cases.write');
   const tokens = form.getAll('emailFiles').map(String);
   if (!tokens.length) return { message: 'Select at least one email file.' };

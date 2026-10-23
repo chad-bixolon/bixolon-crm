@@ -62,13 +62,13 @@ export async function dashboardSalesPlanStatus(client:PrismaClient,actor:Actor,i
     syncStatus:actor.role==='SALES'?statuses[0]:null};
 }
 
-export async function dashboardMarketingActivity(client:PrismaClient,actor:Actor,now=new Date()) {
+export async function dashboardMarketingActivity(client:PrismaClient,actor:Actor,now=new Date(),tradeShowsEnabled=true,opportunitiesEnabled=true) {
   if (!can(actor,'marketing.read')) throw new Error('Access denied');
   const recentStart=new Date(now.getTime()-7*86400000);
   const [campaigns,influences,leads,audiences]=await Promise.all([
-    client.marketingCampaign.count({where:{status:'ACTIVE',archivedAt:null}}),
-    client.campaignInfluence.count({where:{occurredAt:{gte:recentStart,lte:now},voidedAt:null,campaign:{archivedAt:null}}}),
-    client.tradeShowLead.count({where:{tradeShow:{archivedAt:null},status:{in:['NEW','CONTACTED','QUALIFIED']},routing:{in:['UNREVIEWED','MARKETING_FOLLOW_UP']}}}),
+    client.marketingCampaign.count({where:{status:'ACTIVE',archivedAt:null,...(tradeShowsEnabled?{}:{tradeShowId:null})}}),
+    client.campaignInfluence.count({where:{occurredAt:{gte:recentStart,lte:now},voidedAt:null,...(tradeShowsEnabled?{}:{tradeShowLeadId:null}),...(opportunitiesEnabled?{}:{opportunityId:null}),campaign:{archivedAt:null,...(tradeShowsEnabled?{}:{tradeShowId:null})}}}),
+    tradeShowsEnabled?client.tradeShowLead.count({where:{tradeShow:{archivedAt:null},status:{in:['NEW','CONTACTED','QUALIFIED']},routing:{in:['UNREVIEWED','MARKETING_FOLLOW_UP']}}}):0,
     client.marketingAudience.count({where:audienceListWhere(actor)}),
   ]);
   return {campaigns,influences,leads,audiences};

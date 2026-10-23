@@ -83,9 +83,9 @@ test('form wiring requires explicit recovery and keeps Cancel and successful-sav
   assert.match(form, /if \(state\.redirectTo\) \{ clearDraft\(localStorage, draftKey\)/);
   assert.match(form, /JSON\.stringify\(draft\) === JSON\.stringify\(original\.current\)/);
   assert.match(form, /Unfinished Opportunity draft saved on this device/);
-  assert.match(source('app/opportunities/new/page.tsx'), /<OpportunityForm key=\{accountContextId \? `new-account-\$\{accountContextId\}` : "new"\} userId=\{actor\.id\}/);
-  assert.match(source('app/opportunities/[id]/edit/page.tsx'), /<OpportunityForm key=\{id\} id=\{id\} userId=\{actor\.id\} initial=\{initial\}/);
-  assert.match(source('app/trade-shows/[id]/leads/[leadId]/convert/page.tsx'), /<OpportunityForm userId=\{actor\.id\}/);
+  assert.match(source('app/opportunities/new/page.tsx'), /<OpportunityForm [^>]*key=\{accountContextId \? `new-account-\$\{accountContextId\}` : "new"\}[^>]*userId=\{actor\.id\}/);
+  assert.match(source('app/opportunities/[id]/edit/page.tsx'), /<OpportunityForm [^>]*key=\{id\} id=\{id\} userId=\{actor\.id\} initial=\{initial\}/);
+  assert.match(source('app/trade-shows/[id]/leads/[leadId]/convert/page.tsx'), /<OpportunityForm [^>]*userId=\{actor\.id\}/);
 });
 
 test('normal New Opportunity has no Account, Project, or pricing context prefill', () => {

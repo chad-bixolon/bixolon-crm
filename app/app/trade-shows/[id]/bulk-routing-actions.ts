@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import {revalidatePath} from 'next/cache';
 import {TradeShowLeadRouting} from '@prisma/client';
 import {requireMutation} from '@/lib/current-user';
@@ -8,6 +9,7 @@ import {bulkRouteTradeShowLeads,TRADE_SHOW_ROUTINGS,type TradeShowRoutingScope} 
 import type { BulkRecord } from '@/lib/bulk-action-contract';
 
 export async function bulkRouteTradeShowAction(tradeShowId:number,pageRecords:BulkRecord[],scope:TradeShowRoutingScope,form:FormData){
+  await assertModuleEnabled('TRADE_SHOWS');
   const actor=await requireMutation('trade-shows.route');
   try{
     const routing=String(form.get('bulkRouting')??'') as TradeShowLeadRouting;

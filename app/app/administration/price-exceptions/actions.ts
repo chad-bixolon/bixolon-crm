@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { isRecordChanged, recordChangedMessage, requireEditToken } from '@/lib/stale-edit';
 import { revalidatePath } from 'next/cache';
 import { requireMutation } from '@/lib/current-user';
@@ -8,6 +9,7 @@ import { correctPriceExceptionReference, type MaintenanceField } from '@/lib/pri
 import { createPeReviewAccount } from '@/lib/price-exception-account-create';
 
 export async function previewCleanup(request: CleanupRequest) {
+  await assertModuleEnabled('PRICE_EXCEPTIONS');
   const actor = await requireMutation('configuration.manage');
   try {
     const plan = await previewPriceExceptionCleanup(prisma, actor, request);
@@ -15,6 +17,7 @@ export async function previewCleanup(request: CleanupRequest) {
   } catch (error) { return { ok: false as const, message: error instanceof Error ? error.message : 'Preview failed.' }; }
 }
 export async function confirmCleanup(request: CleanupRequest, fingerprint: string, confirmedCount: number, confirmed: boolean) {
+  await assertModuleEnabled('PRICE_EXCEPTIONS');
   const actor = await requireMutation('configuration.manage');
   try {
     const count = await applyPriceExceptionCleanup(prisma, actor, request, fingerprint, confirmedCount, confirmed);
@@ -23,6 +26,7 @@ export async function confirmCleanup(request: CleanupRequest, fingerprint: strin
   } catch (error) { return { ok: false as const, message: error instanceof Error ? error.message : 'Update failed. Preview again.' }; }
 }
 export async function correctReference(id: number, field: MaintenanceField, targetId: number, updatedAt: string, lineId?: number) {
+  await assertModuleEnabled('PRICE_EXCEPTIONS');
   const actor = await requireMutation('configuration.manage');
   try {
     const tokenForm = new FormData();
@@ -41,6 +45,7 @@ export async function correctReference(id: number, field: MaintenanceField, targ
   }
 }
 export async function createCleanupAccount(form:FormData,confirmed:boolean,acknowledgeDuplicate:boolean){
+  await assertModuleEnabled('PRICE_EXCEPTIONS');
   const actor=await requireMutation('accounts.write');
   try{const result=await createPeReviewAccount(prisma,actor,form,confirmed,acknowledgeDuplicate);if(result.kind==='created')revalidatePath('/accounts');return result;}
   catch(error){return {kind:'error' as const,message:error instanceof Error?error.message:'Account could not be created.'};}

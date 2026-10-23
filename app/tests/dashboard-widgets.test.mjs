@@ -69,5 +69,10 @@ test('Marketing Activity counts active Campaigns, recent influences, actionable 
   assert.equal(seen.campaigns.status,'ACTIVE');assert.equal(seen.influences.occurredAt.gte.toISOString(),'2026-09-26T15:00:00.000Z');
   assert.deepEqual(seen.leads.routing.in,['UNREVIEWED','MARKETING_FOLLOW_UP']);assert.ok(seen.audiences.OR);
   assert.deepEqual(await dashboardMarketingActivity(client,actor('ADMIN'),now),{campaigns:4,influences:27,leads:8,audiences:3});
+  assert.deepEqual(await dashboardMarketingActivity(client,actor('ADMIN'),now,false,false),{campaigns:4,influences:27,leads:0,audiences:3});
+  assert.equal(seen.campaigns.tradeShowId,null);
+  assert.equal(seen.influences.tradeShowLeadId,null);
+  assert.equal(seen.influences.opportunityId,null);
+  assert.equal(seen.influences.campaign.tradeShowId,null);
   await assert.rejects(dashboardMarketingActivity(client,actor('SALES'),now),/Access denied/);
 });

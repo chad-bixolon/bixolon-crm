@@ -2,6 +2,7 @@ import { NAV_CATEGORIES } from '../../lib/navigation-categories';
 import Link from "next/link";
 import { Content, PageHeader } from "@/components/shell";
 import { requirePermission } from "@/lib/current-user";
+import { getModuleAvailability, moduleForPath } from '@/lib/module-availability';
 
 const groups = [
   { title: "Data & Imports", tools: [
@@ -10,6 +11,7 @@ const groups = [
     ["Data Quality", "/administration/data-quality", "Review CRM records that may need cleanup or follow-up."],
   ] },
   { title: "Users & Access", tools: [
+    ["Modules", "/administration/modules", "Choose which SalesHub modules are available in this deployment."],
     ["Company & Branding", "/administration/company-branding", "Set company and product names and upload a company logo."],
     ["Trusted Sign-In Domains", "/administration/trusted-domains", "Choose corporate Google domains allowed to sign in."],
     ["Ownership & Reassignment", "/administration/ownership", "Review records assigned to inactive or ineligible users and safely reassign work."],
@@ -47,15 +49,16 @@ const groups = [
 
 export default async function AdministrationPage() {
   await requirePermission("configuration.manage");
+  const availability = await getModuleAvailability();
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.administration} title="Administration" description="Manage users, CRM configuration, sales settings, and system tools."/>
-    <div className="space-y-7">{groups.map((group, index) => <section aria-labelledby={`admin-group-${index}`} key={group.title}>
+    <div className="space-y-7">{groups.map((group, index) => { const tools = group.tools.filter(([, href]) => { const feature = moduleForPath(href); return !feature || availability.effective.has(feature); }); return tools.length ? <section aria-labelledby={`admin-group-${index}`} key={group.title}>
       <h2 className="mb-3 text-lg font-semibold text-slate-900" id={`admin-group-${index}`}>{group.title}</h2>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{group.tools.map(([title, href, description]) => <Link className="panel flex flex-col p-4 transition-colors hover:border-orange-300 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600" href={href} key={href}>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{tools.map(([title, href, description]) => <Link className="panel flex flex-col p-4 transition-colors hover:border-orange-300 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600" href={href} key={href}>
         <h3 className="font-semibold text-slate-900">{title}</h3>
         <p className="mt-1 text-sm text-slate-600">{description}</p>
         <span className="mt-auto pt-3 text-sm font-semibold text-orange-800">Manage →</span>
       </Link>)}</div>
-    </section>)}</div>
+    </section> : null; })}</div>
   </Content>;
 }

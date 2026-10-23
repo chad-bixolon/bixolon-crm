@@ -134,7 +134,7 @@ test('Dashboard UI exposes responsive spans and keyboard reorder controls',()=>{
   assert.match(editor,/No additional widgets are available for this role\./);
   assert.match(editor,/dashboardPresentationSectionTitles\[group\.section\]/);
   assert.match(editor,/composeDashboardSections\(items\)/);
-  assert.match(admin,/widgets=\{availableDashboardWidgets\(target\)\}/);
+  assert.match(admin,/widgets=\{availableDashboardWidgets\(target\)\.filter\(widget=>dashboardWidgetAvailable\(widget.key,availability\)\)\}/);
   for(const inconsistent of ['Pipeline by Sales Rep','Sales rep forecast','Closing Opportunities','Stale Accounts','Recent Activities']){
     assert.equal(page.includes(inconsistent),false);
     assert.equal(editor.includes(inconsistent),false);

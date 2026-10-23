@@ -5,6 +5,7 @@ import { currentUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { dismissAllReadNotifications, markAllNotificationsRead, snoozeUntil, snoozeUserNotification, updateNotification } from '@/lib/notifications';
 import { preferenceCategories } from '@/lib/notification-preferences';
+import { getModuleAvailability, moduleForNotificationCategory } from '@/lib/module-availability';
 
 export async function markNotificationRead(form: FormData) {
   const actor = await currentUser();
@@ -36,8 +37,10 @@ export async function dismissAllRead() {
 
 export async function saveNotificationPreferences(_previous: { status: string }, form: FormData): Promise<{ status: string }> {
   const actor = await currentUser();
+  const availability=await getModuleAvailability();
+  const submitted=new Set(form.getAll('availableCategory').map(String));
   try {
-    await prisma.$transaction(preferenceCategories.map(category => {
+    await prisma.$transaction(preferenceCategories.filter(category=>submitted.has(category)&&(!moduleForNotificationCategory(category)||availability.effective.has(moduleForNotificationCategory(category)!))).map(category => {
       const enabled = form.get(category) === 'on';
       return prisma.notificationPreference.upsert({ where: { userId_category: { userId: actor.id, category } }, create: { userId: actor.id, category, enabled }, update: { enabled } });
     }));
@@ -66,6 +69,8 @@ export async function openNotification(form: FormData) {
   const row = await prisma.notification.findFirst({ where: { id, userId: actor.id }, select: { actionUrl: true, entityType: true, entityId: true } });
   const prefix = row?.entityType === 'PRICE_EXCEPTION' ? '/price-exceptions' : row?.entityType === 'TASK' ? '/tasks' : row?.entityType === 'OPPORTUNITY' ? '/opportunities' : row?.entityType === 'SUPPORT_CASE' ? '/support/cases' : null;
   if (!row || !prefix || row.actionUrl !== `${prefix}/${row.entityId}`) redirect('/notifications');
+  const feature = moduleForNotificationCategory(row.entityType);
+  if (feature && !(await getModuleAvailability()).effective.has(feature)) redirect('/notifications');
   const allowed = await updateNotification(prisma, actor, id, 'read');
   if (!allowed) redirect('/notifications');
   revalidatePath('/notifications');

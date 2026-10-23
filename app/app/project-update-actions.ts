@@ -3,9 +3,12 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { currentUser } from '@/lib/current-user';
 import { saveProjectUpdate, type UpdateContext } from '@/lib/project-updates';
+import { assertModuleEnabled } from '@/lib/module-availability';
 
 export type UpdateState = { message?: string; saved?: boolean };
 export async function submitProjectUpdate(context: UpdateContext, updateId: number | null, _state: UpdateState, form: FormData): Promise<UpdateState> {
+  await assertModuleEnabled(context.kind === 'project' ? 'PROJECTS' : 'OPPORTUNITIES');
+  if (String(form.get(context.kind === 'project' ? 'opportunityId' : 'projectId') ?? '')) await assertModuleEnabled(context.kind === 'project' ? 'OPPORTUNITIES' : 'PROJECTS');
   const actor = await currentUser();
   try {
     const saved = await saveProjectUpdate(prisma, actor, context, updateId, form);

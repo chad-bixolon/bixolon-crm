@@ -1,3 +1,4 @@
+import { getModuleAvailability } from '@/lib/module-availability';
 import { NAV_CATEGORIES } from '../../../../../../lib/navigation-categories';
 import { notFound, redirect } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
@@ -14,6 +15,7 @@ import { submitTradeShowConversion } from './actions';
 export const dynamic = 'force-dynamic';
 export default async function ConvertTradeShowLeadPage({params}:{params:Promise<{id:string;leadId:string}>}) {
   const actor=await currentUser();
+  const moduleAvailability = await getModuleAvailability();
   const values=await params, tradeShowId=Number(values.id), leadId=Number(values.leadId);
   if(!Number.isSafeInteger(tradeShowId)||tradeShowId<1||!Number.isSafeInteger(leadId)||leadId<1) notFound();
   const [lead,options,labels]=await Promise.all([
@@ -29,5 +31,5 @@ export default async function ConvertTradeShowLeadPage({params}:{params:Promise<
   const owners=actor.role==='SALES'?options.owners.filter(owner=>owner.id===actor.id):options.owners;
   const ownerId=defaultEligibleUserId(owners,actor.id,actor.role==='SALES'?null:lead.assignedSalesRepUserId);
   const initial={name:`${lead.account.name} - ${lead.tradeShow.name}`,description:null,competitorId:lead.competitorId,currentProductBeingUsed:lead.currentProductBeingUsed,competitivePricing:null,customerPainPoints:lead.customerPainPoints,ownerId,projectIds:[],stageId:0,expectedCloseDate:null,probability:null,forecastCategory:null,currencyCode:options.defaultCurrency,participants:[{accountId:lead.accountId,roles:[]}],contacts:lead.contactId?[{contactId:lead.contactId,isPrimary:true}]:[],lines:[]};
-  return <Content><PageHeader eyebrow={NAV_CATEGORIES.marketing} title={`Create Opportunity for ${lead.firstName} ${lead.lastName}`} description="Review every sales field before creating the Opportunity."/><OpportunityForm userId={actor.id} {...options} owners={owners} labels={labels} initial={initial} conversionAction={submitTradeShowConversion.bind(null,tradeShowId,leadId)} conversion={{tradeShowId,leadId,tradeShowName:lead.tradeShow.name,productInterest:lead.productInterest,sourceNotes:lead.sourceNotes}}/></Content>;
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.marketing} title={`Create Opportunity for ${lead.firstName} ${lead.lastName}`} description="Review every sales field before creating the Opportunity."/><OpportunityForm productsEnabled={moduleAvailability.effective.has('PRODUCTS')} projectsEnabled={moduleAvailability.effective.has('PROJECTS')} priceExceptionsEnabled={moduleAvailability.effective.has('PRICE_EXCEPTIONS')} userId={actor.id} {...options} owners={owners} labels={labels} initial={initial} conversionAction={submitTradeShowConversion.bind(null,tradeShowId,leadId)} conversion={{tradeShowId,leadId,tradeShowName:lead.tradeShow.name,productInterest:lead.productInterest,sourceNotes:lead.sourceNotes}}/></Content>;
 }

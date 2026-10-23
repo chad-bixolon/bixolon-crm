@@ -69,6 +69,13 @@ test('Contact and Opportunity queries follow the same lead touch without copying
   assert.equal(contact.influences[0], opportunity.influences[0]);
   assert.match(JSON.stringify(query[1].where), /tradeShowLeadId/);
   assert.match(JSON.stringify(query[1].where), /contactId/);
+  await attribution.contactAttribution(client, 9, false);
+  await attribution.opportunityAttribution(client, 20, [9], 42, false);
+  for (const hidden of query.slice(2)) {
+    assert.equal(hidden.where.tradeShowLeadId, null);
+    assert.deepEqual(hidden.where.campaign, { tradeShowId: null });
+    assert.doesNotMatch(JSON.stringify(hidden.where.OR), /tradeShowLead/);
+  }
 });
 
 test('migration is additive, preserves archived campaigns, and avoids historical backfill', () => {
@@ -84,6 +91,7 @@ test('Marketing actions create and archive Campaigns while Sales cannot mutate',
   const originalLoad = Module._load, changes = [];
   let role = 'MARKETING_MANAGER';
   const client = { marketingCampaign: {
+    findUnique: async () => ({ tradeShowId: null }),
     create: async ({ data }) => { changes.push(['create', data]); return { id: 5 }; },
     update: async ({ where, data }) => { changes.push(['update', where.id, data]); return { id: where.id }; },
   } };
@@ -93,6 +101,7 @@ test('Marketing actions create and archive Campaigns while Sales cannot mutate',
     '@/lib/prisma': { prisma: client },
     '@/lib/current-user': { currentUser: async () => actor(role) },
     '@/lib/marketing-attribution': attribution,
+    '@/lib/module-availability': { assertModuleEnabled: async () => {} },
   };
   Module._load = function(specifier, parent, isMain) { return specifier in mocks ? mocks[specifier] : originalLoad.call(this, specifier, parent, isMain); };
   let actions;

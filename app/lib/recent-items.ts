@@ -6,6 +6,7 @@ import { projectReadWhere } from './projects';
 import { supportCaseReadWhere } from './support-cases';
 import { scopedPriceExceptionWhere } from './price-exception-visibility';
 import { formatEasternDateTime } from './display-format';
+import { moduleForPath, resolveModules, type ModuleAvailability } from './module-policy';
 
 export const RECENT_HISTORY_LIMIT = 50;
 export const RECENT_DISPLAY_LIMIT = 8;
@@ -23,8 +24,10 @@ export function isRecentEntityType(value: unknown): value is RecentEntityType {
 }
 
 /** One bounded projection per populated type, with the destination's access and live-record filters. */
-export async function resolveRecentTargets(db: Db, actor: Actor, type: RecentEntityType, ids: number[]): Promise<{ id: number; label: string }[]> {
+export async function resolveRecentTargets(db: Db, actor: Actor, type: RecentEntityType, ids: number[], availability: ModuleAvailability = resolveModules([])): Promise<{ id: number; label: string }[]> {
   if (!ids.length || !actor.active || actor.archivedAt) return [];
+  const feature = moduleForPath(recentEntityRoutes[type][1]);
+  if (feature && !availability.effective.has(feature)) return [];
   const id = { in: ids.slice(0, RECENT_HISTORY_LIMIT) };
   switch (type) {
     case 'ACCOUNT': return can(actor, 'accounts.read') ? (await db.account.findMany({ where: { AND: [{ id }, operationalAccountWhere] }, select: { id: true, name: true }, take: RECENT_HISTORY_LIMIT })).map(row => ({ id: row.id, label: row.name })) : [];
@@ -41,12 +44,12 @@ export async function resolveRecentTargets(db: Db, actor: Actor, type: RecentEnt
   }
 }
 
-export async function recordRecentView(db: PrismaClient, actor: Actor, entityType: unknown, recordId: number) {
+export async function recordRecentView(db: PrismaClient, actor: Actor, entityType: unknown, recordId: number, availability: ModuleAvailability = resolveModules([])) {
   if (!isRecentEntityType(entityType) || !Number.isSafeInteger(recordId) || recordId < 1 || !actor.active || actor.archivedAt) return;
   await db.$transaction(async tx => {
     // Serialize a user's touches across devices; the unique key and cap stay correct under concurrent requests.
     await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${actor.id} FOR UPDATE`;
-    if (!(await resolveRecentTargets(tx, actor, entityType, [recordId])).length) return;
+    if (!(await resolveRecentTargets(tx, actor, entityType, [recordId], availability)).length) return;
     const latest = await tx.recentItem.findFirst({ where: { userId: actor.id }, orderBy: [{ lastViewedAt: 'desc' }, { id: 'desc' }], select: { lastViewedAt: true } });
     // Keep a revisit first even when requests share a millisecond or an app host's clock drifts.
     const lastViewedAt = new Date(Math.max(Date.now(), (latest?.lastViewedAt.getTime() ?? 0) + 1));
@@ -60,11 +63,11 @@ export async function recordRecentView(db: PrismaClient, actor: Actor, entityTyp
   });
 }
 
-export async function listRecentItems(db: PrismaClient, actor: Actor): Promise<RecentItemView[]> {
+export async function listRecentItems(db: PrismaClient, actor: Actor, availability: ModuleAvailability = resolveModules([])): Promise<RecentItemView[]> {
   if (!actor.active || actor.archivedAt) return [];
   const history = await db.recentItem.findMany({ where: { userId: actor.id }, orderBy: [{ lastViewedAt: 'desc' }, { id: 'desc' }], take: RECENT_HISTORY_LIMIT, select: { entityType: true, recordId: true, lastViewedAt: true } });
   const types = [...new Set(history.map(row => row.entityType))];
-  const labels = new Map<string, string>((await Promise.all(types.map(async type => (await resolveRecentTargets(db, actor, type, history.filter(row => row.entityType === type).map(row => row.recordId))).map(row => [`${type}:${row.id}`, row.label] as const)))).flat());
+  const labels = new Map<string, string>((await Promise.all(types.map(async type => (await resolveRecentTargets(db, actor, type, history.filter(row => row.entityType === type).map(row => row.recordId), availability)).map(row => [`${type}:${row.id}`, row.label] as const)))).flat());
   return history.flatMap(row => {
     const key = `${row.entityType}:${row.recordId}`, label = labels.get(key);
     if (!label) return [];

@@ -16,6 +16,7 @@ Module._load = function(request, parent, main) {
   return originalLoad.call(this, request, parent, main);
 };
 const { listRecentItems, recordRecentView, resolveRecentTargets, recentEntityRoutes, isRecentEntityType } = require(path.join(root, 'lib/recent-items.ts'));
+const { resolveModules } = require(path.join(root, 'lib/module-policy.ts'));
 const actor = { id: 7, role: 'ADMIN', active: true };
 
 test('recent input rejects unsupported types, unsafe IDs and inactive actors before any write', async () => {
@@ -64,4 +65,12 @@ test('permission gates skip forbidden entity queries and use operational read sc
 
 test('eight destinations include an activity read page', () => {
   assert.deepEqual(Object.values(recentEntityRoutes).map(row => row[1]), ['/accounts', '/contacts', '/opportunities', '/projects', '/support/cases', '/price-exceptions', '/tasks', '/activities']);
+});
+
+test('disabled module history stays stored and is omitted without querying its records', async () => {
+  const history = [{ entityType: 'OPPORTUNITY', recordId: 4, lastViewedAt: new Date() }, { entityType: 'SUPPORT_CASE', recordId: 8, lastViewedAt: new Date() }];
+  const db = { recentItem: { findMany: async () => history }, opportunity: { findMany: () => assert.fail('disabled Opportunity query') }, supportCase: { findMany: () => assert.fail('disabled Support query') } };
+  const availability = resolveModules([{ module: 'OPPORTUNITIES', enabled: false }, { module: 'SUPPORT_CASES', enabled: false }]);
+  assert.deepEqual(await listRecentItems(db, actor, availability), []);
+  assert.equal(history.length, 2);
 });

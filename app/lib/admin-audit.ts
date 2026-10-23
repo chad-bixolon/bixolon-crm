@@ -2,6 +2,8 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { assertAdmin } from './admin-maintenance';
 import type { Actor } from './authorization';
 import { adminPage, adminPageSize } from './admin-ownership';
+import { readModules } from './module-availability';
+import { moduleForAuditEntity, type ModuleAvailability } from './module-policy';
 export const auditEntities = ['Opportunity', 'Support Case', 'Task', 'Price Exception', 'Account', 'Contact', 'Activity'] as const;
 export const auditActions = ['Outcome', 'Stage', 'Value', 'Expected close date', 'Owner', 'Forecast category', 'Probability', 'Currency', 'Assignment', 'Status', 'Priority', 'Follow-up', 'Relationship', 'Archive', 'Restore', 'Created', 'Other'] as const;
 export type AuditFilters = { from?: string; to?: string; actor?: string; entity?: string; action?: string; page?: string };
@@ -63,11 +65,16 @@ export function auditConditions(f: AuditFilters, maintenance = false) {
   if (f.action && (maintenance || auditActions.includes(f.action as typeof auditActions[number]))) clauses.push(Prisma.sql`action = ${f.action.slice(0, 40)}`);
   return Prisma.join(clauses, ' AND ');
 }
-export async function adminAudit(db: PrismaClient, actor: Actor, f: AuditFilters, maintenance = false) {
+export async function adminAudit(db: PrismaClient, actor: Actor, f: AuditFilters, maintenance = false, availability?: ModuleAvailability) {
   assertAdmin(actor);
   f = normalizeAuditFilters(f);
-  const source = maintenance ? Prisma.sql`SELECT 'maintenance-' || h.id AS key, h."occurredAt" AS at, h."actorId", ${person} AS actor, h."entityType" AS entity, h."recordIds"[1] AS "recordId", CASE WHEN h."entityType" = 'Price Exception' AND h.action IN ('Updated Price Exception reference', 'Corrected Price Exception SKU') THEN COALESCE(p."peCode", 'Price Exception #' || h."recordIds"[1]) WHEN h."entityType" IN ('Branding', 'Trusted domain') THEN h."entityType" WHEN h.action IN ('Assign owner', 'Reassign') AND h."newOwnerName" IS NOT NULL THEN CASE WHEN h.action = 'Reassign' THEN 'Reassigned ' ELSE 'Assigned ' END || h."recordCount"::text || ' ' || CASE WHEN h."entityType" = 'Opportunity' AND h."recordCount" <> 1 THEN 'Opportunities' ELSE h."entityType" || CASE WHEN h."recordCount" = 1 THEN '' ELSE 's' END END || ' to ' || h."newOwnerName" ELSE h."recordCount"::text || CASE WHEN h."recordCount" = 1 THEN ' record' ELSE ' records' END END AS name, h.action, 'Maintenance action'::text AS detail, h."oldValue" AS before, h."newValue" AS after, h."recordCount" AS count, h."recordIds" AS ids FROM "AdminMaintenanceEvent" h LEFT JOIN "User" u ON u.id = h."actorId" LEFT JOIN "PriceException" p ON h."entityType" = 'Price Exception' AND p.id = h."recordIds"[1]` : sources;
-  const conditions = auditConditions(f, maintenance);
+  const available = availability ?? await readModules(db);
+  const unavailableEntities = [...auditEntities, 'Trade Show Lead', 'History'].filter(entity => {
+    const feature = moduleForAuditEntity(entity);
+    return feature && !available.effective.has(feature);
+  });
+  const source = maintenance ? Prisma.sql`SELECT 'maintenance-' || h.id AS key, h."occurredAt" AS at, h."actorId", ${person} AS actor, h."entityType" AS entity, h."recordIds"[1] AS "recordId", CASE WHEN h."entityType" = 'Price Exception' AND h.action IN ('Updated Price Exception reference', 'Corrected Price Exception SKU') THEN COALESCE(p."peCode", 'Price Exception #' || h."recordIds"[1]) WHEN h."entityType" = 'Module' THEN split_part(h."oldValue", ':', 1) WHEN h."entityType" IN ('Branding', 'Trusted domain') THEN h."entityType" WHEN h.action IN ('Assign owner', 'Reassign') AND h."newOwnerName" IS NOT NULL THEN CASE WHEN h.action = 'Reassign' THEN 'Reassigned ' ELSE 'Assigned ' END || h."recordCount"::text || ' ' || CASE WHEN h."entityType" = 'Opportunity' AND h."recordCount" <> 1 THEN 'Opportunities' ELSE h."entityType" || CASE WHEN h."recordCount" = 1 THEN '' ELSE 's' END END || ' to ' || h."newOwnerName" ELSE h."recordCount"::text || CASE WHEN h."recordCount" = 1 THEN ' record' ELSE ' records' END END AS name, h.action, 'Maintenance action'::text AS detail, h."oldValue" AS before, h."newValue" AS after, h."recordCount" AS count, h."recordIds" AS ids FROM "AdminMaintenanceEvent" h LEFT JOIN "User" u ON u.id = h."actorId" LEFT JOIN "PriceException" p ON h."entityType" = 'Price Exception' AND p.id = h."recordIds"[1]` : sources;
+  const conditions = Prisma.sql`${auditConditions(f, maintenance)}${unavailableEntities.length ? Prisma.sql` AND entity NOT IN (${Prisma.join(unavailableEntities)})` : Prisma.empty}`;
   return db.$transaction(async tx => {
     const totals = await tx.$queryRaw<{ count: bigint }[]>(Prisma.sql`SELECT count(*) AS count FROM (${source}) report WHERE ${conditions}`);
     const count = Number(totals[0]?.count ?? 0), pages = Math.max(1, Math.ceil(count / adminPageSize)), page = Math.min(adminPage(f.page), pages);

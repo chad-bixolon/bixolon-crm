@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
@@ -23,6 +24,7 @@ async function editableLead(tradeShowId:number,leadId:number) {
   return {actor,lead};
 }
 export async function createAccountForTradeShowLead(tradeShowId:number,leadId:number,_state:AccountFormState,form:FormData):Promise<AccountFormState> {
+  await assertModuleEnabled('TRADE_SHOWS');
   const {actor}=await editableLead(tradeShowId,leadId);
 
   const parsed=parseAccountForm(form); if(!parsed.value)return {errors:parsed.errors,message:'Please correct the highlighted fields.'};
@@ -38,6 +40,7 @@ export async function createAccountForTradeShowLead(tradeShowId:number,leadId:nu
   redirect(`/trade-shows/${tradeShowId}/leads/${leadId}/edit?saved=account&savedId=${accountId}`);
 }
 export async function createContactForTradeShowLead(tradeShowId:number,leadId:number,_state:State,form:FormData):Promise<State> {
+  await assertModuleEnabled('TRADE_SHOWS');
   const {actor,lead}=await editableLead(tradeShowId,leadId);
 
   const values=retainedValues(form),parsed=parseContact(form); if(!parsed.value)return {errors:parsed.errors,message:'Please correct the highlighted fields.',values};

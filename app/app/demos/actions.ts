@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { revalidatePath } from 'next/cache';
 import { requireMutation } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
@@ -15,11 +16,14 @@ const optionalId = (value: FormDataEntryValue | null) => {
 };
 
 export async function updateDemoContext(id: number, form: FormData) {
+  await assertModuleEnabled('DEMOS');
   const actor = await requireMutation('sales.write');
   const request = await prisma.demoRequest.findFirst({ where: { id, AND: [demoReadWhere(actor)] }, select: { accountId: true, projectId: true, opportunityId: true, requestedById: true } });
   if (!request) throw new Error('Demo Request not found.');
   if (actor.role === 'SALES' && request.requestedById !== actor.id) throw new Error('You can only edit your own Demo Requests.');
   const projectId = optionalId(form.get('projectId')), opportunityId = optionalId(form.get('opportunityId'));
+  if (projectId !== request.projectId) await assertModuleEnabled('PROJECTS');
+  if (opportunityId !== request.opportunityId) await assertModuleEnabled('OPPORTUNITIES');
   await prisma.$transaction(async tx => {
     await assertDemoContext(tx, actor, request.accountId, projectId === request.projectId ? null : projectId, opportunityId === request.opportunityId ? null : opportunityId);
     await tx.demoRequest.update({ where: { id }, data: { projectId, opportunityId } });
@@ -31,6 +35,8 @@ export async function updateDemoContext(id: number, form: FormData) {
 }
 
 export async function linkDemoFromProject(projectId: number, form: FormData) {
+  await assertModuleEnabled('DEMOS');
+  await assertModuleEnabled('PROJECTS');
   const actor = await requireMutation('sales.write');
   if (!can(actor, 'projects.write')) throw new Error('Access denied');
   const demoId = optionalId(form.get('demoId'));
@@ -48,6 +54,8 @@ export async function linkDemoFromProject(projectId: number, form: FormData) {
 }
 
 export async function linkDemoFromOpportunity(opportunityId: number, form: FormData) {
+  await assertModuleEnabled('DEMOS');
+  await assertModuleEnabled('OPPORTUNITIES');
   const actor = await requireMutation('sales.write');
   const demoId = optionalId(form.get('demoId'));
   if (!demoId) throw new Error('Choose a Demo.');
@@ -62,6 +70,7 @@ export async function linkDemoFromOpportunity(opportunityId: number, form: FormD
 }
 
 export async function updateDemoNotes(id: number, form: FormData) {
+  await assertModuleEnabled('DEMOS');
   const actor = await requireMutation('sales.write');
   const request = await prisma.demoRequest.findFirst({ where: { id, AND: [demoReadWhere(actor)] }, select: { requestedById: true } });
   if (!request) throw new Error('Demo Request not found.');
@@ -73,6 +82,7 @@ export async function updateDemoNotes(id: number, form: FormData) {
 }
 
 export async function recordDemoReturn(id: number, form: FormData) {
+  await assertModuleEnabled('DEMOS');
   const actor = await requireMutation('sales.write');
   const unitIds = form.getAll('unitId').map(Number);
   const returnedAt = new Date(`${String(form.get('returnedAt') ?? '')}T12:00:00Z`);
@@ -94,6 +104,7 @@ export async function recordDemoReturn(id: number, form: FormData) {
 }
 
 export async function updateDemoExpectedReturn(id: number, form: FormData) {
+  await assertModuleEnabled('DEMOS');
   const actor = await requireMutation('sales.write');
   const value = String(form.get('expectedReturn') ?? '');
   const reason = String(form.get('reason') ?? '').trim();
@@ -107,6 +118,7 @@ export async function updateDemoExpectedReturn(id: number, form: FormData) {
 }
 
 export async function deployDemoUnits(id: number, form: FormData) {
+  await assertModuleEnabled('DEMOS');
   const actor = await requireMutation('sales.write');
   const unitIds = form.getAll('unitId').map(Number);
   const deployedAt = new Date(`${String(form.get('deployedAt') ?? '')}T12:00:00Z`);

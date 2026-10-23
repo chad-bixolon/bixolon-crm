@@ -1,3 +1,4 @@
+import { ReportTypeLinks } from './report-type-links';
 import { reportingCurrencies } from '@/lib/company-currency';
 import { CurrencyControl } from '@/components/currency-control';
 import { RecoverableActionForm } from '@/components/recoverable-action-form';
@@ -12,13 +13,15 @@ import { ReportCloseDateFields } from '@/components/report-close-date-fields';
 import { prisma } from '@/lib/prisma';
 import { catalogSourceLabels } from '@/lib/products';
 import { filterValue,productPerformanceConfigFromParams } from '@/lib/report-builder';
-import { canCreateReport,canShareReport,executeProductPerformanceReport,reportRegistry } from '@/lib/reporting';
+import { canCreateReport,canShareReport,executeProductPerformanceReport,reportRegistry,visibleReportConfiguration } from '@/lib/reporting';
+import { getModuleAvailability } from '@/lib/module-availability';
 import { saveReportAction } from '../actions';
 
 type Params=Record<string,string|string[]|undefined>;
 type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|'SHARED';configuration:unknown}|null;
 export async function ProductPerformanceBuilder({params,actor,saved}:{params:Params;actor:Actor;saved:Saved}){
-  const config=productPerformanceConfigFromParams(params,saved?.configuration);
+  const availability=await getModuleAvailability();
+  const config=visibleReportConfiguration('PRODUCT_PERFORMANCE',productPerformanceConfigFromParams(params,saved?.configuration),availability);
   const [result,owners,stages,industries,territories,categories,products,skus,currencies]=await Promise.all([
     executeProductPerformanceReport(prisma,actor,config),
     prisma.user.findMany({where:{active:true,archivedAt:null,...(actor.role==='SALES'?{id:actor.id}:{})},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
@@ -35,7 +38,7 @@ export async function ProductPerformanceBuilder({params,actor,saved}:{params:Par
   const definition=reportRegistry.PRODUCT_PERFORMANCE;
   const select=(name:string,label:string,items:{value:string|number;label:string}[],empty='All')=><label className="label">{label}<select className="field" name={name} defaultValue={selected(name)}><option value="">{empty}</option>{items.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</select></label>;
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.reports} title={saved?'Edit Product Performance Report':'Product Performance Report'} description="Analyze product, model, and category performance across the sales pipeline." action={<Link className="btn-secondary" href="/reports">Reports</Link>}/>
-    <div className="mb-2 flex flex-wrap gap-2"><Link className="btn-secondary" href="/reports/new?reportType=PIPELINE">Pipeline</Link><Link className="btn-secondary" href="/reports/new?reportType=ACCOUNT_ACTIVITY">Account Activity</Link><Link className="btn-secondary" href="/reports/new?reportType=PRODUCT_PERFORMANCE">Product Performance</Link><Link className="btn-secondary" href="/reports/new?reportType=CHANNEL_PARTNER">Channel / Partner</Link><Link className="btn-secondary" href="/reports/new?reportType=PROJECT_INITIATIVE">Project Performance</Link></div>
+    <ReportTypeLinks/>
     <form method="get" className="panel report-builder p-3 md:p-4"><input type="hidden" name="configured" value="1"/><input type="hidden" name="reportType" value="PRODUCT_PERFORMANCE"/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}
       <fieldset className="report-section report-primary-filters"><legend className="report-section-title">Primary filters</legend><div className="report-filter-grid">
         <ReportSalesRepFilter actor={actor} reps={owners} selected={selected('ownerId')} label="Sales Rep"/>
@@ -53,18 +56,18 @@ export async function ProductPerformanceBuilder({params,actor,saved}:{params:Par
         {select('industry','Industry',industries.map(x=>({value:x.code,label:x.name})))}
         {select('territory','Territory',territories.map(x=>({value:x.code,label:x.name})))}
         {select('strategicAccount','Strategic Account',[{value:'true',label:'Yes'},{value:'false',label:'No'}])}
-        <ReportEntityFilter type="project" name="projectId" label="Project" selected={selected('projectId')} actor={actor}/>
+        {availability.effective.has('PROJECTS')&&<ReportEntityFilter type="project" name="projectId" label="Project" selected={selected('projectId')} actor={actor}/>}
         {select('priceSource','Pricing Source',[{value:'MANUAL',label:'Manual price'},{value:'CATALOG',label:'Price List'},{value:'PRICE_EXCEPTION',label:'Price Exception'},{value:'ODM_CUSTOMER',label:'Customer Pricing'}])}
         <CurrencyControl name="currency" value={selected('currency')} historicalCodes={currencies.map(row => row.code)}>{select('currency','Currency',currencies.map(x=>({value:x.code,label:x.code})),'All currencies')}</CurrencyControl>
         <ReportCloseDateFields initialChoice={between?'CUSTOM':preset||'ANY'} initialFrom={between?.from} initialTo={between?.to}/>
       </div></fieldset>
       <fieldset className="report-section"><legend className="report-section-title">Display options</legend><div className="report-filter-grid">
-        <label className="label">Group By<select className="field" name="groupBy" defaultValue={config.groupBy??''}><option value="">None</option>{Object.entries(definition.groupings).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+        <label className="label">Group By<select className="field" name="groupBy" defaultValue={config.groupBy??''}><option value="">None</option>{Object.entries(definition.groupings).filter(([value])=>value!=='project'||availability.effective.has('PROJECTS')).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
         <label className="label">Sort<select className="field" name="sortField" defaultValue={config.sort[0]?.field??'lineValue'}>{Object.entries(definition.sorts).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
         <label className="label">Direction<select className="field" name="sortDirection" defaultValue={config.sort[0]?.direction??'desc'}><option value="asc">Ascending</option><option value="desc">Descending</option></select></label>
       </div></fieldset>
       <fieldset className="report-metrics"><legend className="report-metrics-title">Metrics</legend><div className="report-options">{Object.entries(definition.metrics).map(([value,label])=><label key={value} className="text-sm"><input className="mr-2" type="checkbox" name="metrics" value={value} defaultChecked={config.metrics.includes(value)}/>{label}</label>)}</div></fieldset>
-      <fieldset className="report-columns"><legend className="report-columns-title">Detail columns</legend><div className="report-options">{Object.entries(definition.columns).map(([value,label])=><label key={value} className="text-sm"><input className="mr-2" type="checkbox" name="columns" value={value} defaultChecked={config.columns.includes(value)}/>{label}</label>)}</div></fieldset>
+      <fieldset className="report-columns"><legend className="report-columns-title">Detail columns</legend><div className="report-options">{Object.entries(definition.columns).filter(([value])=>value!=='project'||availability.effective.has('PROJECTS')).filter(([value])=>value!=='peCode'||availability.effective.has('PRICE_EXCEPTIONS')).map(([value,label])=><label key={value} className="text-sm"><input className="mr-2" type="checkbox" name="columns" value={value} defaultChecked={config.columns.includes(value)}/>{label}</label>)}</div></fieldset>
       <div className="report-preview"><button className="btn-primary">Preview</button></div>
     </form>
     <ReportResults result={result} config={config} groupKey={typeof params.group==='string'?params.group:undefined}/>

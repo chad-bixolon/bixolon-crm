@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireMutation } from '@/lib/current-user';
@@ -9,6 +10,7 @@ import { saveFeedbackPath } from '@/lib/save-feedback';
 import { requireEditToken, isRecordChanged, recordChangedMessage } from '../../lib/stale-edit';
 export type ProjectFormState = { errors: Record<string, string>; message?: string; redirectTo?: string; values?: Record<string, string>; recordChanged?: boolean };
 export async function submitProject(id: number | null, _old: ProjectFormState, form: FormData): Promise<ProjectFormState> {
+  await assertModuleEnabled('PROJECTS');
   const actor = await requireMutation('projects.write');
   const parsed = parseProject(form);
   if (!parsed.value) return projectFailureState(form, parsed.errors);
@@ -20,6 +22,7 @@ export async function submitProject(id: number | null, _old: ProjectFormState, f
   } catch (error) { if (isRecordChanged(error)) return { ...projectFailureState(form, {}, recordChangedMessage), recordChanged: true }; return projectFailureState(form, {}, friendlyError(error, 'Project could not be saved.')); }
 }
 export async function changeProjectArchive(id: number, archive: boolean, _old: ProjectFormState): Promise<ProjectFormState> {
+  await assertModuleEnabled('PROJECTS');
   void _old;
   const actor = await requireMutation('projects.write');
   try { await setProjectArchived(prisma, id, archive, actor); }

@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import {revalidatePath} from 'next/cache';
 import {redirect} from 'next/navigation';
 import {currentUser} from '@/lib/current-user';
@@ -14,6 +15,7 @@ function retainedValues(form:FormData){const values=Object.fromEntries([...form.
 function refresh(tradeShowId:number){revalidatePath(`/trade-shows/${tradeShowId}`);revalidatePath(`/trade-shows/${tradeShowId}/contact-resolution`);revalidatePath('/marketing/audiences');}
 
 export async function linkContactAction(tradeShowId:number,leadId:number,returnTo:string,form:FormData){
+  await assertModuleEnabled('TRADE_SHOWS');
   const actor=await currentUser(),contactId=positiveId(String(form.get('contactId')??''));
   if(!contactId)return {error:'Select a Contact.'};
   try{await linkTradeShowLeadContact(prisma,tradeShowId,leadId,contactId,actor);}catch(error){return {error:friendlyError(error,'Contact could not be linked.')};}
@@ -21,6 +23,7 @@ export async function linkContactAction(tradeShowId:number,leadId:number,returnT
 }
 
 export async function createResolutionContactAction(tradeShowId:number,leadId:number,returnTo:string,_state:ResolutionFormState,form:FormData):Promise<ResolutionFormState>{
+  await assertModuleEnabled('TRADE_SHOWS');
   const actor=await currentUser(),values=retainedValues(form),parsed=parseContact(form);
   if(!parsed.value)return {errors:parsed.errors,message:'Please correct the highlighted fields.',values};
   let contactId:number;
@@ -29,6 +32,7 @@ export async function createResolutionContactAction(tradeShowId:number,leadId:nu
 }
 
 export async function bulkCreateContactsAction(tradeShowId:number,returnTo:string,form:FormData){
+  await assertModuleEnabled('TRADE_SHOWS');
   const actor=await currentUser(),leadIds=form.getAll('leadIds').map(String).map(positiveId).filter((id):id is number=>id!==null);
   let count:number;
   try{const result=await bulkCreateTradeShowContacts(prisma,tradeShowId,leadIds,actor);count=result.created;}catch(error){return {error:friendlyError(error,'Contacts could not be created.')};}

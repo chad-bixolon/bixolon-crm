@@ -6,4 +6,4 @@
 
 Trusted sign-in domains are **not** a general list of internal email domains. Calendar Matches and My Day use `GOOGLE_WORKSPACE_DOMAIN` to classify internal meetings; Support Inbox currently labels `@bixolonusa.com` senders. These business-message rules stay as they were in this build. A future Internal Email Domains setting should evaluate their desired semantics separately.
 
-Next.js root metadata and `app/icon.png` remain static in v1 to avoid making metadata depend on runtime database access. A future build may evaluate dynamic browser metadata after measuring build and cache behavior. Optional Module Visibility, tenants, SSO alternatives, and custom roles are outside v1.
+Next.js root metadata and `app/icon.png` remain static in v1 to avoid making metadata depend on runtime database access. A future build may evaluate dynamic browser metadata after measuring build and cache behavior. Tenants, SSO alternatives, and custom roles are outside v1. The next approved deployment-level setting, [Optional Module Visibility v1](optional-module-visibility-v1.md), uses its own typed table rather than adding module choices to branding or sign-in domains.

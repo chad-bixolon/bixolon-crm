@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled, getModuleAvailability } from '@/lib/module-availability';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { currentUser } from '@/lib/current-user';
@@ -12,6 +13,12 @@ import { canConvertTradeShowLead } from '@/lib/trade-show-conversion';
 
 export type ConversionFormState = FormState;
 export async function submitTradeShowConversion(tradeShowId: number, leadId: number, _state: ConversionFormState, form: FormData): Promise<ConversionFormState> {
+  await assertModuleEnabled('TRADE_SHOWS');
+  await assertModuleEnabled('OPPORTUNITIES');
+  const availability = await getModuleAvailability();
+  if (!availability.effective.has('PRODUCTS') && ['productId', 'skuId', 'lineId', 'quantity', 'price', 'priceSource'].some(key => form.has(key))) return { errors: { lines: 'Products are unavailable in this deployment.' } };
+  if (!availability.effective.has('PROJECTS') && form.has('projectIds')) return { errors: { projectIds: 'Projects are unavailable in this deployment.' } };
+  if (!availability.effective.has('PRICE_EXCEPTIONS') && form.getAll('priceSource').includes('PRICE_EXCEPTION')) return { errors: { lines: 'Price Exceptions are unavailable in this deployment.' } };
   const actor = await currentUser();
   const parsed = parseOpportunity(form);
   if (!parsed.value) return { errors: parsed.errors, message: 'Please correct the highlighted fields.' };

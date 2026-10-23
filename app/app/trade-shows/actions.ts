@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireMutation } from '@/lib/current-user';
@@ -9,6 +10,7 @@ import { saveFeedbackPath } from '@/lib/save-feedback';
 export type TradeShowFormState = { errors: Record<string, string>; message?: string; redirectTo?: string; values?: Record<string, string> };
 
 export async function submitTradeShow(id: number | null, _old: TradeShowFormState, form: FormData): Promise<TradeShowFormState> {
+  await assertModuleEnabled('TRADE_SHOWS');
   const actor = await requireMutation('trade-shows.manage');
   const parsed = parseTradeShow(form);
   if (!parsed.value) return tradeShowFailureState(form, parsed.errors);
@@ -22,6 +24,7 @@ export async function submitTradeShow(id: number | null, _old: TradeShowFormStat
 }
 
 export async function changeTradeShowArchive(id: number, archive: boolean, _old: TradeShowFormState): Promise<TradeShowFormState> {
+  await assertModuleEnabled('TRADE_SHOWS');
   void _old;
   const actor = await requireMutation('trade-shows.manage');
   try { await setTradeShowArchived(prisma, id, archive, actor); }

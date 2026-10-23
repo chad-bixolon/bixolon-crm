@@ -18,7 +18,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:status": "prisma migrate status",
     "db:seed-stages": "node scripts/seed-sales-stages.mjs",
-    "test": "node --test --test-concurrency=2 tests/*.test.mjs",
+    "test": "node --require ./tests/module-availability-mock.cjs --test --test-concurrency=2 tests/*.test.mjs",
     "test:e2e:prepare": "node e2e/prepare.mjs",
     "test:e2e": "node e2e/run.mjs",
     "test:e2e:headed": "node e2e/run.mjs --headed",

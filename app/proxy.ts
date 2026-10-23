@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { routeAccess } from '@/lib/authorization';
 import { DEV_IMPERSONATION_COOKIE, impersonationAdminAllowed, resolveUserContext } from '@/lib/dev-impersonation';
 import { prisma } from '@/lib/prisma';
+import { readModules, requiredModulesForPath } from '@/lib/module-availability';
 
 export default auth(async (request) => {
   const path = request.nextUrl.pathname;
@@ -11,6 +12,13 @@ export default auth(async (request) => {
   const decision = path.startsWith('/dev/impersonation')
     ? impersonationAdminAllowed(context.real) ? 'allowed' : 'denied'
     : routeAccess(path, context.effective);
+  const required = requiredModulesForPath(path);
+  // Proxy is outside the React render request cache; read current deployment state here.
+  const available = decision === 'allowed' && required.length ? await readModules(prisma) : null;
+  if (available && required.some(module => !available.effective.has(module))) {
+    if (path.startsWith('/api/')) return new NextResponse('Not found', { status: 404 });
+    return NextResponse.redirect(new URL('/module-unavailable', request.url));
+  }
   const response = decision === 'sign-in'
     ? NextResponse.redirect(new URL(request.auth ? '/access-denied?reason=inactive' : '/sign-in', request.url))
     : decision === 'denied'

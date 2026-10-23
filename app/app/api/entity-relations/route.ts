@@ -4,12 +4,15 @@ import { can, opportunityReadWhere } from '@/lib/authorization';
 import { prisma } from '@/lib/prisma';
 import { operationalOpportunityWhere, operationalProjectWhere } from '@/lib/operational-where';
 import { projectReadWhere } from '@/lib/projects';
+import { getModuleAvailability } from '@/lib/module-availability';
 
 export async function GET(request: NextRequest) {
   const actor = await currentUser();
   if (!can(actor, 'accounts.read')) return NextResponse.json({ error: 'Access denied' }, { status: 403 });
   const number = (key: string) => { const id = Number(request.nextUrl.searchParams.get(key)); return Number.isSafeInteger(id) && id > 0 ? id : 0; };
   const accountId = number('accountId'), opportunityId = number('opportunityId'), projectId = number('projectId');
+  const availability = await getModuleAvailability();
+  if (opportunityId && !availability.effective.has('OPPORTUNITIES') || projectId && !availability.effective.has('PROJECTS')) return NextResponse.json({ opportunityValid: false, projectValid: false }, { status: 404 });
   if (!accountId) return NextResponse.json({ opportunityValid: false, projectValid: false }, { headers: { 'Cache-Control': 'private, no-store' } });
   const [opportunity, project] = await Promise.all([
     opportunityId && can(actor, 'opportunities.read') ? prisma.opportunity.findFirst({ where: { id: opportunityId, AND: [operationalOpportunityWhere, opportunityReadWhere(actor)], participants: { some: { accountId } } }, select: { id: true } }) : null,

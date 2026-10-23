@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { searchEntities, type EntityType } from '@/lib/entity-search';
+import { getModuleAvailability } from '@/lib/module-availability';
 
 export async function GET(request: NextRequest) {
   const type = request.nextUrl.searchParams.get('type');
   if (!['account', 'contact', 'opportunity', 'project'].includes(type ?? '')) return NextResponse.json({ results: [] }, { status: 400 });
+  const feature = type === 'opportunity' ? 'OPPORTUNITIES' : type === 'project' ? 'PROJECTS' : null;
   const params = request.nextUrl.searchParams;
+  const availability = await getModuleAvailability();
+  if (feature && !availability.effective.has(feature) || params.has('opportunityId') && !availability.effective.has('OPPORTUNITIES') || (params.has('projectId') || params.has('excludeProjectId')) && !availability.effective.has('PROJECTS')) return NextResponse.json({ results: [] }, { status: 404 });
   const positive = (key: string) => { const value = Number(params.get(key)); return Number.isSafeInteger(value) && value > 0 ? value : undefined; };
   try {
     const results = await searchEntities(prisma, await currentUser(), type as EntityType, params.get('q') ?? '', {

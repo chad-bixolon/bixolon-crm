@@ -1,4 +1,5 @@
 "use server";
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -27,6 +28,7 @@ function submittedProductValues(form: FormData): ProductSubmittedValues {
   };
 }
 export async function submitProduct(id: number | null, _state: FormState, form: FormData): Promise<FormState> {
+  await assertModuleEnabled('PRODUCTS');
   await requireMutation('products.write');
   const values = submittedProductValues(form);
   if (String(form.get('odmCustomerQuery') ?? '').trim()) return { errors: { odmCustomerAccountIds: 'Select an Account from the suggestions.' }, message: 'Please correct the highlighted field.', values };
@@ -40,6 +42,7 @@ export async function submitProduct(id: number | null, _state: FormState, form: 
   revalidatePath("/products"); redirect(saveFeedbackPath(`/products/${productId}/edit`, id ? "updated" : "created"));
 }
 export async function changeProductState(id: number, state: "active" | "inactive" | "archived", _old: FormState): Promise<FormState> {
+  await assertModuleEnabled('PRODUCTS');
   void _old;
   await requireMutation('products.write');
   try { await setProductState(prisma, id, state); }
@@ -48,6 +51,7 @@ export async function changeProductState(id: number, state: "active" | "inactive
   return { errors: {}, message: `Product ${state === "active" ? "activated" : state === "inactive" ? "deactivated" : "archived"}.` };
 }
 export async function submitProductSku(productId: number, skuId: number | null, _state: FormState, form: FormData): Promise<FormState> {
+  await assertModuleEnabled('PRODUCTS');
   await requireMutation('products.write');
   const values = submittedProductValues(form);
   if (String(form.get('odmCustomerQuery') ?? '').trim()) return { errors: { odmCustomerAccountIds: 'Select an Account from the suggestions.' }, message: 'Please correct the highlighted field.', values };

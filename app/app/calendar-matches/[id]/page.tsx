@@ -24,12 +24,14 @@ export default async function ReviewCalendarMatch({ params }: { params: Promise<
   const opportunityId = review.selectionsConfirmed ? review.selectedOpportunityId : review.suggestedOpportunityId;
   const projectId = review.selectionsConfirmed ? review.selectedProjectId : review.suggestedProjectId;
   const options = await workOptions({ accountId, opportunityId, projectId, contactIds }); const zone = await prisma.user.findUnique({ where: { id: real.id }, select: { timeZone: true } });
+  const visibleOpportunityId = options.optionalModules.opportunities || review.selectionsConfirmed ? opportunityId : null;
+  const visibleProjectId = options.optionalModules.projects || review.selectionsConfirmed ? projectId : null;
   const complete = (event.endAt ?? (event.endDate ? new Date(`${event.endDate}T00:00:00Z`) : null))! <= new Date();
   const loggable = complete && !event.cancelledAt && event.status !== 'CANCELLED' && !review.activityId && !review.ignoredAt && !!accountId && (review.matchStatus === "MATCHED" || review.selectionsConfirmed) && can(actor, 'tasks.write');
   return <Content><PageHeader title={event.summary || 'Calendar event'} eyebrow={NAV_CATEGORIES.sales} description={event.allDay ? `${event.startDate} · All day` : event.startAt ? formatDateTimeForUser(event.startAt, zone?.timeZone ?? 'America/New_York') : 'Time unavailable'} action={<Link className="btn-secondary" href="/calendar-matches">Back to queue</Link>}/>
     <section className="panel mb-5 space-y-2 p-5"><h2 className="font-semibold">Match explanation</h2>{match.explanations.length ? match.explanations.map((reason, index) => <p className="text-sm" key={index}>{reason}</p>) : <p className="text-sm">No external customer attendees found.</p>}<p className="text-sm font-semibold">{review.activityId ? 'Logged' : review.ignoredAt ? 'Ignored' : event.cancelledAt ? 'Cancelled' : match.status}</p></section>
     {review.activityId ? <Link className="btn-primary" href={`/activities/${review.activityId}/edit`}>View logged Activity</Link> : review.ignoredAt ? <p className="panel p-5">This meeting was ignored.</p> : can(actor, 'tasks.write') ? <>
-      <CalendarMatchForm eventId={id} options={options} initial={{ accountId, contactIds, opportunityId, projectId }}/>
+      <CalendarMatchForm eventId={id} options={options} initial={{ accountId, contactIds, opportunityId: visibleOpportunityId, projectId: visibleProjectId }}/>
       {loggable && <Link className="btn-secondary mt-4" href={`/calendar-matches/${id}/log`}>Log as Activity</Link>}<form className="mt-4" action={ignoreCalendarEvent}><input type="hidden" name="eventId" value={id}/><button className="btn-secondary">Ignore meeting</button></form>
     </> : <p className="panel p-5">You can view this match, but your role cannot log Activities.</p>}
   </Content>;

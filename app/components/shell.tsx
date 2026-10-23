@@ -15,6 +15,8 @@ import { RecentItems } from './recent-items';
 import type { NotificationItem } from '@/lib/notifications';
 import { NAV_CATEGORIES } from '../lib/navigation-categories';
 import { useDismissOnOutside } from './use-dismiss-on-outside';
+import { moduleForPath, modules } from '@/lib/module-policy';
+import type { DeploymentModule } from '@prisma/client';
 
 const navSections = [
   { label: NAV_CATEGORIES.crm, items: ["Dashboard", "Accounts", "Contacts"] },
@@ -30,8 +32,10 @@ const hrefFor = (item: string) => item === "Users" ? "/administration/users" : i
 const navLabelKeys: Partial<Record<string, keyof LabelMap>> = { Accounts: "ACCOUNT", Contacts: "CONTACT", Projects: "PROJECT", Opportunities: "OPPORTUNITY", Tasks: "TASK" };
 type ShellUser = { id: number; name: string; role: UserRole; delegatedUserAdministrationEnabled?: boolean; canManageUsers: boolean; canViewReports: boolean; canViewMarketing:boolean; canViewSales:boolean; canViewOpportunities:boolean; canViewSupport:boolean; canCreateAccount:boolean; canCreateContact:boolean; canCreateOpportunity:boolean; canCreateTask:boolean };
 type NavItem = (typeof navSections)[number]["items"][number];
-function canSeeNavItem(item: NavItem, user: ShellUser | null) {
+function canSeeNavItem(item: NavItem, user: ShellUser | null, enabled: ReadonlySet<DeploymentModule>) {
   if (!user) return false;
+  const feature = moduleForPath(hrefFor(item));
+  if (feature && !enabled.has(feature)) return false;
   const actor = { ...user, active: true };
   if (item === 'Users') return can(actor, 'users.manage');
   if (item === 'Administration') return can(actor, 'configuration.manage');
@@ -51,8 +55,9 @@ function canSeeNavItem(item: NavItem, user: ShellUser | null) {
     default: return true;
   }
 }
-export function Shell({ children, user, labels, notifications, branding, developmentAdmin = false, impersonating = null }: { children: ReactNode; user: ShellUser | null; labels?: LabelMap; notifications?: { unread: number; rows: NotificationItem[] } | null; branding?: { companyName: string; productName: string; logoSrc: string }; developmentAdmin?: boolean; impersonating?: { realName: string; effectiveName: string; role: UserRole } | null }) {
+export function Shell({ children, user, enabledModules = modules, labels, notifications, branding, developmentAdmin = false, impersonating = null }: { children: ReactNode; user: ShellUser | null; enabledModules?: DeploymentModule[]; labels?: LabelMap; notifications?: { unread: number; rows: NotificationItem[] } | null; branding?: { companyName: string; productName: string; logoSrc: string }; developmentAdmin?: boolean; impersonating?: { realName: string; effectiveName: string; role: UserRole } | null }) {
   const pathname = usePathname();
+  const enabled = new Set(enabledModules);
   const [menuOpen, setMenuOpen] = useState(false);
   const quickCreate = useRef<HTMLDetailsElement>(null);
   const quickCreateIsOpen = useCallback(() => !!quickCreate.current?.open, []);
@@ -63,7 +68,7 @@ export function Shell({ children, user, labels, notifications, branding, develop
   const menuButton = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const drawer = useRef<HTMLElement>(null);
-  const currentItem = navSections.flatMap(section => section.items).filter(item => canSeeNavItem(item, user)).find(item => { const href = hrefFor(item); return href === '/' ? pathname === '/' : pathname.startsWith(href); });
+  const currentItem = navSections.flatMap(section => section.items).filter(item => canSeeNavItem(item, user, enabled)).find(item => { const href = hrefFor(item); return href === '/' ? pathname === '/' : pathname.startsWith(href); });
   const currentKey = currentItem && navLabelKeys[currentItem];
   const currentTitle = currentItem && currentKey && labels ? currentKey === 'OPPORTUNITY' && labels[currentKey] === 'Opportunity' ? 'Opportunities' : `${labels[currentKey]}s` : currentItem ?? (pathname.startsWith('/help') ? 'Help & Guide' : branding?.productName ?? 'SalesHub');
   useEffect(() => { if (menuOpen) closeButton.current?.focus(); }, [menuOpen]);
@@ -90,7 +95,7 @@ export function Shell({ children, user, labels, notifications, branding, develop
         <button ref={closeButton} type="button" aria-label="Close menu" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-xl text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-orange-600 lg:hidden" onClick={() => { setMenuOpen(false); menuButton.current?.focus(); }}>×</button>
       </div>
       <nav aria-label="Primary navigation" className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-3 py-5">
-        {navSections.map(section => { const visible = section.items.filter(item => canSeeNavItem(item, user)); return visible.length ? <div key={section.label} className="mb-4"><p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">{section.label}</p>{visible.map((item) => { const href = hrefFor(item); const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+        {navSections.map(section => { const visible = section.items.filter(item => canSeeNavItem(item, user, enabled)); return visible.length ? <div key={section.label} className="mb-4"><p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">{section.label}</p>{visible.map((item) => { const href = hrefFor(item); const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           const key = navLabelKeys[item];
           const title = labels && key ? key === "OPPORTUNITY" && labels[key] === "Opportunity" ? "Opportunities" : `${labels[key]}s` : item;
           return <Link key={item} href={href} aria-current={active ? "page" : undefined} onClick={() => setMenuOpen(false)} className={`block min-h-11 rounded-md px-3 py-3 text-sm font-medium transition-colors ${active ? "bg-orange-50 text-orange-800 border-l-2 border-orange-600" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}>{title}</Link>; })}</div> : null; })}
@@ -105,10 +110,10 @@ export function Shell({ children, user, labels, notifications, branding, develop
         {user && <div className="flex min-w-0 items-center gap-2 max-[360px]:gap-1 sm:gap-4">
           <GlobalSearchPalette productName={branding?.productName}/>
           <RecentItems key={`${user.id}:${user.role}`}/>
-          {(user.canCreateAccount || user.canCreateContact || user.canCreateOpportunity || user.canCreateTask) && <details ref={quickCreate} className="relative shrink-0 group"><summary className="btn-secondary min-h-11 cursor-pointer list-none" aria-label="New record">+ <span className="hidden sm:inline">New</span></summary><nav aria-label="Quick Create" className="absolute right-0 z-30 mt-2 w-48 max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white p-2 shadow-lg group-open:block">{[
+          {(user.canCreateAccount || user.canCreateContact || user.canCreateOpportunity && enabled.has('OPPORTUNITIES') || user.canCreateTask) && <details ref={quickCreate} className="relative shrink-0 group"><summary className="btn-secondary min-h-11 cursor-pointer list-none" aria-label="New record">+ <span className="hidden sm:inline">New</span></summary><nav aria-label="Quick Create" className="absolute right-0 z-30 mt-2 w-48 max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white p-2 shadow-lg group-open:block">{[
             user.canCreateAccount && ['New Account', '/accounts/new'],
             user.canCreateContact && ['New Contact', '/contacts/new'],
-            user.canCreateOpportunity && ['New Opportunity', '/opportunities/new'],
+            user.canCreateOpportunity && enabled.has('OPPORTUNITIES') && ['New Opportunity', '/opportunities/new'],
             user.canCreateTask && ['New Task', '/tasks/new'],
             user.canCreateTask && ['Log Activity', '/activities/new'],
           ].filter((item): item is string[] => !!item).map(([label, href]) => <Link key={href} className="block min-h-11 rounded px-3 py-3 text-sm hover:bg-orange-50" href={href} onClick={closeQuickCreate}>{label}</Link>)}</nav></details>}

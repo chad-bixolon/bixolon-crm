@@ -421,7 +421,16 @@ try:
                 if directory.name in ('20261022120000_user_lifecycle_roles', '20261022121000_user_lifecycle_administration'):
                     lifecycle_before = all_table_fingerprints('backfill')
                     lifecycle_keys = foreign_keys('backfill')
+                module_before = all_table_fingerprints('backfill') if directory.name == '20261023140000_optional_module_visibility_v1' else None
                 sql("backfill", (directory / "migration.sql").read_text())
+                if module_before is not None:
+                    module_after = all_table_fingerprints('backfill')
+                    for table, fingerprint in module_before.items():
+                        assert module_after.get(table) == fingerprint, f'Module migration changed existing {table} data'
+                    assert sql_values('backfill', '''SELECT count(*) FROM "DeploymentModuleVisibility" WHERE enabled AND "updatedById" IS NULL;''') == ['11']
+                    assert sql_values('backfill', '''SELECT COUNT(DISTINCT module) FROM "DeploymentModuleVisibility";''') == ['11']
+                    assert sql_values('backfill', '''SELECT delete_rule FROM information_schema.referential_constraints WHERE constraint_name='DeploymentModuleVisibility_updatedById_fkey';''') == ['SET NULL']
+                    print('PASS: module visibility additive migration seeds 11 enabled choices, retains every populated table, and uses historical-safe updater FK', flush=True)
                 if lifecycle_before is not None:
                     lifecycle_after = all_table_fingerprints('backfill')
                     if directory.name == '20261022121000_user_lifecycle_administration':

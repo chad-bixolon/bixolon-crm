@@ -12,6 +12,7 @@ import { EntityPicker } from '@/components/entity-picker';
 import { demoDatedBy, demoDisplayDate, demoDuration, demoStatusLabel } from '@/lib/demo-display';
 import { dateOnly, demoSummary, opportunityResult } from '@/lib/demo-operations';
 import { deployDemoUnits, recordDemoReturn, updateDemoContext, updateDemoExpectedReturn, updateDemoNotes } from '../actions';
+import { getModuleAvailability } from '@/lib/module-availability';
 
 export default async function DemoPage({ params }: { params: Promise<{ id: string }> }) {
   const actor = await requirePermission('sales.read'), { id } = await params;
@@ -35,6 +36,7 @@ export default async function DemoPage({ params }: { params: Promise<{ id: strin
     },
   });
   if (!request) notFound();
+  const availability = await getModuleAvailability();
   const name = (user: { firstName: string; lastName: string } | null) => user ? `${user.firstName} ${user.lastName}` : '—';
   const summary = demoSummary(request);
   const units = request.items.flatMap(item => item.units);
@@ -47,8 +49,8 @@ export default async function DemoPage({ params }: { params: Promise<{ id: strin
     <div className="panel grid gap-3 p-5 text-sm sm:grid-cols-2">
       <p><b>Status:</b> {demoStatusLabel(request.status)}</p>
       <p><b>Account:</b> <Link className="text-orange-800 underline" href={`/accounts/${request.accountId}`}>{request.account.name}</Link></p>
-      <p><b>Project:</b> {request.project ? <Link className="text-orange-800 underline" href={`/projects/${request.project.id}`}>{request.project.name}</Link> : 'Not linked'}</p>
-      <p><b>Opportunity:</b> {request.opportunity ? <Link className="text-orange-800 underline" href={`/opportunities/${request.opportunity.id}`}>{request.opportunity.name}</Link> : 'Not linked'}</p>
+      {availability.effective.has('PROJECTS') && <p><b>Project:</b> {request.project ? <Link className="text-orange-800 underline" href={`/projects/${request.project.id}`}>{request.project.name}</Link> : 'Not linked'}</p>}
+      {availability.effective.has('OPPORTUNITIES') && <p><b>Opportunity:</b> {request.opportunity ? <Link className="text-orange-800 underline" href={`/opportunities/${request.opportunity.id}`}>{request.opportunity.name}</Link> : 'Not linked'}</p>}
       <p><b>Requested:</b> {demoDatedBy(request.requestedAt, request.requestedBy)}</p>
       <p><b>Reviewed:</b> {demoDatedBy(request.reviewedAt, request.reviewedBy)}</p>
       <p><b>Shipped:</b> {demoDatedBy(request.shippedAt, request.shippedBy)}</p>
@@ -108,11 +110,11 @@ export default async function DemoPage({ params }: { params: Promise<{ id: strin
       </>}
     </section>
 
-    {editable && <RecoverableActionForm className="panel mt-5 space-y-3 p-5" action={updateDemoContext.bind(null, request.id)}>
+    {editable && (availability.effective.has('PROJECTS') || availability.effective.has('OPPORTUNITIES')) && <RecoverableActionForm className="panel mt-5 space-y-3 p-5" action={updateDemoContext.bind(null, request.id)}>
       <h2 className="font-semibold">Business context</h2>
       <p className="text-sm text-slate-600">Link this demo to a Project or Opportunity when applicable.</p>
-      <EntityPicker type="project" label="Project" name="projectId" initial={request.project ? { id: request.project.id, name: request.project.name, context: null } : null} filters={{ accountId: request.accountId, editableOnly: true }}/>
-      <EntityPicker type="opportunity" label="Opportunity" name="opportunityId" initial={request.opportunity ? { id: request.opportunity.id, name: request.opportunity.name, context: null } : null} filters={{ accountId: request.accountId }}/>
+      {availability.effective.has('PROJECTS') ? <EntityPicker type="project" label="Project" name="projectId" initial={request.project ? { id: request.project.id, name: request.project.name, context: null } : null} filters={{ accountId: request.accountId, editableOnly: true }}/> : <input type="hidden" name="projectId" value={request.projectId ?? ''}/>}
+      {availability.effective.has('OPPORTUNITIES') ? <EntityPicker type="opportunity" label="Opportunity" name="opportunityId" initial={request.opportunity ? { id: request.opportunity.id, name: request.opportunity.name, context: null } : null} filters={{ accountId: request.accountId }}/> : <input type="hidden" name="opportunityId" value={request.opportunityId ?? ''}/>}
       <button className="btn-secondary">Update links</button>
     </RecoverableActionForm>}
     {editable ? <RecoverableActionForm className="panel mt-5 p-4" action={updateDemoNotes.bind(null, request.id)}><h2 className="font-semibold">Notes</h2><label className="sr-only" htmlFor="demo-notes">Notes</label><textarea className="field mt-2 w-full font-normal leading-5" id="demo-notes" name="notes" rows={5} defaultValue={request.notes ?? ''}/><button className="btn-secondary mt-3">Save notes</button></RecoverableActionForm> : <section className="panel mt-5 p-4"><h2 className="font-semibold">Notes</h2><p className="mt-2 whitespace-pre-wrap break-words text-sm font-normal leading-5 text-slate-700">{request.notes ?? '—'}</p></section>}

@@ -32,6 +32,7 @@ Module._extensions['.ts'] = originalTs;
 
 test('one save submits all categories in a transaction and confirms success', async () => {
   const form = new FormData();
+  for (const category of ['TASK', 'OPPORTUNITY', 'PRICE_EXCEPTION', 'SUPPORT_CASE']) form.append('availableCategory', category);
   form.set('TASK', 'on');
   form.set('SUPPORT_CASE', 'on');
   assert.deepEqual(await saveNotificationPreferences({ status: '' }, form), { status: 'success' });
@@ -46,6 +47,7 @@ test('failed save returns an error without claiming an update', async () => {
   fail = true;
   revalidated = [];
   const form = new FormData();
+  for (const category of ['TASK', 'OPPORTUNITY', 'PRICE_EXCEPTION', 'SUPPORT_CASE']) form.append('availableCategory', category);
   form.set('OPPORTUNITY', 'on');
   assert.deepEqual(await saveNotificationPreferences({ status: '' }, form), { status: 'error' });
   assert.deepEqual(operations.map(({ create }) => create.enabled), [false, true, false, false]);

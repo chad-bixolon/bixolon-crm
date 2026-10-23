@@ -1,4 +1,5 @@
 'use server';
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
@@ -10,6 +11,7 @@ const value = (form: FormData, key: string, max: number) => { const text = Strin
 async function manager() { const actor = await currentUser(); if (!canManageAttribution(actor)) throw new Error('Access denied'); return actor; }
 
 export async function saveLeadSource(form: FormData) {
+  await assertModuleEnabled('MARKETING');
   await manager();
   try {
     const sourceId = id(form.get('id')), name = value(form, 'name', 120); if (!name) return { error: 'Enter a Lead Source name.' };
@@ -22,10 +24,12 @@ export async function saveLeadSource(form: FormData) {
 }
 
 export async function saveCampaign(form: FormData) {
+  await assertModuleEnabled('MARKETING');
   const actor = await manager();
   let savedId: number;
   try {
     const campaignId = id(form.get('id')), name = value(form, 'name', 160), category = value(form, 'category', 120) || null, description = value(form, 'description', 10000) || null;
+    if (campaignId && (await prisma.marketingCampaign.findUnique({ where: { id: campaignId }, select: { tradeShowId: true } }))?.tradeShowId) await assertModuleEnabled('TRADE_SHOWS');
     if (!name) return { error: 'Enter a Campaign name.' };
     const status = value(form, 'status', 20); if (!campaignStatuses.includes(status as never)) return { error: 'Choose a valid status.' };
     const yearText = value(form, 'year', 4), year = yearText ? Number(yearText) : null;
@@ -40,22 +44,29 @@ export async function saveCampaign(form: FormData) {
 }
 
 export async function setCampaignArchive(form: FormData) {
+  await assertModuleEnabled('MARKETING');
   const actor = await manager(), campaignId = id(form.get('id')); if (!campaignId) throw new Error('Invalid Campaign.');
+  if ((await prisma.marketingCampaign.findUnique({ where: { id: campaignId }, select: { tradeShowId: true } }))?.tradeShowId) await assertModuleEnabled('TRADE_SHOWS');
   await prisma.marketingCampaign.update({ where: { id: campaignId }, data: { archivedAt: form.get('archive') === 'true' ? new Date() : null, updatedById: actor.id } });
   revalidatePath('/marketing/campaigns'); redirect(`/marketing/campaigns/${campaignId}`);
 }
 
 export async function setFirstTouch(form: FormData) {
+  await assertModuleEnabled('MARKETING');
   const actor = await manager(), contactId = id(form.get('contactId')), tradeShowLeadId = id(form.get('tradeShowLeadId')), sourceId = id(form.get('sourceId'));
   if (!!contactId === !!tradeShowLeadId) throw new Error('Choose a Contact or Trade Show Lead.');
+  if (tradeShowLeadId) await assertModuleEnabled('TRADE_SHOWS');
   await correctLeadSource(prisma, contactId ? { contactId } : { tradeShowLeadId: tradeShowLeadId! }, sourceId, actor, value(form, 'reason', 1000));
   revalidatePath(contactId ? `/contacts/${contactId}` : `/trade-shows/${form.get('tradeShowId')}/leads/${tradeShowLeadId}`);
 }
 
 export async function addInfluence(form: FormData) {
+  await assertModuleEnabled('MARKETING');
   const actor = await manager(), campaignId = id(form.get('campaignId')), contactId = id(form.get('contactId')), tradeShowLeadId = id(form.get('tradeShowLeadId'));
   if (!campaignId || !!contactId === !!tradeShowLeadId) throw new Error('Choose one record and one Campaign.');
+  if (tradeShowLeadId) await assertModuleEnabled('TRADE_SHOWS');
   const campaign = await prisma.marketingCampaign.findUnique({ where: { id: campaignId } }); if (!campaign || campaign.archivedAt) throw new Error('Choose an active Campaign.');
+  if (campaign.tradeShowId) await assertModuleEnabled('TRADE_SHOWS');
   const occurredText = value(form, 'occurredAt', 30), occurredAt = new Date(occurredText); if (!occurredText || Number.isNaN(occurredAt.getTime())) throw new Error('Choose a valid touch date.');
   if (contactId && !await prisma.contact.findUnique({ where: { id: contactId } })) throw new Error('Contact not found.');
   if (tradeShowLeadId && !await prisma.tradeShowLead.findUnique({ where: { id: tradeShowLeadId } })) throw new Error('Lead not found.');
@@ -64,8 +75,12 @@ export async function addInfluence(form: FormData) {
 }
 
 export async function voidInfluence(form: FormData) {
+  await assertModuleEnabled('MARKETING');
   const actor = await manager(), influenceId = id(form.get('id')), reason = value(form, 'reason', 1000); if (!influenceId || !reason) throw new Error('A correction reason is required.');
-  const influence = await prisma.campaignInfluence.findUniqueOrThrow({ where: { id: influenceId } });
+  const influence = await prisma.campaignInfluence.findUniqueOrThrow({ where: { id: influenceId }, include: { campaign: { select: { tradeShowId: true } } } });
+  if (influence.campaign.tradeShowId) await assertModuleEnabled('TRADE_SHOWS');
+  if (influence.tradeShowLeadId) await assertModuleEnabled('TRADE_SHOWS');
+  if (influence.opportunityId) await assertModuleEnabled('OPPORTUNITIES');
   if (influence.voidedAt) throw new Error('Touch already voided.');
   await prisma.campaignInfluence.update({ where: { id: influenceId }, data: { voidedAt: new Date(), voidedById: actor.id, voidReason: reason } });
   if (influence.contactId) revalidatePath(`/contacts/${influence.contactId}`);

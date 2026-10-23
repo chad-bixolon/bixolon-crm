@@ -31,7 +31,7 @@ export function myDayToday(now: Date, timeZone: string) { return calendarLocalIn
 export function durationLabel(minutes: number) { return minutes >= 60 ? `${Math.floor(minutes / 60)}h${minutes % 60 ? ` ${minutes % 60}m` : ''}` : `${minutes}m`; }
 
 // userId must be the real authenticated identity, never the effective impersonated actor.
-export async function getMyDaySummary(client: PrismaClient, userId: number, localDate: string, timeZone: string, now = new Date(), actor?: Actor) {
+export async function getMyDaySummary(client: PrismaClient, userId: number, localDate: string, timeZone: string, now = new Date(), actor?: Actor, optionalModules = { opportunities: true, projects: true }) {
   const zone = isUserTimeZone(timeZone) ? timeZone : DEFAULT_USER_TIME_ZONE;
   const { start, end } = myDayBounds(localDate, zone);
   // Task dueDate is an existing date-only CRM value encoded at UTC midnight.
@@ -53,8 +53,8 @@ export async function getMyDaySummary(client: PrismaClient, userId: number, loca
   const [accounts, contacts, opportunities, projects] = actor && contextRows.length ? await Promise.all([
     can(actor, 'accounts.read') ? client.account.findMany({ where: { id: { in: ids(contextRows.map(row => row.accountId)) }, AND: [operationalAccountWhere] }, select: { id: true, name: true } }) : [],
     can(actor, 'contacts.read') ? client.contact.findMany({ where: { id: { in: ids(contextRows.flatMap(row => row.contactIds)) }, AND: [operationalContactWhere] }, select: { id: true, firstName: true, lastName: true } }) : [],
-    can(actor, 'opportunities.read') ? client.opportunity.findMany({ where: { id: { in: ids(contextRows.map(row => row.opportunityId)) }, AND: [operationalOpportunityWhere], ...opportunityScope(actor) }, select: { id: true, name: true } }) : [],
-    can(actor, 'projects.read') ? client.project.findMany({ where: { id: { in: ids(contextRows.map(row => row.projectId)) }, AND: [operationalProjectWhere, projectReadWhere(actor)] }, select: { id: true, name: true } }) : [],
+    optionalModules.opportunities && can(actor, 'opportunities.read') ? client.opportunity.findMany({ where: { id: { in: ids(contextRows.map(row => row.opportunityId)) }, AND: [operationalOpportunityWhere], ...opportunityScope(actor) }, select: { id: true, name: true } }) : [],
+    optionalModules.projects && can(actor, 'projects.read') ? client.project.findMany({ where: { id: { in: ids(contextRows.map(row => row.projectId)) }, AND: [operationalProjectWhere, projectReadWhere(actor)] }, select: { id: true, name: true } }) : [],
   ]) : [[], [], [], []];
   const context = new Map(contextRows.map(row => [row.eventId, [
     accounts.find(item => item.id === row.accountId)?.name,

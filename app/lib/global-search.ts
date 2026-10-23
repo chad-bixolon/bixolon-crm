@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { searchEntities, type EntityType } from './entity-search';
 import { supportCaseReadWhere } from './support-cases';
+import { moduleForPath, resolveModules, type ModuleAvailability } from './module-policy';
 
 export type GlobalSearchResult = { group: string; label: string; context: string | null; href: string };
 export const GLOBAL_SEARCH_GROUP_LIMIT = 6;
@@ -18,12 +19,12 @@ function rank(label: string, query: string) {
   return name === q ? 0 : name.startsWith(q) ? 1 : name.split(/\s+/).some(word => word.startsWith(q)) ? 2 : name.includes(q) ? 3 : 4;
 }
 
-export async function globalSearch(db: PrismaClient, actor: Actor, raw: string): Promise<GlobalSearchResult[]> {
+export async function globalSearch(db: PrismaClient, actor: Actor, raw: string, availability: ModuleAvailability = resolveModules([])): Promise<GlobalSearchResult[]> {
   const query = raw.trim().slice(0, 100);
   if (query.length < 2) return [];
-  const groups = await Promise.all(basic.map(async ([type, group, path, permission]) => can(actor, permission) ? (await searchEntities(db, actor, type as EntityType, query, {}, GLOBAL_SEARCH_GROUP_LIMIT)).map(row => ({ group, label: row.name, context: row.context, href: `${path}/${row.id}` })) : []));
+  const groups = await Promise.all(basic.map(async ([type, group, path, permission]) => can(actor, permission) && (!moduleForPath(path) || availability.effective.has(moduleForPath(path)!)) ? (await searchEntities(db, actor, type as EntityType, query, {}, GLOBAL_SEARCH_GROUP_LIMIT)).map(row => ({ group, label: row.name, context: row.context, href: `${path}/${row.id}` })) : []));
   const results: GlobalSearchResult[] = groups.flat();
-  if (can(actor, 'support-cases.read') && can(actor, 'accounts.read')) {
+  if (availability.effective.has('SUPPORT_CASES') && can(actor, 'support-cases.read') && can(actor, 'accounts.read')) {
     const scope = supportCaseReadWhere(actor);
     const filters = [
       { caseNumber: { equals: query, mode: 'insensitive' as const } },
@@ -34,7 +35,7 @@ export async function globalSearch(db: PrismaClient, actor: Actor, raw: string):
     const rows = [...new Map(batches.flat().map(row => [row.id, row])).values()];
     results.push(...rows.sort((a, b) => Math.min(rank(a.caseNumber, query), rank(a.subject, query)) - Math.min(rank(b.caseNumber, query), rank(b.subject, query)) || a.caseNumber.localeCompare(b.caseNumber)).slice(0, GLOBAL_SEARCH_GROUP_LIMIT).map(row => ({ group: 'Support Cases', label: `${row.caseNumber} · ${row.subject}`, context: `${row.account?.name ?? row.customerNameText ?? 'Unlinked customer'} · ${row.status.replaceAll('_', ' ')}`, href: `/support/cases/${row.id}` })));
   }
-  if (can(actor, 'products.read')) {
+  if (availability.effective.has('PRODUCTS') && can(actor, 'products.read')) {
     const base = { active: true, product: { active: true, archivedAt: null } };
     const filters = [
       { partNumber: { equals: query, mode: 'insensitive' as const } },

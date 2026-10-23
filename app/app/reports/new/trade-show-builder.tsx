@@ -10,21 +10,27 @@ import { ReportSalesRepFilter } from '@/components/report-sales-rep-filter';
 import { ReportEntityFilter } from '@/components/report-entity-filter';
 import {prisma} from '@/lib/prisma';
 import {filterValue,tradeShowConfigFromParams} from '@/lib/report-builder';
-import {canCreateReport,canShareReport,executeTradeShowReport,reportRegistry} from '@/lib/reporting';
+import {canCreateReport,canShareReport,executeTradeShowReport,reportRegistry,withoutTradeShowOpportunityFields, type ReportConfiguration} from '@/lib/reporting';
+import {getModuleAvailability} from '@/lib/module-availability';
 import {tradeShowReadWhere} from '@/lib/trade-shows';
 import {saveReportAction} from '../actions';
 
 type Params=Record<string,string|string[]|undefined>;
 type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|'SHARED';configuration:unknown}|null;
 export async function TradeShowBuilder({params,actor,saved}:{params:Params;actor:Actor;saved:Saved}){
-  const config=tradeShowConfigFromParams(params,saved?.configuration),definition=reportRegistry.TRADE_SHOW;
+  const opportunitiesEnabled=(await getModuleAvailability()).effective.has('OPPORTUNITIES');
+  const initial=tradeShowConfigFromParams(params,saved?.configuration);
+  const config=(opportunitiesEnabled?initial:withoutTradeShowOpportunityFields(initial)) as ReportConfiguration;
+  const hidden=new Set(['opportunity','opportunityOwner','opportunityStage','opportunityValue','weightedValue','currency','forecastCategory','opportunityCount','pipeline','weightedPipeline','commit','closedWonValue','closedWonOpportunityCount']);
+  const available=(entries:Record<string,string>)=>Object.entries(entries).filter(([key])=>opportunitiesEnabled||!hidden.has(key));
+  const definition=reportRegistry.TRADE_SHOW;
   const [result,shows,reps,stages,competitors,currencies]=await Promise.all([
     executeTradeShowReport(prisma,actor,config),
     prisma.tradeShow.findMany({where:tradeShowReadWhere(actor),select:{id:true,name:true},orderBy:[{startDate:'desc'},{name:'asc'}]}),
     prisma.user.findMany({where:{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']},...(actor.role==='SALES'?{id:actor.id}:{})},orderBy:[{lastName:'asc'},{firstName:'asc'}]}),
-    prisma.salesStage.findMany({orderBy:[{sortOrder:'asc'},{id:'asc'}]}),
+    opportunitiesEnabled?prisma.salesStage.findMany({orderBy:[{sortOrder:'asc'},{id:'asc'}]}):[],
     prisma.competitorOption.findMany({where:{OR:[{active:true},...(Number(filterValue(config,'competitorId'))?[{id:Number(filterValue(config,'competitorId'))}]:[])]},orderBy:[{sortOrder:'asc'},{name:'asc'}]}),
-    reportingCurrencies(),
+    opportunitiesEnabled?reportingCurrencies():[],
   ]);
   const selected=(field:string)=>String(filterValue(config,field)??'');
   const select=(name:string,label:string,items:{value:string|number;label:string}[],empty='All')=><label className="label">{label}<select className="field" name={name} defaultValue={selected(name)}><option value="">{empty}</option>{items.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</select></label>;
@@ -45,15 +51,15 @@ export async function TradeShowBuilder({params,actor,saved}:{params:Params;actor
         <label className="label">Product Interest<input className="field" name="productInterest" defaultValue={selected('productInterest')} placeholder="Contains text"/></label>
         {select('competitorId','Resolved Competitor',competitors.map(item=>({value:item.id,label:item.name+(item.active?'':' (Inactive)')})))}
       </div></fieldset>
-      <fieldset className="report-section"><legend className="report-section-title">Event and Opportunity filters</legend><div className="report-filter-grid">
+      <fieldset className="report-section"><legend className="report-section-title">{opportunitiesEnabled?'Event and Opportunity filters':'Event filters'}</legend><div className="report-filter-grid">
         <fieldset className="label"><legend>Trade Show Date</legend><select className="field" name="showDatePreset" defaultValue={dateChoice}><option value="ANY">Any date</option><option value="THIS_MONTH">This Month</option><option value="THIS_QUARTER">This Quarter</option><option value="THIS_YEAR">This Year</option><option value="CUSTOM">Custom range</option></select><div className="mt-1 flex gap-1"><input className="field min-w-0" aria-label="Trade Show date from" type="date" name="showDateFrom" defaultValue={dateRange?.from}/><input className="field min-w-0" aria-label="Trade Show date to" type="date" name="showDateTo" defaultValue={dateRange?.to}/></div></fieldset>
-        {select('stageId','Opportunity Stage',stages.map(stage=>({value:stage.id,label:stage.name})))}
-        {select('forecastCategory','Forecast Category',['PIPELINE','BEST_CASE','COMMIT','OMITTED','CLOSED'].map(value=>({value,label:value.replaceAll('_',' ')})))}
-        <CurrencyControl name="currency" value={selected('currency')} historicalCodes={currencies.map(row => row.code)}>{select('currency','Currency',currencies.map(item=>({value:item.code,label:item.code})),'All currencies')}</CurrencyControl>
+        {opportunitiesEnabled&&select('stageId','Opportunity Stage',stages.map(stage=>({value:stage.id,label:stage.name})))}
+        {opportunitiesEnabled&&select('forecastCategory','Forecast Category',['PIPELINE','BEST_CASE','COMMIT','OMITTED','CLOSED'].map(value=>({value,label:value.replaceAll('_',' ')})))}
+        {opportunitiesEnabled&&<CurrencyControl name="currency" value={selected('currency')} historicalCodes={currencies.map(row => row.code)}>{select('currency','Currency',currencies.map(item=>({value:item.code,label:item.code})),'All currencies')}</CurrencyControl>}
       </div></fieldset>
-      <fieldset className="report-section"><legend className="report-section-title">Display options</legend><div className="report-filter-grid"><label className="label">Group By<select className="field" name="groupBy" defaultValue={config.groupBy??''}><option value="">None</option>{Object.entries(definition.groupings).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label className="label">Sort<select className="field" name="sortField" defaultValue={config.sort[0]?.field??'capturedDate'}>{Object.entries(definition.sorts).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label className="label">Direction<select className="field" name="sortDirection" defaultValue={config.sort[0]?.direction??'desc'}><option value="asc">Ascending</option><option value="desc">Descending</option></select></label></div></fieldset>
-      <fieldset className="report-metrics"><legend className="report-metrics-title">Metrics</legend><div className="report-options">{Object.entries(definition.metrics).map(([value,label])=><label key={value} className="text-sm"><input className="mr-2" type="checkbox" name="metrics" value={value} defaultChecked={config.metrics.includes(value)}/>{label}</label>)}</div></fieldset>
-      <fieldset className="report-columns"><legend className="report-columns-title">Detail columns</legend><div className="report-options">{Object.entries(definition.columns).map(([value,label])=><label key={value} className="text-sm"><input className="mr-2" type="checkbox" name="columns" value={value} defaultChecked={config.columns.includes(value)}/>{label}</label>)}</div></fieldset>
+      <fieldset className="report-section"><legend className="report-section-title">Display options</legend><div className="report-filter-grid"><label className="label">Group By<select className="field" name="groupBy" defaultValue={config.groupBy??''}><option value="">None</option>{available(definition.groupings).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label className="label">Sort<select className="field" name="sortField" defaultValue={config.sort[0]?.field??'capturedDate'}>{available(definition.sorts).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label className="label">Direction<select className="field" name="sortDirection" defaultValue={config.sort[0]?.direction??'desc'}><option value="asc">Ascending</option><option value="desc">Descending</option></select></label></div></fieldset>
+      <fieldset className="report-metrics"><legend className="report-metrics-title">Metrics</legend><div className="report-options">{available(definition.metrics).map(([value,label])=><label key={value} className="text-sm"><input className="mr-2" type="checkbox" name="metrics" value={value} defaultChecked={config.metrics.includes(value)}/>{label}</label>)}</div></fieldset>
+      <fieldset className="report-columns"><legend className="report-columns-title">Detail columns</legend><div className="report-options">{available(definition.columns).map(([value,label])=><label key={value} className="text-sm"><input className="mr-2" type="checkbox" name="columns" value={value} defaultChecked={config.columns.includes(value)}/>{label}</label>)}</div></fieldset>
       <div className="report-preview"><button className="btn-primary">Preview</button></div>
     </form>
     <ReportResults result={result} config={config} groupKey={Array.isArray(params.group)?params.group[0]:params.group}/>

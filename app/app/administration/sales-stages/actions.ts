@@ -1,9 +1,11 @@
 "use server";
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { revalidatePath } from "next/cache";
 import { requireMutation } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { parseStage, saveStage } from "@/lib/sales-stage-admin";
 export async function submitStage(id: number | null, _state: { message: string; success?: boolean }, form: FormData) {
+  await assertModuleEnabled('OPPORTUNITIES');
   const actor = await requireMutation("configuration.manage");
   try { await saveStage(prisma, id, parseStage(form), actor); }
   catch (error) { return { message: error instanceof Error && !error.message.includes("Unique constraint") ? error.message : "Stage name must be unique.", success: false }; }

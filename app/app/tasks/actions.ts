@@ -12,6 +12,7 @@ import { saveFeedbackPath } from '../../lib/save-feedback';
 import { assertWorkPermission, caseWorkContext, saveSupportCaseTask } from '@/lib/support-work';
 import { assertTaskEdit } from '@/lib/task-policy';
 import { assertPermission, can } from '@/lib/authorization';
+import { assertWorkModuleContext } from '@/lib/module-availability';
 export type WorkState = { errors: Record<string,string>; message?: string; values?: Record<string,string>; recordChanged?: boolean };
 const taskFields = ['subject', 'description', 'accountId', 'opportunityId', 'projectId', 'assignedToId', 'supportCaseId', 'contactId', 'status', 'priority', 'dueDate'] as const;
 function submittedValues(form: FormData) { return Object.fromEntries(taskFields.map(key => [key, String(form.get(key) ?? '')])); }
@@ -22,6 +23,9 @@ export async function submitTask(id: number | null, _old: WorkState, form: FormD
   let destination: string;
   try {
     const actor = await currentUser();
+    assertWorkPermission(actor, parsed.value.supportCaseId);
+    const previousContext = id ? await prisma.task.findUnique({ where: { id }, select: { opportunityId: true, projectId: true, supportCaseId: true } }) : null;
+    await assertWorkModuleContext(parsed.value, previousContext ?? {});
     let row;
     if (!can(actor, 'tasks.write') && can(actor, 'support-work.write') && id) {
       row = await saveSupportCaseTask(prisma, actor, parsed.value, id, requireEditToken(form));

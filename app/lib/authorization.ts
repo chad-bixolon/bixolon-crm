@@ -20,7 +20,7 @@ export function can(actor: Actor | null | undefined, permission: Permission) {
 }
 export function assertPermission(actor: Actor | null | undefined, permission: Permission) { if (!can(actor,permission)) throw new Error('Access denied'); }
 export function permissionForPath(path: string): Permission | null {
-  if (path.startsWith('/administration/company-branding') || path.startsWith('/administration/trusted-domains')) return 'deployment.manage';
+  if (path.startsWith('/administration/company-branding') || path.startsWith('/administration/trusted-domains') || path.startsWith('/administration/modules')) return 'deployment.manage';
   if (path.startsWith('/support/cases')) return 'support-cases.read';
   if (path.startsWith('/support-cases')) return 'support-cases.read';
   if (path.startsWith('/calendar-matches')) return 'sales.read';

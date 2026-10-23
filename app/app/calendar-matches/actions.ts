@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { currentUser, getRealAuthenticatedUser } from '@/lib/current-user';
 import { assertPermission, opportunityScope } from '@/lib/authorization';
 import { assertProjectWorkEdit, projectReadWhere } from '@/lib/projects';
+import { assertWorkModuleContext } from '@/lib/module-availability';
 import { activityErrorField, activityFailureState, parseActivity, saveActivity } from '@/lib/work';
 import type { WorkState } from '@/app/tasks/actions';
 import { operationalAccountWhere, operationalContactWhere, operationalOpportunityWhere, operationalProjectWhere } from '@/lib/operational-where';
@@ -40,6 +41,7 @@ export async function saveCalendarSelection(form: FormData) {
   if (event.review?.activityId || event.review?.ignoredAt) throw new Error('This event is already reviewed.');
   const number = (name: string) => { const raw = String(form.get(name) ?? ''); const value = Number(raw); if (raw && (!Number.isSafeInteger(value) || value < 1)) throw new Error('Choose a valid record.'); return raw ? value : null; };
   const accountId = number('accountId'), opportunityId = number('opportunityId'), projectId = number('projectId');
+  await assertWorkModuleContext({ opportunityId, projectId }, { opportunityId: event.review?.selectedOpportunityId ?? null, projectId: event.review?.selectedProjectId ?? null });
   const contactIds = [...new Set(form.getAll('contactIds').map(Number))];
   if (contactIds.some(id => !Number.isSafeInteger(id) || id < 1)) throw new Error('Choose valid Contacts.');
   if (accountId && !await prisma.account.findFirst({ where: { id: accountId, AND: [operationalAccountWhere] } })) throw new Error('Choose an active Account.');
@@ -77,6 +79,7 @@ export async function submitCalendarActivity(eventId: number, _old: WorkState, f
   try {
     const event = await ownedEvent(eventId);
     const actor = await currentUser(); assertPermission(actor, 'tasks.write');
+    await assertWorkModuleContext(parsed.value);
     if (event.review?.activityId || event.review?.ignoredAt || !event.review || (event.review.matchStatus !== 'MATCHED' && !event.review.selectionsConfirmed)) throw new Error('Review this Calendar match before logging.');
     await assertProjectWorkEdit(prisma, actor, parsed.value.projectId);
     await saveActivity(prisma, parsed.value, undefined, actor.id, eventId);

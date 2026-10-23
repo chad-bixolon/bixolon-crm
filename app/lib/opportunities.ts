@@ -122,7 +122,7 @@ export async function opportunityOptions(client: PrismaClient, { historicalOutco
   return { defaultCurrency: currencyConfig.defaultCurrency, businessDate: businessToday().toISOString().slice(0, 10), outcomeReasons, accounts: [] as { id: number; name: string }[], contacts: [] as { id: number; firstName: string; lastName: string; email: string | null; accountId: number | null }[], owners, stages, currencies: currencyConfig.activeCurrencies, productCount, projects: [] as { id: number; name: string }[], productCategories, competitors };
 }
 /** Form actions must supply the form-open editToken; trusted programmatic changes use the current record predicate. */
-export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number, actor?: Actor, editToken?: string) {
+export async function saveOpportunity(client: PrismaClient, input: OpportunityInput, id?: number, actor?: Actor, editToken?: string, preserve?: { products?: boolean; projects?: boolean }) {
   if (actor) assertPermission(actor, 'sales.write');
   input = { ...input, contacts: input.contacts ?? [], lines: input.lines.map(line => ({ ...line, priceSource: line.priceSource ?? "MANUAL", catalogPriceTier: line.catalogPriceTier ?? null, priceExceptionLineId: line.priceExceptionLineId ?? null, odmCustomerPriceId: line.odmCustomerPriceId ?? null, odmCustomerAccountId: line.odmCustomerAccountId ?? null })) };
   const run = async (tx: Prisma.TransactionClient) => {
@@ -152,7 +152,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
     }
     if (!canRetainCurrency(currency, input.currencyCode, existing?.currencyCode)) throw new Error("Choose an available currency.");
     if (input.ownerId && input.ownerId !== existing?.ownerId && !eligibleUser(owner, 'opportunity-owner')) throw new Error("Choose an eligible owner.");
-    if (new Set(input.projectIds).size !== input.projectIds.length || projects.length !== input.projectIds.length || projects.some(project => project.archivedAt && !existing?.projects.some(link => link.projectId === project.id))) throw new Error("Choose each active Project only once.");
+    if (!preserve?.projects && (new Set(input.projectIds).size !== input.projectIds.length || projects.length !== input.projectIds.length || projects.some(project => project.archivedAt && !existing?.projects.some(link => link.projectId === project.id)))) throw new Error("Choose each active Project only once.");
     if (accounts.length !== input.participants.length) throw new Error("Choose active accounts for all participants.");
     if (contacts.length !== input.contacts.length || contacts.some(contact => !existingContactIds.has(contact.id) && (!contact.active || contact.archivedAt))) throw new Error("Choose active Contacts.");
     const participantIds = new Set(input.participants.map(participant => participant.accountId));
@@ -202,6 +202,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
     }
     else { const created = await tx.opportunity.create({ data }); id = created.id; }
     const opportunityId = id;
+    if (!preserve?.projects) {
     const changedProjectIds = [
       ...(existing?.projects ?? []).filter(link => !input.projectIds.includes(link.projectId)).map(link => link.projectId),
       ...input.projectIds.filter(projectId => !existing?.projects.some(link => link.projectId === projectId)),
@@ -209,6 +210,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
     await advanceProjectRelationships(tx, changedProjectIds);
     for (const link of existing?.projects ?? []) if (!input.projectIds.includes(link.projectId)) await tx.opportunityProject.delete({ where: { opportunityId_projectId: { opportunityId, projectId: link.projectId } } });
     for (const projectId of input.projectIds) if (!existing?.projects.some(link => link.projectId === projectId)) await tx.opportunityProject.create({ data: { opportunityId, projectId } });
+    }
     const existingMemberships = await tx.opportunityAccount.findMany({ where: { opportunityId }, include: { roles: true } });
     for (const membership of existingMemberships) {
       const desired = input.participants.find((p) => p.accountId === membership.accountId);
@@ -226,6 +228,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       await tx.opportunityContact.updateMany({ where: { opportunityId, isPrimary: true }, data: { isPrimary: false } });
       for (const contact of input.contacts) await tx.opportunityContact.upsert({ where: { opportunityId_contactId: { opportunityId, contactId: contact.contactId } }, create: { opportunityId, ...contact }, update: { isPrimary: contact.isPrimary } });
     }
+    if (!preserve?.products) {
     for (const line of existingLines.filter((line) => !input.lines.some((item) => item.id === line.id))) await tx.opportunityProduct.update({ where: { id: line.id }, data: { archivedAt: new Date() } });
     for (const line of input.lines) {
       const old = existingLines.find(candidate => candidate.id === line.id);
@@ -242,6 +245,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       const lineData = { productId: line.productId, skuId: line.skuId ?? null, quantity: line.quantity, estimatedUnitPrice: line.price, ...provenance, ...odmSnapshot };
       if (line.id) { if (!old) throw new Error("Line item not found."); await tx.opportunityProduct.update({ where: { id: line.id }, data: lineData }); }
       else await tx.opportunityProduct.create({ data: { opportunityId, ...lineData } });
+    }
     }
     if (actor) {
       const [actorRow, newOwner, currentLines] = await Promise.all([
@@ -284,7 +288,7 @@ export async function saveOpportunity(client: PrismaClient, input: OpportunityIn
       for (const link of existingContacts) if (!currentContacts.has(link.contactId)) add('CONTACT_REMOVED', { relatedRecordId: link.contactId, relatedRecordName: link.contact ? `${link.contact.firstName} ${link.contact.lastName}` : 'Contact unavailable' });
       for (const contact of contacts) if (!previousContacts.has(contact.id)) add('CONTACT_ADDED', { relatedRecordId: contact.id, relatedRecordName: `${contact.firstName} ${contact.lastName}` });
       const previousProjects = new Set(existing?.projects.map(link => link.projectId) ?? []);
-      const currentProjects = new Set(input.projectIds);
+      const currentProjects = new Set(preserve?.projects ? existing?.projects.map(link => link.projectId) ?? [] : input.projectIds);
       for (const link of existing?.projects ?? []) if (!currentProjects.has(link.projectId)) add('PROJECT_UNLINKED', { relatedRecordId: link.projectId, relatedRecordName: link.project?.name ?? 'Project unavailable' });
       for (const project of projects) if (!previousProjects.has(project.id)) add('PROJECT_LINKED', { relatedRecordId: project.id, relatedRecordName: project.name ?? 'Project unavailable' });
       if (tx.notification && input.ownerId && input.ownerId !== existing?.ownerId) {

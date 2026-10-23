@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { formatDateTimeForUser } from '@/lib/display-format';
 import { DEFAULT_USER_TIME_ZONE } from '@/lib/user-time-zone';
 import { durationLabel, getMyDaySummary, myDayToday } from '@/lib/my-day';
+import { getModuleAvailability } from '@/lib/module-availability';
 
 export const dynamic = 'force-dynamic';
 export default async function MyDayPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
@@ -17,7 +18,8 @@ export default async function MyDayPage({ searchParams }: { searchParams: Promis
   const today = myDayToday(new Date(), zone);
   const requested = (await searchParams).date;
   const date = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && !Number.isNaN(Date.parse(`${requested}T00:00:00Z`)) && new Date(`${requested}T00:00:00Z`).toISOString().slice(0, 10) === requested ? requested : today;
-  const summary = await getMyDaySummary(prisma, real.id, date, zone, new Date(), actor);
+  const availability = await getModuleAvailability();
+  const summary = await getMyDaySummary(prisma, real.id, date, zone, new Date(), actor, { opportunities: availability.effective.has('OPPORTUNITIES'), projects: availability.effective.has('PROJECTS') });
   const day = new Date(`${date}T00:00:00Z`);
   const move = (offset: number) => new Date(day.getTime() + offset * 86400000).toISOString().slice(0, 10);
   const cards = [

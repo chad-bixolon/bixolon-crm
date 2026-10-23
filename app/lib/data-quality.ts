@@ -1,6 +1,8 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { BULK_SELECTION_LIMIT } from './bulk-action-contract';
 import { eligibleUserWhere } from './assignment-eligibility';
+import { readModules } from './module-availability';
+import { qualityIssueAvailable, type ModuleAvailability } from './module-policy';
 
 export const qualityIssues = [
   { key: 'account-owner', label: 'Accounts without a sales owner', entity: 'Accounts', explanation: 'Active Accounts with no owner.' },
@@ -69,9 +71,11 @@ async function duplicateRows(db: PrismaClient, contact: boolean, q: string, skip
   return { count, rows: rows.map(row => ({ ...row, href: contact ? `/contacts/${row.id}` : `/accounts/${row.id}` })) };
 }
 
-export async function qualityCounts(db: PrismaClient) {
+export async function qualityCounts(db: PrismaClient, availability?: ModuleAvailability) {
+  const available = availability ?? await readModules(db);
   const counts = await Promise.all(qualityIssues.map(async issue => {
     const key = issue.key;
+    if (!qualityIssueAvailable(key, available)) return 0;
     if (key === 'duplicate-account' || key === 'duplicate-contact') return duplicateCount(db, key === 'duplicate-contact');
     const where = qualityWhere(key)!;
     if (key.startsWith('account-')) return db.account.count({ where: where as Prisma.AccountWhereInput });
@@ -85,7 +89,8 @@ export async function qualityCounts(db: PrismaClient) {
 }
 
 export type QualityRow = { id: number; name: string; detail: string | null; href: string; updatedAt?: string };
-export async function qualityRows(db: PrismaClient, key: QualityIssueKey, q: string, page: number): Promise<{ count: number; rows: QualityRow[] }> {
+export async function qualityRows(db: PrismaClient, key: QualityIssueKey, q: string, page: number, availability?: ModuleAvailability): Promise<{ count: number; rows: QualityRow[] }> {
+  if (!qualityIssueAvailable(key, availability ?? await readModules(db))) throw new Error('Data Quality check unavailable.');
   const pageSize = qualityPageSizeFor(key);
   const skip = (page - 1) * pageSize;
   if (key === 'duplicate-account' || key === 'duplicate-contact') return duplicateRows(db, key === 'duplicate-contact', q, skip);

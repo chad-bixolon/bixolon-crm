@@ -13,6 +13,7 @@ Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(f
 const { eligibleUserWhere } = require(path.join(root, 'lib/assignment-eligibility.ts'));
 const { routeAccess } = require(path.join(root, 'lib/authorization.ts'));
 const { qualityIssues, qualityWhere, qualityPage, qualityCounts, qualityRows, qualityBulkSupported, qualityPageSizeFor } = require(path.join(root, 'lib/data-quality.ts'));
+const { resolveModules } = require(path.join(root, 'lib/module-policy.ts'));
 Module._extensions['.ts'] = originalTs;
 
 test('Data Quality routes are Admin only, including inactive Admin denial', () => {
@@ -62,6 +63,17 @@ test('counts use database aggregates and drill-down uses bounded queries', async
   assert.equal(rowCall[2].where.accountId, null);
   assert.equal(rowCall[2].where.OR.length, 3);
   assert.equal(calls.filter(call => call[1] === 'raw').length, 2);
+});
+test('disabled Opportunity and Project checks do not query or expose hidden records', async () => {
+  const availability = resolveModules([{ module: 'OPPORTUNITIES', enabled: false }, { module: 'PROJECTS', enabled: false }]);
+  const count = { count: async () => 1 };
+  const db = { account: count, contact: count, task: { count: () => assert.fail('mixed Task check queried') }, activity: { count: () => assert.fail('mixed Activity check queried') }, opportunity: { count: () => assert.fail('disabled Opportunity queried') }, project: { count: () => assert.fail('disabled Project queried') }, $queryRaw: async () => [{ count: 1n }] };
+  const counts = await qualityCounts(db, availability);
+  assert.equal(counts['account-owner'], 1);
+  assert.equal(counts['opportunity-owner'], 0);
+  assert.equal(counts['project-account'], 0);
+  assert.equal(counts['task-archived-link'], 0);
+  await assert.rejects(qualityRows(db, 'opportunity-owner', '', 1, availability), /unavailable/);
 });
 
 test('duplicate review uses normalized Account names and nonblank Contact emails', async () => {

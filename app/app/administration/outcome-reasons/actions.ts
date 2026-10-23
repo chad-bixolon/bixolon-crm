@@ -1,4 +1,5 @@
 "use server";
+import { assertModuleEnabled } from '@/lib/module-availability';
 import { revalidatePath } from "next/cache";
 import { requireMutation } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
@@ -7,6 +8,7 @@ import { Prisma } from "@prisma/client";
 
 export type OutcomeReasonState = { message?: string; success?: boolean };
 export async function submitOutcomeReason(id: number | null, _state: OutcomeReasonState, form: FormData): Promise<OutcomeReasonState> {
+  await assertModuleEnabled('OPPORTUNITIES');
   const actor = await requireMutation("configuration.manage");
   try {
     await saveOutcomeReason(prisma, actor, parseOutcomeReason(form), id ?? undefined);

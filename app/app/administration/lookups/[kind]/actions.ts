@@ -3,10 +3,12 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireMutation } from "@/lib/current-user";
 import { lookupKind, parseLookup, saveLookup } from "@/lib/lookups";
+import { assertModuleEnabled } from '@/lib/module-availability';
 
 export type LookupState = { errors: Record<string, string>; message?: string; success?: boolean };
 export async function submitLookup(kind: string, editing: boolean, _state: LookupState, form: FormData): Promise<LookupState> {
   await requireMutation("configuration.manage");
+  if (kind === 'product-categories') await assertModuleEnabled('PRODUCTS');
   if (!lookupKind(kind)) return { errors: {}, message: "Unknown lookup type." };
   const parsed = parseLookup(form, editing);
   if (!parsed.value) return { errors: parsed.errors, message: "Please correct the highlighted fields." };

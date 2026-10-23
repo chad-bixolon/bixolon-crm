@@ -1,3 +1,4 @@
+import { getModuleAvailability } from '@/lib/module-availability';
 import { NAV_CATEGORIES } from '../../../lib/navigation-categories';
 import { Content, PageHeader } from "@/components/shell";
 import { OpportunityForm } from "@/components/opportunity-form";
@@ -10,6 +11,7 @@ import { defaultEligibleUserId } from "@/lib/assignment-eligibility";
 export const dynamic = "force-dynamic";
 export default async function NewOpportunityPage({ searchParams }: { searchParams: Promise<{ accountId?: string | string[] }> }) {
   const actor = await requirePermission('sales.write');
+  const moduleAvailability = await getModuleAvailability();
   const [options, labels, params] = await Promise.all([opportunityOptions(prisma), getLabels(prisma), searchParams]);
   const rawAccountId = params.accountId;
   const accountContextId = rawAccountId === undefined ? undefined : typeof rawAccountId === 'string' && /^[1-9]\d*$/.test(rawAccountId) ? Number(rawAccountId) : NaN;
@@ -20,5 +22,5 @@ export default async function NewOpportunityPage({ searchParams }: { searchParam
     if (!options.accounts.some(option => option.id === account.id)) options.accounts.push(account);
   }
   const owners = actor.role === 'SALES' ? options.owners.filter(owner => owner.id === actor.id) : options.owners;
-  return <Content><PageHeader eyebrow={NAV_CATEGORIES.sales} title="New opportunity" description="Use Opportunities for specific commercial pursuits with expected revenue and close timing."/><OpportunityForm key={accountContextId ? `new-account-${accountContextId}` : "new"} userId={actor.id} accountContextId={accountContextId} {...options} owners={owners} defaultOwnerId={defaultEligibleUserId(owners, actor.id) ?? undefined} labels={labels}/></Content>;
+  return <Content><PageHeader eyebrow={NAV_CATEGORIES.sales} title="New opportunity" description="Use Opportunities for specific commercial pursuits with expected revenue and close timing."/><OpportunityForm productsEnabled={moduleAvailability.effective.has('PRODUCTS')} projectsEnabled={moduleAvailability.effective.has('PROJECTS')} priceExceptionsEnabled={moduleAvailability.effective.has('PRICE_EXCEPTIONS')} key={accountContextId ? `new-account-${accountContextId}` : "new"} userId={actor.id} accountContextId={accountContextId} {...options} owners={owners} defaultOwnerId={defaultEligibleUserId(owners, actor.id) ?? undefined} labels={labels}/></Content>;
 }
