@@ -7,7 +7,7 @@ export type ImportHeader = typeof importHeaders[number];
 export type CsvRow = { line: number; values: Partial<Record<ImportHeader,string>> };
 export const template = importHeaders.join(',') + '\n';
 
-export function parseImportCsv(input: string, catalogHeaders?: readonly string[]): { rows: CsvRow[]; errors: string[] } {
+export function parseImportCsv(input: string, catalogHeaders?: readonly string[], requiredHeaders: readonly string[] = ['model','part_number']): { rows: CsvRow[]; errors: string[] } {
   const errors: string[] = [];
   if (!input || input.length > 2_000_000) return { rows: [], errors: ['Choose a UTF-8 CSV file smaller than 2 MB.'] };
   const source = input.replace(/^\uFEFF/, '');
@@ -38,7 +38,7 @@ export function parseImportCsv(input: string, catalogHeaders?: readonly string[]
   const unknown = headers.filter(h => !(catalogHeaders ?? importHeaders).includes(h));
   if (unknown.length) errors.push(`Unsupported column: ${unknown.join(', ')}.${unknown.some(x => x.includes('external') || x.includes('source')) ? ' Source IDs require a schema migration.' : ''}`);
   if (catalogHeaders) {
-    for (const required of ['model','part_number']) if (!headers.includes(required)) errors.push(`Missing required header: ${required}.`);
+    for (const required of requiredHeaders) if (!headers.includes(required)) errors.push(`Missing required header: ${required}.`);
   } else {
     if (!headers.includes('record_type')) errors.push('Missing required header: record_type.');
     if (!headers.includes('account_name') && !headers.includes('contact_first_name')) errors.push('Include account_name or contact_first_name and contact_last_name headers.');

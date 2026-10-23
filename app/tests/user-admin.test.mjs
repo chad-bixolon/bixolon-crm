@@ -105,6 +105,12 @@ test('duplicate email keeps the existing error and entered values', async () => 
   assert.equal(result.success, undefined);
   saveError = undefined;
 });
+test('delegated-access eligibility error tells an Admin how to correct the User form', async () => {
+  saveError = new Error('User Administration Access requires an active Sales Manager. Set it to No before changing role or status.');
+  const result = await submitUser(42, { errors: {} }, form());
+  assert.match(result.message, /Set it to No/);
+  saveError = undefined;
+});
 
 for (const actor of [null, ...['READ_ONLY', 'SALES', 'SUPPORT', 'SALES_MANAGER', 'MARKETING_MANAGER'].map(role => ({ id: 2, role, active: true })), { id: 1, role: 'ADMIN', active: false }, { id: 1, role: 'ADMIN', active: true, archivedAt: new Date() }]) {
   test(`direct submitUser rejects ${JSON.stringify(actor)} before persistence, including forged Admin payloads`, async () => {

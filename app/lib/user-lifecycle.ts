@@ -30,7 +30,7 @@ export async function userChangeImpact(tx: Prisma.TransactionClient, actor: Acto
 export function impactConfirmation(before: Actor, after: Actor, impact: UserImpact[]) {
   return createHash('sha256').update(JSON.stringify({ before, after, impact })).digest('hex');
 }
-export type UserHistoryAction = 'User created' | 'Role changed' | 'Status changed' | 'Email changed' | 'Timezone changed' | 'Delegation changed' | 'Identity reset';
+export type UserHistoryAction = 'Name changed' | 'User created' | 'Role changed' | 'Status changed' | 'Email changed' | 'Timezone changed' | 'Delegation changed' | 'Identity reset';
 export async function recordUserHistory(tx: Prisma.TransactionClient, actorId: number, targetId: number, action: UserHistoryAction, oldValue?: string, newValue?: string) {
   await tx.adminMaintenanceEvent.create({ data: { actorId, entityType: 'User', recordIds: [targetId], recordCount: 1, action, oldValue, newValue } });
 }

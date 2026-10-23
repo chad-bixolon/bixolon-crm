@@ -41,35 +41,15 @@ export async function saveUser(client: PrismaClient, actor: Actor, input: UserIn
   for (const key of ['firstName', 'lastName', 'email', 'role', 'active', 'timeZone', 'delegatedUserAdministrationEnabled'] as const) if (input[key] !== undefined) form.set(key, String(input[key]));
   const parsed = parseUser(form);
   if (!parsed.value) throw new Error('Invalid user fields.');
-  const value = parsed.value;
+  const value: UserInput = parsed.value;
   try {
     return await client.$transaction(async tx => {
       await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(72341001)`;
       await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${actor.id} FOR UPDATE`;
       const persistedActor = await tx.user.findUnique({ where: { id: actor.id } });
       assertPermission(persistedActor, 'users.manage');
-      if (id) {
-        const existing = await tx.user.findUnique({ where: { id } });
-        if (!existing || existing.archivedAt) throw new Error("User not found.");
-        if (input.timeZone === undefined) value.timeZone = existing.timeZone;
-        assertUserAdministrationTarget(persistedActor!, existing, value);
-        await assertUsableAdminRemains(tx, id, value);
-        const next = { ...existing, ...value };
-        const impact = await userChangeImpact(tx, persistedActor!, existing, next);
-        const digest = impactConfirmation(existing, next, impact);
-        if (impact.length && confirmation !== digest) throw new UserImpactRequired(impact, digest);
-        const changes = { role: 'Role changed', active: 'Status changed', email: 'Email changed', timeZone: 'Timezone changed', delegatedUserAdministrationEnabled: 'Delegation changed' } as const;
-        for (const [key, action] of Object.entries(changes)) {
-          const field = key as keyof typeof changes;
-          if (existing[field] !== next[field]) await recordUserHistory(tx, actor.id, id, action as UserHistoryAction, String(existing[field]), String(next[field]));
-        }
-        return (await tx.user.update({ where: { id }, data: value })).id;
-      }
-      assertUserAdministrationTarget(persistedActor!, null, value);
-      const created = await tx.user.create({ data: value });
-      await recordUserHistory(tx, actor.id, created.id, 'User created', undefined, value.role);
-      if (value.delegatedUserAdministrationEnabled) await recordUserHistory(tx, actor.id, created.id, 'Delegation changed', 'false', 'true');
-      return created.id;
+      if (input.timeZone === undefined && id) value.timeZone = undefined;
+      return saveUserInTransaction(tx, persistedActor!, value, id, confirmation);
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new Error("That email address is already in use.");
@@ -80,6 +60,34 @@ export async function saveUser(client: PrismaClient, actor: Actor, input: UserIn
 // Delegation cannot create, recover, or modify an administrative identity.
 export function assertUserAdministrationTarget(actor: Actor, existing: { role: UserRole; delegatedUserAdministrationEnabled?: boolean } | null, next: UserInput) {
   assertPermission(actor, 'users.manage');
-  if (actor.role === 'ADMIN') return;
-  if (existing?.role === 'ADMIN' || existing?.delegatedUserAdministrationEnabled || next.role === 'ADMIN' || next.delegatedUserAdministrationEnabled === true || (next.delegatedUserAdministrationEnabled !== undefined && next.delegatedUserAdministrationEnabled !== (existing?.delegatedUserAdministrationEnabled ?? false))) throw new Error('Only an Administrator may manage administrative access.');
+  if (actor.role !== 'ADMIN' && (existing?.role === 'ADMIN' || existing?.delegatedUserAdministrationEnabled || next.role === 'ADMIN' || next.delegatedUserAdministrationEnabled === true || (next.delegatedUserAdministrationEnabled !== undefined && next.delegatedUserAdministrationEnabled !== (existing?.delegatedUserAdministrationEnabled ?? false)))) throw new Error('Only an Administrator may manage administrative access.');
+  const delegation = next.delegatedUserAdministrationEnabled ?? existing?.delegatedUserAdministrationEnabled ?? false;
+  if (delegation && (next.role !== 'SALES_MANAGER' || !next.active)) throw new Error('User Administration Access requires an active Sales Manager. Set it to No before changing role or status.');
+}
+
+/** Shared lifecycle write path; caller holds the user administration lock. */
+export async function saveUserInTransaction(tx: Prisma.TransactionClient, actor: Actor, value: UserInput, id?: number, confirmation?: string) {
+      if (id) {
+        const existing = await tx.user.findUnique({ where: { id } });
+        if (!existing || existing.archivedAt) throw new Error("User not found.");
+        if (value.timeZone === undefined) value.timeZone = existing.timeZone;
+        assertUserAdministrationTarget(actor, existing, value);
+        await assertUsableAdminRemains(tx, id, value);
+        const next = { ...existing, ...value };
+        const impact = await userChangeImpact(tx, actor, existing, next);
+        const digest = impactConfirmation(existing, next, impact);
+        if (impact.length && confirmation !== digest) throw new UserImpactRequired(impact, digest);
+        if (existing.firstName !== next.firstName || existing.lastName !== next.lastName) await recordUserHistory(tx, actor.id, id, 'Name changed', `${existing.firstName} ${existing.lastName}`, `${next.firstName} ${next.lastName}`);
+        const changes = { role: 'Role changed', active: 'Status changed', email: 'Email changed', timeZone: 'Timezone changed', delegatedUserAdministrationEnabled: 'Delegation changed' } as const;
+        for (const [key, action] of Object.entries(changes)) {
+          const field = key as keyof typeof changes;
+          if (existing[field] !== next[field]) await recordUserHistory(tx, actor.id, id, action as UserHistoryAction, String(existing[field]), String(next[field]));
+        }
+        return (await tx.user.update({ where: { id }, data: value })).id;
+      }
+      assertUserAdministrationTarget(actor, null, value);
+      const created = await tx.user.create({ data: value });
+      await recordUserHistory(tx, actor.id, created.id, 'User created', undefined, value.role);
+      if (value.delegatedUserAdministrationEnabled) await recordUserHistory(tx, actor.id, created.id, 'Delegation changed', 'false', 'true');
+      return created.id;
 }

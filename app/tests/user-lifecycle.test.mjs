@@ -37,7 +37,7 @@ test('new roles grant only their explicit business capabilities', async () => {
   assert.equal(routeAccess('/administration/system-health',support),'denied');
 });
 test('delegation grants only user administration and cannot elevate administrative identities', () => {
-  for (const permission of predefinedCapabilities.ADMIN) assert.equal(can(delegated,permission),permission==='users.manage'||predefinedCapabilities.SALES_MANAGER.includes(permission),permission);
+  for (const permission of predefinedCapabilities.ADMIN) assert.equal(can(delegated,permission),['users.manage','users.export'].includes(permission)||predefinedCapabilities.SALES_MANAGER.includes(permission),permission);
   for (const policy of Object.keys(eligibilityRoles)) assert.equal(eligibleUser(delegated,policy),eligibleUser(actor('SALES_MANAGER'),policy));
   for (const role of ['ADMIN','SALES_MANAGER']) assert.throws(()=>assertUserAdministrationTarget(delegated,null,{role,delegatedUserAdministrationEnabled:true}),/Only an Administrator/);
   assert.throws(()=>assertUserAdministrationTarget(delegated,admin,{role:'SALES'}),/Only an Administrator/);
@@ -47,6 +47,12 @@ test('delegation grants only user administration and cannot elevate administrati
   assert.equal(can({...delegated,archivedAt:new Date()},'users.manage'),false);
   assert.equal(routeAccess('/administration/settings',delegated),'denied');
   assert.equal(routeAccess('/administration/users',delegated),'allowed');
+});
+test('individual User edits enforce delegated access eligibility through the shared target policy', () => {
+  assert.throws(() => assertUserAdministrationTarget(admin, null, { role: 'SALES_MANAGER', active: false, delegatedUserAdministrationEnabled: true }), /requires an active Sales Manager/);
+  assert.throws(() => assertUserAdministrationTarget(admin, null, { role: 'SALES', active: true, delegatedUserAdministrationEnabled: true }), /requires an active Sales Manager/);
+  assert.throws(() => assertUserAdministrationTarget(admin, delegated, { role: 'READ_ONLY', active: true }), /requires an active Sales Manager/);
+  assertUserAdministrationTarget(admin, delegated, { role: 'READ_ONLY', active: true, delegatedUserAdministrationEnabled: false });
 });
 test('eligibility separates Support leadership from Sales and excludes all Executive assignments',()=>{
   for(const policy of Object.keys(eligibilityRoles)) {

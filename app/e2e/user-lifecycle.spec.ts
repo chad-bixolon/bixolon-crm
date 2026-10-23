@@ -88,9 +88,12 @@ test('persisted lifecycle preview, Unicode/timezone history, and delegated bound
   await expect(saveUser(db,delegate,{...saved,role:'ADMIN'},saved.id)).rejects.toThrow(/Only an Administrator/);
   await expect(saveUser(db,delegate,{...delegate,delegatedUserAdministrationEnabled:false},delegate.id)).rejects.toThrow(/Only an Administrator/);
   expect(eligibleUser(delegate,'account-owner')).toBe(true);
-  let warning: unknown;
-  try { await saveUser(db,admin,{...delegate,active:false},delegate.id); } catch(error) { warning=error; }
-  expect(warning).toBeUndefined();
+  await expect(saveUser(db,admin,{...delegate,active:false},delegate.id)).rejects.toThrow(/User Administration Access requires an active Sales Manager/);
+  expect((await db.user.findUniqueOrThrow({where:{id:delegate.id}})).active).toBe(true);
+  await saveUser(db,admin,{...delegate,active:false,delegatedUserAdministrationEnabled:false},delegate.id);
+  const deactivated=await db.user.findUniqueOrThrow({where:{id:delegate.id}});
+  expect(deactivated.active).toBe(false);
+  expect(deactivated.delegatedUserAdministrationEnabled).toBe(false);
 });
 test('direct server services deny Executive writes and Support Manager general assignments',async()=>{
  const executive=await db.user.findUniqueOrThrow({where:{email:emails.executive}}),manager=await db.user.findUniqueOrThrow({where:{email:emails.supportManager}}),admin=await db.user.findUniqueOrThrow({where:{email:emails.admin}});

@@ -16,7 +16,7 @@ export async function submitUser(id: number | null, _state: FormState, form: For
   if (!parsed.value) return { errors: parsed.errors, message: "Please correct the highlighted fields.", values: submittedValues(form) };
   let userId: number;
   try { userId = await saveUser(prisma, actor, parsed.value, id ?? undefined, String(form.get("impactConfirmation") ?? "")); }
-  catch (error) { if (error instanceof UserImpactRequired) return { errors: {}, message: error.message, impact: error.impact, confirmation: error.confirmation, values: submittedValues(form) }; return { errors: {}, message: error instanceof Error && /already in use|not found|Keep at least one active|Only an Administrator/.test(error.message) ? error.message : "User could not be saved.", values: submittedValues(form) }; }
+  catch (error) { if (error instanceof UserImpactRequired) return { errors: {}, message: error.message, impact: error.impact, confirmation: error.confirmation, values: submittedValues(form) }; return { errors: {}, message: error instanceof Error && /already in use|not found|Keep at least one active|Only an Administrator|User Administration Access requires/.test(error.message) ? error.message : "User could not be saved.", values: submittedValues(form) }; }
   revalidatePath("/administration/users"); revalidatePath("/accounts"); revalidatePath("/opportunities");
   if (id) return { errors: {}, message: "User updated successfully.", success: true, values: submittedValues(form) };
   redirect(`/administration/users/${userId}/edit?saved=created`);
