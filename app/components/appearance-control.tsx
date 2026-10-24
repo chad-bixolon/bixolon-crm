@@ -33,7 +33,7 @@ export function AppearanceControl({ initial }: { initial: AppearancePreference }
       <option value="LIGHT">Light</option>
       <option value="DARK">Dark</option>
     </select>
-    <p className="mt-2 text-sm text-slate-600">System follows your device&apos;s light or dark appearance setting.</p>
+    <p className="mt-2 text-sm text-slate-600">Choose System to follow your device, or select Light or Dark to keep this appearance.</p>
     <p className="mt-1 text-xs text-slate-500" role="status" aria-live="polite">{status}</p>
   </div>;
 }

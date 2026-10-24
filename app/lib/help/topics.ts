@@ -10,7 +10,7 @@ type HelpTopic = { title: string; summary: string; group: typeof helpGroups[numb
 export const helpTopics = {
   'appearance': {
     title: 'Appearance', group: 'Getting Started', summary: 'Choose how SalesHub looks on your device.',
-    sections: [{ heading: 'Choose your appearance', paragraphs: ["Open My integrations → Personal settings. Choose System to follow your device appearance, or select Light or Dark to keep SalesHub in that mode. Your choice belongs to your account and is saved for future sign-ins."] }],
+    sections: [{ heading: 'Choose your appearance', paragraphs: ["Open My Settings → Preferences. Choose System to follow your device appearance, or select Light or Dark to keep SalesHub in that mode. Your choice belongs to your account and is saved for future sign-ins. Appearance v1 uses one uploaded company logo in both themes; separate Light and Dark logo variants remain deferred."] }],
   },
   'roles': {
     title: 'Roles', group: 'Getting Started', summary: 'Choose a role for the work a person performs in SalesHub.',

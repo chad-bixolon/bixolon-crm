@@ -41,7 +41,7 @@ export function UserAccountMenu({ name, role }: { name: string; role: UserRole }
     </button>
     {open && <nav ref={panel} id="user-account-menu" aria-label="User account" className="absolute right-0 z-50 mt-2 w-48 max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
       <Link href="/help" onClick={() => setOpen(false)} className={itemClass}>Help &amp; Guide</Link>
-      <Link href="/my-integrations" onClick={() => setOpen(false)} className={itemClass}>My integrations</Link>
+      <Link href="/my-integrations" onClick={() => setOpen(false)} className={itemClass}>My Settings</Link>
       <form action={signOutAction} onSubmit={() => { setOpen(false); document.documentElement.dataset.appearance = 'system'; }}><button type="submit" className={itemClass}>Sign out</button></form>
     </nav>}
   </div>;

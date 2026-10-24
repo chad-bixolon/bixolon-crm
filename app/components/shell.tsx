@@ -70,7 +70,7 @@ export function Shell({ children, user, enabledModules = modules, labels, notifi
   const drawer = useRef<HTMLElement>(null);
   const currentItem = navSections.flatMap(section => section.items).filter(item => canSeeNavItem(item, user, enabled)).find(item => { const href = hrefFor(item); return href === '/' ? pathname === '/' : pathname.startsWith(href); });
   const currentKey = currentItem && navLabelKeys[currentItem];
-  const currentTitle = currentItem && currentKey && labels ? currentKey === 'OPPORTUNITY' && labels[currentKey] === 'Opportunity' ? 'Opportunities' : `${labels[currentKey]}s` : currentItem ?? (pathname.startsWith('/help') ? 'Help & Guide' : branding?.productName ?? 'SalesHub');
+  const currentTitle = currentItem && currentKey && labels ? currentKey === 'OPPORTUNITY' && labels[currentKey] === 'Opportunity' ? 'Opportunities' : `${labels[currentKey]}s` : currentItem ?? (pathname.startsWith('/help') ? 'Help & Guide' : pathname.startsWith('/my-integrations') ? 'My Settings' : branding?.productName ?? 'SalesHub');
   useEffect(() => { if (menuOpen) closeButton.current?.focus(); }, [menuOpen]);
   useEffect(() => {
     if (!menuOpen) return;
@@ -91,7 +91,11 @@ export function Shell({ children, user, enabledModules = modules, labels, notifi
     {menuOpen && <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-slate-950/50 lg:hidden" onClick={() => setMenuOpen(false)}/>}
     <aside ref={drawer} id="primary-navigation-drawer" className={`${menuOpen ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-50 w-[min(18rem,calc(100vw-3rem))] flex-col border-r border-slate-200 bg-white shadow-xl lg:static lg:flex lg:h-full lg:min-h-0 lg:w-60 lg:shrink-0 lg:shadow-none`}>
       <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-5 py-5 lg:shrink-0">
-        <Image src={branding?.logoSrc ?? '/brand/bixolon-logo.png'} alt={branding?.companyName ?? 'BIXOLON'} width={500} height={40} unoptimized={branding?.logoSrc === '/api/branding/logo'} priority className={`brand-logo h-8 w-44 object-contain object-center`} />
+        {branding?.logoSrc === '/api/branding/logo' ? <>
+          {/* Uploaded images have their own intrinsic dimensions. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/api/branding/logo" alt={branding.companyName} className="brand-logo block h-auto max-h-10 w-auto max-w-44 object-contain object-left" />
+        </> : <Image src={branding?.logoSrc ?? '/brand/bixolon-logo.png'} alt={branding?.companyName ?? 'BIXOLON'} width={500} height={40} priority className="brand-logo brand-logo-default block h-auto max-h-10 w-auto max-w-44 object-contain object-left" />}
         <button ref={closeButton} type="button" aria-label="Close menu" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-xl text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-orange-600 lg:hidden" onClick={() => { setMenuOpen(false); menuButton.current?.focus(); }}>×</button>
       </div>
       <nav aria-label="Primary navigation" className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-3 py-5">

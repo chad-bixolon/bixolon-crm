@@ -348,7 +348,7 @@ input:not(.field):not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 input[type="checkbox"], input[type="radio"] { accent-color: #c2410c; }
 input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible { outline-color: var(--focus-color); }
 ::selection { background: light-dark(#fed7aa, #875333); color: var(--text-primary); }
-.brand-logo { background: #fff; border-radius: .25rem; padding: .15rem .25rem; }
+.brand-logo-default { background: #fff; border-radius: .25rem; padding: .15rem .25rem; }
 
 /* Existing semantic components, tables, selectors, and overlays share the same palette. */
 .filter-panel, .report-section.report-primary-filters, .report-metrics { border-color: light-dark(#fed7aa, #735139); background: light-dark(rgb(255 247 237 / .65), #39291f); }
@@ -369,7 +369,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .saved-views-options p { color: var(--text-muted); }
 .saved-views-item { background: var(--surface-card); }
 
-/* A configured logo is shown on a neutral backing, never recolored. */
 @media print {
   :root, :root[data-appearance="system"], :root[data-appearance="dark"] { color-scheme: light !important; }
 }

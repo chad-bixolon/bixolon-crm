@@ -34,10 +34,10 @@ export default async function MyIntegrationsPage({ searchParams }: { searchParam
   if (!user) redirect('/access-denied?reason=inactive');
   const displayTime = (value: Date) => formatDateTimeForUser(value, user.timeZone);
   const result = (await searchParams).result;
-  return <Content><PageHeader eyebrow="Personal integrations" title="My integrations" description={`Connections belong to your signed-in ${branding.productName} account (${real.email}).`} />
+  return <Content><PageHeader eyebrow="Personal settings" title="My Settings" description={`Manage preferences and connections for your signed-in ${branding.productName} account (${real.email}).`} />
     {result && notices[result] && <p role="status" className="mb-5 rounded-md bg-slate-100 p-3 text-sm">{notices[result].replaceAll('SalesHub', () => branding.productName)}</p>}
-    <section className="panel mb-5 max-w-2xl space-y-4 p-6" aria-labelledby="personal-settings-heading">
-      <h2 id="personal-settings-heading" className="text-xl font-semibold">Personal settings</h2>
+    <section className="panel mb-5 max-w-2xl space-y-4 p-6" aria-labelledby="preferences-heading">
+      <h2 id="preferences-heading" className="text-xl font-semibold">Preferences</h2>
       <RecoverableActionForm action={saveMyTimeZone} className="inline-field-action">
         <label className="label">Time Zone
           <select className="field mt-1" name="timeZone" defaultValue={user.timeZone} required>
@@ -49,8 +49,10 @@ export default async function MyIntegrationsPage({ searchParams }: { searchParam
       <p className="text-sm text-slate-600">Calendar times display in your saved time zone. Your browser time zone does not change this setting.</p>
       <AppearanceControl initial={user.appearancePreference}/>
     </section>
-    <section className="panel max-w-2xl space-y-4 p-6" aria-labelledby="google-calendar-heading">
-      <h2 id="google-calendar-heading" className="text-xl font-semibold">Google Calendar</h2>
+    <section className="panel max-w-2xl space-y-4 p-6" aria-labelledby="integrations-heading">
+      <h2 id="integrations-heading" className="text-xl font-semibold">Integrations</h2>
+      <div className="space-y-4 border-t border-slate-200 pt-4">
+        <h3 className="text-lg font-semibold">Google Calendar</h3>
       {!connection ? <><p>Connect your Google Calendar to sync events for future Activity review.</p><p className="text-sm text-slate-600">Read-only access. {branding.productName} does not create or edit Google Calendar events.</p><form action={connectGoogleCalendar}><button className="btn-primary" type="submit">Connect Google Calendar</button></form></> : <>
         <p className="text-sm">Google account: <strong>{connection.googleEmail}</strong></p>
         <p className="text-sm">Status: <strong>{connection.connectionStatus === 'CONNECTED' ? 'Connected' : 'Needs reauthorization'}</strong></p>
@@ -60,6 +62,7 @@ export default async function MyIntegrationsPage({ searchParams }: { searchParam
         <p className="text-sm text-slate-600">Read-only access. Events are stored for future review; no Activities are created by sync.</p>
         <div className="form-action-row">{connection.connectionStatus === 'CONNECTED' && <form action={syncMyGoogleCalendar}><button className="btn-primary" type="submit">Sync now</button></form>}<form action={connectGoogleCalendar}><button className="btn-secondary" type="submit">Reconnect / Reauthorize</button></form><form action={disconnectGoogleCalendar}><button className="btn-secondary" type="submit">Disconnect</button></form></div>
       </>}
+      </div>
     </section>
   </Content>;
 }

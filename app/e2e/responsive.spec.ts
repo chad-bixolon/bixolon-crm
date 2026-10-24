@@ -387,7 +387,7 @@ test('User account menu fits the responsive header and supports touch dismissal'
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
   await (isMobile ? trigger.tap() : trigger.click());
-  const integrations = menu.getByRole('link', { name: 'My integrations' });
+  const integrations = menu.getByRole('link', { name: 'My Settings' });
   await (isMobile ? integrations.tap() : integrations.click());
   await expect(page).toHaveURL('/my-integrations');
   await expect(menu).toHaveCount(0);

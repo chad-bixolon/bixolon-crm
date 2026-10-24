@@ -7,7 +7,7 @@ const menu = (page: import('@playwright/test').Page) => page.getByRole('navigati
 test('account menu toggles, dismisses outside and on Escape, and supports keyboard focus', async ({ page }) => {
   await signInAs(page, 'admin');
   await expect(trigger(page)).toContainText('Administrator');
-  await expect(page.locator('header').getByRole('link', { name: 'My integrations' })).toHaveCount(0);
+  await expect(page.locator('header').getByRole('link', { name: 'My Settings' })).toHaveCount(0);
   await expect(page.locator('header').getByRole('button', { name: 'Sign out' })).toHaveCount(0);
   await trigger(page).click();
   await expect(menu(page)).toBeVisible();
@@ -21,7 +21,7 @@ test('account menu toggles, dismisses outside and on Escape, and supports keyboa
   await page.keyboard.press('Enter');
   await page.keyboard.press('Tab');
   const help = menu(page).getByRole('link', { name: 'Help & Guide' });
-  const integrations = menu(page).getByRole('link', { name: 'My integrations' });
+  const integrations = menu(page).getByRole('link', { name: 'My Settings' });
   const signOut = menu(page).getByRole('button', { name: 'Sign out' });
   await expect(help).toBeFocused();
   expect(await help.evaluate(el => getComputedStyle(el).outlineStyle)).not.toBe('none');
@@ -50,9 +50,9 @@ for (const role of ['admin', 'support', 'sales', 'salesManager', 'marketing', 'r
     await expect(menu(page).getByRole('link')).toHaveCount(2);
     await expect(menu(page).getByRole('link', { name: 'Help & Guide' })).toHaveAttribute('href', '/help');
     await expect(menu(page).getByRole('button')).toHaveCount(1);
-    await menu(page).getByRole('link', { name: 'My integrations' }).click();
+    await menu(page).getByRole('link', { name: 'My Settings' }).click();
     await expect(page).toHaveURL('/my-integrations');
-    await expect(page.getByRole('heading', { name: 'My integrations', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'My Settings', exact: true })).toBeVisible();
     await expect(menu(page)).toHaveCount(0);
     await expect(trigger(page)).toHaveAttribute('aria-expanded', 'false');
   });
@@ -119,8 +119,8 @@ test('Administrator can still test a user and return through the existing banner
   await expect(page.getByRole('main').getByRole('heading', { name: 'Administration', exact: true })).toHaveCount(0);
   await expect(page.getByRole('main').locator('a[href="/help/support-inbox"]')).toHaveCount(0);
   await trigger(page).click();
-  await menu(page).getByRole('link', { name: 'My integrations' }).click();
-  await expect(page.getByText('Connections belong to your signed-in SalesHub account (admin@e2e.saleshub.local).')).toBeVisible();
+  await menu(page).getByRole('link', { name: 'My Settings' }).click();
+  await expect(page.getByText('Manage preferences and connections for your signed-in SalesHub account (admin@e2e.saleshub.local).')).toBeVisible();
   await page.getByRole('button', { name: 'Return to Admin' }).click();
   await expect(trigger(page)).toContainText('E2E admin');
   await expect(page.locator('header').getByRole('link', { name: 'Test as user' })).toBeVisible();
