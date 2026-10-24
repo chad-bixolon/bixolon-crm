@@ -19,6 +19,12 @@ enum UserRole {
   READ_ONLY
 }
 
+enum AppearancePreference {
+  SYSTEM
+  LIGHT
+  DARK
+}
+
 enum SupportCaseStatus {
   NEW
   OPEN
@@ -301,6 +307,7 @@ model User {
   firstName               String
   lastName                String
   timeZone                String             @default("America/New_York")
+  appearancePreference    AppearancePreference @default(SYSTEM)
   active                  Boolean            @default(true)
   delegatedUserAdministrationEnabled Boolean @default(false)
   role                    UserRole           @default(READ_ONLY)

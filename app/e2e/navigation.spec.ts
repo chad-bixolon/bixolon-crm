@@ -21,7 +21,7 @@ test('primary navigation tracks route and browser history', async ({ page }) => 
 });
 
 const access = [
-  { role: 'support', visible: ['Support Cases', 'Accounts', 'Contacts', 'Products'], absent: ['Pipeline', 'Administration', 'Reports'], allowed: '/support/cases', denied: '/administration' },
+  { role: 'support', visible: ['Support Cases', 'Accounts', 'Contacts', 'Products', 'Reports'], absent: ['Pipeline', 'Administration'], allowed: '/support/cases', denied: '/administration' },
   { role: 'sales', visible: ['Pipeline', 'Sales Plan', 'Tasks'], absent: ['Administration', 'Demos'], allowed: '/opportunities', denied: '/administration' },
   { role: 'salesManager', visible: ['Pipeline', 'Sales Plan', 'Reports'], absent: ['Administration', 'Demos'], allowed: '/reports', denied: '/administration' },
   { role: 'marketing', visible: ['Campaigns', 'Marketing Audiences', 'Trade Shows'], absent: ['Pipeline', 'Administration'], allowed: '/marketing/audiences', denied: '/pipeline' },

@@ -8,6 +8,10 @@ type HelpTopic = { title: string; summary: string; group: typeof helpGroups[numb
 
 // User guidance only. Operational and maintainer notes belong in app/docs.
 export const helpTopics = {
+  'appearance': {
+    title: 'Appearance', group: 'Getting Started', summary: 'Choose how SalesHub looks on your device.',
+    sections: [{ heading: 'Choose your appearance', paragraphs: ["Open My integrations → Personal settings. Choose System to follow your device appearance, or select Light or Dark to keep SalesHub in that mode. Your choice belongs to your account and is saved for future sign-ins."] }],
+  },
   'roles': {
     title: 'Roles', group: 'Getting Started', summary: 'Choose a role for the work a person performs in SalesHub.',
     sections: [{ heading: 'Functional responsibility', paragraphs: ['Job title, location, language, and email domain do not determine a role. A VP of Sales who carries accounts normally remains Sales Manager. A President who needs broad visibility without operational ownership normally uses Executive. Executive is not a higher Sales Manager.', 'Admin manages configuration and administration. Sales Manager manages Sales work and team oversight and may own customer business. Sales manages customer Sales work. Support Manager adds Support workload oversight to Support work. Support resolves Cases. Marketing Manager manages Marketing. Read Only views business records with personal-preference actions only.', 'Executive can review company pipeline, forecasts, Sales Plans, reports, Support, and Marketing without operational editing or assignment. Executive cannot view negotiated customer pricing. Broad visibility does not make someone eligible to own work.', 'HQ users receive the functional role matching their work. Corporate domain approval is a separate sign-in policy.'] }],

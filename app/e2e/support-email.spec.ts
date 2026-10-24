@@ -68,7 +68,7 @@ test('compact queue, Manage, matching and case-link disclosures fit phone, table
     await expect(mailbox).toContainText('Gmail disconnected (mock messages)');
     await expect(mailbox).toContainText('support@bixolonusa.com');
     await expect(mailbox).toContainText('Last synced');
-    await expect(mailbox.getByRole('note')).toHaveText('Gmail is read-only. SalesHub actions do not modify the mailbox.');
+    await expect(mailbox.getByRole('note')).toHaveText('Gmail is read-only. CRM actions do not modify the mailbox.');
     await expect(manage).toHaveAttribute('aria-expanded', 'false');
     await expect(mailbox.getByText('Showing messages from the last 30 days')).toBeHidden();
     await expect(number).toBeHidden();
@@ -341,5 +341,5 @@ test('existing Ignore and Restore actions still handle only the local queue', as
   await ignored.getByRole('button', { name: 'Restore to inbox', exact: true }).click();
   await expect(heading).toBeVisible();
   await expect(ignored).toHaveCount(0);
-  await expect(page.getByRole('note')).toHaveText('Gmail is read-only. SalesHub actions do not modify the mailbox.');
+  await expect(page.getByRole('note')).toHaveText('Gmail is read-only. CRM actions do not modify the mailbox.');
 });

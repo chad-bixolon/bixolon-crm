@@ -99,6 +99,7 @@ test('contextual Help links open the right guide from complex pages and forms', 
   await page.getByRole('link', { name: 'Help with Log Email Response' }).click();
   await expect(page).toHaveURL('/help/log-email-response');
   await expect(page.getByRole('article')).toContainText('SalesHub does not send the email.');
+  await signInAs(page, 'admin');
   await page.goto(`/support/cases?q=${encodeURIComponent(row.subject)}`);
   const selection = page.getByRole('checkbox', { name: `Select ${row.caseNumber}` });
   await expect(selection).toBeVisible(); await selection.check();

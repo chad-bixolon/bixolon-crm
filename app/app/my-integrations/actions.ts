@@ -7,11 +7,17 @@ import { prisma } from '@/lib/prisma';
 import { CALENDAR_STATE_COOKIE, calendarAuthorizationUrl, createCalendarState, disconnectCalendar, realCalendarUserId } from '@/lib/google-calendar-oauth';
 import { syncGoogleCalendarConnection } from '@/lib/google-calendar-sync';
 import { saveOwnTimeZone } from '@/lib/user-time-zone';
+import { saveOwnAppearance } from '@/lib/appearance';
 
 export async function saveMyTimeZone(form: FormData) {
   const real = await getRealAuthenticatedUser();
   await saveOwnTimeZone(prisma, real, form.get('timeZone'));
   redirect('/my-integrations?result=time-zone-saved');
+}
+
+export async function saveMyAppearance(value: string) {
+  const real = await getRealAuthenticatedUser();
+  return saveOwnAppearance(prisma, real, value);
 }
 
 export async function connectGoogleCalendar() {

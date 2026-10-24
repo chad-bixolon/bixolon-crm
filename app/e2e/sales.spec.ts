@@ -14,6 +14,7 @@ test('Task retains relationships and due date, then completes', async ({ page })
   await expect(page).toHaveURL(/\/tasks\/\d+$/);
   await expect(page.getByRole('main')).toContainText(subject);
   await page.getByRole('link', { name: 'Edit task' }).click();
+  await page.waitForURL(/\/tasks\/\d+\/edit$/, { timeout: 30_000 });
   await expect(page.getByLabel('Due date')).toHaveValue('2026-11-20');
   await page.getByLabel('Status').selectOption('COMPLETED');
   await page.getByRole('button', { name: 'Save changes' }).click();

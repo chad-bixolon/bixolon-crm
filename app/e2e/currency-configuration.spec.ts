@@ -96,10 +96,12 @@ test('non-Admins and impersonated Sales cannot administer currency settings', as
   for (const role of ['sales','salesManager','readOnly','support','marketing'] as const) {
     await signInAs(page,role);await page.goto('/administration/currencies');await expect(page).toHaveURL(/access-denied/);
   }
-  await signInAs(page,'admin');
-  const rep = await db.user.findUniqueOrThrow({where:{email:emails.sales}});
-  await context.addCookies([{name:'saleshub-dev-impersonate-user',value:String(rep.id),url:baseURL}]);
-  await page.goto('/administration/currencies');await expect(page).toHaveURL(/access-denied/);
+  if (process.env.ENABLE_DEV_IMPERSONATION === 'true') {
+    await signInAs(page,'admin');
+    const rep = await db.user.findUniqueOrThrow({where:{email:emails.sales}});
+    await context.addCookies([{name:'saleshub-dev-impersonate-user',value:String(rep.id),url:baseURL}]);
+    await page.goto('/administration/currencies');await expect(page).toHaveURL(/access-denied/);
+  }
 });
 
 test('Currency Settings fits desktop, tablet and phone', async ({ page }, testInfo) => {

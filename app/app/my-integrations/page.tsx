@@ -7,6 +7,7 @@ import { connectGoogleCalendar, disconnectGoogleCalendar, saveMyTimeZone, syncMy
 import { formatDateTimeForUser } from '@/lib/display-format';
 import { IANA_TIME_ZONES } from '@/lib/user-time-zone';
 import { getBranding } from '@/lib/deployment-branding';
+import { AppearanceControl } from '@/components/appearance-control';
 
 const notices: Record<string, string> = {
   connected: 'Google Calendar connected.',
@@ -26,7 +27,7 @@ export default async function MyIntegrationsPage({ searchParams }: { searchParam
   const real = await getRealAuthenticatedUser();
   if (!real) redirect('/sign-in');
   const [user, connection, branding] = await Promise.all([
-    prisma.user.findUnique({ where: { id: real.id }, select: { timeZone: true } }),
+    prisma.user.findUnique({ where: { id: real.id }, select: { timeZone: true, appearancePreference: true } }),
     prisma.googleCalendarConnection.findUnique({ where: { userId: real.id }, select: { googleEmail: true, connectionStatus: true, lastConnectedAt: true, lastSuccessfulSyncAt: true, lastSyncCompletedAt: true, lastError: true } }),
     getBranding(prisma),
   ]);
@@ -46,6 +47,7 @@ export default async function MyIntegrationsPage({ searchParams }: { searchParam
         <button className="btn-primary" type="submit">Save</button>
       </RecoverableActionForm>
       <p className="text-sm text-slate-600">Calendar times display in your saved time zone. Your browser time zone does not change this setting.</p>
+      <AppearanceControl initial={user.appearancePreference}/>
     </section>
     <section className="panel max-w-2xl space-y-4 p-6" aria-labelledby="google-calendar-heading">
       <h2 id="google-calendar-heading" className="text-xl font-semibold">Google Calendar</h2>

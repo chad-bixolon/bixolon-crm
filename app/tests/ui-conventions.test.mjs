@@ -16,7 +16,8 @@ test('shared controls and button variants use the same sizing and visible states
   assert.match(css, /\.btn-secondary, \.btn-filter-secondary\s*\{[^}]*min-height: var\(--control-height\)/);
   assert.match(css, /\.btn-danger\s*\{[^}]*min-height: var\(--control-height\)/);
   assert.match(css, /\.field:focus-visible/);
-  assert.match(css, /\.btn-primary:disabled[^}]*background: #e2e8f0/);
+  assert.match(css, /--surface-disabled: light-dark\(#e2e8f0, #[0-9a-f]+\)/);
+  assert.match(css, /\.btn-primary:disabled[^}]*background: var\(--surface-disabled\)/);
 });
 
 test('integration, cleanup, and report controls use shared layout classes', () => {

@@ -140,7 +140,7 @@ test('Sales can browse and search another Sales rep’s records without acquirin
   expect((await db.opportunity.findUniqueOrThrow({ where: { id: otherOpportunityId } })).ownerId).toBe(otherSalesId);
   expect((await db.project.findUniqueOrThrow({ where: { id: otherProjectId } })).ownerId).toBe(otherSalesId);
   await page.goto('/help/opportunities');
-  await expect(page.getByRole('main')).toContainText('Sales users can view other reps’ Accounts, Opportunities, and Projects.');
+  await expect(page.getByRole('main')).toContainText('Sales users can view other Sales reps’ Accounts, Opportunities, and Projects');
 });
 
 test('Sales Pipeline rejects inactive, archived, missing, and non-sales rep selections', async ({ page }) => {

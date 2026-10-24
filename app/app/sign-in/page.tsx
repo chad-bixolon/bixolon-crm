@@ -10,7 +10,7 @@ export default async function SignInPage() {
       <div className="text-center">
         {/* The public asset is served directly so the browser requests the PNG URL. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={branding.logoStorageKey ? '/api/branding/logo' : '/brand/bixolon-logo.png'} alt={isDefault ? 'BIXOLON' : branding.companyName} width={500} height={40} className="mx-auto block max-h-24 h-auto w-full max-w-[260px] object-contain" />
+        <img src={branding.logoStorageKey ? '/api/branding/logo' : '/brand/bixolon-logo.png'} alt={isDefault ? 'BIXOLON' : branding.companyName} width={500} height={40} className="brand-logo mx-auto block max-h-24 h-auto w-full max-w-[260px] object-contain" />
         <p className="mt-3 break-words text-[11px] font-semibold tracking-[0.18em] text-slate-500">{isDefault ? 'AMERICA | SALESHUB' : `${branding.companyName} | ${branding.productName}`}</p>
       </div>
 

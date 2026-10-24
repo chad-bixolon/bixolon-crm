@@ -19,6 +19,7 @@ Module._load = function (name, parent, isMain) {
   if (name === '@/lib/google-calendar-oauth') return { realCalendarUserId: value => { if (!value?.active) throw new Error('Sign in'); return value.id; } };
   if (name === '@/lib/google-calendar-sync') return { syncGoogleCalendarConnection: async (_client, id) => { calls.push(id); return { success: true }; } };
   if (name === '@/lib/user-time-zone') return { saveOwnTimeZone: async () => {} };
+  if (name === '@/lib/appearance') return { saveOwnAppearance: async () => {} };
   return originalLoad.call(this, name, parent, isMain);
 };
 let syncMyGoogleCalendar;

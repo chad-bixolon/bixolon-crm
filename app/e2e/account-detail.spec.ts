@@ -179,7 +179,7 @@ for (const width of [1440, 768, 820, 1024, 390]) {
     const box = await next.boundingBox(); expect(box!.height).toBeGreaterThanOrEqual(width === 1440 ? 40 : 44);
     await next.click(); await expect(pager).toContainText('Page 2 of 5');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-    await page.screenshot({ path: testInfo.outputPath(`contacts-${width}.png`), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath(`contacts-${width}.png`), fullPage: true, caret: 'initial' });
     await page.goto(`/accounts/${id}?tab=demos`);
     const table = page.locator('table'); await expect(table).toBeVisible();
     expect(await table.evaluate(element => {
@@ -187,6 +187,6 @@ for (const width of [1440, 768, 820, 1024, 390]) {
       return getComputedStyle(container).overflowX === 'auto' && container.clientWidth <= window.innerWidth;
     })).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-    await page.screenshot({ path: testInfo.outputPath(`demos-${width}.png`), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath(`demos-${width}.png`), fullPage: true, caret: 'initial' });
   });
 }

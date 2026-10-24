@@ -91,7 +91,7 @@ export function Shell({ children, user, enabledModules = modules, labels, notifi
     {menuOpen && <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-slate-950/50 lg:hidden" onClick={() => setMenuOpen(false)}/>}
     <aside ref={drawer} id="primary-navigation-drawer" className={`${menuOpen ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-50 w-[min(18rem,calc(100vw-3rem))] flex-col border-r border-slate-200 bg-white shadow-xl lg:static lg:flex lg:h-full lg:min-h-0 lg:w-60 lg:shrink-0 lg:shadow-none`}>
       <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-5 py-5 lg:shrink-0">
-        <Image src={branding?.logoSrc ?? '/brand/bixolon-logo.png'} alt={branding?.companyName ?? 'BIXOLON'} width={500} height={40} unoptimized={branding?.logoSrc === '/api/branding/logo'} priority className={`h-6 w-44 ${branding?.logoSrc === '/api/branding/logo' ? 'object-contain' : 'object-cover'} object-center`} />
+        <Image src={branding?.logoSrc ?? '/brand/bixolon-logo.png'} alt={branding?.companyName ?? 'BIXOLON'} width={500} height={40} unoptimized={branding?.logoSrc === '/api/branding/logo'} priority className={`brand-logo h-8 w-44 object-contain object-center`} />
         <button ref={closeButton} type="button" aria-label="Close menu" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-xl text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-orange-600 lg:hidden" onClick={() => { setMenuOpen(false); menuButton.current?.focus(); }}>×</button>
       </div>
       <nav aria-label="Primary navigation" className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-3 py-5">

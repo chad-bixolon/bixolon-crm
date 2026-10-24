@@ -1,16 +1,16 @@
 .catalog { font-size: .875rem; }
-.catalog thead { border-bottom: 1px solid #e2e8f0; background: #f1f5f9; color: #475569; font-size: .75rem; font-weight: 600; letter-spacing: .025em; text-transform: uppercase; }
+.catalog thead { border-bottom: 1px solid var(--border-color); background: var(--surface-hover); color: var(--text-secondary); font-size: .75rem; font-weight: 600; letter-spacing: .025em; text-transform: uppercase; }
 .catalog th { padding: .5rem .75rem; }
-.catalog td { padding: .375rem .75rem; color: #475569; }
-.catalog tbody tr:nth-child(even) { background: #f8fafc; }
-.catalog tr.row:hover, .catalog tr.row:focus, .catalog tr.row:focus-within { background: #fff0df; box-shadow: inset 3px 0 #ea580c; }
+.catalog td { padding: .375rem .75rem; color: var(--text-secondary); }
+.catalog tbody tr:nth-child(even) { background: var(--surface-hover); }
+.catalog tr.row:hover, .catalog tr.row:focus, .catalog tr.row:focus-within { background: var(--surface-selected); box-shadow: inset 3px 0 #ea580c; }
 .row { cursor: pointer; }
 .row:focus-visible { outline: 2px solid #ea580c; outline-offset: -2px; }
-.catalog .sku { color: #334155; font-weight: 600; white-space: nowrap; }
-.model { color: #0f172a; font-weight: 700; }
-.model:hover { color: #c2410c; text-decoration: underline; }
+.catalog .sku { color: var(--text-primary); font-weight: 600; white-space: nowrap; }
+.model { color: var(--text-primary); font-weight: 700; }
+.model:hover { color: var(--color-orange-700); text-decoration: underline; }
 .model:focus-visible { outline: 2px solid #ea580c; outline-offset: 2px; }
 .badge { display: inline-flex; align-items: center; border-radius: 9999px; padding: .125rem .5rem; font-size: .75rem; font-weight: 600; white-space: nowrap; }
-.active { background: #f0fdf4; color: #15803d; }
-.inactive { background: #fffbeb; color: #92400e; }
-.archived { background: #f1f5f9; color: #475569; }
+.active { background: var(--success-bg); color: var(--success-text); }
+.inactive { background: var(--warning-bg); color: var(--warning-text); }
+.archived { background: var(--surface-hover); color: var(--text-secondary); }

@@ -40,15 +40,16 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { await db.opportunity.updateMany({ where: { id: { in: Object.values(dealIds) } }, data: { archivedAt: new Date() } }); await db.$disconnect(); });
 test('trend windows, quarter progression, missing weeks and frozen Account filter', async ({ page }) => {
+  test.setTimeout(120_000);
   await signInAs(page, 'salesManager'); await page.goto(url('&window=quarter'));
   await expect(page.getByRole('region', { name: 'Trend data', exact: true }).locator('tbody tr')).toHaveCount(12);
   await expect(page.getByText('Missing weekly snapshots · change spans the gap', { exact: true })).toBeVisible();
   await expect(page.getByRole('figure', { name: 'Pipeline trend chart' })).toBeVisible();
   for (const [window, count] of [['4', 5], ['8', 8], ['12', 12]] as const) {
-    await page.getByRole('combobox', { name: 'Comparison window', exact: true }).selectOption(window); await page.getByRole('button', { name: 'Update history' }).click();
+    await page.getByRole('combobox', { name: 'Comparison window', exact: true }).selectOption(window); await page.getByRole('button', { name: 'Apply filters' }).click();
     await expect(page.getByRole('region', { name: 'Trend data', exact: true }).locator('tbody tr')).toHaveCount(count);
   }
-  await openAdvanced(page); await page.getByRole('combobox', { name: 'Account', exact: true }).selectOption(String(accountId)); await page.getByRole('button', { name: 'Update history' }).click(); await expect(page.getByRole('combobox', { name: 'Account', exact: true })).toHaveValue(String(accountId));
+  await openAdvanced(page); await page.getByRole('combobox', { name: 'Account', exact: true }).selectOption(String(accountId)); await page.getByRole('button', { name: 'Apply filters' }).click(); await expect(page.getByRole('combobox', { name: 'Account', exact: true })).toHaveValue(String(accountId));
 });
 test('Commit/Best Case cohorts, unknown actual dates and reopened history count deals once', async ({ page }) => {
   await signInAs(page, 'salesManager'); await page.goto(url('&window=quarter'));
@@ -56,15 +57,15 @@ test('Commit/Best Case cohorts, unknown actual dates and reopened history count 
   await expect(detail.getByRole('row').filter({ hasText: `${tag} Commit won` })).toContainText('Closed Won in-period');
   const reopened = detail.getByRole('row').filter({ hasText: `${tag} Reopened` }); await expect(reopened).toContainText('Still open'); await expect(reopened).toContainText('2 recorded closures · 2 reopenings');
   await reopened.getByText('Closure & Reopening History', { exact: true }).click(); await expect(reopened).toContainText('OUTCOME REOPENED');
-  await openAdvanced(page); await page.getByRole('combobox', { name: 'Reference Category', exact: true }).selectOption('BEST_CASE'); await page.getByRole('button', { name: 'Update history' }).click();
+  await openAdvanced(page); await page.getByRole('combobox', { name: 'Forecast category at the reference date', exact: true }).selectOption('BEST_CASE'); await page.getByRole('button', { name: 'Apply filters' }).click();
   await expect(detail.getByRole('row').filter({ hasText: `${tag} Best later` })).toContainText('Closed Won later'); await expect(detail.getByRole('row').filter({ hasText: `${tag} Legacy` })).toContainText('Actual close unknown'); await expect(detail.locator('tbody tr')).toHaveCount(2);
 });
 test('slippage detail and outcome reason filters preserve historical labels', async ({ page }) => {
   await signInAs(page, 'salesManager'); await page.goto(url('&window=quarter'));
   const slip = page.getByRole('region', { name: 'Slippage detail', exact: true }); await expect(slip.locator('tbody tr')).toHaveCount(1); await expect(slip).toContainText(`${tag} Slip lost`); await expect(slip).toContainText(`${year + 1} Q1`);
-  await openAdvanced(page); await page.getByRole('combobox', { name: 'Outcome View', exact: true }).selectOption('lost-slipped'); await page.getByRole('button', { name: 'Update history' }).click();
+  await openAdvanced(page); await page.getByRole('combobox', { name: 'Show outcomes', exact: true }).selectOption('lost-slipped'); await page.getByRole('button', { name: 'Apply filters' }).click();
   const reasons = page.getByRole('region', { name: 'Outcome reason groups', exact: true }); await expect(reasons).toContainText('Historical lost label');
-  await page.getByRole('combobox', { name: 'Outcome reason', exact: true }).selectOption('Historical lost label'); await page.getByRole('button', { name: 'Update history' }).click(); await expect(reasons.locator('tbody td').first()).toHaveText('1');
+  await page.getByRole('combobox', { name: 'Outcome reason', exact: true }).selectOption('Historical lost label'); await page.getByRole('button', { name: 'Apply filters' }).click(); await expect(reasons.locator('tbody td').first()).toHaveText('1');
   await page.goto(url('&window=quarter&reasonView=won')); await expect(reasons).toContainText('Historical won label (inactive)');
 });
 test('quarter comparison requires compatible matching weeks', async ({ page }) => {
@@ -75,7 +76,7 @@ test('quarter comparison requires compatible matching weeks', async ({ page }) =
 test('Sales self default, cross-rep selection, currency, permissions and impersonation', async ({ page, context }) => {
   await signInAs(page, 'sales'); await page.goto(url('&window=quarter'));
   await expect(page.getByRole('combobox', { name: 'Salesperson', exact: true })).toHaveValue(String(rep.id)); await expect(page.getByRole('combobox', { name: 'Salesperson', exact: true }).locator('option[value="team"]')).toHaveCount(0);
-  await page.getByRole('combobox', { name: 'Salesperson', exact: true }).selectOption(String(manager.id)); await page.getByRole('button', { name: 'Update history' }).click(); await expect(page.getByRole('region', { name: 'Forecast outcome detail', exact: true }).locator('tbody tr')).toHaveCount(1);
+  await page.getByRole('combobox', { name: 'Salesperson', exact: true }).selectOption(String(manager.id)); await page.getByRole('button', { name: 'Apply filters' }).click(); await expect(page.getByRole('region', { name: 'Forecast outcome detail', exact: true }).locator('tbody tr')).toHaveCount(1);
   await page.goto(url('&window=quarter&currencyCode=CAD')); await expect(page.getByRole('region', { name: 'Executive summary', exact: true })).toContainText('CAD'); await expect(page.getByRole('region', { name: 'Forecast outcome detail', exact: true }).locator('tbody tr')).toHaveCount(1);
   await page.goto(url('&ownerId=team')); await expect(page.getByRole('alert')).toContainText('eligible salesperson');
   if (process.env.ENABLE_DEV_IMPERSONATION === 'true') { await signInAs(page, 'admin'); await context.addCookies([{ name: 'saleshub-dev-impersonate-user', value: String(rep.id), url: baseURL }]); await page.goto(url()); await expect(page.getByRole('combobox', { name: 'Salesperson', exact: true })).toHaveValue(String(rep.id)); await context.clearCookies(); }
