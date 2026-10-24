@@ -66,9 +66,14 @@ test('sign-in and Admin configuration fit the five required widths', async ({ pa
     await db.deploymentBranding.upsert({ where: { id: 1 }, create: { id: 1, companyName, productName }, update: { companyName, productName } });
     for (const width of [1440, 1024, 820, 768, 390]) {
       await page.setViewportSize({ width, height: 900 });
-      for (const path of ['/sign-in', '/administration/company-branding', '/administration/trusted-domains']) {
+      for (const path of ['/sign-in', '/administration/company-branding', '/administration/trusted-domains', '/administration/internal-email-domains', '/help/internal-email-domains']) {
         await page.goto(path);
         await expect(page.locator('main')).toBeVisible();
+        if (path === '/administration/internal-email-domains') {
+          await expect(page.getByLabel('Add Internal Email Domain')).toBeVisible();
+          await expect(page.getByText('Internal Email Domains do not control who can sign in')).toBeVisible();
+        }
+        if (path === '/help/internal-email-domains') await expect(page.getByRole('article', { name: 'Internal Email Domains' })).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `${path} at ${width}px`).toBe(true);
       }
     }
@@ -77,9 +82,33 @@ test('sign-in and Admin configuration fit the five required widths', async ({ pa
   }
 });
 
+test('Admin manages Internal Email Domains independently and sees Maintenance History', async ({ page }) => {
+  await signInAs(page, 'admin');
+  const domain = 'identity-acme.test';
+  try {
+    await page.goto('/administration/internal-email-domains');
+    await expect(page.getByText('Internal Email Domains do not control who can sign in')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Trusted Sign-In Domains' })).toBeVisible();
+    await page.getByLabel('Add Internal Email Domain').fill('Identity-Acme.TEST');
+    await page.getByRole('button', { name: 'Add domain' }).click();
+    await expect.poll(() => db.internalEmailDomain.findUnique({ where: { domain } }).then(row => row?.active)).toBe(true);
+    const row = page.locator('.panel > div').filter({ hasText: domain });
+    await row.getByRole('button', { name: 'Deactivate' }).click();
+    await expect.poll(() => db.internalEmailDomain.findUnique({ where: { domain } }).then(value => value?.active)).toBe(false);
+    await row.getByRole('button', { name: 'Reactivate' }).click();
+    await expect.poll(() => db.internalEmailDomain.findUnique({ where: { domain } }).then(value => value?.active)).toBe(true);
+    await page.goto('/administration/maintenance-history?entity=Internal%20domain');
+    await expect(page.locator('article').filter({ hasText: domain }).first()).toBeVisible();
+  } finally {
+    await db.internalEmailDomain.deleteMany({ where: { domain } });
+  }
+});
+
 test('delegated manager cannot open or mutate deployment configuration', async ({ page }) => {
   await signInAs(page, 'salesManager');
   await page.goto('/administration/company-branding');
+  await expect(page).toHaveURL(/access-denied/);
+  await page.goto('/administration/internal-email-domains');
   await expect(page).toHaveURL(/access-denied/);
   const response = await page.request.post('/api/branding/logo', { multipart: { file: { name: 'logo.png', mimeType: 'image/png', buffer: Buffer.from('invalid') } } });
   expect(response.status()).toBe(403);

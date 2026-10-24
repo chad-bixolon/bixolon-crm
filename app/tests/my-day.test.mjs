@@ -14,10 +14,20 @@ const at = value => new Date(value);
 const event = (id, start, end, attendees, review = null, extra = {}) => ({ id, summary: `Meeting ${id}`, startAt: at(start), endAt: at(end), allDay: false, startDate: null, organizerEmail: 'rep@bixolon.com', attendees: attendees.map(email => ({ email, displayName: null, self: false })), connection: { googleEmail: 'rep@bixolon.com' }, review, ...extra });
 const external = ['customer@example.com'];
 const internal = ['team@bixolon.com'];
-function client({ events = [], activities = [], completed = [], due = [] } = {}) {
+function client({ events = [], activities = [], completed = [], due = [], domains = [] } = {}) {
   const queries = [];
-  return { queries, googleCalendarEvent: { findMany: async args => { queries.push(args.where); return events; } }, activity: { findMany: async args => { queries.push(args.where); return activities; } }, task: { findMany: async args => { queries.push(args.where); return args.where.status === 'COMPLETED' ? completed : due; }, count: async args => { queries.push(args.where); return 0; } } };
+  return { queries, internalEmailDomain: { findMany: async () => domains.map(domain => ({ domain, active: true })) }, trustedSignInDomain: { findMany: async () => [] }, googleCalendarEvent: { findMany: async args => { queries.push(args.where); return events; } }, activity: { findMany: async args => { queries.push(args.where); return activities; } }, task: { findMany: async args => { queries.push(args.where); return args.where.status === 'COMPLETED' ? completed : due; }, count: async args => { queries.push(args.where); return 0; } } };
 }
+test('My Day recognizes both internal domains and treats trusted-only parent domain as customer', async () => {
+  const events = [
+    event(101, '2026-10-07T14:00:00Z', '2026-10-07T15:00:00Z', ['지민@bixolon.com'], null, { organizerEmail: 'rep@bixolonusa.com' }),
+    event(102, '2026-10-07T16:00:00Z', '2026-10-07T17:00:00Z', ['parent@parentcompany.com'], null, { organizerEmail: 'rep@bixolonusa.com' }),
+  ];
+  const summary = await getMyDaySummary(client({ events, domains: ['bixolonusa.com', 'bixolon.com'] }), 7, '2026-10-07', 'America/New_York', at('2026-10-07T18:00:00Z'));
+  assert.equal(summary.internalMeetingMinutes, 60);
+  assert.equal(summary.customerMeetingMinutes, 60);
+  assert.equal(summary.customerMeetingCount, 1);
+});
 test('day bounds follow configured zone and DST', () => {
   assert.equal(myDayBounds('2026-03-08', 'America/New_York').end.getTime() - myDayBounds('2026-03-08', 'America/New_York').start.getTime(), 23 * 3600000);
   assert.equal(myDayToday(at('2026-10-07T04:30:00Z'), 'America/New_York'), '2026-10-07');

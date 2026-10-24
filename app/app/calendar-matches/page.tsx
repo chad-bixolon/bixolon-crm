@@ -10,6 +10,7 @@ import { ReportEntityFilter } from '@/components/report-entity-filter';
 import { currentUser, getRealAuthenticatedUser } from '@/lib/current-user';
 import { can } from '@/lib/authorization';
 import { evaluateCalendarEvent } from '@/lib/calendar-matching';
+import { activeInternalDomainSet } from '@/lib/internal-email-domains';
 import { formatDateTimeForUser } from '@/lib/display-format';
 import { ignoreCalendarEvent } from './actions';
 import { calendarQueueWhere, type CalendarQueueStatus } from '@/lib/calendar-queue';
@@ -27,9 +28,10 @@ export default async function CalendarMatchesPage({ searchParams }: { searchPara
   const from = /^\d{4}-\d{2}-\d{2}$/.test(p.from ?? '') ? new Date(`${p.from}T00:00:00Z`) : new Date(now.getTime() - 60 * 86400000);
   const to = /^\d{4}-\d{2}-\d{2}$/.test(p.to ?? '') ? new Date(`${p.to}T23:59:59Z`) : new Date(now.getTime() + 90 * 86400000);
   if (connection && can(actor, 'contacts.read')) {
+    const internalDomains = await activeInternalDomainSet(prisma);
     const candidates = await prisma.googleCalendarEvent.findMany({ where: { connectionId: connection.id, userId: real.id, OR: [{ startAt: { gte: from, lte: to } }, { startDate: { gte: from.toISOString().slice(0, 10), lte: to.toISOString().slice(0, 10) } }] }, select: { id: true, updatedAt: true, review: { select: { updatedAt: true, activityId: true, ignoredAt: true } } }, orderBy: { id: 'desc' } });
     const stale = candidates.filter(event => !event.review || (!event.review.activityId && !event.review.ignoredAt && (event.review.updatedAt < event.updatedAt || event.review.updatedAt.getTime() < now.getTime() - 5 * 60000)));
-    for (let offset = 0; offset < stale.length; offset += 8) await Promise.all(stale.slice(offset, offset + 8).map(event => evaluateCalendarEvent(prisma, event.id, actor, connection.googleEmail)));
+    for (let offset = 0; offset < stale.length; offset += 8) await Promise.all(stale.slice(offset, offset + 8).map(event => evaluateCalendarEvent(prisma, event.id, actor, connection.googleEmail, internalDomains)));
   }
   const accountId = Number(p.accountId); const q = (p.q ?? '').trim().slice(0, 100);
   const dateWhere = calendarQueueWhere({ userId: real.id, from, to, now, status: status as CalendarQueueStatus, search: q, accountId });

@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { calendarLocalInput, calendarLocalToUtc } from './calendar-time';
 import { matchCalendarAttendees } from './calendar-matching';
+import { activeInternalDomainSet } from './internal-email-domains';
 import { operationalAccountWhere, operationalActivityWhere, operationalContactWhere, operationalOpportunityWhere, operationalProjectWhere, operationalTaskWhere } from './operational-where';
 import { can, opportunityScope, type Actor } from './authorization';
 import { projectReadWhere } from './projects';
@@ -37,12 +38,13 @@ export async function getMyDaySummary(client: PrismaClient, userId: number, loca
   // Task dueDate is an existing date-only CRM value encoded at UTC midnight.
   const dueStart = new Date(`${localDate}T00:00:00Z`);
   const dueEnd = new Date(dueStart.getTime() + 86400000);
-  const [events, activities, completedTasks, dueTasks, overdueTaskCount] = await Promise.all([
+  const [events, activities, completedTasks, dueTasks, overdueTaskCount, internalDomains] = await Promise.all([
     client.googleCalendarEvent.findMany({ where: { userId, connection: { userId }, status: { not: 'CANCELLED' }, cancelledAt: null, OR: [{ allDay: false, startAt: { lt: end }, endAt: { gt: start } }, { allDay: true, startDate: { lt: dueEnd.toISOString().slice(0, 10) }, endDate: { gt: localDate } }] }, select: { id: true, summary: true, startAt: true, endAt: true, allDay: true, startDate: true, endDate: true, organizerEmail: true, attendees: { select: { email: true, displayName: true, self: true } }, connection: { select: { googleEmail: true } }, review: { select: { matchStatus: true, activityId: true, ignoredAt: true, selectionsConfirmed: true, selectedAccountId: true, suggestedAccountId: true, selectedContactIds: true, suggestedContactIds: true, selectedOpportunityId: true, suggestedOpportunityId: true, selectedProjectId: true, suggestedProjectId: true } } }, orderBy: { startAt: 'asc' }, take: 1000 }),
     client.activity.findMany({ where: { AND: [operationalActivityWhere], userId, activityDate: { gte: start, lt: end } }, select: { id: true, subject: true, activityDate: true, calendarReview: { select: { eventId: true } } }, orderBy: { activityDate: 'asc' }, take: 1000 }),
     client.task.findMany({ where: { AND: [operationalTaskWhere], assignedToId: userId, status: 'COMPLETED', completedAt: { gte: start, lt: end } }, select: { id: true, subject: true, completedAt: true }, orderBy: { completedAt: 'asc' }, take: 1000 }),
     client.task.findMany({ where: { AND: [operationalTaskWhere], assignedToId: userId, status: { in: ['OPEN', 'IN_PROGRESS'] }, dueDate: { gte: dueStart, lt: dueEnd } }, select: { id: true, subject: true, dueDate: true }, orderBy: { dueDate: 'asc' }, take: 1000 }),
     client.task.count({ where: { AND: [operationalTaskWhere], assignedToId: userId, status: { in: ['OPEN', 'IN_PROGRESS'] }, dueDate: { lt: dueStart } } }),
+    activeInternalDomainSet(client),
   ]);
   const contextRows = actor ? events.map(event => {
     const review = event.review;
@@ -66,10 +68,9 @@ export async function getMyDaySummary(client: PrismaClient, userId: number, loca
   const customer: Interval[] = [], internal: Interval[] = [];
   let customerMeetingCount = 0;
   const linkedActivityIds = new Set<number>();
-  const domain = process.env.GOOGLE_WORKSPACE_DOMAIN?.trim().toLowerCase() ?? '';
   for (const event of events) {
-    const attendeeMatch = matchCalendarAttendees(event.attendees, [], domain, event.connection.googleEmail, event.organizerEmail);
-    const kind = attendeeMatch.external.length > 0 ? 'customer' : event.review?.matchStatus === 'INTERNAL' ? 'internal' : null;
+    const attendeeMatch = matchCalendarAttendees(event.attendees, [], internalDomains, event.connection.googleEmail, event.organizerEmail);
+    const kind = attendeeMatch.external.length > 0 ? 'customer' : attendeeMatch.internalOnly ? 'internal' : null;
     if (!kind) continue;
     if (event.review?.activityId) linkedActivityIds.add(event.review.activityId);
     const ended = event.allDay ? !!event.endDate && event.endDate <= myDayToday(now, zone) : !!event.endAt && event.endAt <= now;

@@ -265,6 +265,7 @@ enum TradeShowImportFormat {
 
 model User {
   deploymentModuleUpdates DeploymentModuleVisibility[] @relation("DeploymentModuleUpdater")
+  internalEmailDomainUpdates InternalEmailDomain[] @relation("InternalEmailDomainUpdater")
   maintenanceOwnerAssignments AdminMaintenanceEvent[] @relation("MaintenanceNewOwner")
   recentItems RecentItem[]
   savedViews SavedView[]
@@ -843,6 +844,18 @@ model TrustedSignInDomain {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/// Domains recognized as this deployment's own organization in email and calendar activity.
+model InternalEmailDomain {
+  domain      String   @id @db.VarChar(253)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  updatedById Int?
+  updatedBy   User?    @relation("InternalEmailDomainUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([updatedById])
 }
 
 model Contact {

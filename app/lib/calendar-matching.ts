@@ -3,6 +3,7 @@ import type { Actor } from './authorization';
 import { opportunityScope } from './authorization';
 import { operationalAccountWhere, operationalContactWhere, operationalOpportunityWhere, operationalProjectWhere } from './operational-where';
 import { projectReadWhere } from './projects';
+import { activeInternalDomainSet, isInternalEmail } from './internal-email-domains';
 
 export const normalizeCalendarEmail = (email: string) => email.trim().toLowerCase();
 export type CalendarContact = { id: number; firstName: string; lastName: string; email: string | null; accountId: number | null };
@@ -11,10 +12,9 @@ export type CalendarMatch = {
   opportunityId: number | null; projectId: number | null; explanations: string[];
 };
 
-export function matchCalendarAttendees(attendees: Pick<GoogleCalendarAttendee, 'email' | 'displayName' | 'self'>[], contacts: CalendarContact[], internalDomain: string, ownerEmail: string, organizerEmail?: string | null) {
+export function matchCalendarAttendees(attendees: Pick<GoogleCalendarAttendee, 'email' | 'displayName' | 'self'>[], contacts: CalendarContact[], internalDomains: ReadonlySet<string>, ownerEmail: string, organizerEmail?: string | null) {
   const normalizedOwner = normalizeCalendarEmail(ownerEmail);
-  const domain = internalDomain.trim().toLowerCase();
-  const isInternal = (email: string) => email === normalizedOwner || (!!domain && email.endsWith(`@${domain}`));
+  const isInternal = (email: string) => email === normalizedOwner || isInternalEmail(email, internalDomains);
   // An empty or incomplete attendee list cannot prove that a meeting is internal.
   // The organizer can disqualify an internal classification, even when absent
   // from the attendee list.
@@ -51,12 +51,12 @@ export function classifyCalendarMatch(contactCount: number, accountId: number | 
   return !accountId || ambiguous || opportunityCount > 1 || projectCount > 1 ? 'SUGGESTED' : 'MATCHED';
 }
 
-export async function evaluateCalendarEvent(client: PrismaClient, eventId: number, actor: Actor, ownerEmail: string): Promise<CalendarMatch> {
+export async function evaluateCalendarEvent(client: PrismaClient, eventId: number, actor: Actor, ownerEmail: string, internalDomains?: ReadonlySet<string>): Promise<CalendarMatch> {
   const event = await client.googleCalendarEvent.findUniqueOrThrow({ where: { id: eventId }, include: { attendees: true, review: true } });
-  const domain = process.env.GOOGLE_WORKSPACE_DOMAIN?.trim().toLowerCase() ?? '';
+  const domains = internalDomains ?? await activeInternalDomainSet(client);
   const emails = [...new Set(event.attendees.map(a => normalizeCalendarEmail(a.email)).filter(Boolean))];
   const contacts = emails.length ? await client.contact.findMany({ where: { AND: [operationalContactWhere], OR: emails.map(email => ({ email: { equals: email, mode: 'insensitive' as const } })) }, select: { id: true, firstName: true, lastName: true, email: true, accountId: true } }) : [];
-  const result = matchCalendarAttendees(event.attendees, contacts, domain, ownerEmail, event.organizerEmail);
+  const result = matchCalendarAttendees(event.attendees, contacts, domains, ownerEmail, event.organizerEmail);
   if (result.internalOnly && !event.review?.selectionsConfirmed && !event.review?.activityId) {
     const match: CalendarMatch = { status: 'INTERNAL', contactIds: [], accountId: null, opportunityId: null, projectId: null, explanations: [] };
     await client.googleCalendarEventReview.upsert({ where: { eventId }, create: { eventId, matchStatus: match.status, explanations: [], suggestedContactIds: [], suggestedAccountId: null, suggestedOpportunityId: null, suggestedProjectId: null }, update: { matchStatus: match.status, explanations: [], suggestedContactIds: [], suggestedAccountId: null, suggestedOpportunityId: null, suggestedProjectId: null } });

@@ -13,7 +13,7 @@ const { matchCalendarAttendees, classifyCalendarMatch, evaluateCalendarEvent } =
 const { calendarLocalInput, calendarLocalToUtc } = require(path.join(root, 'lib/calendar-time.ts'));
 const contact = (id, email, accountId = 10) => ({ id, firstName: 'Jane', lastName: String(id), email, accountId });
 const attendee = email => ({ email, displayName: null, self: false });
-const match = (attendees, contacts) => matchCalendarAttendees(attendees, contacts, 'bixolon.com', 'owner@bixolon.com');
+const match = (attendees, contacts) => matchCalendarAttendees(attendees, contacts, new Set(['bixolon.com']), 'owner@bixolon.com');
 
 test('exact normalized email matches a single active candidate and infers its Account', () => {
   const result = match([attendee(' JANE@CUSTOMER.COM ')], [contact(1, 'jane@customer.com')]);
@@ -49,7 +49,7 @@ test('opportunity and project suggestions exclude closed or irrelevant rows thro
     googleCalendarEventReview: { upsert: async args => { saved = args.create; } },
   };
   const actor = { id: 7, role: 'SALES', active: true, archivedAt: null };
-  const result = await evaluateCalendarEvent(client, 1, actor, 'owner@bixolon.com');
+  const result = await evaluateCalendarEvent(client, 1, actor, 'owner@bixolon.com', new Set(['bixolon.com']));
   assert.equal(result.status, 'MATCHED'); assert.equal(result.opportunityId, 50); assert.equal(result.projectId, 70);
   assert.equal(calls[0].stage.isClosed, false); assert.equal(calls[0].ownerId, 7);
   assert.deepEqual(calls[1].status.in, ['PLANNING', 'ACTIVE']); assert.equal(saved.suggestedProjectId, 70);
@@ -63,7 +63,7 @@ test('multiple open Opportunities and Projects stay unselected', async () => {
     project: { findMany: async () => [{ id: 70 }, { id: 71 }] },
     googleCalendarEventReview: { upsert: async () => {} },
   };
-  const result = await evaluateCalendarEvent(client, 1, { id: 7, role: 'SALES', active: true }, 'owner@bixolon.com');
+  const result = await evaluateCalendarEvent(client, 1, { id: 7, role: 'SALES', active: true }, 'owner@bixolon.com', new Set(['bixolon.com']));
   assert.equal(result.status, 'SUGGESTED'); assert.equal(result.opportunityId, null); assert.equal(result.projectId, null);
   assert.match(result.explanations.join(' '), /Multiple open Opportunities/);
 });
@@ -91,10 +91,7 @@ function evaluationClient(event, contacts = []) {
   return { client, get review() { return review; }, get writes() { return writes; } };
 }
 async function evaluateWithDomain(fixture, eventId = 20) {
-  const prior = process.env.GOOGLE_WORKSPACE_DOMAIN;
-  process.env.GOOGLE_WORKSPACE_DOMAIN = 'bixolonusa.com';
-  try { return await evaluateCalendarEvent(fixture.client, eventId, actor, 'owner@bixolonusa.com'); }
-  finally { if (prior === undefined) delete process.env.GOOGLE_WORKSPACE_DOMAIN; else process.env.GOOGLE_WORKSPACE_DOMAIN = prior; }
+  return evaluateCalendarEvent(fixture.client, eventId, actor, 'owner@bixolonusa.com', new Set(['bixolonusa.com']));
 }
 
 test('internal-only attendees and owner/self-only events persist INTERNAL without touching source or creating Activities', async () => {

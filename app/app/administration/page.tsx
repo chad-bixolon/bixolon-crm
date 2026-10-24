@@ -14,6 +14,7 @@ const groups = [
     ["Modules", "/administration/modules", "Choose which SalesHub modules are available in this deployment."],
     ["Company & Branding", "/administration/company-branding", "Set company and product names and upload a company logo."],
     ["Trusted Sign-In Domains", "/administration/trusted-domains", "Choose corporate Google domains allowed to sign in."],
+    ["Internal Email Domains", "/administration/internal-email-domains", "Identify your own organization's email addresses in Calendar, My Day, and Support."],
     ["Ownership & Reassignment", "/administration/ownership", "Review records assigned to inactive or ineligible users and safely reassign work."],
     ["Users", "/administration/users", "Manage user access and record owners."],
     ["Dashboard Views", "/administration/dashboard-views", "Configure the default Dashboard for each role."],

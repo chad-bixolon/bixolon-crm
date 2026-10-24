@@ -41,7 +41,7 @@ finally {
 
 const expected = [
   ['Data & Imports', [['Imports', '/administration/imports'], ['Price Exception Cleanup', '/administration/price-exceptions'], ['Data Quality', '/administration/data-quality']]],
-  ['Users & Access', [['Modules', '/administration/modules'], ['Company & Branding', '/administration/company-branding'], ['Trusted Sign-In Domains', '/administration/trusted-domains'], ['Ownership & Reassignment', '/administration/ownership'], ['Users', '/administration/users'], ['Dashboard Views', '/administration/dashboard-views']]],
+  ['Users & Access', [['Modules', '/administration/modules'], ['Company & Branding', '/administration/company-branding'], ['Trusted Sign-In Domains', '/administration/trusted-domains'], ['Internal Email Domains', '/administration/internal-email-domains'], ['Ownership & Reassignment', '/administration/ownership'], ['Users', '/administration/users'], ['Dashboard Views', '/administration/dashboard-views']]],
   ['Sales Configuration', [['Currency Settings', '/administration/currencies'], ['Sales Stages', '/administration/sales-stages'], ['Sales Targets', '/administration/sales-targets'], ['Outcome Reasons', '/administration/outcome-reasons'], ['Competitors', '/administration/competitors'], ['Territories', '/administration/lookups/territories']]],
   ['CRM Configuration', [['Support Case Categories', '/administration/support-case-categories'], ['Industries', '/administration/lookups/industries'], ['Activity Types', '/administration/lookups/activity-types'], ['Labels & Terminology', '/administration/labels']]],
   ['Product Configuration', [['Product Categories', '/administration/lookups/product-categories']]],
@@ -68,7 +68,7 @@ test('Administration renders every existing tool in its intended group and desti
     return [heading, links];
   });
   assert.deepEqual(actual, expected);
-  assert.equal(actual.flatMap(([, links]) => links).length, 28);
+  assert.equal(actual.flatMap(([, links]) => links).length, 29);
 });
 
 test('Administration keeps the effective-user management permission gate', async () => {

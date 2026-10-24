@@ -46,6 +46,8 @@ Generic Configuration v1 stores deployment branding in the singleton `Deployment
 
 Optional Module Visibility v1 adds the typed `DeploymentModuleVisibility` table in `20261023140000_optional_module_visibility_v1`. Apply the reviewed additive migration before this application version. Every existing module is seeded Enabled, and absent rows also resolve Enabled, so the current BIXOLON deployment needs no setup. A true Admin may then choose modules at Administration → Modules. Disabling hides normal use without deleting data or changing scheduled-job configuration. See [the module matrix and dependency policy](optional-module-visibility-v1.md).
 
+Organization Identity v1 adds the typed `InternalEmailDomain` table in `20261023180000_internal_email_domains_v1`. Apply this additive migration before the new application version. The migration does not seed deployment-specific data. With no rows, valid `GOOGLE_WORKSPACE_DOMAIN` and active Trusted Sign-In Domains form a visible temporary bootstrap list. The first true-Admin change persists that list and the change atomically; thereafter only Internal Email Domain rows classify Calendar, My Day, and Support email activity. Even an all-inactive persisted list stays authoritative. Authentication remains governed by Trusted Sign-In Domains. See [Internal Email Domains](internal-email-domains.md).
+
 For the single App Platform container on a 22-connection DigitalOcean database,
 the runtime Prisma client defaults to `connection_limit=4` when the URL has no
 explicit limit. This leaves connections for migrations, administration, and

@@ -63,6 +63,24 @@ test('views count and filter only the current batch without any request; Help an
   await expect(help).toContainText('Older mail remains in Gmail');
 });
 
+test('internal sender badge follows the Admin-managed domain list', async ({ page }) => {
+  const domain = 'bixolonusa.com';
+  const previous = await db.internalEmailDomain.findUnique({ where: { domain } });
+  await db.internalEmailDomain.upsert({ where: { domain }, create: { domain, active: true }, update: { active: true } });
+  try {
+    await signInAs(page, 'support');
+    await page.goto('/support/inbox');
+    const message = page.getByRole('article', { name: 'Internal handoff' });
+    await expect(message.getByText('Internal sender')).toBeVisible();
+    await db.internalEmailDomain.update({ where: { domain }, data: { active: false } });
+    await page.reload();
+    await expect(page.getByRole('article', { name: 'Internal handoff' }).getByText('Internal sender')).toHaveCount(0);
+  } finally {
+    if (previous) await db.internalEmailDomain.update({ where: { domain }, data: { active: previous.active, updatedById: previous.updatedById } });
+    else await db.internalEmailDomain.delete({ where: { domain } });
+  }
+});
+
 for (const [width, height] of [[1440, 900], [768, 1024], [820, 1180], [1024, 768], [390, 844]]) {
   test.describe(`triage viewport ${width}`, () => {
     test.use({ viewport: { width, height }, isMobile: width < 1100, hasTouch: width < 1100 });

@@ -4,6 +4,7 @@ import type { Actor } from './authorization';
 import { assertInboxActor, inboxMailboxIdentity, suggestSupportEmail } from './support-email';
 import { recentSupportMail, supportMailbox, fullSupportMessages, withinLookback, supportGmailLookbackDays, type SupportMailMessage } from './support-gmail';
 import type { PrismaClient } from '@prisma/client';
+import { activeInternalDomainSet, isInternalEmail } from './internal-email-domains';
 
 const SOURCE_ERROR = 'Invalid or expired Support email source. Return to the Support Inbox and try again.';
 type Source = { userId: number; mailbox: string; messageId: string; threadId: string; firstMessageId: string; expires: number };
@@ -54,6 +55,9 @@ export async function resolveInboxSource(actor: Actor, token: string, messageId:
 export async function emailIntakeContext(db: PrismaClient, actor: Actor, messageId: string) {
   return gmailWorkflow('create-review', () => intakeContext(db, actor, messageId));
 }
+export function originalSupportRequest<T extends { senderEmail: string }>(thread: readonly T[], internalDomains: ReadonlySet<string>): T | undefined {
+  return thread.find(row => !isInternalEmail(row.senderEmail, internalDomains)) ?? thread[0];
+}
 async function intakeContext(db: PrismaClient, actor: Actor, messageId: string) {
   assertInboxActor(actor);
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(messageId)) throw new Error(SOURCE_ERROR);
@@ -67,7 +71,8 @@ async function intakeContext(db: PrismaClient, actor: Actor, messageId: string) 
   if (full.some((row, index) => !row || row.sourceExcluded || !withinLookback(row.messageDate, new Date(), supportGmailLookbackDays()) || row.id !== candidates[index].id || row.threadId !== message.threadId)) throw new Error(SOURCE_ERROR);
   const thread = (full as SupportMailMessage[]).sort((a, b) => a.messageDate.getTime() - b.messageDate.getTime());
   const selected = thread.find(row => row.id === messageId)!;
-  const firstMessage = thread.find(row => !row.senderEmail.endsWith('@bixolonusa.com')) ?? thread[0];
+  const internalDomains = await activeInternalDomainSet(db);
+  const firstMessage = originalSupportRequest(thread, internalDomains)!;
   const suggestion = await suggestSupportEmail(db, firstMessage);
   const account = suggestion.account && suggestion.account.status === 'ACTIVE' ? suggestion.account : null;
   // Normal Case validation requires a Contact to belong to the linked Account.

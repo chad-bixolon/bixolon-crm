@@ -422,7 +422,16 @@ try:
                     lifecycle_before = all_table_fingerprints('backfill')
                     lifecycle_keys = foreign_keys('backfill')
                 module_before = all_table_fingerprints('backfill') if directory.name == '20261023140000_optional_module_visibility_v1' else None
+                internal_before = all_table_fingerprints('backfill') if directory.name == '20261023180000_internal_email_domains_v1' else None
                 sql("backfill", (directory / "migration.sql").read_text())
+                if internal_before is not None:
+                    internal_after = all_table_fingerprints('backfill')
+                    for table, fingerprint in internal_before.items():
+                        assert internal_after.get(table) == fingerprint, f'Internal domain migration changed existing {table} data'
+                    assert sql_values('backfill', '''SELECT count(*) FROM "InternalEmailDomain";''') == ['0']
+                    assert sql_values('backfill', '''SELECT delete_rule FROM information_schema.referential_constraints WHERE constraint_name='InternalEmailDomain_updatedById_fkey';''') == ['SET NULL']
+                    assert sql('backfill', '''INSERT INTO "InternalEmailDomain" (domain,"updatedAt") VALUES ('ACME.COM',now());''', check=False).returncode != 0
+                    print('PASS: internal domain additive migration preserves populated data, seeds no company defaults, enforces lowercase and historical-safe updater FK', flush=True)
                 if module_before is not None:
                     module_after = all_table_fingerprints('backfill')
                     for table, fingerprint in module_before.items():

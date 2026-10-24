@@ -219,7 +219,7 @@ test('Create review/save share token and profile within each operation, hydrate 
   const google = provider(2); google.overrides.set('m1',{threadId:'tm0'});
   t.mock.method(globalThis,'fetch',google.fetcher);
   await gmail.recentSupportMail(); google.calls.length = 0;
-  const db = {contact:{findMany:async()=>[]},supportCaseEmail:{findMany:async()=>[]},supportCase:{findMany:async()=>[]}};
+  const db = {internalEmailDomain:{findMany:async()=>[]},trustedSignInDomain:{findMany:async()=>[]},contact:{findMany:async()=>[]},supportCaseEmail:{findMany:async()=>[]},supportCase:{findMany:async()=>[]}};
   const context = await source.emailIntakeContext(db,actor,'m0');
   assert.equal(google.calls.length,4); assert.equal(context.messages.length,2);
   assert.match(context.prefill.description,/PRIVATE MESSAGE BODY/);

@@ -31,7 +31,7 @@ test('source signature binds mailbox, user, message, thread and expiry; rejects 
 
 test('matching prefills existing records, unmatched requester survives, and earliest available request is used', async () => {
   const account = { id: 3, name: 'Acme', status: 'ACTIVE' }, contact = { id: 2, firstName: 'Jane', lastName: 'Smith', account };
-  const db = { contact: { findMany: async () => [contact] }, supportCaseEmail: { findMany: async () => [] }, supportCase: { findMany: async () => [] } };
+  const db = { internalEmailDomain: { findMany: async () => [] }, trustedSignInDomain: { findMany: async () => [] }, contact: { findMany: async () => [contact] }, supportCaseEmail: { findMany: async () => [] }, supportCase: { findMany: async () => [] } };
   const matched = await source.emailIntakeContext(db, actor, 'poc-xd5-1');
   assert.equal(matched.prefill.subject, 'XD5 printer still jamming');
   assert.equal(matched.prefill.customerNameText, 'E2E Picker Contact');

@@ -2,6 +2,8 @@
 
 Gmail is the system of record for email. SalesHub is the system of record for the Support Case. [Outbound email logging](support-cases.md#log-an-outbound-email-response) records only a lightweight Activity summary for an email already sent outside SalesHub. It does not mirror Gmail, fetch Sent Mail, send messages, copy outbound bodies or attachments, or request additional OAuth scopes.
 
+Support Inbox uses active [Internal Email Domains](internal-email-domains.md) to label senders from the company's own domains and to choose the earliest external message as the original request when creating a Case from a thread. Domains match exactly without inheriting subdomains. This does not change Gmail authorization, mailbox identity, message linking, or exact-email Contact suggestions. Trusted Sign-In Domains separately govern authentication.
+
 Support Inbox is `/support/inbox`, available from Support Cases to active Support/Admin users when `SUPPORT_GMAIL_ENABLED=true`. It ports the validated Support Email worktree into current SalesHub. Normal login and Calendar integration keep their existing clients and permissions. The dedicated Support client requests exactly `https://www.googleapis.com/auth/gmail.readonly`; the token exchange rejects any additional scope. Gmail calls are GET requests for profile, messages and explicitly selected attachment bytes. Only Google's OAuth token endpoint receives POST requests. No Gmail mutation API is implemented.
 
 ## Connection and environment boundaries

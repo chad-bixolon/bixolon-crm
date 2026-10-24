@@ -17,6 +17,7 @@ import { LocalFetchTime } from './local-fetch-time';
 import { InboxDisclosure } from './disclosure';
 import { InboxTriage } from './triage';
 import { inboxMatchSummary, inboxAttachmentLabel, inboxTriageState } from '@/lib/support-inbox-display';
+import { activeInternalDomainSet, isInternalEmail } from '@/lib/internal-email-domains';
 import { trackIntegrationAttempt, gmailContext } from '@/lib/integration-attempts';
 
 export const dynamic = 'force-dynamic';
@@ -70,6 +71,7 @@ export default async function SupportInboxPage({ searchParams }: { searchParams:
   try { messages = await trackIntegrationAttempt(prisma, gmailContext('INBOX_FETCH', inboxMailboxIdentity(), 'inbox', actor.id), () => recentSupportMail()); }
   catch (error) { return <Content>{heading}{connectionPanel()}<p role="alert" className="panel p-5 text-red-700">{error instanceof Error ? error.message : 'Could not read Support mailbox.'}</p></Content>; }
   const mailbox = inboxMailboxIdentity();
+  const internalDomains = await activeInternalDomainSet(prisma);
   const dismissals = await prisma.supportInboxDismissal.findMany({ where: { mailbox, gmailMessageId: { in: messages.map(message => message.id) } }, select: { gmailMessageId: true } });
   const ignoredIds = new Set(dismissals.map(row => row.gmailMessageId));
   const rows = await suggestSupportEmails(prisma, messages.filter(message => !ignoredIds.has(message.id)));
@@ -92,7 +94,7 @@ export default async function SupportInboxPage({ searchParams }: { searchParams:
         <p className="mt-2 line-clamp-2 break-words text-sm leading-6 text-slate-600">{message.snippet || message.bodyText.slice(0, 300) || 'No message preview available.'}</p>
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs" aria-label="Message status">
           {suggestion.alreadyLinkedCaseId && <span className="rounded bg-emerald-50 px-2 py-1 text-emerald-800">Linked</span>}
-          {message.senderEmail.toLowerCase().endsWith('@bixolonusa.com') && <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">Internal sender</span>}
+          {isInternalEmail(message.senderEmail, internalDomains) && <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">Internal sender</span>}
           {match.confidence && <span className={`rounded px-2 py-1 ${match.needsReview ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{match.confidence}</span>}
           {attachments && <span className="rounded bg-slate-100 px-2 py-1 text-slate-600" title="Optional file import is available when creating a Case; decorative inline images are excluded from this count.">{attachments}</span>}
           {(threadCounts.get(message.threadId) ?? 0) > 1 && <span className="text-slate-500">{threadCounts.get(message.threadId)} messages in thread</span>}
