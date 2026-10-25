@@ -54,7 +54,7 @@ const pageMocks = {
   '@/components/documents-section': { DocumentsSection: ({ compact }) => React.createElement('section', { id: 'documents', 'data-compact': compact }, 'Documents') },
   '@/components/demo-list': { DemoList: ({ rows, empty, compact }) => React.createElement('div', { 'data-compact': compact }, rows.length ? rows.map(row => row.demoNumber).join(', ') : empty) },
   '@/lib/demo-operations': { demoSummary: () => ({ outstanding: 0 }) },
-  '@/lib/demos': { demoLabel: row => row.demoNumber },
+  '@/lib/demos': { demoLabel: row => row.demoNumber, demoEditWhere: () => ({}), canEditDemo: () => true },
   '@/lib/authorization': { can: () => true },
   '@/lib/opportunity-history': { opportunityHistory: async () => history, stageStartedAt: () => null },
   '@/lib/opportunity-snapshots': { opportunitySnapshotHistory: async () => [], canReadOpportunitySnapshots: () => true, canReadOpportunitySnapshotHistory: () => true },
