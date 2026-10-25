@@ -110,7 +110,7 @@ test('ADMIN can pre-create and edit a CRM user without creating an identity', as
   assert.deepEqual(parsed.errors, {});
   assert.equal(parsed.value.email, 'test@bixolon.example');
   let user;
-  const client = { adminMaintenanceEvent: { create: async () => ({}) }, account: { count: async () => 0 }, opportunity: { count: async () => 0 }, project: { count: async () => 0 }, task: { count: async () => 0 }, tradeShowLead: { count: async () => 0 }, priceException: { count: async () => 0 }, demoRequest: { count: async () => 0 }, salesPlan: { count: async () => 0 }, salesTarget: { count: async () => 0 }, user: {
+  const client = { adminMaintenanceEvent: { create: async () => ({}) }, account: { count: async () => 0 }, opportunity: { count: async () => 0 }, project: { count: async () => 0 }, task: { count: async () => 0 }, supportCase: { count: async () => 0 }, tradeShowLead: { count: async () => 0 }, tradeShow: { count: async () => 0 }, priceException: { count: async () => 0 }, demoRequest: { count: async () => 0 }, marketingAudience: { count: async () => 0 }, reportDefinition: { count: async () => 0 }, salesPlan: { count: async () => 0 }, salesTarget: { count: async () => 0 }, user: {
     create: async ({ data }) => { user = { id: 7, archivedAt: null, ...data }; return user; },
     findUnique: async ({ where }) => where.id === 1 ? { ...actor('ADMIN'), id: 1 } : user,
     update: async ({ data }) => { user = { ...user, ...data }; return user; },

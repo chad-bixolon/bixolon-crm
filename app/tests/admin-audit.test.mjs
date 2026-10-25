@@ -51,28 +51,28 @@ test('date/actor/entity/action filters are parameterized and report pagination i
   assert.deepEqual(queries[1].values.slice(-2), [25, 25]);
   assert.equal(auditValue(null), 'Not recorded'); assert.equal(auditValue('0'), '0'); assert.equal(auditValue('Old owner'), 'Old owner');
 });
-test('disabled module business history is excluded while Module change history remains queryable', async () => {
+test('disabled module business audit is scoped while Admin Maintenance History remains queryable', async () => {
   const queries = [];
   const tx = { $queryRaw: async query => { queries.push(query); return queries.length % 2 ? [{ count: 0n }] : []; } };
   const availability = resolveModules([{ module: 'OPPORTUNITIES', enabled: false }, { module: 'SUPPORT_CASES', enabled: false }]);
   await adminAudit({ $transaction: fn => fn(tx) }, admin, { entity: 'Module' }, true, availability);
   assert.equal(queries.length, 2);
-  assert.equal(queries[0].values.includes('Opportunity'), true);
-  assert.equal(queries[0].values.includes('Support Case'), true);
+  assert.equal(queries[0].values.includes('Opportunity'), false);
+  assert.equal(queries[0].values.includes('Support Case'), false);
   assert.equal(queries[0].values.includes('Module'), true);
   assert.equal(queries[0].values.filter(value => value === 'Module').length, 1);
 });
-test('Ownership counts and direct rows skip disabled optional records', async () => {
+test('Ownership counts and direct rows retain disabled optional records for Admin cleanup', async () => {
   const availability = resolveModules([{ module: 'OPPORTUNITIES', enabled: false }, { module: 'PROJECTS', enabled: false }, { module: 'SUPPORT_CASES', enabled: false }]);
   const db = {
     account: { count: async () => 1 }, contact: { count: async () => 2 },
-    task: { count: async query => { assert.equal(query.where.AND.some(part => part.supportCaseId === null), true); return 3; } },
-    opportunity: { count: () => assert.fail('disabled Opportunity count') }, project: { count: () => assert.fail('disabled Project count') },
-    supportCase: { count: () => assert.fail('disabled Support count') },
+    task: { count: async () => 3 },
+    opportunity: { count: async () => 4, findMany: async () => [] }, project: { count: async () => 5 },
+    supportCase: { count: async () => 6 }, tradeShowLead: { count: async () => 0 }, tradeShow: { count: async () => 0 }, demoRequest: { count: async () => 0 }, priceException: { count: async () => 0 }, marketingAudience: { count: async () => 0 }, reportDefinition: { count: async () => 0 },
   };
   const counts = await ownershipCounts(db, admin, undefined, availability);
-  assert.deepEqual([counts.Account, counts.Contact, counts.Task, counts.Opportunity, counts.Project, counts['Support Case']], [1, 2, 3, 0, 0, 0]);
-  await assert.rejects(ownershipRows(db, admin, 'Opportunity', undefined, 1, availability), /unavailable/);
+  assert.deepEqual([counts.Account, counts.Contact, counts.Task, counts.Opportunity, counts.Project, counts['Support Case']], [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(await ownershipRows(db, admin, 'Opportunity', undefined, 1, availability), []);
 });
 test('health statuses never return provider secrets or exceptions', async () => {
   const now = new Date(), base = { connectionStatus: 'CONNECTED', lastSuccessfulSyncAt: now, lastSyncStartedAt: now, lastSyncCompletedAt: now, lastError: null };

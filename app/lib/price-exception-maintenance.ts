@@ -2,6 +2,7 @@ import { assertEditToken, nextUpdatedAt, RecordChangedError } from './stale-edit
 import { recordMaintenance } from './admin-maintenance';
 import type { PrismaClient } from '@prisma/client';
 import { assertPermission, type Actor } from './authorization';
+import { eligibleUserWhere } from './assignment-eligibility';
 
 export type MaintenanceField = 'distributorAccountId'|'varAccountId'|'endUserAccountId'|'assignedSalesRepUserId'|'productSkuId';
 export async function correctPriceExceptionReference(db:PrismaClient,actor:Actor,peId:number,field:MaintenanceField,targetId:number,expectedUpdatedAt:Date,lineId?:number){
@@ -33,8 +34,8 @@ export async function correctPriceExceptionReference(db:PrismaClient,actor:Actor
       return;
     }
     if(field==='assignedSalesRepUserId'){
-      const user=await tx.user.findUnique({where:{id:targetId},select:{active:true,archivedAt:true,role:true}});
-      if(!user?.active||user.archivedAt||!['SALES','SALES_MANAGER'].includes(user.role))throw new Error('Choose an active salesperson.');
+      const user=await tx.user.findFirst({where:{id:targetId,...eligibleUserWhere('account-owner')},select:{id:true}});
+      if(!user)throw new Error('Choose an active salesperson.');
     }else{
       const account=await tx.account.findUnique({where:{id:targetId},select:{status:true,archivedAt:true}});
       if(account?.status!=='ACTIVE'||account.archivedAt)throw new Error('Choose an active Account.');

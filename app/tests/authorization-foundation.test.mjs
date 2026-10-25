@@ -32,6 +32,7 @@ function userDb(users) {
     create: async ({ data }) => { state.writes++; const row = { ...data, id: 100 }; users.push(row); return row; },
     update: async ({ where, data }) => { state.writes++; const user = users.find(user => user.id === where.id); Object.assign(user, data); return user; },
   } };
+  for (const model of ['account','opportunity','project','tradeShowLead','tradeShow','priceException','demoRequest','marketingAudience','reportDefinition']) tx[model] = { count: async () => 0 };
   return { ...tx, $transaction: fn => fn(tx), state };
 }
 test('persisted actor defeats stale/forged Admin role, active status, or archive state', async () => {
@@ -61,7 +62,7 @@ test('last usable Admin cannot be demoted, deactivated, or archived; a second us
   assert.equal((await db.user.findUnique({ where: { id: 1 } })).active, false);
 });
 test('eligibility populations are explicit, independent of capabilities, and exclude inactive/archived users', () => {
-  const expected = { 'account-owner': ['SALES','SALES_MANAGER'], 'opportunity-owner': ['SALES','SALES_MANAGER'], 'project-owner': ['SALES','SALES_MANAGER'], 'sales-plan-owner': ['SALES','SALES_MANAGER'], 'general-task': ['ADMIN','SALES','SALES_MANAGER','MARKETING_MANAGER'], 'support-task': ['ADMIN','SALES','SALES_MANAGER','MARKETING_MANAGER','SUPPORT','SUPPORT_MANAGER'], 'support-case': ['ADMIN','SUPPORT','SUPPORT_MANAGER'], 'trade-show-sales': ['SALES','SALES_MANAGER'], 'marketing-owner': ['MARKETING_MANAGER'] };
+  const expected = { 'account-owner': ['SALES','SALES_MANAGER'], 'opportunity-owner': ['SALES','SALES_MANAGER'], 'project-owner': ['SALES','SALES_MANAGER'], 'sales-plan-owner': ['SALES','SALES_MANAGER'], 'general-task': ['ADMIN','SALES','SALES_MANAGER','MARKETING_MANAGER'], 'support-task': ['ADMIN','SALES','SALES_MANAGER','MARKETING_MANAGER','SUPPORT','SUPPORT_MANAGER'], 'support-case': ['ADMIN','SUPPORT','SUPPORT_MANAGER'], 'trade-show-sales': ['SALES','SALES_MANAGER'], 'marketing-owner': ['MARKETING_MANAGER'], 'audience-owner': ['ADMIN','MARKETING_MANAGER'], 'demo-owner': ['SALES','SALES_MANAGER'], 'pe-follow-up': ['SALES','SALES_MANAGER'], 'report-owner': ['ADMIN','SALES','SALES_MANAGER','MARKETING_MANAGER'] };
   for (const policy of Object.keys(eligibilityRoles)) {
     assert.deepEqual(eligibleUserWhere(policy).role.in, expected[policy]);
     for (const role of Object.keys(predefinedCapabilities)) {

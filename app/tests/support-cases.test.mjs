@@ -17,12 +17,13 @@ const input = { accountId: 11, subject: 'Printer stops', description: 'Error at 
 function fixture() {
   const sequenceByYear = new Map(); let nextId = 0;
   const rows = new Map(), events = [], notifications = [];
+  const unavailable = new Set();
   const tx = {
     account: { findFirst: async ({ where }) => [11, 21, 22].includes(where.id) && where.archivedAt === null && where.status === 'ACTIVE' ? { id: where.id } : null, findMany: async () => [{ id: 11, name: 'Customer' }, { id: 21, name: 'CDW Corporation' }, { id: 22, name: 'POSGuys' }] },
     contact: { findFirst: async ({ where }) => where.id === 12 && where.accountId === 11 ? { id: 12 } : null, findMany: async () => [{ id: 12, firstName: 'Jane', lastName: 'Smith' }] },
     supportCaseCategory: { findFirst: async ({ where }) => where.id === 13 ? { id: 13 } : null, findMany: async () => [{ id: 13, name: 'Hardware' }] },
     productSku: { findFirst: async ({ where }) => where.id === 14 ? { id: 14 } : null, findMany: async () => [{ id: 14, partNumber: 'SKU-14' }] },
-    user: { findFirst: async ({ where }) => [2, 3, 4].includes(where.id) ? { id: where.id } : null, findMany: async () => [{ id: 2, firstName: 'Support', lastName: 'Rep' }] },
+    user: { findFirst: async ({ where }) => [2, 3, 4].includes(where.id) && !unavailable.has(where.id) ? { id: where.id } : null, findMany: async () => [{ id: 2, firstName: 'Support', lastName: 'Rep' }] },
     $queryRaw: async (strings, year) => {
       if (!String(strings[0]).startsWith('INSERT')) return [{ id: 1 }];
       const lastNumber = (sequenceByYear.get(year) ?? 0) + 1;
@@ -42,8 +43,18 @@ function fixture() {
     supportCaseLifecycleEvent: { createMany: async ({ data }) => { for(const event of data) events.push({ ...event, id: events.length + 1 }); }, findMany: async ({ take }) => events.slice(-take).reverse() },
     notification: { findMany: async () => [], createMany: async ({data}) => {notifications.push(...data);return { count: data.length };}, updateMany: async () => ({ count: 0 }) },
   };
-  return { db: { ...tx, $transaction: async fn => fn(tx) }, rows, events, notifications };
+  return { db: { ...tx, $transaction: async fn => fn(tx) }, rows, events, notifications, unavailable };
 }
+test('reopening preserves eligible assignee and requires replacement for an unavailable historical assignee', async () => {
+  const f = fixture();
+  const row = await service.createSupportCase(f.db, actor('SUPPORT_MANAGER'), { ...input, assignedToId: 2, status: 'CLOSED', resolutionSummary: 'Completed' });
+  f.unavailable.add(2);
+  await assert.rejects(service.changeSupportCaseStatus(f.db, actor('SUPPORT_MANAGER'), row.id, 'OPEN'), /eligible Support assignee/);
+  assert.equal(f.rows.get(row.id).status, 'CLOSED');
+  assert.equal(f.rows.get(row.id).assignedToId, 2);
+  await service.updateSupportCase(f.db, actor('SUPPORT_MANAGER'), row.id, { status: 'OPEN', assignedToId: 3 });
+  assert.equal(f.rows.get(row.id).assignedToId, 3);
+});
 async function withFixedDate(iso, callback) {
   const OriginalDate = globalThis.Date;
   globalThis.Date = class extends OriginalDate {

@@ -136,16 +136,17 @@ test('New York thresholds and overdue follow-up use one source key per condition
 
 test('recipient follows PE ownership without team-wide broadcasts or inaccessible Sales alerts', () => {
   const users = new Map([[7, { role: 'SALES' }], [8, { role: 'SALES_MANAGER' }], [9, { role: 'ADMIN' }]]);
-  assert.equal(peNotificationRecipient(pe, users), 7);
+  assert.equal(peNotificationRecipient(pe, users), null);
   assert.equal(peNotificationRecipient({ ...pe, assignedSalesRepUserId: null }, users), null);
+  assert.equal(peNotificationRecipient({ ...pe, followUp: { ownerId: 7, status: 'NOT_STARTED', nextFollowUpAt: null } }, users), 7);
   assert.equal(peNotificationRecipient({ ...pe, followUp: { ownerId: 8, status: 'NOT_STARTED', nextFollowUpAt: null } }, users), 8);
   assert.equal(peNotificationRecipient({ ...pe, followUp: { ownerId: null, status: 'NOT_STARTED', nextFollowUpAt: null } }, users), null);
-  assert.equal(peNotificationRecipient({ ...pe, followUp: { ownerId: 9, status: 'NOT_STARTED', nextFollowUpAt: null } }, users), 9);
-  assert.equal(peNotificationRecipient({ ...pe, assignedSalesRepUserId: 8, followUp: { ownerId: 7, status: 'NOT_STARTED', nextFollowUpAt: null } }, users), null);
+  assert.equal(peNotificationRecipient({ ...pe, followUp: { ownerId: 9, status: 'NOT_STARTED', nextFollowUpAt: null } }, users), null);
+  assert.equal(peNotificationRecipient({ ...pe, assignedSalesRepUserId: 8, followUp: { ownerId: 7, status: 'NOT_STARTED', nextFollowUpAt: null } }, users), 7);
 });
 
 test('evaluator dedupes reruns, supersedes thresholds, and resolves overdue when date moves forward', async () => {
-  const row = { ...pe };
+  const row = { ...pe, followUp: { ownerId: 7, status: 'NOT_STARTED', nextFollowUpAt: null } };
   const notifications = [];
   let enabled = true;
   const db = {

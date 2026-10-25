@@ -20,7 +20,7 @@ function database(initial=[admin],failAt=0) {
  create:async({data})=>{if(++writes===failAt)throw new Error('injected failure');const u=user(users.length+1,data.role,data);users.push(u);return u;},
  update:async({where,data})=>{if(++writes===failAt)throw new Error('injected failure');const i=users.findIndex(u=>u.id===where.id);users[i]={...users[i],...data,updatedAt:new Date()};return users[i];},
  }, adminMaintenanceEvent:{create:async({data})=>history.push(data)}};
- for(const name of ['account','opportunity','project','task','supportCase','tradeShowLead','tradeShow','priceException','demoRequest','salesPlan','salesTarget'])tx[name]={count:async()=>2};
+ for(const name of ['account','opportunity','project','task','supportCase','tradeShowLead','tradeShow','priceException','demoRequest','marketingAudience','reportDefinition','salesPlan','salesTarget'])tx[name]={count:async()=>2};
  return {tx,get users(){return users;},get history(){return history;},$transaction:async fn=>{const before=structuredClone(users),events=structuredClone(history);try{return await fn(tx);}catch(e){users=before;history=events;throw e;}}};
 }
 async function apply(db,csv){const preview=await reviewUserCsv(db,admin,csv);return applyUserCsv(db,admin,csv,signUserCsvPreview(1,preview.digest));}

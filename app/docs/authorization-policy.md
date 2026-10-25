@@ -62,6 +62,13 @@ Every population requires `active: true` and `archivedAt: null`.
 | `support-case` | Admin, Support, Support Manager |
 | `trade-show-sales` | Sales, Sales Manager |
 | `marketing-owner` | Marketing Manager |
+| `audience-owner` | Admin, Marketing Manager |
+| `demo-owner`, `pe-follow-up` | Sales, Sales Manager |
+| `report-owner` | Admin, Sales, Sales Manager, Marketing Manager; report-type capability is also checked |
+
+Unavailable Work v2 uses these centralized populations for current responsibility. `DemoRequest.operationalOwnerId` is separate from historical requester, reviewer and shipper fields. `demos.assign` lets Admin and Sales Manager explicitly choose an eligible operational owner on an active or outstanding Demo. Sales editing follows the current operational owner when set; a legacy unassigned Demo retains requester-scoped editing until an owner is chosen. Admin and Sales Manager oversight remains capability-based. Global recovery uses `maintenance.manage`, which delegated User Admin, Read Only, Executive and inactive actors do not receive.
+
+For Price Exceptions, the explicit follow-up owner gains the Sales record scope needed to work that PE. Historical salesperson attribution remains visible and unchanged. New follow-up owners must satisfy `pe-follow-up` eligibility; the follow-up owner is the sole recipient of current PE follow-up notifications.
 
 Admin can administer and reassign Sales ownership without becoming a new routine Sales owner. Admin remains a valid Task and Support Case assignee because existing case handling, task assignment, and follow-up workflows explicitly use Admin. Case Tasks retain operational collaborators as well as Support. General CRM Tasks cannot newly be assigned to Support. `taskAssigneePolicy` selects the population from the persisted Task's case link for notification delivery and bulk reassignment. Ownership & Reassignment offers the union of potential Task targets, then checks each selected Task on the server; a mixed general/case selection cannot be assigned to Support.
 

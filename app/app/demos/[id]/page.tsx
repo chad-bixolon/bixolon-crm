@@ -7,12 +7,13 @@ import { Content, PageHeader } from '@/components/shell';
 import { requirePermission } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { can } from '@/lib/authorization';
-import { demoLabel, demoReadWhere } from '@/lib/demos';
+import { canEditDemo, demoLabel, demoReadWhere } from '@/lib/demos';
 import { EntityPicker } from '@/components/entity-picker';
 import { demoDatedBy, demoDisplayDate, demoDuration, demoStatusLabel } from '@/lib/demo-display';
 import { dateOnly, demoSummary, opportunityResult } from '@/lib/demo-operations';
-import { deployDemoUnits, recordDemoReturn, updateDemoContext, updateDemoExpectedReturn, updateDemoNotes } from '../actions';
+import { assignDemoOperationalOwner, deployDemoUnits, recordDemoReturn, updateDemoContext, updateDemoExpectedReturn, updateDemoNotes } from '../actions';
 import { getModuleAvailability } from '@/lib/module-availability';
+import { eligibleUserWhere } from '@/lib/assignment-eligibility';
 
 export default async function DemoPage({ params }: { params: Promise<{ id: string }> }) {
   const actor = await requirePermission('sales.read'), { id } = await params;
@@ -25,6 +26,7 @@ export default async function DemoPage({ params }: { params: Promise<{ id: strin
       project: { select: { id: true, name: true, status: true, archivedAt: true } },
       opportunity: { select: { id: true, name: true, stage: { select: { isClosed: true, isWon: true } } } },
       requestedBy: { select: { firstName: true, lastName: true } },
+      operationalOwner: { select: { firstName: true, lastName: true } },
       reviewedBy: { select: { firstName: true, lastName: true } },
       shippedBy: { select: { firstName: true, lastName: true } },
       expectedReturnOverrideBy: { select: { firstName: true, lastName: true } },
@@ -41,8 +43,10 @@ export default async function DemoPage({ params }: { params: Promise<{ id: strin
   const summary = demoSummary(request);
   const units = request.items.flatMap(item => item.units);
   const activeUnits = request.items.filter(item => !item.retiredAt).flatMap(item => item.units);
-  const editable = can(actor, 'sales.write') && (actor.role !== 'SALES' || request.requestedById === actor.id);
+  const editable = canEditDemo(actor, request);
   const result = request.opportunity ? opportunityResult(request.opportunity) : null;
+  const activeResponsibility = ['PENDING', 'APPROVED'].includes(request.status) || summary.outstanding > 0;
+  const ownerChoices = can(actor, 'demos.assign') && activeResponsibility ? await prisma.user.findMany({ where: eligibleUserWhere('demo-owner'), select: { id: true, firstName: true, lastName: true }, orderBy: [{ lastName: 'asc' }, { id: 'asc' }] }) : [];
 
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.sales} title={demoLabel(request)} action={<Link href={`/accounts/${request.accountId}?tab=demos`} className="btn-secondary">Account Demos</Link>}/>
@@ -51,6 +55,7 @@ export default async function DemoPage({ params }: { params: Promise<{ id: strin
       <p><b>Account:</b> <Link className="text-orange-800 underline" href={`/accounts/${request.accountId}`}>{request.account.name}</Link></p>
       {availability.effective.has('PROJECTS') && <p><b>Project:</b> {request.project ? <Link className="text-orange-800 underline" href={`/projects/${request.project.id}`}>{request.project.name}</Link> : 'Not linked'}</p>}
       {availability.effective.has('OPPORTUNITIES') && <p><b>Opportunity:</b> {request.opportunity ? <Link className="text-orange-800 underline" href={`/opportunities/${request.opportunity.id}`}>{request.opportunity.name}</Link> : 'Not linked'}</p>}
+      <p><b>Current follow-up owner:</b> {name(request.operationalOwner)}</p>
       <p><b>Requested:</b> {demoDatedBy(request.requestedAt, request.requestedBy)}</p>
       <p><b>Reviewed:</b> {demoDatedBy(request.reviewedAt, request.reviewedBy)}</p>
       <p><b>Shipped:</b> {demoDatedBy(request.shippedAt, request.shippedBy)}</p>
@@ -60,6 +65,11 @@ export default async function DemoPage({ params }: { params: Promise<{ id: strin
       <p className="sm:col-span-2 whitespace-pre-wrap"><b>Shipping address:</b> {request.shippingAddress ?? '—'}</p>
       {request.approvalComments?.trim() && <p className="sm:col-span-2 whitespace-pre-wrap"><b>Approval comments:</b> {request.approvalComments}</p>}
     </div>
+    {can(actor, 'demos.assign') && activeResponsibility && <RecoverableActionForm action={assignDemoOperationalOwner.bind(null, request.id)} className="panel mt-5 flex flex-wrap items-end gap-3 p-4 text-sm">
+      <input type="hidden" name="editToken" value={request.updatedAt.toISOString()}/>
+      <label className="label">Current Demo follow-up owner<select className="field mt-1" name="operationalOwnerId" defaultValue={request.operationalOwnerId ?? ''} required><option value="" disabled>Choose owner</option>{ownerChoices.map(user => <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>)}</select></label>
+      <button className="btn-secondary">Assign follow-up owner</button>
+    </RecoverableActionForm>}
 
     <section className="panel mt-5 p-5">
       <h2 className="font-semibold">Items</h2>

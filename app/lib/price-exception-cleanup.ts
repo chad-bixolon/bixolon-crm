@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { assertPermission, type Actor } from './authorization';
 import { businessToday } from './price-exception-expiration';
+import { eligibleUser } from './assignment-eligibility';
 
 import type { CleanupIssue, CleanupRequest } from './price-exception-cleanup-shared';
 export { cleanupIssues, cleanupIssueKeys } from './price-exception-cleanup-shared';
@@ -79,7 +80,7 @@ async function target(db: PrismaClient | Prisma.TransactionClient, request: Clea
   if (request.action === 'expire' || request.action === 'archive') return '';
   if (request.action === 'assignOwner') {
     const user = await db.user.findUnique({ where: { id: request.targetId }, select: { firstName:true,lastName:true,role:true,active:true,archivedAt:true } });
-    if (!user || !user.active || user.archivedAt || !['SALES','SALES_MANAGER'].includes(user.role)) throw new Error('Choose an active Sales or Sales Manager user.');
+    if (!user || !eligibleUser(user, 'account-owner')) throw new Error('Choose an active Sales or Sales Manager user.');
     return `${user.firstName} ${user.lastName}`;
   }
   const account = await db.account.findUnique({ where: { id: request.targetId }, select: { name:true,status:true,archivedAt:true } });

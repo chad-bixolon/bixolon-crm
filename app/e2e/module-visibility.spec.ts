@@ -38,7 +38,9 @@ test('Admin choices govern routes, navigation, search, Quick Actions, dependenci
   expect(search.status()).toBe(200);
   expect(JSON.stringify(await search.json())).not.toContain('E2E Picker Opportunity');
   expect((await page.request.get('/administration/data-quality?issue=opportunity-owner'))?.status()).toBe(404);
-  expect((await page.request.get('/administration/ownership?entity=Opportunity'))?.status()).toBe(404);
+  expect((await page.request.get('/administration/ownership?entity=Opportunity'))?.status()).toBe(200);
+  await page.goto('/administration/ownership?entity=Opportunity');
+  await expect(page.getByText('Opportunities is currently disabled.')).toBeVisible();
   await page.goto('/administration/maintenance-history?entity=Module');
   await expect(page.getByText('Opportunities: Enabled', { exact: true }).first()).toBeVisible();
   await page.goto('/administration/modules');
@@ -113,9 +115,9 @@ test('a small deployment keeps core CRM routes and hides disabled optional modul
     await expect(page.locator('a[href*="issue=opportunity-"]').first()).toBeVisible();
     await expect(page.locator('a[href="/administration/price-exceptions"]')).toHaveCount(0);
     await page.goto('/administration/ownership');
-    await expect(page.getByRole('link', { name: 'Support Case' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /Support Case.*Module disabled/ })).toBeVisible();
     await expect(page.locator('a[href*="entity=Project"]')).toBeVisible();
-    expect((await page.request.get('/administration/ownership?entity=Support%20Case'))?.status()).toBe(404);
+    expect((await page.request.get('/administration/ownership?entity=Support%20Case'))?.status()).toBe(200);
   } finally {
     for (const feature of allModules) await db.deploymentModuleVisibility.update({ where: { module: feature }, data: { enabled: original.get(feature) ?? true } });
   }

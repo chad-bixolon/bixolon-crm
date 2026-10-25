@@ -8,6 +8,7 @@ import { canRouteTradeShowLead, referralData, TRADE_SHOW_ROUTINGS, validateTrade
 import { syncTradeShowFollowUp } from './trade-show-follow-up';
 import { tradeShowFollowUpBusinessDays } from './configuration';
 import { linkLeadAttributionToContact } from './marketing-attribution';
+import { eligibleUserWhere } from './assignment-eligibility';
 
 const statuses = Object.values(TradeShowLeadStatus);
 export const actionableTradeShowLeadStatuses: TradeShowLeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED'];
@@ -84,7 +85,7 @@ export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId:
     const repId = can(actor, 'trade-shows.assign') ? input.assignedSalesRepUserId : lead.assignedSalesRepUserId;
     if (lead.convertedOpportunityId && repId !== lead.assignedSalesRepUserId) throw new Error('Converted lead ownership cannot be changed.');
     if (repId) {
-      const rep = await tx.user.findFirst({ where: { id: repId, active: true, archivedAt: null, role: { in: ['SALES', 'SALES_MANAGER'] } } });
+      const rep = await tx.user.findFirst({ where: { id: repId, ...eligibleUserWhere('trade-show-sales') } });
       if (!rep && repId !== lead.assignedSalesRepUserId) throw new Error('Choose an active Sales rep.');
     }
     const routing = form.has('routing') ? input.routing! : lead.routing;

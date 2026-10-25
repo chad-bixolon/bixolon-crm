@@ -30,6 +30,7 @@ test('lookup only includes current priced SKU tiers visible to the rep', () => {
   const parent = where.priceException.AND;
   assert.deepEqual(parent[0].OR, [
     { assignedSalesRepUserId: 19 },
+    { followUp: { is: { ownerId: 19 } } },
     { assignedSalesRepUserId: null, sourceType: 'LEGACY_WORKBOOK' },
   ]);
   assert.equal(parent[1].status, 'ACTIVE');

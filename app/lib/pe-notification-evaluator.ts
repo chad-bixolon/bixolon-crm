@@ -2,16 +2,17 @@ import { Prisma, type PrismaClient, type PriceExceptionFollowUpStatus } from '@p
 import { businessToday, daysUntilExpiration } from './price-exception-expiration';
 import { followUpOverdue } from './price-exception-follow-up';
 import { notificationEnabled } from './notification-preferences';
+import { eligibleUser } from './assignment-eligibility';
+import type { UserRole } from '@prisma/client';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Pe = { id: number; peCode: string | null; status: 'ACTIVE' | 'EXPIRED' | 'ARCHIVED'; archivedAt: Date | null; expirationDate: Date | null; assignedSalesRepUserId: number | null; followUp: { ownerId: number | null; status: PriceExceptionFollowUpStatus; nextFollowUpAt: Date | null } | null };
 type Candidate = { type: string; severity: 'INFO' | 'WARNING' | 'CRITICAL'; title: string; message: string; sourceKey: string };
 
 export function peNotificationRecipient(pe: Pe, users: Map<number, { role: string }>) {
-  const ownerId = pe.followUp ? pe.followUp.ownerId : pe.assignedSalesRepUserId;
-  const role = ownerId ? users.get(ownerId)?.role : undefined;
-  // A Sales user can only open a PE assigned to them under existing PE permissions.
-  return role && (role !== 'SALES' || pe.assignedSalesRepUserId === ownerId) ? ownerId : null;
+  const ownerId = pe.followUp?.ownerId ?? null;
+  const role = ownerId ? users.get(ownerId)?.role as UserRole | undefined : undefined;
+  return role && eligibleUser({ role, active: true, archivedAt: null }, 'pe-follow-up') ? ownerId : null;
 }
 
 export function peNotificationCandidates(pe: Pe, userId: number, today: Date): Candidate[] {
@@ -69,7 +70,7 @@ export async function notifyPeFollowUpAssignment(db: Prisma.TransactionClient, p
   if (userId === actorId) return;
   const pe = await db.priceException.findUnique({ where: { id: peId }, select: { peCode: true, assignedSalesRepUserId: true } });
   const user = await db.user.findUnique({ where: { id: userId }, select: { active: true, archivedAt: true, role: true } });
-  if (!pe || !user?.active || user.archivedAt || (user.role === 'SALES' && pe.assignedSalesRepUserId !== userId)) return;
+  if (!pe || !eligibleUser(user, 'pe-follow-up')) return;
   if (!await notificationEnabled(db, userId, 'PRICE_EXCEPTION', 'INFO')) return;
   await db.notification.createMany({ data: [{ userId, type: 'PE_FOLLOW_UP_ASSIGNED', severity: 'INFO', title: 'Price Exception follow-up assigned to you', message: `${pe.peCode ?? 'Price Exception'} follow-up was assigned to you.`, entityType: 'PRICE_EXCEPTION', entityId: peId, actionUrl: `/price-exceptions/${peId}`, sourceKey: `PE:${peId}:${userId}:FOLLOW_UP_ASSIGNED:${eventId}`, createdAt: now }], skipDuplicates: true });
 }

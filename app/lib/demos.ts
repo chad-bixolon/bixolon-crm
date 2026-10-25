@@ -11,6 +11,13 @@ export function demoReadWhere(actor: Actor): Prisma.DemoRequestWhereInput {
   // Account detail is available to every CRM user with accounts.read.
   return {};
 }
+export function canEditDemo(actor: Actor, demo: { requestedById: number | null; operationalOwnerId: number | null }) {
+  return can(actor, 'sales.write') && (actor.role !== 'SALES' || demo.operationalOwnerId === actor.id || demo.operationalOwnerId === null && demo.requestedById === actor.id);
+}
+export function demoEditWhere(actor: Actor): Prisma.DemoRequestWhereInput {
+  if (!can(actor, 'sales.write')) return { id: -1 };
+  return actor.role === 'SALES' ? { OR: [{ operationalOwnerId: actor.id }, { operationalOwnerId: null, requestedById: actor.id }] } : {};
+}
 
 export async function assertDemoContext(db: Db, actor: Actor, accountId: number, projectId: number | null, opportunityId: number | null) {
   if (!can(actor, 'accounts.read') || !can(actor, 'sales.write')) throw new Error('Access denied');

@@ -1,5 +1,5 @@
 import { operationalOpportunityWhere, operationalProjectWhere, operationalActivityWhere } from './operational-where';
-import { ForecastCategory, ProductCatalogSource, Prisma, type PrismaClient, type TradeShowLeadRouting, type TradeShowLeadStatus } from '@prisma/client';
+import { ForecastCategory, ProductCatalogSource, Prisma, UserRole, type PrismaClient, type TradeShowLeadRouting, type TradeShowLeadStatus } from '@prisma/client';
 import { can, opportunityScope, type Actor } from './authorization';
 import { lineTotal, opportunityTotal, weightedValue } from './opportunities';
 import { daysSince, engagementAccountWhere, hasNoActivityInDays, latestAccountActivityOrder } from './engagement';
@@ -157,6 +157,10 @@ export function canRunReportType(actor: Actor, reportType: unknown) {
   return (reportType !== 'PRICE_EXCEPTION_USAGE' || can(actor, 'pricing.read')) && reportTypes.includes(reportType as CuratedReportType) && reportRegistry[reportType as CuratedReportType].implemented && can(actor,reportType === 'TRADE_SHOW' ? 'trade-shows.read' : reportType === 'ACCOUNT_ACTIVITY' ? 'reports.engagement.read' : 'sales.read');
 }
 export function getVisibleReportTypes(actor: Actor) { return reportTypes.filter(reportType=>canRunReportType(actor,reportType)); }
+export function canOwnReportType(actor: Actor, reportType: CuratedReportType) { return canRunReportType(actor, reportType) && canCreateReport(actor); }
+export function reportOwnerRoles(reportType: CuratedReportType) {
+  return Object.values(UserRole).filter(role => canOwnReportType({ id: 0, role, active: true, archivedAt: null }, reportType));
+}
 export function getCreatableReportTypes(actor: Actor) { return getVisibleReportTypes(actor).filter(()=>can(actor,'reports.create')); }
 export function canViewBuiltInReport(actor: Actor, reportType: BuiltInReportType) {
   return reportType === 'EXPIRING_PRICE_EXCEPTIONS' ? can(actor,'pricing.read')&&can(actor,'sales.read') : reportType === 'DEMO_INVENTORY' ? can(actor,'sales.read') && can(actor,'accounts.read') : reportType.startsWith('TRADE_SHOW_') || reportType.startsWith('LEADS_BY_') ? canRunReportType(actor,'TRADE_SHOW') : reportType === 'ACCOUNT_ENGAGEMENT' ? canRunReportType(actor,'ACCOUNT_ACTIVITY') : ['PE_USAGE_THIS_QUARTER','PE_USAGE_BY_SALES_REP','PE_USAGE_BY_PRODUCT','PRICE_OVERRIDES','PES_BELOW_MOQ'].includes(reportType) ? (can(actor,'reports.operational.read') && getVisibleReportTypes(actor).includes('PRICE_EXCEPTION_USAGE')) : ['ACTIVE_PROJECTS','PIPELINE_BY_PROJECT','PROJECTS_NEAR_TARGET'].includes(reportType) ? (can(actor,'reports.operational.read') && getVisibleReportTypes(actor).includes('PROJECT_INITIATIVE')) : ['PIPELINE_BY_PARTNER','PIPELINE_BY_PARTNER_TYPE','MEDIA_PARTNER_PIPELINE'].includes(reportType) ? (can(actor,'reports.operational.read') && getVisibleReportTypes(actor).includes('CHANNEL_PARTNER')) : reportType === 'PRODUCT_THIS_QUARTER' || reportType === 'PIPELINE_BY_PRODUCT' ? (can(actor,'reports.operational.read') && getVisibleReportTypes(actor).includes('PRODUCT_PERFORMANCE')) : (can(actor,'reports.operational.read') && getVisibleReportTypes(actor).includes('PIPELINE'));

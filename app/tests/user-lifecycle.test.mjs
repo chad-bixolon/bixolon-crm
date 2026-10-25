@@ -63,7 +63,7 @@ test('eligibility separates Support leadership from Sales and excludes all Execu
 });
 test('impact preview examines lost eligibility only, preserving history and compatible transitions',async()=>{
  const seen=[];
- const db=Object.fromEntries(['account','opportunity','project','task','supportCase','tradeShowLead','tradeShow','priceException','demoRequest','salesPlan','salesTarget'].map(name=>[name,{count:async args=>{seen.push([name,args]);return 2;}}]));
+ const db=Object.fromEntries(['account','opportunity','project','task','supportCase','tradeShowLead','tradeShow','priceException','demoRequest','marketingAudience','reportDefinition'].map(name=>[name,{count:async args=>{seen.push([name,args]);return 2;}}]));
  const next=actor('EXECUTIVE');
  const impact=await userChangeImpact(db,admin,actor('SALES_MANAGER'),next);
  assert.ok(impact.some(row=>row.area==='Open Opportunities'&&row.count===2));
@@ -84,7 +84,7 @@ test('save refuses stale delegation before persistence and records approved chan
  let target={...actor('SALES'),id:2,firstName:'A',lastName:'B',email:'a@example.test',timeZone:'Asia/Seoul',delegatedUserAdministrationEnabled:false};
  const history=[];let writes=0;
  const tx={$queryRaw:async()=>[],user:{findUnique:async({where})=>where.id===1?admin:target,update:async({data})=>{writes++;target={...target,...data};return target;}},adminMaintenanceEvent:{create:async({data})=>history.push(data)}};
- for(const model of ['account','opportunity','project','task','tradeShowLead','priceException','demoRequest','salesPlan','salesTarget'])tx[model]={count:async()=>model==='opportunity'?4:0};
+ for(const model of ['account','opportunity','project','task','tradeShowLead','priceException','demoRequest','marketingAudience','reportDefinition'])tx[model]={count:async()=>model==='opportunity'?4:0};
  const db={$transaction:fn=>fn(tx)};
  const next={...target,role:'EXECUTIVE'};
  let warning;try{await saveUser(db,admin,next,2);}catch(error){warning=error;}

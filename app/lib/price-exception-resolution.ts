@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { assertPermission, type Actor } from './authorization';
 import { positiveId } from './crm-validation';
+import { eligibleUser } from './assignment-eligibility';
 
 export const priceExceptionAccountFields = ['distributorAccountId', 'varAccountId', 'endUserAccountId'] as const;
 export type PriceExceptionAccountField = typeof priceExceptionAccountFields[number];
@@ -45,7 +46,7 @@ export async function updatePriceExceptionSalesRep(db: Db, priceExceptionId: num
     assignedSalesRepUserId ? db.user.findUnique({ where: { id: assignedSalesRepUserId }, select: { id: true, role: true, active: true, archivedAt: true } }) : null,
   ]);
   if (!priceException) throw new PriceExceptionAccountValidationError({ form: 'Price Exception not found.' });
-  if (assignedSalesRepUserId && assignedSalesRepUserId !== priceException.assignedSalesRepUserId && (!user || !user.active || user.archivedAt || !['SALES', 'SALES_MANAGER'].includes(user.role))) throw new PriceExceptionAccountValidationError({ assignedSalesRepUserId: 'Choose a Sales or Sales Manager user.' });
+  if (assignedSalesRepUserId && assignedSalesRepUserId !== priceException.assignedSalesRepUserId && !eligibleUser(user, 'account-owner')) throw new PriceExceptionAccountValidationError({ assignedSalesRepUserId: 'Choose a Sales or Sales Manager user.' });
   await db.priceException.update({ where: { id: priceExceptionId }, data: { assignedSalesRepUserId, updatedById: actor.id } });
 }
 

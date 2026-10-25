@@ -297,6 +297,7 @@ model User {
   supersededSalesPlans SalesPlan[] @relation("SalesPlanSuperseder")
   salesPlanAllocations SalesPlanQuarterAllocation[] @relation("SalesPlanAllocationEditor")
   requestedDemos DemoRequest[] @relation("DemoRequester")
+  operationalDemos DemoRequest[] @relation("DemoOperationalOwner")
   reviewedDemos DemoRequest[] @relation("DemoReviewer")
   shippedDemos DemoRequest[] @relation("DemoShipper")
   recordedDemoRevisions DemoSourceRevision[] @relation("DemoRevisionActor")
@@ -1653,6 +1654,8 @@ model DemoRequest {
   requestedAt DateTime
   requestedById Int?
   requestedBy User? @relation("DemoRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  operationalOwnerId Int?
+  operationalOwner User? @relation("DemoOperationalOwner", fields: [operationalOwnerId], references: [id], onDelete: Restrict)
   reviewedAt DateTime?
   reviewedById Int?
   reviewedBy User? @relation("DemoReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
@@ -1688,6 +1691,7 @@ model DemoRequest {
   @@index([projectId, requestedAt])
   @@index([opportunityId, requestedAt])
   @@index([requestedById, status])
+  @@index([operationalOwnerId, status])
   @@index([status, requestedAt])
 }
 

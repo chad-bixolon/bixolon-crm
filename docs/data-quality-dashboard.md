@@ -1,13 +1,13 @@
 # Data Quality / Cleanup
 
-The Administration page links to a dashboard for Admin users. Each card counts current records matching one review rule. Selecting a card opens a server-side paged list, with a search field and links to existing CRM records. A record can appear in more than one group. Admins can assign or reassign owners in the three supported checks described below. PE Cleanup remains the place to review Price Exceptions.
+The Administration page links to a dashboard for Admin users. Each card counts current records matching one review rule. Selecting a card opens a server-side paged list, with a search field and links to existing CRM records. A record can appear in more than one group. Admins can assign or reassign owners in the three supported checks described below. Ownership & Reassignment also reviews unavailable users with current operational work, including PE follow-up; PE Cleanup remains the place for source and pricing-reference issues.
 
 ## Implemented checks
 
 | Group | Rule |
 | --- | --- |
 | Accounts without a sales owner | Active, unarchived Account with no owner. |
-| Accounts assigned to unavailable owners | Active, unarchived Account with an owner excluded by `eligibleUserWhere('accounts.write')`: inactive, archived, or without Account write permission. Unowned Accounts remain in their separate check. |
+| Accounts assigned to unavailable owners | Active, unarchived Account whose owner fails the centralized `account-owner` population: inactive, archived, or no longer Sales/Sales Manager. Unowned Accounts remain in their separate check. |
 | Contacts without an Account | Active, unarchived Contact with no Account. |
 | Contacts linked to an inactive Account | Active, unarchived Contact whose Account is inactive or archived. |
 | Open Opportunities without an owner | Unarchived Opportunity in an open stage with no owner or an inactive/archived owner. |
@@ -43,7 +43,7 @@ One existing Maintenance History event records **Assign owner** for the original
 
 Unavailable-owner reassignment reuses the same transaction and `updatedAt` token, advances the Account version, and leaves Contact rows untouched. If a current owner regains eligibility, the Account no longer matches even when its own version is unchanged. Replacement owners must be active, unarchived, and permitted to write Accounts; currently Admin, Sales Manager, or Sales. No schema migration is needed for reassignment.
 
-All other groups remain individual review. Deferred reassignment candidates include unavailable-owner Opportunities and Projects as dedicated bulk groups, and general Contact owner changes. The existing Opportunity owner check retains its original criteria and behavior. No general mass reassignment, cross-page selection, relationship rewriting, or bulk deletion is enabled.
+Unavailable Work v2 adds individual Admin recovery for unavailable owners of open Opportunities and active Projects in Ownership & Reassignment. Other active-work groups are described in `app/docs/unavailable-work-v2.md`. Contacts continue to inherit Account ownership. There is no general mass reassignment, cross-page selection, relationship rewriting, or bulk deletion.
 
 ## Bulk v1 implementation files
 

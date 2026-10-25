@@ -14,6 +14,10 @@ export const eligibilityRoles = {
   'support-case': ['ADMIN', 'SUPPORT', 'SUPPORT_MANAGER'],
   'trade-show-sales': ['SALES', 'SALES_MANAGER'],
   'marketing-owner': ['MARKETING_MANAGER'],
+  'audience-owner': ['ADMIN', 'MARKETING_MANAGER'],
+  'demo-owner': ['SALES', 'SALES_MANAGER'],
+  'pe-follow-up': ['SALES', 'SALES_MANAGER'],
+  'report-owner': ['ADMIN', 'SALES', 'SALES_MANAGER', 'MARKETING_MANAGER'],
 } as const satisfies Record<string, readonly UserRole[]>;
 export type Eligibility = keyof typeof eligibilityRoles;
 export function eligibleUserWhere(policy: Eligibility): Prisma.UserWhereInput {

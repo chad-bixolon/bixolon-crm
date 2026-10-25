@@ -36,7 +36,7 @@ Marketing Attribution and Lead Sources reports combine Marketing, Trade Show, an
 | Direct pages, server actions, APIs | Proxy and service boundaries deny disabled module pages and mutations. Direct page access uses a neutral unavailable page; API access uses 404-style denial. Document access checks its optional parent. |
 | Account, Contact, Project, Demo, Trade Show, Task, Activity, Note, Calendar contexts | Related sections, links, selectors, and relationship APIs follow the optional module state. Existing links stay in storage. |
 | Notifications | Existing history remains; disabled module categories are filtered from normal notification views and preferences. |
-| Admin Audit and Maintenance History | Business history rows for disabled modules are hidden; Module change events remain visible to a true Admin. Historical events are retained. |
+| Admin Audit and Maintenance History | Business Audit History rows for disabled modules are hidden. True Admins retain Maintenance History evidence, including unavailable-work recovery in disabled modules. Historical events are retained. |
 | Admin Data Quality and Ownership | Optional record checks, counts, and rows follow effective availability. Direct issue/type URLs are unavailable when their module is disabled. Mixed archived-link checks pause when an optional parent is unavailable. |
 
 Editing an Opportunity while Products or Projects is unavailable preserves its existing product lines and Project links. The hidden sections cannot be changed through that edit. Historical Product and Price Exception labels remain readable on an Opportunity without exposing their disabled module routes.

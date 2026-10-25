@@ -23,13 +23,14 @@ test('central visibility policy covers self, other rep, legacy fallback, and bro
   const sales = actor('SALES');
   assert.equal(canViewPriceException(sales, pe(10)), true);
   assert.equal(canViewPriceException(sales, pe(11)), false);
+  assert.equal(canViewPriceException(sales, { ...pe(11), followUp: { ownerId: 10 } }), true);
   assert.equal(canViewPriceException(sales, pe(null, 'LEGACY_WORKBOOK')), true);
   assert.equal(canViewPriceException(sales, pe(null, 'EXTERNAL_EXPORT')), false);
   for (const role of ['ADMIN', 'SALES_MANAGER', 'MARKETING_MANAGER', 'READ_ONLY']) {
     assert.equal(canViewPriceException(actor(role), pe(11)), true);
     assert.deepEqual(priceExceptionVisibilityWhere(actor(role)), {});
   }
-  assert.deepEqual(priceExceptionVisibilityWhere(sales), { OR: [{ assignedSalesRepUserId: 10 }, { assignedSalesRepUserId: null, sourceType: 'LEGACY_WORKBOOK' }] });
+  assert.deepEqual(priceExceptionVisibilityWhere(sales), { OR: [{ assignedSalesRepUserId: 10 }, { followUp: { is: { ownerId: 10 } } }, { assignedSalesRepUserId: null, sourceType: 'LEGACY_WORKBOOK' }] });
 });
 
 test('Account context and both Opportunity candidate scopes embed the same SALES visibility predicate', async () => {

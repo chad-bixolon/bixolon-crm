@@ -69,7 +69,7 @@ export async function adminAudit(db: PrismaClient, actor: Actor, f: AuditFilters
   assertAdmin(actor);
   f = normalizeAuditFilters(f);
   const available = availability ?? await readModules(db);
-  const unavailableEntities = [...auditEntities, 'Trade Show Lead', 'History'].filter(entity => {
+  const unavailableEntities = (maintenance ? [] : [...auditEntities, 'Trade Show Lead', 'History']).filter(entity => {
     const feature = moduleForAuditEntity(entity);
     return feature && !available.effective.has(feature);
   });
@@ -85,6 +85,6 @@ export async function adminAudit(db: PrismaClient, actor: Actor, f: AuditFilters
 export function auditValue(value: string | null | undefined) { return value == null || value === '' ? 'Not recorded' : value; }
 export function auditHref(entity: string, id: number | null) {
   if (!id) return null;
-  const path: Record<string, string> = { Opportunity: 'opportunities', 'Support Case': 'support/cases', Task: 'tasks', 'Price Exception': 'price-exceptions', Account: 'accounts', Contact: 'contacts', Activity: 'activities' };
+  const path: Record<string, string> = { Opportunity: 'opportunities', Project: 'projects', 'Support Case': 'support/cases', Task: 'tasks', 'Price Exception': 'price-exceptions', 'Price Exception Follow-up': 'price-exceptions', Account: 'accounts', Contact: 'contacts', Activity: 'activities', 'Trade Show': 'trade-shows', Demo: 'demos', Audience: 'marketing/audiences', 'Saved Report': 'reports' };
   return path[entity] ? `/${path[entity]}/${id}${entity === 'Activity' ? '/edit' : ''}` : null;
 }

@@ -25,19 +25,19 @@ test('untouched PE defaults in the report query without backfill and respects ex
   const migration=fs.readFileSync(path.join(root,'prisma/migrations/20261005010000_price_exception_follow_up/migration.sql'),'utf8');
   assert.doesNotMatch(migration,/^\s*(INSERT|UPDATE)\s/mi);
 });
-test('an untouched PE displays Not Started and inherits its assigned Sales Rep without writing',async()=>{
+test('an untouched PE displays Not Started with no operational follow-up owner',async()=>{
   const row={id:2,peCode:'PE-2',sourceType:'EXTERNAL_EXPORT',assignedSalesRepUser:{firstName:'A',lastName:'Rep'},followUp:null,distributorAccount:null,varAccount:null,endUserAccount:null,distributorSourceName:null,varSourceName:null,endUserSourceName:null,status:'ACTIVE',expirationDate:new Date('2026-10-10T00:00:00Z'),lines:[]};
   const db={priceException:{count:async()=>1,findMany:async()=>[row]}};
   const result=await expiration.expiringReport(db,actor('SALES'),{}, {now:new Date('2026-10-05T18:00:00Z')});
   assert.equal(result.rows[0].followUpStatus,'NOT_STARTED');
-  assert.equal(result.rows[0].followUpOwner,'A Rep');
+  assert.equal(result.rows[0].followUpOwner,'Unassigned');
   row.assignedSalesRepUser=null;row.sourceType='LEGACY_WORKBOOK';
   const unassigned=await expiration.expiringReport(db,actor('SALES'),{}, {now:new Date('2026-10-05T18:00:00Z')});
   assert.equal(unassigned.rows[0].followUpOwner,'Unassigned');
 });
 test('transitions capture actor, timestamp, prior and new values; no-op creates no event',async()=>{
   const db=fakeDb(),now=new Date('2026-10-05T18:00:00Z');
-  for(const status of ['IN_PROGRESS','RENEWAL_REQUESTED','REPLACEMENT_SUBMITTED','NO_RENEWAL_NEEDED','COMPLETED'])await workflow.updatePriceExceptionFollowUp(db,2,actor('SALES'),patch(status),now);
+  for(const status of ['IN_PROGRESS','RENEWAL_REQUESTED','REPLACEMENT_SUBMITTED','NO_RENEWAL_NEEDED','COMPLETED'])await workflow.updatePriceExceptionFollowUp(db,2,actor('SALES_MANAGER'),patch(status),now);
   assert.equal(db.state.events.length,5);
   assert.equal(db.state.events[0].previousValues.status,'NOT_STARTED');
   assert.equal(db.state.events[0].newValues.status,'IN_PROGRESS');
@@ -45,7 +45,7 @@ test('transitions capture actor, timestamp, prior and new values; no-op creates 
   assert.equal(db.state.events[4].actorId,7);
   assert.equal(db.state.events[4].createdAt,now);
   assert.equal(db.state.row.completedById,7);
-  assert.deepEqual(await workflow.updatePriceExceptionFollowUp(db,2,actor('SALES'),patch('COMPLETED'),now),{changed:false});
+  assert.deepEqual(await workflow.updatePriceExceptionFollowUp(db,2,actor('SALES_MANAGER'),patch('COMPLETED'),now),{changed:false});
   assert.equal(db.state.events.length,5);
 });
 test('role, row scope, owner and replacement checks reject tampering',async()=>{
@@ -57,7 +57,7 @@ test('role, row scope, owner and replacement checks reject tampering',async()=>{
   assert.equal(manager.state.row.ownerId,8);
   assert.equal(manager.state.events[0].previousValues.ownerId,null);
   const admin=fakeDb();await workflow.updatePriceExceptionFollowUp(admin,2,actor('ADMIN'),patch('IN_PROGRESS'));assert.equal(admin.state.events.length,1);
-  await assert.rejects(workflow.updatePriceExceptionFollowUp(fakeDb(),2,actor('SALES'),patch('IN_PROGRESS',{replacementPriceExceptionId:2})),/cannot replace itself/);
+  await assert.rejects(workflow.updatePriceExceptionFollowUp(fakeDb(),2,actor('SALES_MANAGER'),patch('IN_PROGRESS',{replacementPriceExceptionId:2})),/cannot replace itself/);
 });
 test('overdue is based on action date and excludes completed or no-renewal',()=>{
   const today=new Date('2026-10-05T00:00:00Z'),yesterday=new Date('2026-10-04T00:00:00Z');

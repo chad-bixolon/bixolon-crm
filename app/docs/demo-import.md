@@ -1,5 +1,7 @@
 # Rosa Demo Request CSV import
 
+Unavailable Work v2 adds nullable `DemoRequest.operationalOwnerId` for current responsibility. The additive migration leaves it NULL for every existing record. Import and backfill preserve `requestedById`, `reviewedById`, and `shippedById` as historical actors and never infer operational ownership from them. Admin or Sales Manager can explicitly assign an eligible Sales/Sales Manager on an active or outstanding Demo. Unassigned outstanding Demos appear in Ownership & Reassignment; fully returned historical Demos do not.
+
 The authoritative development fixture is `reference-data/demo-requests-2026-09-28.csv`. Its 8 rows contain 6 Request IDs. Request ID is the immutable source identity; Demo Number is a display value and may be blank. The two two-line requests are `15110d56-5378-4e00-a8a4-cde6c304ed90` (PAR) and `29d044bd-b332-48b8-994d-2d92771ad01b` (UPS). There are 4 shipped and 2 approved requests, 4 blank Demo Numbers, and no grouped header conflicts. No pending request appears in this fixture.
 
 | Source field | CRM destination |
@@ -35,7 +37,7 @@ Apply requires a fresh preview digest and explicit confirmation. Each source upd
 
 Every Demo has a required Account. Project and Opportunity links are optional CRM context, selected later from Account-compatible records. Account → Demos is the normal Sales workflow; Project and Opportunity pages also show explicitly linked Demos. Linking and unlinking retain the same Demo, items, and source revisions. CRM cannot originate a Demo Request. Admins may backfill an existing Rosa Demo from Administration → Imports → Demo Requests when CSV import is unavailable or missed. Backfill requires the Rosa Request ID, records manual provenance and source values, and uses the same Demo lifecycle and reporting. Account-only Demos are valid.
 
-The standalone `/demos` directory and Administration → Imports → Demo Requests are Admin-only. Sales and Read Only users reach permitted Demo details from Account, Project, or Opportunity context. Sales can edit only their own Demo notes and context; Sales Managers and Admins may edit any under their usual permissions. Read Only cannot edit.
+The standalone `/demos` directory and Administration → Imports → Demo Requests are Admin-only. Sales and Read Only users reach permitted Demo details from Account, Project, or Opportunity context. Sales users can edit Demo notes and context when they are the current operational owner; legacy unassigned Demos retain requester-scoped editing until an owner is chosen. Sales Managers and Admins may edit any under their usual permissions. Read Only cannot edit.
 
 The read-only local Compose preview can be run with `docker compose exec -T app node scripts/operations/preview-demo-local.cjs < reference-data/demo-requests-2026-09-28.csv`. It reads local Demo, Account, User, and SKU records and does not write any Demo records.
 

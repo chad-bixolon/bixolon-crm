@@ -15,6 +15,7 @@ export function RecoverableActionForm({ action, failureMessage = 'Could not save
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: 'error' | 'success'; message: string } | null>(null);
   return <form {...props} aria-busy={pending} onSubmit={event => {
+    if (event.defaultPrevented) return;
     event.preventDefault();
     if (busy.current) return;
     const submitter = (event.nativeEvent as SubmitEvent).submitter;

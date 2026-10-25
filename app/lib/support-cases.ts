@@ -187,6 +187,11 @@ export async function updateSupportCaseInTransaction(tx: Prisma.TransactionClien
   if (editToken !== undefined) assertEditToken(before.updatedAt, editToken);
   if (!(patch.customerNameText === undefined ? before.customerNameText : patch.customerNameText) && !(patch.accountId === undefined ? before.accountId : patch.accountId)) throw new Error('Enter a customer/end user or link a CRM Account.');
   if (patch.status !== undefined && !validSupportTransition(before.status, patch.status)) throw new Error('Invalid status transition.');
+  if (['CLOSED', 'RESOLVED'].includes(before.status) && patch.status !== undefined && !['CLOSED', 'RESOLVED'].includes(patch.status)) {
+    const assigneeId = patch.assignedToId === undefined ? before.assignedToId : patch.assignedToId;
+    if (assigneeId && !await tx.user.findFirst({ where: { id: assigneeId, ...eligibleUserWhere('support-case') }, select: { id: true } }))
+      throw new Error('Choose an eligible Support assignee before reopening this Case.');
+  }
   validateResolution(patch.status ?? before.status, patch.resolutionSummary === undefined ? before.resolutionSummary : patch.resolutionSummary);
   await validateReferences(tx, patch, before);
   const next = { ...patch } as SupportCasePatch & { resolvedAt?: Date | null; closedAt?: Date | null };

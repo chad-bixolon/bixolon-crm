@@ -4,22 +4,24 @@ import type { Actor } from './authorization';
 export type PriceExceptionVisibilityRecord = {
   assignedSalesRepUserId: number | null;
   sourceType: PriceExceptionSourceType;
+  followUp?: { ownerId: number | null } | null;
 };
 
-/** SALES users see their own assigned PEs plus unassigned legacy workbook PEs.
+/** SALES users see their historically assigned PEs, current follow-up work, and unassigned legacy workbook PEs.
  * All other roles with pricing.read retain their existing all-PE visibility.
  */
 export function priceExceptionVisibilityWhere(actor: Actor): Prisma.PriceExceptionWhereInput {
   return actor.role === 'SALES' ? {
     OR: [
       { assignedSalesRepUserId: actor.id },
+      { followUp: { is: { ownerId: actor.id } } },
       { assignedSalesRepUserId: null, sourceType: 'LEGACY_WORKBOOK' },
     ],
   } : {};
 }
 
 export function canViewPriceException(actor: Actor, priceException: PriceExceptionVisibilityRecord) {
-  return actor.role !== 'SALES' || priceException.assignedSalesRepUserId === actor.id ||
+  return actor.role !== 'SALES' || priceException.assignedSalesRepUserId === actor.id || priceException.followUp?.ownerId === actor.id ||
     (priceException.assignedSalesRepUserId === null && priceException.sourceType === 'LEGACY_WORKBOOK');
 }
 

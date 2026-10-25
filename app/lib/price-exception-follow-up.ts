@@ -3,6 +3,8 @@ import { can, type Actor } from './authorization';
 import { scopedPriceExceptionWhere } from './price-exception-visibility';
 import { businessToday } from './price-exception-dates';
 import { notifyPeFollowUpAssignment, syncPeNotificationsInTransaction } from './pe-notification-evaluator';
+import { eligibleUserWhere } from './assignment-eligibility';
+import { canViewPriceException } from './price-exception-visibility';
 
 export const followUpStatuses = ['NOT_STARTED','IN_PROGRESS','RENEWAL_REQUESTED','REPLACEMENT_SUBMITTED','NO_RENEWAL_NEEDED','COMPLETED'] as const;
 export const followUpLabels: Record<PriceExceptionFollowUpStatus,string> = {
@@ -14,7 +16,7 @@ export function followUpOverdue(next:Date|null|undefined,status:PriceExceptionFo
   return !!next && next<today && !closedFollowUpStatuses.includes(status);
 }
 export function canUpdateFollowUp(actor:Actor) {
-  return can(actor,'pricing.read') && can(actor,'sales.write') && ['ADMIN','SALES_MANAGER','SALES'].includes(actor.role);
+  return can(actor,'pricing.read') && can(actor,'sales.write');
 }
 export type FollowUpPatch={status:PriceExceptionFollowUpStatus;ownerId:number|null;nextFollowUpAt:Date|null;note:string|null;replacementPriceExceptionId:number|null;replacementPeNumber:string|null};
 export function parseFollowUpForm(form:FormData):FollowUpPatch {
@@ -35,14 +37,14 @@ export async function updatePriceExceptionFollowUp(db:Client,id:number,actor:Act
   if(!canUpdateFollowUp(actor))throw new Error('Access denied');
   if(!Number.isSafeInteger(id)||id<=0)throw new Error('Invalid Price Exception.');
   return db.$transaction(async tx=>{
-    const pe=await tx.priceException.findFirst({where:scopedPriceExceptionWhere(actor,{id}),select:{id:true,assignedSalesRepUserId:true,followUp:true}});
+    const pe=await tx.priceException.findFirst({where:scopedPriceExceptionWhere(actor,{id}),select:{id:true,sourceType:true,assignedSalesRepUserId:true,followUp:true}});
     if(!pe)throw new Error('Price Exception not found.');
     const old=pe.followUp;
-    const previous={status:old?.status??'NOT_STARTED',ownerId:old?old.ownerId:pe.assignedSalesRepUserId,nextFollowUpAt:old?.nextFollowUpAt?.toISOString().slice(0,10)??null,replacementPriceExceptionId:old?.replacementPriceExceptionId??null,replacementPeNumber:old?.replacementPeNumber??null,summary:old?.summary??null};
+    const previous={status:old?.status??'NOT_STARTED',ownerId:old?.ownerId??null,nextFollowUpAt:old?.nextFollowUpAt?.toISOString().slice(0,10)??null,replacementPriceExceptionId:old?.replacementPriceExceptionId??null,replacementPeNumber:old?.replacementPeNumber??null,summary:old?.summary??null};
     if(actor.role==='SALES'&&patch.ownerId!==previous.ownerId)throw new Error('Sales cannot reassign follow-up ownership.');
     if(patch.ownerId!==null&&patch.ownerId!==previous.ownerId){
-      const owner=await tx.user.findFirst({where:{id:patch.ownerId,active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true}});
-      if(!owner)throw new Error('Follow-up owner must be an active Sales user.');
+      const owner=await tx.user.findFirst({where:{id:patch.ownerId,...eligibleUserWhere('pe-follow-up')},select:{id:true,role:true,active:true,archivedAt:true}});
+      if(!owner||!canViewPriceException(owner,{...pe,followUp:{ownerId:patch.ownerId}}))throw new Error('Follow-up owner must be an eligible Sales user who can view this Price Exception.');
     }
     if(patch.replacementPriceExceptionId!==null){
       if(patch.replacementPriceExceptionId===id)throw new Error('A PE cannot replace itself.');
