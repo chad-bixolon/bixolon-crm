@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { canEditProject } from './projects';
+import { requireEditToken, assertEditToken, nextUpdatedAt } from './stale-edit';
 
 export type UpdateContext = { kind: 'project' | 'opportunity'; id: number };
 export function projectUpdateWhere(context: UpdateContext) {
@@ -39,8 +40,9 @@ export async function saveProjectUpdate(client: PrismaClient, actor: Actor, cont
       const oldOpportunity = await tx.opportunity.findUnique({ where: { id: existing.opportunityId } });
       if (!oldOpportunity || !can(actor, 'sales.write') || (actor.role === 'SALES' && oldOpportunity.ownerId !== actor.id)) throw new Error('Access denied to the linked Opportunity.');
     }
+    if (existing) assertEditToken(existing.updatedAt, requireEditToken(form));
     const data = { projectId, opportunityId, body };
-    const saved = existing ? await tx.projectUpdate.update({ where: { id: existing.id }, data: { ...data, updatedById: actor.id } }) : await tx.projectUpdate.create({ data: { ...data, createdById: actor.id } });
+    const saved = existing ? await tx.projectUpdate.update({ where: { id: existing.id, updatedAt: existing.updatedAt }, data: { ...data, updatedById: actor.id, updatedAt: nextUpdatedAt(existing.updatedAt) } }) : await tx.projectUpdate.create({ data: { ...data, createdById: actor.id } });
     return { id: saved.id, projectId, opportunityId, oldProjectId: existing?.projectId, oldOpportunityId: existing?.opportunityId };
   });
 }

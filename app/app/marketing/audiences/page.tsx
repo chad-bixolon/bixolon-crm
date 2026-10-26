@@ -7,6 +7,7 @@ import { audienceListWhere, audienceRequiresTradeShows, audienceSummary, resolve
 import { getModuleAvailability } from '@/lib/module-availability';
 import { prisma } from '@/lib/prisma';
 import { setAudienceArchived } from './actions';
+import { RecoverableActionForm } from '@/components/recoverable-action-form';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +39,7 @@ export default async function AudiencesPage({ searchParams }: { searchParams: Pr
         <td className="px-4 py-3">{row.owner.firstName} {row.owner.lastName}<span className="block text-xs text-slate-500">{row.visibility === 'PERSONAL' ? 'Personal' : 'Shared'}</span></td>
         <td className="px-4 py-3">{row.summary?.selected ?? '—'}</td><td className="px-4 py-3">{row.summary?.marketingReady ?? '—'}</td>
         <td className="px-4 py-3">{row.updatedAt.toISOString().slice(0, 10)}</td>
-        <td className="px-4 py-3">{row.archivedAt ? <span className="text-slate-500">Archived</span> : 'Active'}{row.archivedAt && can(actor, 'marketing.write') && <form action={setAudienceArchived} className="mt-1"><input type="hidden" name="audienceId" value={row.id}/><input type="hidden" name="archived" value="false"/><button className="text-xs font-semibold text-orange-800 underline">Restore</button></form>}</td>
+        <td className="px-4 py-3">{row.archivedAt ? <span className="text-slate-500">Archived</span> : 'Active'}{row.archivedAt && can(actor, 'marketing.write') && <RecoverableActionForm action={setAudienceArchived} className="mt-1"><input type="hidden" name="audienceId" value={row.id}/><input type="hidden" name="editToken" value={row.updatedAt.toISOString()}/><input type="hidden" name="archived" value="false"/><button className="text-xs font-semibold text-orange-800 underline">Restore</button></RecoverableActionForm>}</td>
       </tr>)}
     </tbody></table>{!rows.length && <p className="p-8 text-sm text-slate-500">No Marketing Audiences found.</p>}</div>
   </Content>;

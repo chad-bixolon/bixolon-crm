@@ -6,8 +6,9 @@ import { requireMutation } from '@/lib/current-user';
 import { parseTradeShow, saveTradeShow, setTradeShowArchived, tradeShowFailureState } from '@/lib/trade-shows';
 import { friendlyError } from '@/lib/crm-validation';
 import { saveFeedbackPath } from '@/lib/save-feedback';
+import { requireEditToken, isRecordChanged, recordChangedMessage } from '@/lib/stale-edit';
 
-export type TradeShowFormState = { errors: Record<string, string>; message?: string; redirectTo?: string; values?: Record<string, string> };
+export type TradeShowFormState = { errors: Record<string, string>; message?: string; redirectTo?: string; values?: Record<string, string>; recordChanged?: boolean };
 
 export async function submitTradeShow(id: number | null, _old: TradeShowFormState, form: FormData): Promise<TradeShowFormState> {
   await assertModuleEnabled('TRADE_SHOWS');
@@ -15,10 +16,11 @@ export async function submitTradeShow(id: number | null, _old: TradeShowFormStat
   const parsed = parseTradeShow(form);
   if (!parsed.value) return tradeShowFailureState(form, parsed.errors);
   try {
-    const showId = await saveTradeShow(prisma, parsed.value, actor, id ?? undefined);
+    const showId = await saveTradeShow(prisma, parsed.value, actor, id ?? undefined, id ? requireEditToken(form) : undefined);
     revalidatePath('/trade-shows'); revalidatePath(`/trade-shows/${showId}`);
     return { errors: {}, redirectTo: saveFeedbackPath(`/trade-shows/${showId}`, id ? 'updated' : 'created') };
   } catch (error) {
+    if (isRecordChanged(error)) return { ...tradeShowFailureState(form, {}, recordChangedMessage), recordChanged: true };
     return tradeShowFailureState(form, {}, friendlyError(error, 'Trade Show could not be saved.'));
   }
 }

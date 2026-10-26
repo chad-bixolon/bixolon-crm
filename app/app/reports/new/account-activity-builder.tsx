@@ -13,7 +13,7 @@ import { canCreateReport,canShareReport,executeAccountActivityReport,reportRegis
 import { saveReportAction } from '../actions';
 
 type Params=Record<string,string|string[]|undefined>;
-type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|'SHARED';configuration:unknown}|null;
+type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|'SHARED';configuration:unknown;updatedAt:Date}|null;
 export async function AccountActivityBuilder({params,actor,saved}:{params:Params;actor:Actor;saved:Saved}) {
  const config=accountActivityConfigFromParams(params,saved?.configuration);
  const [result,owners,industries,territories,types]=await Promise.all([
@@ -47,6 +47,6 @@ export async function AccountActivityBuilder({params,actor,saved}:{params:Params
  <fieldset className="report-columns"><legend className="report-columns-title">Detail columns</legend><div className="report-options">{Object.entries(definition.columns).map(([value,label])=><label key={value} className="text-sm"><input className="mr-2" type="checkbox" name="columns" value={value} defaultChecked={config.columns.includes(value)}/>{label}</label>)}</div></fieldset>
  <div className="report-preview"><button className="btn-primary">Preview</button></div></form>
  <ReportResults result={result} config={config} groupKey={typeof params.group==='string'?params.group:undefined}/>
- {canCreateReport(actor)&&<RecoverableActionForm action={saveReportAction} className="panel mt-4 grid gap-3 p-4 sm:grid-cols-2 md:p-5"><h2 className="text-lg font-semibold sm:col-span-2">Save This Report</h2><input type="hidden" name="reportType" value="ACCOUNT_ACTIVITY"/><input type="hidden" name="configuration" value={JSON.stringify(config)}/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}
+ {canCreateReport(actor)&&<RecoverableActionForm action={saveReportAction} recordHref={saved ? `/reports/${saved.id}` : undefined} className="panel mt-4 grid gap-3 p-4 sm:grid-cols-2 md:p-5"><h2 className="text-lg font-semibold sm:col-span-2">Save This Report</h2><input type="hidden" name="reportType" value="ACCOUNT_ACTIVITY"/><input type="hidden" name="configuration" value={JSON.stringify(config)}/>{saved&&<><input type="hidden" name="reportId" value={saved.id}/><input type="hidden" name="editToken" value={saved.updatedAt.toISOString()}/></>}
  <label className="label">Report name<input className="field" name="name" required maxLength={120} defaultValue={saved?.name??''}/></label><label className="label">Visibility<select className="field" name="visibility" defaultValue={saved?.visibility??'PERSONAL'}><option value="PERSONAL">Personal</option>{canShareReport(actor)&&<option value="SHARED">Shared</option>}</select></label><label className="label sm:col-span-2">Description<textarea className="field" name="description" maxLength={1000} defaultValue={saved?.description??''}/></label><div><button className="btn-primary">{saved?'Save changes':'Save report'}</button></div></RecoverableActionForm>}</Content>;
 }

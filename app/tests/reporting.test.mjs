@@ -100,11 +100,17 @@ test('shared saved reports remain subject to report-type authorization',async()=
 });
 
 test('saved report create, shared authorization, edit ownership, archive, and config round-trip',async()=>{
- let record=null;const client={reportDefinition:{findUnique:async()=>record,create:async({data})=>(record={id:1,archivedAt:null,...data}),update:async({data})=>(record={...record,...data})}};
+ let record=null;const client={reportDefinition:{findUnique:async()=>record?{...record}:null,create:async({data})=>(record={id:1,archivedAt:null,updatedAt:new Date('2026-10-01T00:00:00.000Z'),...data}),update:async({where,data})=>{if(where.updatedAt&&record.updatedAt.getTime()!==where.updatedAt.getTime())throw Object.assign(new Error('stale'),{code:'P2025'});return record={...record,...data};}}};
  const input={name:' My Pipeline ',description:' Current deals ',reportType:'PIPELINE',visibility:'PERSONAL',configuration:base()};
  assert.equal(await saved.saveReportDefinition(client,actor('SALES'),input),1);assert.equal(record.name,'My Pipeline');assert.deepEqual(record.configuration,base());
  await assert.rejects(saved.saveReportDefinition(client,actor('SALES'),{...input,visibility:'SHARED'}),/Only Sales Managers/);
- record.ownerId=7;await saved.saveReportDefinition(client,actor('SALES'),{...input,name:'Renamed'},1);assert.equal(record.name,'Renamed');
+ record.ownerId=7;await saved.saveReportDefinition(client,actor('SALES'),{...input,name:'Renamed'},1,record.updatedAt.toISOString());assert.equal(record.name,'Renamed');
+ await assert.rejects(saved.saveReportDefinition(client,actor('ADMIN'),{...input,name:'Missing token'},1),/This record changed/);
+ await assert.rejects(saved.saveReportDefinition(client,actor('ADMIN'),{...input,name:'Stale token'},1,'2026-10-01T00:00:00.000Z'),/This record changed/);
+ assert.equal(record.name,'Renamed');
+ const concurrentToken=record.updatedAt.toISOString();const results=await Promise.allSettled([saved.saveReportDefinition(client,actor('ADMIN'),{...input,name:'First'},1,concurrentToken),saved.saveReportDefinition(client,actor('ADMIN'),{...input,name:'Second'},1,concurrentToken)]);
+ assert.deepEqual(results.map(result=>result.status).sort(),['fulfilled','rejected']);
+ assert.ok(['First','Second'].includes(record.name));
  await assert.rejects(saved.saveReportDefinition(client,actor('SALES',8),input,1),/Access denied/);
  await saved.archiveReportDefinition(client,actor('ADMIN'),1);assert.ok(record.archivedAt instanceof Date);assert.equal(reporting.canViewReportDefinition(actor('SALES'),record),false);
  await assert.rejects(saved.saveReportDefinition(client,actor('READ_ONLY'),input),/cannot create/);

@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { currentUser } from '@/lib/current-user';
 import { campaignStatuses, canManageAttribution, correctLeadSource } from '@/lib/marketing-attribution';
+import { requireEditToken, isRecordChanged, nextUpdatedAt, recordChangedMessage } from '@/lib/stale-edit';
 
 const id = (value: FormDataEntryValue | null) => { const n = Number(value); return Number.isSafeInteger(n) && n > 0 ? n : null; };
 const value = (form: FormData, key: string, max: number) => { const text = String(form.get(key) ?? '').trim(); if (text.length > max) throw new Error(`${key} is too long.`); return text; };
@@ -37,9 +38,10 @@ export async function saveCampaign(form: FormData) {
     const date = (key: string) => { const text = value(form, key, 10); if (!text) return null; if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw new Error('Choose a valid date.'); const result = new Date(`${text}T00:00:00.000Z`); if (result.toISOString().slice(0, 10) !== text) throw new Error('Choose a valid date.'); return result; };
     const startDate = date('startDate'), endDate = date('endDate'); if (startDate && endDate && endDate < startDate) return { error: 'End date precedes start date.' };
     const data = { name, category, description, status, year, startDate, endDate, updatedById: actor.id };
-    const campaign = campaignId ? await prisma.marketingCampaign.update({ where: { id: campaignId }, data }) : await prisma.marketingCampaign.create({ data: { ...data, createdById: actor.id } });
+    const token = campaignId ? requireEditToken(form) : null;
+    const campaign = campaignId && token ? await prisma.marketingCampaign.update({ where: { id: campaignId, updatedAt: new Date(token), archivedAt: null }, data: { ...data, updatedAt: nextUpdatedAt(new Date(token)) } }) : await prisma.marketingCampaign.create({ data: { ...data, createdById: actor.id } });
     savedId = campaign.id;
-  } catch (error) { return { error: error instanceof Error && (/too long|Choose a valid date/.test(error.message)) ? error.message : 'Campaign could not be saved. Check the fields and try again.' }; }
+  } catch (error) { return { error: isRecordChanged(error) ? recordChangedMessage : error instanceof Error && (/too long|Choose a valid date/.test(error.message)) ? error.message : 'Campaign could not be saved. Check the fields and try again.' }; }
   revalidatePath('/marketing/campaigns'); redirect(`/marketing/campaigns/${savedId}`);
 }
 
@@ -47,7 +49,8 @@ export async function setCampaignArchive(form: FormData) {
   await assertModuleEnabled('MARKETING');
   const actor = await manager(), campaignId = id(form.get('id')); if (!campaignId) throw new Error('Invalid Campaign.');
   if ((await prisma.marketingCampaign.findUnique({ where: { id: campaignId }, select: { tradeShowId: true } }))?.tradeShowId) await assertModuleEnabled('TRADE_SHOWS');
-  await prisma.marketingCampaign.update({ where: { id: campaignId }, data: { archivedAt: form.get('archive') === 'true' ? new Date() : null, updatedById: actor.id } });
+  try { const token = requireEditToken(form); await prisma.marketingCampaign.update({ where: { id: campaignId, updatedAt: new Date(token) }, data: { archivedAt: form.get('archive') === 'true' ? new Date() : null, updatedById: actor.id, updatedAt: nextUpdatedAt(new Date(token)) } }); }
+  catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; throw error; }
   revalidatePath('/marketing/campaigns'); redirect(`/marketing/campaigns/${campaignId}`);
 }
 

@@ -47,7 +47,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             <td><Link className={styles.model} href={canManageProducts ? `/products/${p.id}/edit` : `/products/${p.id}`}>{p.name}</Link></td>
             <td>{peIds.length ? <Link className="font-semibold text-orange-800 underline" href={priceExceptionLookupHref({ productId: String(p.id), catalogSource: filters.catalogSource })}>{peIds.length === 1 ? 'Active PE available' : `${peIds.length} active PEs`}</Link> : <span className="text-slate-400">—</span>}</td>
             <td><span className={`${styles.badge} ${styles[state]}`}>{state[0].toUpperCase() + state.slice(1)}</span></td>
-            {canManageProducts && <td><CrmStateControl kind="product" id={p.id} state={state}/></td>}
+            {canManageProducts && <td><CrmStateControl kind="product" id={p.id} state={state} editToken={p.updatedAt.toISOString()}/></td>}
           </ProductTableRow>;
         })}</tbody>
       </table>

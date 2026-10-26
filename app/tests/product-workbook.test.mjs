@@ -146,7 +146,7 @@ test('reimport corrects an existing primary category without rewriting SKU prove
   const initial=await planProductImport(emptyDb,input);
   const value=initial.items[0].after;
   const {Prisma}=require('@prisma/client');
-  const existing={id:1,name:value.model,category:{code:'LABEL'},skus:[{
+  const existing={id:1,name:value.model,updatedAt:new Date('2026-10-01T00:00:00Z'),category:{code:'LABEL'},skus:[{
     id:2,partNumber:value.partNumber,normalizedPartNumber:value.partNumber,description:value.description,
     catalogSource:'PRICE_LIST',priceUnit:'EACH',active:true,
     prices:[{currencyCode:'USD',tier:'MSRP',amount:new Prisma.Decimal('20')},{currencyCode:'USD',tier:'RESELLER',amount:new Prisma.Decimal('30')}],
@@ -158,5 +158,11 @@ test('reimport corrects an existing primary category without rewriting SKU prove
   assert.deepEqual(plan.items[0].classes,['UPDATE PRODUCT']);
   assert.equal(plan.items[0].after.catalogSource,'PRICE_LIST');
   await applyProductImport(client,input,plan.digest);
-  assert.deepEqual(writes,[{where:{id:1},data:{name:value.model,category:{connect:{code:'MOBILE'}}}}]);
+  assert.equal(writes.length,2);
+  assert.deepEqual(writes[0].where,{id:1,updatedAt:new Date('2026-10-01T00:00:00Z')});
+  assert.ok(writes[0].data.updatedAt>new Date('2026-10-01T00:00:00Z'));
+  assert.deepEqual(writes[1].where,{id:1,updatedAt:writes[0].data.updatedAt});
+  assert.equal(writes[1].data.name,value.model);
+  assert.deepEqual(writes[1].data.category,{connect:{code:'MOBILE'}});
+  assert.ok(writes[1].data.updatedAt>writes[0].data.updatedAt);
 });

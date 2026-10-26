@@ -5,9 +5,10 @@ import { useActionState, useEffect, useRef, useState } from 'react';
 import { changeTradeShowArchive, submitTradeShow, type TradeShowFormState } from '@/app/trade-shows/actions';
 import { useSubmitGuard } from '@/lib/submit-guard';
 import { isApprovedTradeShowTimezone, TRADE_SHOW_TIMEZONE_GROUPS } from '@/lib/trade-show-timezones';
+import { RecordChangedNotice } from './record-changed-notice';
 
 type Owner = { id: number; firstName: string; lastName: string };
-type Initial = { name: string; startDate: Date | null; endDate: Date | null; location: string | null; timezone: string | null; description: string | null; marketingOwnerId: number | null; boothNumber: string | null; resourceLinks: { id: number; label: string; url: string }[] };
+type Initial = { name: string; startDate: Date | null; endDate: Date | null; location: string | null; timezone: string | null; description: string | null; marketingOwnerId: number | null; boothNumber: string | null; updatedAt: Date; resourceLinks: { id: number; label: string; url: string }[] };
 
 export function TradeShowForm({ id, initial, owners, currentOwner, defaultOwnerId }: { id?: number; initial?: Initial; owners: Owner[]; currentOwner?: {firstName:string;lastName:string}|null; defaultOwnerId?: number | null }) {
   const router = useRouter();
@@ -22,7 +23,9 @@ export function TradeShowForm({ id, initial, owners, currentOwner, defaultOwnerI
   const selectedTimezone = val('timezone', initial?.timezone ?? '');
   const unsupportedTimezone = selectedTimezone && !isApprovedTradeShowTimezone(selectedTimezone) ? selectedTimezone : null;
   return <form action={action} onSubmit={guard} className="panel max-w-3xl space-y-4 p-5 sm:p-6" aria-label={id ? 'Edit Trade Show' : 'Create Trade Show'}>
-    {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
+    {id && initial && <input type="hidden" name="editToken" value={initial.updatedAt.toISOString()}/>}
+    {state.recordChanged && id && <RecordChangedNotice result={state} href={`/trade-shows/${id}`}/>}
+    {state.message && !state.recordChanged && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}</p>}
     <div className="min-w-0"><label className="label" htmlFor="name">Name *</label><input className="field min-w-0" id="name" name="name" required maxLength={200} defaultValue={val('name', initial?.name ?? '')}/>{error('name')}</div>
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="min-w-0"><label className="label" htmlFor="startDate">Start Date</label><input className="field min-w-0" type="date" id="startDate" name="startDate" defaultValue={val('startDate', initial?.startDate?.toISOString().slice(0,10) ?? '')}/>{error('startDate')}</div>

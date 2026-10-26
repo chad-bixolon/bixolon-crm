@@ -153,9 +153,9 @@ test('Trade Show create/edit validates eligible owner and archive stays reversib
   const resourceLinks = [];
   const tx = {
     tradeShow: {
-      findUnique: async () => saved,
-      create: async ({ data }) => { saved = { id: 3, archivedAt: null, ...data }; return saved; },
-      update: async ({ data }) => { saved = { ...saved, ...data }; return saved; },
+      findUnique: async () => saved ? { ...saved } : null,
+      create: async ({ data }) => { saved = { id: 3, archivedAt: null, updatedAt: new Date("2026-10-01T00:00:00.000Z"), ...data }; return saved; },
+      update: async ({ where, data }) => { if(where.updatedAt && saved.updatedAt.getTime()!==where.updatedAt.getTime())throw Object.assign(new Error('stale'),{code:'P2025'});saved = { ...saved, ...data }; return saved; },
     },
     tradeShowResourceLink: {
       findMany: async () => resourceLinks.map(link => ({ ...link })),
@@ -166,40 +166,48 @@ test('Trade Show create/edit validates eligible owner and archive stays reversib
     user: { findFirst: async ({ where }) => owner?.id === where.id && where.role.in.includes(owner.role) && owner.active && !owner.archivedAt ? owner : null },
   };
   const client = { $transaction: async callback => callback(tx), tradeShow: tx.tradeShow };
+  const save = (client, input, actor, id) => shows.saveTradeShow(client, input, actor, id, id ? saved.updatedAt.toISOString() : undefined);
   const input = shows.parseTradeShow(form([['name','MODEX 2026'],['timezone','America/Chicago'],['marketingOwnerId','8']])).value;
-  assert.equal(await shows.saveTradeShow(client, input, actor('MARKETING_MANAGER')), 3);
+  assert.equal(await save(client, input, actor('MARKETING_MANAGER')), 3);
   assert.equal(saved.createdById, 7);
   assert.equal(saved.boothNumber, null);
   assert.deepEqual(resourceLinks, []);
-  assert.equal(await shows.saveTradeShow(client, { ...input, location: 'Atlanta' }, actor('MARKETING_MANAGER'), 3), 3);
+  assert.equal(await save(client, { ...input, location: 'Atlanta' }, actor('MARKETING_MANAGER'), 3), 3);
   assert.equal(saved.location, 'Atlanta');
   const withResources = shows.parseTradeShow(form([['name','MODEX 2026'],['timezone','America/Chicago'],['marketingOwnerId','8'],['boothNumber','Hall B — 1427'],['resourceId',''],['resourceLabel','Floor plan'],['resourceUrl','https://example.com/floor-plan'],['resourceId',''],['resourceLabel','Exhibitor portal'],['resourceUrl','https://portal.example.com/login']])).value;
-  assert.equal(await shows.saveTradeShow(client, withResources, actor('ADMIN'), 3), 3);
+  assert.equal(await save(client, withResources, actor('ADMIN'), 3), 3);
   assert.equal(saved.boothNumber, 'Hall B — 1427');
   assert.deepEqual(resourceLinks.map(link => [link.label, link.url]), [['Floor plan','https://example.com/floor-plan'],['Exhibitor portal','https://portal.example.com/login']]);
+  const openedToken = saved.updatedAt.toISOString();
   const retained = { ...withResources, resourceLinks: resourceLinks.map(({ id, label, url }) => ({ id, label, url })) };
-  await shows.saveTradeShow(client, retained, actor('MARKETING_MANAGER'), 3);
+  await save(client, retained, actor('MARKETING_MANAGER'), 3);
   assert.deepEqual(resourceLinks.map(link => link.id), [1,2]);
-  await shows.saveTradeShow(client, { ...retained, resourceLinks: [{ ...retained.resourceLinks[0], label: 'Updated floor plan', url: 'https://example.com/new-plan' }, retained.resourceLinks[1]] }, actor('ADMIN'), 3);
+  await save(client, { ...retained, resourceLinks: [{ ...retained.resourceLinks[0], label: 'Updated floor plan', url: 'https://example.com/new-plan' }, retained.resourceLinks[1]] }, actor('ADMIN'), 3);
   assert.deepEqual(resourceLinks.slice(0, 1).map(link => [link.label, link.url]), [['Updated floor plan','https://example.com/new-plan']]);
-  await shows.saveTradeShow(client, { ...retained, resourceLinks: [retained.resourceLinks[1]] }, actor('ADMIN'), 3);
+  const linksAfterNewerEdit = resourceLinks.map(link => ({...link}));
+  await assert.rejects(shows.saveTradeShow(client,retained,actor('ADMIN'),3),/This record changed/);
+  await assert.rejects(shows.saveTradeShow(client,retained,actor('ADMIN'),3,'invalid'),/This record changed/);
+  await assert.rejects(shows.saveTradeShow(client,{...retained,name:'Stale event',resourceLinks:[]},actor('ADMIN'),3,openedToken),/This record changed/);
+  assert.deepEqual(resourceLinks,linksAfterNewerEdit);
+  assert.equal(saved.name,'MODEX 2026');
+  await save(client, { ...retained, resourceLinks: [retained.resourceLinks[1]] }, actor('ADMIN'), 3);
   assert.deepEqual(resourceLinks.map(link => link.label), ['Exhibitor portal']);
-  await assert.rejects(shows.saveTradeShow(client, { ...retained, resourceLinks: [{ id: null, label: 'Bad', url: 'javascript:alert(1)' }] }, actor('ADMIN'), 3), /valid show resource/);
-  await assert.rejects(shows.saveTradeShow(client, { ...retained, resourceLinks: [{ id: 999, label: 'Other show', url: 'https://example.com' }] }, actor('ADMIN'), 3), /does not belong/);
-  await assert.rejects(shows.saveTradeShow(client, withResources, actor('READ_ONLY'), 3), /Access denied/);
-  await assert.rejects(shows.saveTradeShow(client, withResources, actor('SALES'), 3), /Access denied/);
-  await assert.rejects(shows.saveTradeShow(client, withResources, actor('SALES')), /Access denied/);
-  await assert.rejects(shows.saveTradeShow(client, { ...input, timezone: '' }, actor('ADMIN')), /approved event timezone/);
-  await assert.rejects(shows.saveTradeShow(client, { ...input, timezone: '' }, actor('ADMIN'), 3), /approved event timezone/);
-  await assert.rejects(shows.saveTradeShow(client, { ...input, timezone: 'Europe/London' }, actor('ADMIN'), 3), /approved event timezone/);
+  await assert.rejects(save(client, { ...retained, resourceLinks: [{ id: null, label: 'Bad', url: 'javascript:alert(1)' }] }, actor('ADMIN'), 3), /valid show resource/);
+  await assert.rejects(save(client, { ...retained, resourceLinks: [{ id: 999, label: 'Other show', url: 'https://example.com' }] }, actor('ADMIN'), 3), /does not belong/);
+  await assert.rejects(save(client, withResources, actor('READ_ONLY'), 3), /Access denied/);
+  await assert.rejects(save(client, withResources, actor('SALES'), 3), /Access denied/);
+  await assert.rejects(save(client, withResources, actor('SALES')), /Access denied/);
+  await assert.rejects(save(client, { ...input, timezone: '' }, actor('ADMIN')), /approved event timezone/);
+  await assert.rejects(save(client, { ...input, timezone: '' }, actor('ADMIN'), 3), /approved event timezone/);
+  await assert.rejects(save(client, { ...input, timezone: 'Europe/London' }, actor('ADMIN'), 3), /approved event timezone/);
   owner = { ...owner, active: false };
-  assert.equal(await shows.saveTradeShow(client, input, actor('ADMIN'), 3), 3);
-  await assert.rejects(shows.saveTradeShow(client, input, actor('ADMIN')), /active Marketing Manager/);
-  await assert.rejects(shows.saveTradeShow(client, input, actor('READ_ONLY')), /Access denied/);
+  assert.equal(await save(client, input, actor('ADMIN'), 3), 3);
+  await assert.rejects(save(client, input, actor('ADMIN')), /active Marketing Manager/);
+  await assert.rejects(save(client, input, actor('READ_ONLY')), /Access denied/);
   await shows.setTradeShowArchived(client, 3, true, actor('MARKETING_MANAGER'));
   assert.ok(saved.archivedAt);
   assert.equal(saved.archivedById, 7);
-  await assert.rejects(shows.saveTradeShow(client, { ...input, marketingOwnerId: null }, actor('ADMIN'), 3), /archived/);
+  await assert.rejects(save(client, { ...input, marketingOwnerId: null }, actor('ADMIN'), 3), /archived/);
   await shows.setTradeShowArchived(client, 3, false, actor('ADMIN'));
   assert.equal(saved.archivedAt, null);
   assert.equal(saved.archivedById, null);

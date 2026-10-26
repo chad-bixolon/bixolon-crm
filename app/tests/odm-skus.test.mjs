@@ -10,13 +10,15 @@ Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(f
 const require = Module.createRequire(import.meta.url);
 const { Prisma } = require('@prisma/client');
 const { saveSkuMetadata, parseSkuMetadataForm, DuplicateSkuError } = require(path.join(root,'lib/odm-skus.ts'));
+const editToken = "2026-10-01T00:00:00.000Z";
 function fixture() {
   const calls=[];
-  const rows=new Map([[1,{id:1,productId:10,catalogSource:'PRICE_LIST',active:true,product:{active:true,archivedAt:null},odmCustomers:[]}],[2,{id:2,productId:10,catalogSource:'ODM',active:true,product:{active:true,archivedAt:null},odmSubtype:'CUSTOMER_SPECIFIC',baseSkuId:null,odmDescription:null,odmCustomers:[]}]]);
-  const tx={currency:{findUnique:async()=>({active:true})},product:{findUnique:async()=>({id:10,archivedAt:null})},productSku:{findUnique:async({where})=>where.normalizedPartNumber?rows.get('duplicate')??null:rows.get(where.id)??null,count:async()=>0,create:async({data})=>{calls.push(data);return {id:3,...data};},update:async({data})=>{calls.push(data);return {id:2,...data};}},account:{count:async({where})=>where.id.in.filter(id=>[7,8].includes(id)).length},productSkuOdmCustomer:{updateMany:async args=>{calls.push({archive:args.where});},upsert:async({create})=>{calls.push(create)}},productSkuOdmCustomerPrice:{updateMany:async()=>{},findFirst:async()=>null,create:async({data})=>{calls.push({customerPrice:data})}}};
-  return {calls,rows,tx,db:{$transaction:async callback=>callback(tx)}};
+  const product={id:10,archivedAt:null,updatedAt:new Date(editToken)};
+  const rows=new Map([[1,{id:1,productId:10,catalogSource:'PRICE_LIST',active:true,product:{active:true,archivedAt:null},odmCustomers:[],updatedAt:new Date(editToken)}],[2,{id:2,productId:10,catalogSource:'ODM',active:true,product:{active:true,archivedAt:null},odmSubtype:'CUSTOMER_SPECIFIC',baseSkuId:null,odmDescription:null,odmCustomers:[],updatedAt:new Date(editToken)}]]);
+  const tx={currency:{findUnique:async()=>({active:true})},product:{findUnique:async()=>({...product}),update:async({where,data})=>{if(product.updatedAt.getTime()!==where.updatedAt.getTime())throw Object.assign(new Error('stale'),{code:'P2025'});Object.assign(product,data);return {...product};}},productSku:{findUnique:async({where})=>where.normalizedPartNumber?rows.get('duplicate')??null:rows.get(where.id)??null,count:async()=>0,create:async({data})=>{calls.push(data);return {id:3,...data};},update:async({where,data})=>{const row=rows.get(where.id);if(where.updatedAt&&row.updatedAt.getTime()!==where.updatedAt.getTime())throw Object.assign(new Error('stale'),{code:'P2025'});calls.push(data);Object.assign(row,data);return {...row};}},account:{count:async({where})=>where.id.in.filter(id=>[7,8].includes(id)).length},productSkuOdmCustomer:{updateMany:async args=>{calls.push({archive:args.where});},upsert:async({create})=>{calls.push(create)}},productSkuOdmCustomerPrice:{updateMany:async()=>{},findFirst:async()=>null,create:async({data})=>{calls.push({customerPrice:data})}}};
+  return {calls,rows,product,tx,db:{$transaction:async callback=>callback(tx)}};
 }
-const input={productId:10,partNumber:'XT5-UPS',description:null,active:true,catalogSource:'ODM',active:true,product:{active:true,archivedAt:null},odmSubtype:'CUSTOMER_SPECIFIC',odmCustomerAccountIds:[7,8],baseSkuId:1,odmDescription:'RFID'};
+const input={editToken,productId:10,partNumber:'XT5-UPS',description:null,active:true,catalogSource:'ODM',active:true,product:{active:true,archivedAt:null},odmSubtype:'CUSTOMER_SPECIFIC',odmCustomerAccountIds:[7,8],baseSkuId:1,odmDescription:'RFID'};
 test('ODM SKU links existing Account and standard base without touching Account roles',async()=>{
   const {db,calls}=fixture();await saveSkuMetadata(db,input);
   assert.equal(calls.filter(call=>call.accountId).length,2);assert.equal(calls[0].baseSkuId,1);assert.equal(calls[0].active,true);
@@ -77,6 +79,16 @@ test('editing ODM updates customers and fields without touching prices',async()=
   assert.equal(calls.find(call=>call.catalogSource==='ODM').active,false);
   assert.ok(calls.some(call=>call.accountId===8));
   assert.ok(calls.every(call=>!('prices' in call)));
+});
+test('SKU metadata and parent Product versions reject stale edits before customer links change',async()=>{
+  const {db,rows,product,calls}=fixture();
+  const value={...input,skuId:2,baseSkuId:null,odmCustomerAccountIds:[7],productEditToken:editToken};
+  await saveSkuMetadata(db,{...value,description:'Latest description'});
+  const current=rows.get(2),savedDescription=current.description,savedVersion=current.updatedAt.toISOString(),productVersion=product.updatedAt.toISOString(),callCount=calls.length;
+  assert.notEqual(savedVersion,editToken);assert.notEqual(productVersion,editToken);
+  await assert.rejects(saveSkuMetadata(db,{...value,description:'Stale description',odmCustomerAccountIds:[8]}),/This record changed/);
+  await assert.rejects(saveSkuMetadata(db,{...value,editToken:savedVersion,description:'Stale parent',odmCustomerAccountIds:[8]}),/This record changed/);
+  assert.equal(current.description,savedDescription);assert.equal(calls.length,callCount);
 });
 test('normalized duplicate identifies the existing Product and SKU',async()=>{
   const {db,rows,calls}=fixture();rows.set('duplicate',{id:40,productId:20,partNumber:'XT5-UPS',catalogSource:'ODM',product:{name:'Printer'}});

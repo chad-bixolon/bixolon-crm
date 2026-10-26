@@ -25,6 +25,7 @@ Module._load = function(request, parent, isMain) {
     saveProduct: async () => { throw saveError; },
   };
   if (request === '@/lib/current-user') return { requireMutation: async () => {} };
+  if (request === '@/lib/stale-edit') return { requireEditToken: () => new Date('2026-10-26T00:00:00Z'), isRecordChanged: () => false, recordChangedMessage: 'This record changed after you opened it.' };
   if (request === '@/lib/crm-validation') return require(path.join(root, 'lib/crm-validation.ts'));
   if (request === '@/lib/odm-skus') return require(path.join(root, 'lib/odm-skus.ts'));
   if (request === '@/lib/product-labels') return require(path.join(root, 'lib/product-labels.ts'));

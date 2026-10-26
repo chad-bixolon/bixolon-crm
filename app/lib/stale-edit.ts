@@ -3,9 +3,9 @@ export const recordChangedMessage = 'This record changed after you opened it. Re
 export class RecordChangedError extends Error {
   constructor() { super(recordChangedMessage); this.name = 'RecordChangedError'; }
 }
-export function requireEditToken(form: FormData): string {
-  const value = form.get('editToken');
-  if (form.getAll('editToken').length !== 1 || typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value) throw new RecordChangedError();
+export function requireEditToken(form: FormData, field = 'editToken'): string {
+  const value = form.get(field);
+  if (form.getAll(field).length !== 1 || typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value) throw new RecordChangedError();
   return value;
 }
 export function assertEditToken(current: Date, submitted: string) {

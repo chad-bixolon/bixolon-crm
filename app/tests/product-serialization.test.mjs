@@ -15,7 +15,7 @@ const { serializeProductSku } = require(path.join(root, 'lib/product-serializati
 test('existing Product SKU form props contain exact decimal strings and plain data', () => {
   const createdAt = new Date('2026-09-17T12:00:00.000Z');
   const sku = {
-    id: 2, partNumber: 'DX220-STD', description: null, active: true,
+    id: 2, partNumber: 'DX220-STD', description: null, active: true, updatedAt: createdAt,
     catalogSource: 'ODM', odmSubtype: 'CUSTOMER_SPECIFIC', odmDescription: null,
     odmCustomers: [{ account: { id: 5, name: 'Example' }, prices: [], createdAt }],
     baseSku: { id: 1, partNumber: 'DX220', product: { name: 'DX220', createdAt }, createdAt },
@@ -32,7 +32,8 @@ test('existing Product SKU form props contain exact decimal strings and plain da
   assert.deepEqual(initial.prices.map(price => price.amount), ['9999999999.99', '12.30']);
   assert.ok(initial.prices.every(price => typeof price.amount === 'string' && !(price.amount instanceof Prisma.Decimal)));
   assert.equal(Object.getPrototypeOf(initial.prices[0]), Object.prototype);
-  assert.doesNotMatch(JSON.stringify(initial), /createdAt|updatedAt/);
-  assert.deepEqual(JSON.parse(JSON.stringify(initial)), initial);
+  assert.equal(initial.updatedAt.toISOString(), createdAt.toISOString());
+  assert.doesNotMatch(JSON.stringify(initial), /createdAt/);
+  assert.deepEqual(JSON.parse(JSON.stringify(initial)), { ...initial, updatedAt: createdAt.toISOString() });
   assert.equal(sku.prices[0].amount.toString(), '9999999999.99');
 });

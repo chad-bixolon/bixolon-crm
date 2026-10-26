@@ -2,10 +2,11 @@ import { canRetainCurrency } from './currency-rules';
 import { ProductCatalogSource, OdmCustomizationSubtype, type PrismaClient, type Prisma } from '@prisma/client';
 import { normalizePartNumber, normalizeAccountName } from './product-import';
 import { calculateOdmCustomerPrice, parseOdmPriceForm, type SubmittedOdmPrice } from './odm-customer-pricing';
+import { assertEditToken, nextUpdatedAt } from './stale-edit';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 export type SkuMetadataInput = {
-  productId: number; skuId?: number; partNumber: string; description: string | null; active: boolean;
+  productId: number; skuId?: number; editToken?: string; productEditToken?: string; partNumber: string; description: string | null; active: boolean;
   catalogSource: ProductCatalogSource | null; odmCustomerAccountIds: number[];
   odmSubtype: OdmCustomizationSubtype | null; baseSkuId: number | null; odmDescription: string | null;
   odmPrices?: SubmittedOdmPrice[];
@@ -51,8 +52,10 @@ export async function saveSkuMetadata(db: PrismaClient, input: SkuMetadataInput)
 export async function saveSkuMetadataInTransaction(tx: Prisma.TransactionClient, input: SkuMetadataInput) {
     const product = await tx.product.findUnique({ where: { id: input.productId } });
     if (!product || product.archivedAt) throw new Error('Product is unavailable.');
+    if (input.productEditToken) assertEditToken(product.updatedAt, input.productEditToken);
     const current = input.skuId ? await tx.productSku.findUnique({ where: { id: input.skuId }, include: { odmCustomers: true } }) : null;
     if (input.skuId && (!current || current.productId !== input.productId)) throw new Error('SKU is unavailable.');
+    if (current) assertEditToken(current.updatedAt, input.editToken ?? '');
     if (!input.partNumber.trim() || input.partNumber.length > 100) throw new Error('Part number is required and must be at most 100 characters.');
     if (input.description && input.description.length > 2000) throw new Error('Description exceeds 2000 characters.');
     if (input.odmDescription && input.odmDescription.length > 2000) throw new Error('ODM Description exceeds 2000 characters.');
@@ -86,13 +89,14 @@ export async function saveSkuMetadataInTransaction(tx: Prisma.TransactionClient,
       baseSkuId: input.catalogSource === 'ODM' ? input.baseSkuId : null,
       odmDescription: input.catalogSource === 'ODM' ? input.odmDescription : null,
       odmCustomerSourceName: input.catalogSource === 'ODM' ? current?.odmCustomerSourceName ?? null : null };
+    if (input.productEditToken) await tx.product.update({where:{id:product.id,updatedAt:product.updatedAt},data:{updatedAt:nextUpdatedAt(product.updatedAt)}});
     if (current) {
+      await tx.productSku.update({ where: { id: current.id, updatedAt: current.updatedAt }, data: { ...data, updatedAt: nextUpdatedAt(current.updatedAt) } });
       if (input.catalogSource === 'ODM') {
         await tx.productSkuOdmCustomer.updateMany({ where: { skuId: current.id, accountId: { notIn: accountIds }, archivedAt: null }, data: { archivedAt: new Date() } });
         await tx.productSkuOdmCustomerPrice.updateMany({ where: { skuId: current.id, accountId: { notIn: accountIds }, archivedAt: null }, data: { archivedAt: new Date() } });
         if (input.odmSubtype !== 'CUSTOMER_SPECIFIC' && input.odmSubtype !== 'SPECIAL_CONFIGURATION') await tx.productSkuOdmCustomerPrice.updateMany({ where: { skuId: current.id, archivedAt: null }, data: { archivedAt: new Date() } });
       }
-      await tx.productSku.update({ where: { id: current.id }, data });
     }
     const sku = current ?? await tx.productSku.create({ data: { ...data, productId: input.productId } });
     for (const accountId of accountIds) await tx.productSkuOdmCustomer.upsert({ where: { skuId_accountId: { skuId: sku.id, accountId } }, create: { skuId: sku.id, accountId }, update: { archivedAt: null } });

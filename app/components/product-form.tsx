@@ -5,13 +5,16 @@ import { useActionState, useState } from "react";
 import { submitProduct, type FormState } from "@/app/products/actions";
 import { CatalogSourceField, OdmDetailsFields } from "@/components/product-odm-fields";
 import { SaveSuccessFromQuery } from "@/components/save-success";
-export function ProductForm({ id, initial, categories = [] }: { id?: number; initial?: { sku: string; name: string; active: boolean; categoryId: number | null }; categories?: { id: number; name: string }[] }) {
+import { RecordChangedNotice } from './record-changed-notice';
+export function ProductForm({ id, initial, categories = [] }: { id?: number; initial?: { sku: string; name: string; active: boolean; categoryId: number | null; updatedAt: Date }; categories?: { id: number; name: string }[] }) {
   const [state, action, pending] = useActionState(submitProduct.bind(null, id ?? null), { errors: {} } as FormState);
   const [source, setSource] = useState(state.values?.catalogSource ?? '');
   const guard = useSubmitGuard(state, action);
   const value = (key: 'name' | 'categoryId' | 'sku' | 'active', fallback: string | number) => state.values?.[key] ?? fallback;
   return <>{id && <SaveSuccessFromQuery recordName="Product"/>}<form action={action} onSubmit={guard} className="panel max-w-2xl space-y-4 p-6" aria-label={id ? "Edit product" : "Create product"}>
-    {state.message && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}{state.existingSku && <> <Link className="underline" href={state.existingSku.href}>Open {state.existingSku.label}</Link>.</>}</p>}
+    {id && initial && <input type="hidden" name="editToken" value={initial.updatedAt.toISOString()}/>}
+    {state.recordChanged && id && <RecordChangedNotice result={state} href={`/products/${id}/edit`}/>}
+    {state.message && !state.recordChanged && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{state.message}{state.existingSku && <> <Link className="underline" href={state.existingSku.href}>Open {state.existingSku.label}</Link>.</>}</p>}
     {!id && <h2 className="text-sm font-semibold text-slate-800">Product Information</h2>}
     <div className="grid gap-3 sm:grid-cols-2"><div><label className="label" htmlFor="name">Name *</label><input className="field" id="name" name="name" required maxLength={200} defaultValue={value('name', initial?.name ?? '')}/>{state.errors.name && <p className="text-sm text-red-700">{state.errors.name}</p>}</div><div><label className="label" htmlFor="categoryId">Product Category</label><select className="field" id="categoryId" name="categoryId" defaultValue={value('categoryId', initial?.categoryId ?? '')}><option value="">Uncategorized</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select>{state.errors.categoryId && <p className="text-sm text-red-700">{state.errors.categoryId}</p>}</div></div>
     {!id && <><h2 className="border-t border-slate-200 pt-3 text-sm font-semibold text-slate-800">Initial SKU</h2><p className="text-xs text-slate-500">Product = model/family. SKU = exact part number.</p></>}

@@ -9,16 +9,16 @@ import { canEditProject, projectReadWhere } from '@/lib/projects';
 import { dateOnly } from '@/lib/demo-operations';
 import { eligibleUserWhere } from '@/lib/assignment-eligibility';
 import { activeDemoWhere } from '@/lib/unavailable-work';
-import { assertEditToken, nextUpdatedAt } from '@/lib/stale-edit';
+import { assertEditToken, nextUpdatedAt, requireEditToken, isRecordChanged, recordChangedMessage } from '@/lib/stale-edit';
 import { Prisma } from '@prisma/client';
 
 export async function assignDemoOperationalOwner(id: number, form: FormData) {
   await assertModuleEnabled('DEMOS');
   const actor = await requireMutation('demos.assign');
   const ownerId = Number(form.get('operationalOwnerId'));
-  const token = String(form.get('editToken') ?? '');
+  const token = requireEditToken(form);
   if (!Number.isSafeInteger(id) || id < 1 || !Number.isSafeInteger(ownerId) || ownerId < 1) throw new Error('Choose an eligible Demo owner.');
-  await prisma.$transaction(async tx => {
+  try { await prisma.$transaction(async tx => {
     await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id IN (${Prisma.join([...new Set([actor.id, ownerId])].sort((a, b) => a - b))}) ORDER BY id FOR SHARE`);
     const [currentActor, owner] = await Promise.all([
       tx.user.findUnique({ where: { id: actor.id } }),
@@ -33,7 +33,7 @@ export async function assignDemoOperationalOwner(id: number, form: FormData) {
     if (row.operationalOwnerId === ownerId) return;
     await tx.demoRequest.update({ where: { id, updatedAt: row.updatedAt }, data: { operationalOwnerId: ownerId, updatedAt: nextUpdatedAt(row.updatedAt) } });
     await tx.adminMaintenanceEvent.create({ data: { actorId: actor.id, entityType: 'Demo', action: 'Reassign', recordIds: [id], recordCount: 1, oldValue: row.operationalOwnerId ? `User #${row.operationalOwnerId}` : 'Unassigned', newOwnerId: ownerId, newOwnerName: `${owner.firstName} ${owner.lastName}` } });
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; throw error; }
   revalidatePath(`/demos/${id}`);
   revalidatePath('/administration/ownership');
   return { success: 'Demo follow-up owner saved.' };
@@ -49,16 +49,19 @@ const optionalId = (value: FormDataEntryValue | null) => {
 export async function updateDemoContext(id: number, form: FormData) {
   await assertModuleEnabled('DEMOS');
   const actor = await requireMutation('sales.write');
-  const request = await prisma.demoRequest.findFirst({ where: { id, AND: [demoReadWhere(actor)] }, select: { accountId: true, projectId: true, opportunityId: true, requestedById: true, operationalOwnerId: true } });
+  const request = await prisma.demoRequest.findFirst({ where: { id, AND: [demoReadWhere(actor)] }, select: { accountId: true, projectId: true, opportunityId: true, requestedById: true, operationalOwnerId: true, updatedAt: true } });
   if (!request) throw new Error('Demo Request not found.');
   if (!canEditDemo(actor, request)) throw new Error('You can only edit your own Demo Requests.');
   const projectId = optionalId(form.get('projectId')), opportunityId = optionalId(form.get('opportunityId'));
+  if (form.get('projectsAtOpen') === 'true') await assertModuleEnabled('PROJECTS');
+  if (form.get('opportunitiesAtOpen') === 'true') await assertModuleEnabled('OPPORTUNITIES');
   if (projectId !== request.projectId) await assertModuleEnabled('PROJECTS');
   if (opportunityId !== request.opportunityId) await assertModuleEnabled('OPPORTUNITIES');
-  await prisma.$transaction(async tx => {
+  try { await prisma.$transaction(async tx => {
     await assertDemoContext(tx, actor, request.accountId, projectId === request.projectId ? null : projectId, opportunityId === request.opportunityId ? null : opportunityId);
-    await tx.demoRequest.update({ where: { id }, data: { projectId, opportunityId } });
-  });
+    const token = requireEditToken(form);
+    await tx.demoRequest.update({ where: { id, updatedAt: new Date(token) }, data: { projectId, opportunityId, updatedAt: nextUpdatedAt(new Date(token)) } });
+  }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; throw error; }
   revalidatePath(`/demos/${id}`);
   revalidatePath(`/accounts/${request.accountId}`);
   for (const project of [request.projectId, projectId]) if (project) revalidatePath(`/projects/${project}`);
@@ -78,7 +81,7 @@ export async function linkDemoFromProject(projectId: number, form: FormData) {
     const demo = await tx.demoRequest.findFirst({ where: { id: demoId, projectId: null, AND: [demoReadWhere(actor)] }, select: { accountId: true, requestedById: true, operationalOwnerId: true } });
     if (!demo || !canEditDemo(actor, demo)) throw new Error('Demo is not available.');
     await assertDemoContext(tx, actor, demo.accountId, projectId, null);
-    await tx.demoRequest.update({ where: { id: demoId }, data: { projectId } });
+    await tx.demoRequest.update({ where: { id: demoId, projectId: null }, data: { projectId } });
   });
   revalidatePath(`/projects/${projectId}`);
   revalidatePath(`/demos/${demoId}`);
@@ -94,7 +97,7 @@ export async function linkDemoFromOpportunity(opportunityId: number, form: FormD
     const demo = await tx.demoRequest.findFirst({ where: { id: demoId, opportunityId: null, AND: [demoReadWhere(actor)] }, select: { accountId: true, requestedById: true, operationalOwnerId: true } });
     if (!demo || !canEditDemo(actor, demo)) throw new Error('Demo is not available.');
     await assertDemoContext(tx, actor, demo.accountId, null, opportunityId);
-    await tx.demoRequest.update({ where: { id: demoId }, data: { opportunityId } });
+    await tx.demoRequest.update({ where: { id: demoId, opportunityId: null }, data: { opportunityId } });
   });
   revalidatePath(`/opportunities/${opportunityId}`);
   revalidatePath(`/demos/${demoId}`);
@@ -103,12 +106,12 @@ export async function linkDemoFromOpportunity(opportunityId: number, form: FormD
 export async function updateDemoNotes(id: number, form: FormData) {
   await assertModuleEnabled('DEMOS');
   const actor = await requireMutation('sales.write');
-  const request = await prisma.demoRequest.findFirst({ where: { id, AND: [demoReadWhere(actor)] }, select: { requestedById: true, operationalOwnerId: true } });
+  const request = await prisma.demoRequest.findFirst({ where: { id, AND: [demoReadWhere(actor)] }, select: { requestedById: true, operationalOwnerId: true, updatedAt: true } });
   if (!request) throw new Error('Demo Request not found.');
   if (!canEditDemo(actor, request)) throw new Error('You can only edit your own Demo Requests.');
   const notes = String(form.get('notes') ?? '').trim();
   if (notes.length > 10000) throw new Error('Notes are too long.');
-  await prisma.demoRequest.update({ where: { id }, data: { notes: notes || null } });
+  try { const token=requireEditToken(form); await prisma.demoRequest.update({ where: { id, updatedAt: new Date(token) }, data: { notes: notes || null, updatedAt: nextUpdatedAt(new Date(token)) } }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; throw error; }
   revalidatePath(`/demos/${id}`);
 }
 
@@ -120,16 +123,18 @@ export async function recordDemoReturn(id: number, form: FormData) {
   const trackingNumber = String(form.get('trackingNumber') ?? '').trim();
   const note = String(form.get('note') ?? '').trim();
   if (!unitIds.length || unitIds.some(value => !Number.isSafeInteger(value) || value <= 0) || new Set(unitIds).size !== unitIds.length || Number.isNaN(returnedAt.valueOf()) || dateOnly(returnedAt) !== form.get('returnedAt') || dateOnly(returnedAt) > dateOnly(new Date()) || trackingNumber.length > 200 || note.length > 4000) throw new Error('Choose outstanding units and a valid return date.');
-  await prisma.$transaction(async tx => {
+  try { await prisma.$transaction(async tx => {
     const request = await tx.demoRequest.findFirst({ where: { id, AND: [demoReadWhere(actor)] }, select: { requestedById: true, operationalOwnerId: true } });
     if (!request || !canEditDemo(actor, request)) throw new Error('Access denied');
     const units = await tx.demoUnit.findMany({ where: { id: { in: unitIds }, demoItem: { demoRequestId: id }, status: 'DEPLOYED', returnedAt: null } });
     if (units.length !== unitIds.length || units.some(unit => !unit.deployedAt || dateOnly(returnedAt) < dateOnly(unit.deployedAt))) throw new Error('Only deployed outstanding units can be returned.');
+    const token=requireEditToken(form);
+    await tx.demoRequest.update({where:{id,updatedAt:new Date(token)},data:{updatedAt:nextUpdatedAt(new Date(token))}});
     for (const unit of units) {
       await tx.demoUnit.update({ where: { id: unit.id }, data: { status: 'RETURNED', returnedAt } });
       await tx.demoReturnEvent.create({ data: { demoUnitId: unit.id, returnedAt, trackingNumber: trackingNumber || null, note: note || null, recordedById: actor.id } });
     }
-  });
+  }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; throw error; }
   revalidatePath(`/demos/${id}`);
   revalidatePath('/reports/demo-inventory');
 }
@@ -141,9 +146,9 @@ export async function updateDemoExpectedReturn(id: number, form: FormData) {
   const reason = String(form.get('reason') ?? '').trim();
   const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00Z`) : null;
   if (!parsed || Number.isNaN(parsed.valueOf()) || dateOnly(parsed) !== value || reason.length > 2000) throw new Error('Enter a valid expected return date.');
-  const request = await prisma.demoRequest.findFirst({ where: { id, AND: [demoReadWhere(actor)] }, select: { requestedById: true, operationalOwnerId: true } });
+  const request = await prisma.demoRequest.findFirst({ where: { id, AND: [demoReadWhere(actor)] }, select: { requestedById: true, operationalOwnerId: true, updatedAt: true } });
   if (!request || !canEditDemo(actor, request)) throw new Error('Access denied');
-  await prisma.demoRequest.update({ where: { id }, data: { expectedReturnOverrideAt: parsed, expectedReturnOverrideById: actor.id, expectedReturnOverrideRecordedAt: new Date(), expectedReturnOverrideReason: reason || null } });
+  try { const token=requireEditToken(form); await prisma.demoRequest.update({ where: { id, updatedAt:new Date(token) }, data: { expectedReturnOverrideAt: parsed, expectedReturnOverrideById: actor.id, expectedReturnOverrideRecordedAt: new Date(), expectedReturnOverrideReason: reason || null, updatedAt:nextUpdatedAt(new Date(token)) } }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; throw error; }
   revalidatePath(`/demos/${id}`);
   revalidatePath('/reports/demo-inventory');
 }
@@ -154,13 +159,15 @@ export async function deployDemoUnits(id: number, form: FormData) {
   const unitIds = form.getAll('unitId').map(Number);
   const deployedAt = new Date(`${String(form.get('deployedAt') ?? '')}T12:00:00Z`);
   if (!unitIds.length || unitIds.some(value => !Number.isSafeInteger(value) || value <= 0) || new Set(unitIds).size !== unitIds.length || Number.isNaN(deployedAt.valueOf()) || dateOnly(deployedAt) !== form.get('deployedAt') || dateOnly(deployedAt) > dateOnly(new Date())) throw new Error('Choose units and a valid deployment date.');
-  await prisma.$transaction(async tx => {
+  try { await prisma.$transaction(async tx => {
     const request = await tx.demoRequest.findFirst({ where: { id, AND: [demoReadWhere(actor)] }, select: { requestedById: true, operationalOwnerId: true } });
     if (!request || !canEditDemo(actor, request)) throw new Error('Access denied');
     const units = await tx.demoUnit.findMany({ where: { id: { in: unitIds }, demoItem: { demoRequestId: id, retiredAt: null }, deployedAt: null, returnedAt: null } });
     if (units.length !== unitIds.length) throw new Error('Only not yet deployed units can be deployed.');
+    const token=requireEditToken(form);
+    await tx.demoRequest.update({where:{id,updatedAt:new Date(token)},data:{updatedAt:nextUpdatedAt(new Date(token))}});
     for (const unit of units) await tx.demoUnit.update({ where: { id: unit.id }, data: { status: 'DEPLOYED', deployedAt } });
-  });
+  }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; throw error; }
   revalidatePath(`/demos/${id}`);
   revalidatePath('/reports/demo-inventory');
 }

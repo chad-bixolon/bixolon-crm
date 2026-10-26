@@ -4,10 +4,10 @@ import { saveCampaign } from '@/app/marketing/attribution/actions';
 import { campaignStatuses } from '@/lib/marketing-attribution';
 import { campaignStatusLabel } from '@/lib/campaign-view';
 
-type CampaignValues = { id: number; name: string; year: number | null; category: string | null; status: string; startDate: Date | null; endDate: Date | null; description: string | null };
+type CampaignValues = { id: number; name: string; year: number | null; category: string | null; status: string; startDate: Date | null; endDate: Date | null; description: string | null; updatedAt: Date };
 export function CampaignForm({ campaign }: { campaign?: CampaignValues }) {
   return <RecoverableActionForm action={saveCampaign} className="panel grid gap-3 p-5 sm:grid-cols-2">
-    {campaign && <input type="hidden" name="id" value={campaign.id}/>}
+    {campaign && <><input type="hidden" name="id" value={campaign.id}/><input type="hidden" name="editToken" value={campaign.updatedAt.toISOString()}/></>}
     <label className="text-sm">Name<input className="field mt-1 block w-full" name="name" defaultValue={campaign?.name} required maxLength={160}/></label>
     <label className="text-sm">Year<input className="field mt-1 block w-full" name="year" type="number" min={1900} max={2200} defaultValue={campaign?.year ?? ''}/></label>
     <label className="text-sm">Category<input className="field mt-1 block w-full" name="category" maxLength={120} defaultValue={campaign?.category ?? ''}/></label>

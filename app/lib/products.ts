@@ -4,6 +4,7 @@ import { normalizePartNumber } from "./product-import";
 import { DuplicateSkuError, saveSkuMetadataInTransaction, type SkuMetadataInput } from "./odm-skus";
 import type { Actor } from './authorization';
 import { activePriceExceptionLineWhere } from './price-exception-lookup';
+import { assertEditToken, nextUpdatedAt } from './stale-edit';
 export function parseProduct(form: FormData) {
   const errors: Errors = {};
   const sku = required(form, "sku", "SKU", 100, errors);
@@ -14,16 +15,17 @@ export function parseProduct(form: FormData) {
   if (categoryText && (!Number.isSafeInteger(categoryId) || Number(categoryId) <= 0)) errors.categoryId = "Choose a valid Product Category.";
   return { errors, value: Object.keys(errors).length ? undefined : { sku, name, active, categoryId } };
 }
-export async function saveProduct(client: PrismaClient, input: { sku: string; name: string; active: boolean; categoryId?: number | null }, id?: number, initialSku?: Omit<SkuMetadataInput, 'productId' | 'skuId'>) {
+export async function saveProduct(client: PrismaClient, input: { sku: string; name: string; active: boolean; categoryId?: number | null }, id?: number, initialSku?: Omit<SkuMetadataInput, 'productId' | 'skuId'>, editToken?: string) {
   return client.$transaction(async tx => {
     const old = id ? await tx.product.findUnique({ where: { id } }) : null;
     if (id && !old) throw new Error("Product not found.");
     if (old?.archivedAt) throw new Error("Reactivate this product before editing it.");
+    if (old) assertEditToken(old.updatedAt, editToken ?? '');
     if (input.categoryId && !await tx.productCategory.count({ where: { id: input.categoryId, active: true } }) && old?.categoryId !== input.categoryId) throw new Error("Choose an active Product Category.");
     const key = normalizePartNumber(input.sku);
     const conflict = await tx.productSku.findUnique({where:{normalizedPartNumber:key},include:{product:{select:{name:true}}}});
     if (conflict && (conflict.productId !== id || old && normalizePartNumber(old.sku) !== key)) throw new DuplicateSkuError({id:conflict.id,partNumber:conflict.partNumber,productId:conflict.productId,productName:conflict.product.name,catalogSource:conflict.catalogSource});
-    const row = id ? await tx.product.update({ where: { id }, data: input }) : await tx.product.create({ data: input });
+    const row = old ? await tx.product.update({ where: { id: old.id, updatedAt: old.updatedAt }, data: { ...input, updatedAt: nextUpdatedAt(old.updatedAt) } }) : await tx.product.create({ data: input });
     if (!old) {
       await saveSkuMetadataInTransaction(tx, { description: null, catalogSource: null, odmSubtype: null, odmCustomerAccountIds: [], baseSkuId: null, odmDescription: null, ...initialSku, productId: row.id, partNumber: input.sku, active: input.active });
       return row.id;
@@ -37,9 +39,10 @@ export async function saveProduct(client: PrismaClient, input: { sku: string; na
     return row.id;
   });
 }
-export async function setProductState(client: PrismaClient, id: number, state: "active" | "inactive" | "archived") {
+export async function setProductState(client: PrismaClient, id: number, state: "active" | "inactive" | "archived", editToken: string) {
   const row = await client.product.findUnique({ where: { id } }); if (!row) throw new Error("Product not found.");
-  await client.product.update({ where: { id }, data: { active: state === "active", archivedAt: state === "archived" ? new Date() : null } });
+  assertEditToken(row.updatedAt, editToken);
+  await client.product.update({ where: { id, updatedAt: row.updatedAt }, data: { active: state === "active", archivedAt: state === "archived" ? new Date() : null, updatedAt: nextUpdatedAt(row.updatedAt) } });
 }
 export { catalogSourceLabels } from './product-labels';
 export function productCategoryChoices(client: PrismaClient) {

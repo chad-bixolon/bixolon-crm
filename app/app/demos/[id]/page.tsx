@@ -103,31 +103,33 @@ export default async function DemoPage({ params }: { params: Promise<{ id: strin
         </div>))}
       </div>
       {editable && <>
-        <RecoverableActionForm action={deployDemoUnits.bind(null, request.id)} className="mt-4 space-y-2">
+        <RecoverableActionForm action={deployDemoUnits.bind(null, request.id)} className="mt-4 space-y-2"><input type="hidden" name="editToken" value={request.updatedAt.toISOString()}/>
           <h3 className="font-semibold">Record deployment</h3>
           <div className="flex flex-wrap gap-3">{activeUnits.filter(unit => !unit.deployedAt).map(unit => <label key={unit.id}><input type="checkbox" name="unitId" value={unit.id}/> {unit.serialNumber ?? `Unit ${unit.ordinal}`}</label>)}</div>
           <input className="field" type="date" name="deployedAt" required/><button className="btn-secondary ml-2">Record deployment</button>
         </RecoverableActionForm>
-        <RecoverableActionForm action={recordDemoReturn.bind(null, request.id)} className="mt-4 space-y-2">
+        <RecoverableActionForm action={recordDemoReturn.bind(null, request.id)} className="mt-4 space-y-2"><input type="hidden" name="editToken" value={request.updatedAt.toISOString()}/>
           <h3 className="font-semibold">Record return</h3>
           <div className="flex flex-wrap gap-3">{units.filter(unit => unit.deployedAt && !unit.returnedAt).map(unit => <label key={unit.id}><input type="checkbox" name="unitId" value={unit.id}/> {unit.serialNumber ?? `Unit ${unit.ordinal}`}</label>)}</div>
           <input className="field" type="date" name="returnedAt" required/><input className="field ml-2" name="trackingNumber" placeholder="Return tracking (optional)"/><input className="field ml-2" name="note" placeholder="Return note (optional)"/><button className="btn-secondary ml-2">Record return</button>
         </RecoverableActionForm>
-        <RecoverableActionForm action={updateDemoExpectedReturn.bind(null, request.id)} className="mt-4 space-y-2">
+        <RecoverableActionForm action={updateDemoExpectedReturn.bind(null, request.id)} className="mt-4 space-y-2"><input type="hidden" name="editToken" value={request.updatedAt.toISOString()}/>
           <h3 className="font-semibold">Expected return</h3>
           <input className="field" type="date" name="expectedReturn" defaultValue={summary.expected ? dateOnly(summary.expected) : ''} required/><input className="field ml-2" name="reason" placeholder="Reason (optional)"/><button className="btn-secondary ml-2">Update date</button>
         </RecoverableActionForm>
       </>}
     </section>
 
-    {editable && (availability.effective.has('PROJECTS') || availability.effective.has('OPPORTUNITIES')) && <RecoverableActionForm className="panel mt-5 space-y-3 p-5" action={updateDemoContext.bind(null, request.id)}>
+    {editable && (availability.effective.has('PROJECTS') || availability.effective.has('OPPORTUNITIES')) && <RecoverableActionForm className="panel mt-5 space-y-3 p-5" action={updateDemoContext.bind(null, request.id)}><input type="hidden" name="editToken" value={request.updatedAt.toISOString()}/>
+      {availability.effective.has('PROJECTS') && <input type="hidden" name="projectsAtOpen" value="true"/>}
+      {availability.effective.has('OPPORTUNITIES') && <input type="hidden" name="opportunitiesAtOpen" value="true"/>}
       <h2 className="font-semibold">Business context</h2>
       <p className="text-sm text-slate-600">Link this demo to a Project or Opportunity when applicable.</p>
       {availability.effective.has('PROJECTS') ? <EntityPicker type="project" label="Project" name="projectId" initial={request.project ? { id: request.project.id, name: request.project.name, context: null } : null} filters={{ accountId: request.accountId, editableOnly: true }}/> : <input type="hidden" name="projectId" value={request.projectId ?? ''}/>}
       {availability.effective.has('OPPORTUNITIES') ? <EntityPicker type="opportunity" label="Opportunity" name="opportunityId" initial={request.opportunity ? { id: request.opportunity.id, name: request.opportunity.name, context: null } : null} filters={{ accountId: request.accountId }}/> : <input type="hidden" name="opportunityId" value={request.opportunityId ?? ''}/>}
       <button className="btn-secondary">Update links</button>
     </RecoverableActionForm>}
-    {editable ? <RecoverableActionForm className="panel mt-5 p-4" action={updateDemoNotes.bind(null, request.id)}><h2 className="font-semibold">Notes</h2><label className="sr-only" htmlFor="demo-notes">Notes</label><textarea className="field mt-2 w-full font-normal leading-5" id="demo-notes" name="notes" rows={5} defaultValue={request.notes ?? ''}/><button className="btn-secondary mt-3">Save notes</button></RecoverableActionForm> : <section className="panel mt-5 p-4"><h2 className="font-semibold">Notes</h2><p className="mt-2 whitespace-pre-wrap break-words text-sm font-normal leading-5 text-slate-700">{request.notes ?? '—'}</p></section>}
+    {editable ? <RecoverableActionForm className="panel mt-5 p-4" action={updateDemoNotes.bind(null, request.id)}><input type="hidden" name="editToken" value={request.updatedAt.toISOString()}/><h2 className="font-semibold">Notes</h2><label className="sr-only" htmlFor="demo-notes">Notes</label><textarea className="field mt-2 w-full font-normal leading-5" id="demo-notes" name="notes" rows={5} defaultValue={request.notes ?? ''}/><button className="btn-secondary mt-3">Save notes</button></RecoverableActionForm> : <section className="panel mt-5 p-4"><h2 className="font-semibold">Notes</h2><p className="mt-2 whitespace-pre-wrap break-words text-sm font-normal leading-5 text-slate-700">{request.notes ?? '—'}</p></section>}
     {actor.role === 'ADMIN' && request.sourceRequestId && <section className="mt-5 text-xs text-slate-500">
       <p>Source method: {request.sourceMethod === 'MANUAL_ROSA_BACKFILL' ? 'Manual Rosa backfill' : 'Rosa CSV import'} · Source Request ID: {request.sourceRequestId}</p>
       <p>{request.revisions.length} source revision{request.revisions.length === 1 ? '' : 's'}</p>

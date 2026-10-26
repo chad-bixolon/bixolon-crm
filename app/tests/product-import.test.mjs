@@ -14,10 +14,10 @@ const {productWhere,productHref,listProducts,productCategoryChoices}=require(pat
 const {parseImportCsv}=require(path.join(root,'lib/import-csv.ts'));
 const {routeAccess}=require(path.join(root,'lib/authorization.ts'));
 const csv=(rows,header='model,part_number,description,standard_price,currency,active')=>`${header}\n${rows.join('\n')}\n`;
-const sku=(id,productId,partNumber,price='10.00')=>({id,productId,partNumber,normalizedPartNumber:normalizePartNumber(partNumber),description:'Old',priceUnit:'EACH',active:true,prices:[{currencyCode:'USD',tier:'STANDARD',amount:new Prisma.Decimal(price)}]});
-const product=(id,name,skus=[])=>({id,name,sku:skus[0]?.partNumber ?? 'LEGACY',active:true,archivedAt:null,skus});
+const sku=(id,productId,partNumber,price='10.00')=>({id,productId,partNumber,normalizedPartNumber:normalizePartNumber(partNumber),description:'Old',priceUnit:'EACH',active:true,updatedAt:new Date('2026-10-01T00:00:00Z'),prices:[{currencyCode:'USD',tier:'STANDARD',amount:new Prisma.Decimal(price)}]});
+const product=(id,name,skus=[])=>({id,name,sku:skus[0]?.partNumber ?? 'LEGACY',active:true,archivedAt:null,updatedAt:new Date('2026-10-01T00:00:00Z'),skus});
 const categories=['POS','LABEL','MOBILE','LASER','RIBBON','ACCESSORIES','PAPER','WARRANTY'].map(code=>({code,active:true}));
-const db=(products=[],categoryRows=categories,accounts=[])=>({product:{findMany:async()=>products},productCategory:{findMany:async()=>categoryRows},account:{findMany:async()=>accounts}});
+const db=(products=[],categoryRows=categories,accounts=[])=>({product:{findMany:async()=>products,update:async({where,data})=>{const row=products.find(item=>item.id===where.id);if(!row||where.updatedAt&&row.updatedAt.getTime()!==where.updatedAt.getTime())throw Object.assign(new Error('stale'),{code:'P2025'});Object.assign(row,data);return row;}},productSku:{update:async({where,data})=>{const row=products.flatMap(item=>item.skus).find(item=>item.id===where.id);if(!row||where.updatedAt&&row.updatedAt.getTime()!==where.updatedAt.getTime())throw Object.assign(new Error('stale'),{code:'P2025'});Object.assign(row,data);return row;}},productCategory:{findMany:async()=>categoryRows},account:{findMany:async()=>accounts}});
 
 test('catalog CSV parses quoted descriptions and validates headers',()=>{
   const parsed=parseImportCsv(csv(['SLP-DX220,DX220-STD,"Printer, standard",15,USD,true']),productImportHeaders);

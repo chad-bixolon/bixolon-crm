@@ -14,7 +14,7 @@ Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(f
 const actor = role => ({ id: 1, role, active: true, archivedAt: null });
 const { can, routeAccess } = require(path.join(root, 'lib/authorization.ts'));
 let effective = actor('ADMIN');
-const product = { id: 5, name: 'Printer', sku: 'P5', active: true, archivedAt: null, category: null, categoryId: null, skus: [{ id: 8, partNumber: 'P5-8', description: null, active: true, catalogSource: null, odmSubtype: null, odmCustomers: [], baseSku: null, prices: [] }] };
+const product = { id: 5, name: 'Printer', sku: 'P5', active: true, updatedAt: new Date('2026-10-26T00:00:00Z'), archivedAt: null, category: null, categoryId: null, skus: [{ id: 8, partNumber: 'P5-8', description: null, active: true, updatedAt: new Date('2026-10-26T00:00:00Z'), catalogSource: null, odmSubtype: null, odmCustomers: [], baseSku: null, prices: [] }] };
 const originalLoad = Module._load;
 const originalTsx = Module._extensions['.tsx'];
 const originalCss = Module._extensions['.css'];

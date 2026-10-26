@@ -16,7 +16,7 @@ import {tradeShowReadWhere} from '@/lib/trade-shows';
 import {saveReportAction} from '../actions';
 
 type Params=Record<string,string|string[]|undefined>;
-type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|'SHARED';configuration:unknown}|null;
+type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|'SHARED';configuration:unknown;updatedAt:Date}|null;
 export async function TradeShowBuilder({params,actor,saved}:{params:Params;actor:Actor;saved:Saved}){
   const opportunitiesEnabled=(await getModuleAvailability()).effective.has('OPPORTUNITIES');
   const initial=tradeShowConfigFromParams(params,saved?.configuration);
@@ -36,7 +36,7 @@ export async function TradeShowBuilder({params,actor,saved}:{params:Params;actor
   const select=(name:string,label:string,items:{value:string|number;label:string}[],empty='All')=><label className="label">{label}<select className="field" name={name} defaultValue={selected(name)}><option value="">{empty}</option>{items.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</select></label>;
   const dateFilter=config.filters.find(filter=>filter.field==='showDate'),dateChoice=dateFilter?.operator==='preset'?String(dateFilter.value):dateFilter?.operator==='between'?'CUSTOM':'ANY',dateRange=dateFilter?.operator==='between'?dateFilter.value as {from:string;to:string}:null;
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.reports} title={saved?'Edit Trade Show Performance Report':'Trade Show Performance'} description={definition.description} action={<Link className="btn-secondary" href="/reports">Reports</Link>}/>
-    <form method="get" className="panel report-builder p-3 md:p-4"><input type="hidden" name="configured" value="1"/><input type="hidden" name="reportType" value="TRADE_SHOW"/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>} 
+    <form method="get" className="panel report-builder p-3 md:p-4"><input type="hidden" name="configured" value="1"/><input type="hidden" name="reportType" value="TRADE_SHOW"/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}
       <fieldset className="report-section report-primary-filters"><legend className="report-section-title">Lead filters</legend><div className="report-filter-grid">
         {select('tradeShowId','Trade Show',shows.map(show=>({value:show.id,label:show.name})))}
         <ReportSalesRepFilter actor={actor} reps={reps} selected={selected('ownerId')} label="Assigned Sales Rep"/>
@@ -63,6 +63,6 @@ export async function TradeShowBuilder({params,actor,saved}:{params:Params;actor
       <div className="report-preview"><button className="btn-primary">Preview</button></div>
     </form>
     <ReportResults result={result} config={config} groupKey={Array.isArray(params.group)?params.group[0]:params.group}/>
-    {canCreateReport(actor)&&<RecoverableActionForm action={saveReportAction} className="panel mt-4 grid gap-3 p-4 sm:grid-cols-2 md:p-5"><h2 className="text-lg font-semibold sm:col-span-2">Save This Report</h2><input type="hidden" name="reportType" value="TRADE_SHOW"/><input type="hidden" name="configuration" value={JSON.stringify(config)}/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}<label className="label">Report name<input className="field" name="name" required maxLength={120} defaultValue={saved?.name??''}/></label><label className="label">Visibility<select className="field" name="visibility" defaultValue={saved?.visibility??'PERSONAL'}><option value="PERSONAL">Personal</option>{canShareReport(actor)&&<option value="SHARED">Shared</option>}</select></label><label className="label sm:col-span-2">Description<textarea className="field" name="description" maxLength={1000} defaultValue={saved?.description??''}/></label><div><button className="btn-primary">{saved?'Save changes':'Save report'}</button></div></RecoverableActionForm>}
+    {canCreateReport(actor)&&<RecoverableActionForm action={saveReportAction} recordHref={saved ? `/reports/${saved.id}` : undefined} className="panel mt-4 grid gap-3 p-4 sm:grid-cols-2 md:p-5"><h2 className="text-lg font-semibold sm:col-span-2">Save This Report</h2><input type="hidden" name="reportType" value="TRADE_SHOW"/><input type="hidden" name="configuration" value={JSON.stringify(config)}/>{saved&&<><input type="hidden" name="reportId" value={saved.id}/><input type="hidden" name="editToken" value={saved.updatedAt.toISOString()}/></>}<label className="label">Report name<input className="field" name="name" required maxLength={120} defaultValue={saved?.name??''}/></label><label className="label">Visibility<select className="field" name="visibility" defaultValue={saved?.visibility??'PERSONAL'}><option value="PERSONAL">Personal</option>{canShareReport(actor)&&<option value="SHARED">Shared</option>}</select></label><label className="label sm:col-span-2">Description<textarea className="field" name="description" maxLength={1000} defaultValue={saved?.description??''}/></label><div><button className="btn-primary">{saved?'Save changes':'Save report'}</button></div></RecoverableActionForm>}
   </Content>;
 }

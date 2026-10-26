@@ -13,7 +13,7 @@ const { saveProjectUpdate, projectUpdateWhere } = require(path.join(root, 'lib/p
 const actor = { id: 7, role: 'ADMIN', active: true, archivedAt: null };
 const project = { id: 3, ownerId: 7, archivedAt: null, primaryAccount: null };
 const opportunity = { id: 8, ownerId: 7, archivedAt: null };
-function form(body, otherField, otherId) { const result = new FormData(); result.set('body', body); if (otherId) result.set(otherField, String(otherId)); return result; }
+function form(body, otherField, otherId, token) { const result = new FormData(); result.set('body', body); if (otherId) result.set(otherField, String(otherId)); if (token) result.set('editToken', token); return result; }
 
 test('a dual-linked update is one record returned in both parent contexts', async () => {
   const records = [];
@@ -22,9 +22,9 @@ test('a dual-linked update is one record returned in both parent contexts', asyn
     opportunity: { findUnique: async ({ where }) => where.id === 8 ? opportunity : null },
     opportunityProject: { findUnique: async ({ where }) => where.opportunityId_projectId.projectId === 3 && where.opportunityId_projectId.opportunityId === 8 ? {} : null },
     projectUpdate: {
-      findUnique: async ({ where }) => records.find(record => record.id === where.id) ?? null,
-      create: async ({ data }) => { const record = { id: records.length + 1, ...data }; records.push(record); return record; },
-      update: async ({ where, data }) => Object.assign(records.find(record => record.id === where.id), data),
+      findUnique: async ({ where }) => { const record = records.find(record => record.id === where.id); return record ? { ...record } : null; },
+      create: async ({ data }) => { const record = { id: records.length + 1, updatedAt: new Date('2026-10-01T00:00:00.000Z'), ...data }; records.push(record); return record; },
+      update: async ({ where, data }) => { const record=records.find(row=>row.id===where.id);if(!record||record.updatedAt.getTime()!==where.updatedAt.getTime())throw Object.assign(new Error('stale'),{code:'P2025'});return Object.assign(record,data); },
     },
   };
   const client = { $transaction: async callback => callback(tx) };
@@ -32,9 +32,17 @@ test('a dual-linked update is one record returned in both parent contexts', asyn
   assert.equal(saved.id, 1);
   assert.equal(records.filter(row => row.projectId === projectUpdateWhere({ kind: 'project', id: 3 }).projectId).length, 1);
   assert.equal(records.filter(row => row.opportunityId === projectUpdateWhere({ kind: 'opportunity', id: 8 }).opportunityId).length, 1);
-  await saveProjectUpdate(client, actor, { kind: 'opportunity', id: 8 }, saved.id, form('Milestone revised', 'projectId', 3));
+  await saveProjectUpdate(client, actor, { kind: 'opportunity', id: 8 }, saved.id, form('Milestone revised', 'projectId', 3, records[0].updatedAt.toISOString()));
   assert.equal(records.length, 1);
   assert.equal(records[0].body, 'Milestone revised');
+  const current = records[0].updatedAt.toISOString();
+  await assert.rejects(saveProjectUpdate(client, actor, { kind: 'project', id: 3 }, saved.id, form('Missing token', 'opportunityId', 8)), /This record changed/);
+  await assert.rejects(saveProjectUpdate(client, actor, { kind: 'project', id: 3 }, saved.id, form('Invalid token', 'opportunityId', 8, 'invalid')), /This record changed/);
+  await assert.rejects(saveProjectUpdate(client, actor, { kind: 'project', id: 3 }, saved.id, form('Stale text', 'opportunityId', 8, '2026-10-01T00:00:00.000Z')), /This record changed/);
+  assert.equal(records[0].body, 'Milestone revised');
+  const concurrent=await Promise.allSettled([saveProjectUpdate(client,actor,{kind:'project',id:3},saved.id,form('First concurrent edit','opportunityId',8,current)),saveProjectUpdate(client,actor,{kind:'project',id:3},saved.id,form('Second concurrent edit','opportunityId',8,current))]);
+  assert.deepEqual(concurrent.map(result=>result.status).sort(),['fulfilled','rejected']);
+  assert.ok(['First concurrent edit','Second concurrent edit'].includes(records[0].body));
   await assert.rejects(saveProjectUpdate(client, actor, { kind: 'project', id: 4 }, saved.id, form('Wrong context', 'opportunityId', 8)), /not found in this record/);
 });
 

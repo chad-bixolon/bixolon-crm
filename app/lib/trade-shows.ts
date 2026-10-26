@@ -4,6 +4,7 @@ import { can, type Actor } from './authorization';
 import { field, optional, positiveId, required, type Errors } from './crm-validation';
 import { isApprovedTradeShowTimezone } from './trade-show-timezones';
 import { dateField } from './work';
+import { assertEditToken, nextUpdatedAt } from './stale-edit';
 
 export type TradeShowInput = {
   name: string; startDate: Date | null; endDate: Date | null; location: string | null;
@@ -94,7 +95,7 @@ export function tradeShowKpis(leads: { assignedSalesRepUserId: number | null; st
   };
 }
 
-export async function saveTradeShow(client: PrismaClient, input: TradeShowInput, actor: Actor, id?: number) {
+export async function saveTradeShow(client: PrismaClient, input: TradeShowInput, actor: Actor, id?: number, editToken?: string) {
   if (!can(actor, 'trade-shows.manage')) throw new Error('Access denied');
   if (!input.name.trim() || input.name.length > 200) throw new Error('Trade Show name is required and must be 200 characters or fewer.');
   if (input.endDate && input.startDate && input.endDate < input.startDate) throw new Error('End date must be on or after the start date.');
@@ -106,6 +107,7 @@ export async function saveTradeShow(client: PrismaClient, input: TradeShowInput,
   return client.$transaction(async tx => {
     const existing = id ? await tx.tradeShow.findUnique({ where: { id } }) : null;
     if (id && (!existing || existing.archivedAt)) throw new Error('Trade Show not found or archived.');
+    if (existing) assertEditToken(existing.updatedAt, editToken ?? '');
     if (input.marketingOwnerId && input.marketingOwnerId !== existing?.marketingOwnerId) {
       const owner = await tx.user.findFirst({ where: { id: input.marketingOwnerId, ...eligibleUserWhere('marketing-owner') } });
       if (!owner) throw new Error('Choose an active Marketing Manager.');
@@ -114,7 +116,7 @@ export async function saveTradeShow(client: PrismaClient, input: TradeShowInput,
     if (requestedIds.some(linkId => !currentLinks.some(link => link.id === linkId))) throw new Error('Resource link does not belong to this Trade Show.');
     const { resourceLinks, ...showFields } = input;
     const data = { ...showFields, updatedById: actor.id };
-    const show = existing ? await tx.tradeShow.update({ where: { id }, data }) : await tx.tradeShow.create({ data: { ...data, createdById: actor.id } });
+    const show = existing ? await tx.tradeShow.update({ where: { id, updatedAt: existing.updatedAt }, data: { ...data, updatedAt: nextUpdatedAt(existing.updatedAt) } }) : await tx.tradeShow.create({ data: { ...data, createdById: actor.id } });
     const removedIds = currentLinks.filter(link => !requestedIds.includes(link.id)).map(link => link.id);
     if (removedIds.length) await tx.tradeShowResourceLink.deleteMany({ where: { tradeShowId: show.id, id: { in: removedIds } } });
     for (const [sortOrder, link] of resourceLinks.entries()) {
@@ -129,8 +131,8 @@ export async function saveTradeShow(client: PrismaClient, input: TradeShowInput,
 
 export async function setTradeShowArchived(client: PrismaClient, id: number, archived: boolean, actor: Actor) {
   if (!can(actor, 'trade-shows.manage')) throw new Error('Access denied');
-  const show = await client.tradeShow.findUnique({ where: { id }, select: { id: true, archivedAt: true } });
+  const show = await client.tradeShow.findUnique({ where: { id }, select: { id: true, archivedAt: true, updatedAt: true } });
   if (!show) throw new Error('Trade Show not found.');
   if (!!show.archivedAt === archived) throw new Error(archived ? 'Trade Show already archived.' : 'Trade Show already active.');
-  await client.tradeShow.update({ where: { id }, data: { archivedAt: archived ? new Date() : null, archivedById: archived ? actor.id : null, updatedById: actor.id } });
+  await client.tradeShow.update({ where: { id, updatedAt: show.updatedAt, archivedAt: show.archivedAt }, data: { archivedAt: archived ? new Date() : null, archivedById: archived ? actor.id : null, updatedById: actor.id, updatedAt: nextUpdatedAt(show.updatedAt) } });
 }

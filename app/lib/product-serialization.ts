@@ -2,6 +2,7 @@ import type { Prisma, ProductPriceTier } from '@prisma/client';
 
 type ProductSkuForClient = {
   id: number;
+  updatedAt: Date;
   partNumber: string;
   description: string | null;
   active: boolean;
@@ -16,6 +17,7 @@ type ProductSkuForClient = {
 export function serializeProductSku(sku: ProductSkuForClient) {
   return {
     id: sku.id,
+    updatedAt: sku.updatedAt,
     partNumber: sku.partNumber,
     description: sku.description,
     active: sku.active,

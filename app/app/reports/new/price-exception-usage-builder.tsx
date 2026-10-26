@@ -16,7 +16,7 @@ import { canShareReport,executePriceExceptionUsageReport,reportRegistry } from '
 import { saveReportAction } from '../actions';
 
 type Params=Record<string,string|string[]|undefined>;
-type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|'SHARED';configuration:unknown}|null;
+type Saved={id:number;name:string;description:string|null;visibility:'PERSONAL'|'SHARED';configuration:unknown;updatedAt:Date}|null;
 export async function PriceExceptionUsageBuilder({params,actor,saved}:{params:Params;actor:Actor;saved:Saved}){
   const config=priceExceptionUsageConfigFromParams(params,saved?.configuration);
   const [result,owners,stages,categories,products,skus,priceExceptions,peSalespeople,currencies,competitors]=await Promise.all([
@@ -69,7 +69,7 @@ export async function PriceExceptionUsageBuilder({params,actor,saved}:{params:Pa
       <div className="report-preview"><button className="btn-primary">Preview</button></div>
     </form>
     <ReportResults result={result} config={config} groupKey={typeof params.group==='string'?params.group:undefined}/>
-    <RecoverableActionForm action={saveReportAction} className="panel mt-4 grid gap-3 p-4 sm:grid-cols-2 md:p-5"><h2 className="text-lg font-semibold sm:col-span-2">Save This Report</h2><input type="hidden" name="reportType" value="PRICE_EXCEPTION_USAGE"/><input type="hidden" name="configuration" value={JSON.stringify(config)}/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}
+    <RecoverableActionForm action={saveReportAction} recordHref={saved ? `/reports/${saved.id}` : undefined} className="panel mt-4 grid gap-3 p-4 sm:grid-cols-2 md:p-5"><h2 className="text-lg font-semibold sm:col-span-2">Save This Report</h2><input type="hidden" name="reportType" value="PRICE_EXCEPTION_USAGE"/><input type="hidden" name="configuration" value={JSON.stringify(config)}/>{saved&&<><input type="hidden" name="reportId" value={saved.id}/><input type="hidden" name="editToken" value={saved.updatedAt.toISOString()}/></>}
       <label className="label">Report name<input className="field" name="name" required maxLength={120} defaultValue={saved?.name??''}/></label><label className="label">Visibility<select className="field" name="visibility" defaultValue={saved?.visibility??'PERSONAL'}><option value="PERSONAL">Personal</option>{canShareReport(actor)&&<option value="SHARED">Shared</option>}</select></label><label className="label sm:col-span-2">Description<textarea className="field" name="description" maxLength={1000} defaultValue={saved?.description??''}/></label><div><button className="btn-primary">{saved?'Save changes':'Save report'}</button></div>
     </RecoverableActionForm>
   </Content>;

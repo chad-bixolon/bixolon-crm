@@ -89,11 +89,11 @@ test('migration is additive, preserves archived campaigns, and avoids historical
 
 test('Marketing actions create and archive Campaigns while Sales cannot mutate', async () => {
   const originalLoad = Module._load, changes = [];
-  let role = 'MARKETING_MANAGER';
+  let role = 'MARKETING_MANAGER', version = new Date('2026-10-04T00:00:00.000Z');
   const client = { marketingCampaign: {
     findUnique: async () => ({ tradeShowId: null }),
     create: async ({ data }) => { changes.push(['create', data]); return { id: 5 }; },
-    update: async ({ where, data }) => { changes.push(['update', where.id, data]); return { id: where.id }; },
+    update: async ({ where, data }) => { if(where.updatedAt && where.updatedAt.getTime()!==version.getTime())throw Object.assign(new Error('stale'),{code:'P2025'});changes.push(['update', where.id, data]);version=data.updatedAt??version;return { id: where.id }; },
   } };
   const mocks = {
     'next/cache': { revalidatePath: () => {} },
@@ -101,6 +101,7 @@ test('Marketing actions create and archive Campaigns while Sales cannot mutate',
     '@/lib/prisma': { prisma: client },
     '@/lib/current-user': { currentUser: async () => actor(role) },
     '@/lib/marketing-attribution': attribution,
+    '@/lib/stale-edit': require(path.join(root, 'lib/stale-edit.ts')),
     '@/lib/module-availability': { assertModuleEnabled: async () => {} },
   };
   Module._load = function(specifier, parent, isMain) { return specifier in mocks ? mocks[specifier] : originalLoad.call(this, specifier, parent, isMain); };
@@ -110,12 +111,20 @@ test('Marketing actions create and archive Campaigns while Sales cannot mutate',
   const create = form([['name', 'FSTEC 2026'], ['status', 'ACTIVE'], ['year', '2026']]);
   await assert.rejects(actions.saveCampaign(create), /REDIRECT:\/marketing\/campaigns\/5/);
   assert.equal(changes[0][0], 'create'); assert.equal(changes[0][1].createdById, 7);
-  const edit = form([['id', '5'], ['name', 'FSTEC 2026 updated'], ['status', 'COMPLETED']]);
+  const edit = form([['id', '5'], ['name', 'FSTEC 2026 updated'], ['status', 'COMPLETED'], ['editToken', '2026-10-04T00:00:00.000Z']]);
   await assert.rejects(actions.saveCampaign(edit), /REDIRECT:\/marketing\/campaigns\/5/);
   assert.equal(changes[1][0], 'update'); assert.equal(changes[1][2].status, 'COMPLETED');
-  const archive = form([['id', '5'], ['archive', 'true']]);
+  role='ADMIN';
+  assert.equal((await actions.saveCampaign(edit)).error,'This record changed after you opened it. Review the latest version before saving again.');
+  assert.equal((await actions.saveCampaign(form([['id','5'],['name','Missing token'],['status','ACTIVE']]))).error,'This record changed after you opened it. Review the latest version before saving again.');
+  assert.equal(changes.length,2);
+  const archive = form([['id', '5'], ['archive', 'true'], ['editToken', version.toISOString()]]);
   await assert.rejects(actions.setCampaignArchive(archive), /REDIRECT:\/marketing\/campaigns\/5/);
   assert.ok(changes[2][2].archivedAt instanceof Date);
+  const current = version.toISOString();
+  const concurrent = await Promise.all(['First', 'Second'].map(name => actions.saveCampaign(form([['id', '5'], ['name', name], ['status', 'ACTIVE'], ['editToken', current]])).catch(error => error.message)));
+  assert.equal(concurrent.filter(result => typeof result === 'string' && result.startsWith('REDIRECT:')).length, 1);
+  assert.equal(concurrent.filter(result => typeof result === 'object' && result.error === 'This record changed after you opened it. Review the latest version before saving again.').length, 1);
   role = 'SALES';
   await assert.rejects(actions.saveCampaign(create), /Access denied/);
   await assert.rejects(actions.setCampaignArchive(archive), /Access denied/);

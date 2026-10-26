@@ -4,6 +4,7 @@ import { useActionState, useRef, useState } from 'react';
 import { submitProjectUpdate } from '@/app/project-update-actions';
 import type { UpdateContext } from '@/lib/project-updates';
 import { EntityPicker } from './entity-picker';
+import { RecordChangedNotice } from './record-changed-notice';
 
 type Row = { id: number; body: string; projectId: number | null; opportunityId: number | null; createdAt: Date; updatedAt: Date; createdBy: { firstName: string; lastName: string } };
 type Option = { id: number; name: string };
@@ -15,11 +16,13 @@ function UpdateForm({ context, update, options, allowRelated = true }: { context
   const other = context.kind === 'project' ? 'opportunityId' : 'projectId';
   const current = update?.[other] ?? null;
   return <form ref={formRef} action={action} onSubmit={event => submitPreservingForm(event, action)} className="mt-3 space-y-3 rounded border border-slate-200 p-4">
+    {update && <input type="hidden" name="editToken" value={update.updatedAt.toISOString()}/>}
+    {state.recordChanged && <RecordChangedNotice result={state} href={`/${context.kind === 'project' ? 'projects' : 'opportunities'}/${context.id}`}/>}
     <label className="block text-sm font-medium" htmlFor={`update-body-${context.kind}-${update?.id ?? 'new'}`}>Update</label>
     <textarea id={`update-body-${context.kind}-${update?.id ?? 'new'}`} name="body" className="field min-h-28 w-full" maxLength={5000} required defaultValue={update?.body ?? ''}/>
     {allowRelated && <EntityPicker type={context.kind === 'project' ? 'opportunity' : 'project'} label={`${context.kind === 'project' ? 'Linked Opportunity' : 'Linked Project'} (optional)`} name={other} initial={current ? { id: current, name: options.find(option => option.id === current)?.name ?? 'Linked record', context: null } : null} filters={context.kind === 'project' ? { projectId: context.id } : { opportunityId: context.id, editableOnly: true }}/>}
 
-    <div className="flex items-center gap-3"><button className="btn-primary" disabled={pending}>{pending ? 'Saving…' : update ? 'Save update' : 'Add update'}</button>{state.message && <span role={state.saved ? 'status' : 'alert'} className="text-sm">{state.message}</span>}</div>
+    <div className="flex items-center gap-3"><button className="btn-primary" disabled={pending}>{pending ? 'Saving…' : update ? 'Save update' : 'Add update'}</button>{state.message && !state.recordChanged && <span role={state.saved ? 'status' : 'alert'} className="text-sm">{state.message}</span>}</div>
   </form>;
 }
 

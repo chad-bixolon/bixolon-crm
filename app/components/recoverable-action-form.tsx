@@ -2,14 +2,17 @@
 import { startTransition, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { useRouter } from 'next/navigation';
+import { recordChangedMessage } from '@/lib/stale-edit';
+import { RecordChangedNotice } from './record-changed-notice';
 
 type Props = Omit<ComponentProps<'form'>, 'action' | 'onSubmit'> & {
   action: (form: FormData) => Promise<unknown>;
   failureMessage?: string;
   refreshOnSuccess?: boolean;
+  recordHref?: string;
 };
 
-export function RecoverableActionForm({ action, failureMessage = 'Could not save. Check the form and try again.', refreshOnSuccess = false, children, ...props }: Props) {
+export function RecoverableActionForm({ action, failureMessage = 'Could not save. Check the form and try again.', refreshOnSuccess = false, recordHref, children, ...props }: Props) {
   const router = useRouter();
   const busy = useRef(false);
   const [pending, setPending] = useState(false);
@@ -38,5 +41,5 @@ export function RecoverableActionForm({ action, failureMessage = 'Could not save
       catch { setFeedback({ kind: 'error', message: failureMessage }); }
       finally { busy.current = false; setPending(false); }
     });
-  }}>{children}{pending && <p role="status" className="mt-2 text-sm text-slate-600">Saving…</p>}{feedback && <p role={feedback.kind === 'error' ? 'alert' : 'status'} className={`mt-2 text-sm ${feedback.kind === 'error' ? 'text-red-700' : 'text-emerald-800'}`}>{feedback.message}</p>}</form>;
+  }}>{children}{pending && <p role="status" className="mt-2 text-sm text-slate-600">Saving…</p>}{feedback?.message === recordChangedMessage ? <RecordChangedNotice result={feedback} href={recordHref ?? (typeof window === 'undefined' ? '/' : window.location.href)}/> : feedback && <p role={feedback.kind === 'error' ? 'alert' : 'status'} className={`mt-2 text-sm ${feedback.kind === 'error' ? 'text-red-700' : 'text-emerald-800'}`}>{feedback.message}</p>}</form>;
 }

@@ -4,6 +4,7 @@ import { parseImportCsv } from './import-csv';
 import { accountWriteData, checkAccountReferences, normalizeAccountName } from './accounts';
 import { parseAccountForm } from './account-validation';
 import { calculateOdmCustomerPrice } from './odm-customer-pricing';
+import { nextUpdatedAt } from './stale-edit';
 export { normalizeAccountName } from './accounts';
 
 export const productImportHeaders = ['model','part_number','description','standard_price','msrp_price','reseller_price','distributor_price','currency','price_unit','active','category','catalog_source','odm_customer','base_sku','odm_description','odm_subtype'] as const;
@@ -25,7 +26,7 @@ const tierFields = [
   {header:'distributor_price',field:'distributorPrice',tier:ProductPriceTier.DISTRIBUTOR},
 ] as const;
 export type ProductImportSource = {workbook:string;sheet:string;customerCell:string;partNumber:string;partIndex:number;partCount:number;oldPrice:string;priorPrice:string;newPrice:string;tariffPercent:string;tariffAmount:string;note:string;rawOldPrice:string;rawPriorPrice:string;rawNewPrice:string;rawTariffPercent:string;rawTariffAmount:string};
-export type ProductImportItem = {line:number;label:string;classes:string[];status:'READY'|'NEEDS REVIEW'|'ERROR'|'SKIPPED'|'ALREADY IMPORTED';before:Values|null;after:Values;messages:string[];productId?:number;skuId?:number;source?:ProductImportSource;odmPricing?:ReturnType<typeof calculateOdmCustomerPrice>;priceComparison?:{kind:'NEW'|'UNCHANGED'|'CHANGED';before?:string;after:string;confirmationKey?:string};reviewKey?:string;suggestedBaseSku?:string;recommendations?:string[];catalogCreatable?:boolean;resolvedPrice?:string;resolvedTariffPercent?:string;resolvedTariffAmount?:string};
+export type ProductImportItem = {line:number;label:string;classes:string[];status:'READY'|'NEEDS REVIEW'|'ERROR'|'SKIPPED'|'ALREADY IMPORTED';before:Values|null;after:Values;messages:string[];productId?:number;skuId?:number;productUpdatedAt?:string;skuUpdatedAt?:string;source?:ProductImportSource;odmPricing?:ReturnType<typeof calculateOdmCustomerPrice>;priceComparison?:{kind:'NEW'|'UNCHANGED'|'CHANGED';before?:string;after:string;confirmationKey?:string};reviewKey?:string;suggestedBaseSku?:string;recommendations?:string[];catalogCreatable?:boolean;resolvedPrice?:string;resolvedTariffPercent?:string;resolvedTariffAmount?:string};
 export type ProductImportCounts = {newProducts:number;updatedProducts:number;newSkus:number;updatedSkus:number;priceChanges:number;unchanged:number;warnings:number;errors:number};
 export type CustomerResolution = {source:string;key:string;accountId?:number;accountName?:string;status:'Matched'|'Manually Mapped'|'Needs Review'|'Unresolved';rows:number};
 export type ProductImportDecisionGroup = {key:string;kind:'PRICE'|'TARIFF';reason:'NOTE_PRICE'|'MISSING_PRICE'|'STRUCTURED_TARIFF'|'NOTE_TARIFF';customer:string;label:string;reviewKeys:string[];lines:number[];partNumbers:string[];oldPrice?:string;priorPrice?:string;newPrice?:string;notePrice?:string;proposedPrice?:string;tariffPercent?:string;tariffAmount?:string;noteTariff?:string};
@@ -247,7 +248,7 @@ export async function planProductImport(db:Db,csv:string,selectedSource?:Product
     if (recommendedHistorical && !review.dispositions?.[reviewKey]) recommendations.push('Historical only; no active pricing');
     if (suggestedBaseSku && !existingStandard && !review.baseSkus?.[reviewKey]) recommendations.push(`Base SKU: ${suggestedBaseSku}`);
     if (source?.newPrice && validPrice(source.newPrice) && !notePriceConflict) recommendations.push(`Current price: ${source.newPrice}`);
-    const item:ProductImportItem={line:lineNumber,label:partNumber || '(missing part number)',classes,status,before,after,messages,productId:product?.id,skuId:sku?.id,source,odmPricing,reviewKey,suggestedBaseSku,recommendations,resolvedPrice:chosenPrice,resolvedTariffPercent:chosenTariffPercent,resolvedTariffAmount:chosenTariffAmount};
+    const item:ProductImportItem={line:lineNumber,label:partNumber || '(missing part number)',classes,status,before,after,messages,productId:product?.id,skuId:sku?.id,productUpdatedAt:product?.updatedAt?.toISOString(),skuUpdatedAt:sku?.updatedAt?.toISOString(),source,odmPricing,reviewKey,suggestedBaseSku,recommendations,resolvedPrice:chosenPrice,resolvedTariffPercent:chosenTariffPercent,resolvedTariffAmount:chosenTariffAmount};
     item.catalogCreatable=catalogCreationEligible(item);
     items.push(item);
     if (key && !prior) seen.set(key,item);
@@ -352,6 +353,8 @@ export async function applyProductImport(db:PrismaClient,csv:string,expectedDige
     if (!expectedDigest || plan.digest!==expectedDigest || plan.errors.length) throw new Error('Preview changed or contains errors. Preview the file again before confirming.');
     const created=new Map<string,number>();
     const createdSkus=new Map<string,number>();
+    const claimedProducts=new Map<number,Date>();
+    const claimedSkus=new Map<number,Date>();
     for (const item of plan.items) {
       if (item.status!=='READY') continue;
       if (item.source) {
@@ -363,18 +366,43 @@ export async function applyProductImport(db:PrismaClient,csv:string,expectedDige
       const modelKey=normalizeModel(value.model);
       const skuKey=normalizePartNumber(value.partNumber);
       const repeatedOdmRow=!!item.source && createdSkus.has(skuKey);
+      const liveCustomerLink=!!value.odmCustomerAccountId && (!!item.source || value.catalogSource==='ODM');
+      const changesSku=item.classes.includes('UPDATE SKU') || item.classes.includes('PRICE CHANGE') || liveCustomerLink;
+      const changesProduct=item.classes.includes('UPDATE PRODUCT') || item.classes.includes('NEW SKU') || changesSku;
+      if(item.productId && changesProduct && !claimedProducts.has(item.productId)){
+        if(!item.productUpdatedAt)throw new Error('Preview changed. Preview the file again.');
+        const previous=new Date(item.productUpdatedAt);
+        const advanced=nextUpdatedAt(previous);
+        await tx.product.update({where:{id:item.productId,updatedAt:previous},data:{updatedAt:advanced}});
+        claimedProducts.set(item.productId,advanced);
+      }
+      if(item.skuId && changesSku && !claimedSkus.has(item.skuId)){
+        if(!item.skuUpdatedAt)throw new Error('Preview changed. Preview the file again.');
+        const previous=new Date(item.skuUpdatedAt);
+        const advanced=nextUpdatedAt(previous);
+        await tx.productSku.update({where:{id:item.skuId,updatedAt:previous},data:{updatedAt:advanced}});
+        claimedSkus.set(item.skuId,advanced);
+      }
       let productId=item.productId ?? created.get(modelKey);
       if (!productId) {
         const product=await tx.product.create({data:{name:value.model,sku:value.partNumber,active:value.active ?? true,category:value.category ? {connect:{code:value.category}} : undefined}});
         productId=product.id;created.set(modelKey,productId);
-      } else if (item.classes.includes('UPDATE PRODUCT') || (created.has(modelKey) && value.category)) await tx.product.update({where:{id:productId},data:{name:value.model,category:value.category ? {connect:{code:value.category}} : undefined}});
+      } else if (item.classes.includes('UPDATE PRODUCT') || (created.has(modelKey) && value.category)) {
+        const previous=claimedProducts.get(productId);
+        const advanced=previous ? nextUpdatedAt(previous) : undefined;
+        await tx.product.update({where:{id:productId,...(previous ? {updatedAt:previous} : {})},data:{name:value.model,category:value.category ? {connect:{code:value.category}} : undefined,...(advanced ? {updatedAt:advanced} : {})}});
+        if(advanced)claimedProducts.set(productId,advanced);
+      }
       let skuId=item.skuId ?? createdSkus.get(skuKey);
       if (!skuId) {
         const sku=await tx.productSku.create({data:{productId,partNumber:value.partNumber,normalizedPartNumber:skuKey,description:value.description,priceUnit:value.priceUnit ?? ProductPriceUnit.EACH,active:value.active ?? true,catalogSource:value.catalogSource,odmSubtype:value.odmSubtype,odmCustomerSourceName:value.odmCustomerSourceName,baseSkuId:value.baseSkuId,odmDescription:value.odmDescription}});
         skuId=sku.id;
       } else if (!repeatedOdmRow && item.classes.includes('UPDATE SKU')) {
         if (item.before?.catalogSource==='ODM' && value.catalogSource!=='ODM') await tx.productSkuOdmCustomer.updateMany({where:{skuId,archivedAt:null},data:{archivedAt:new Date()}});
-        await tx.productSku.update({where:{id:skuId},data:{partNumber:value.partNumber,description:value.description,priceUnit:value.priceUnit,active:value.active,catalogSource:value.catalogSource,odmSubtype:value.catalogSource==='ODM'?value.odmSubtype??null:null,odmCustomerSourceName:value.odmCustomerSourceName??null,baseSkuId:value.baseSkuId??null,odmDescription:value.odmDescription??null}});
+        const previous=claimedSkus.get(skuId);
+        const advanced=previous ? nextUpdatedAt(previous) : undefined;
+        await tx.productSku.update({where:{id:skuId,...(previous ? {updatedAt:previous} : {})},data:{partNumber:value.partNumber,description:value.description,priceUnit:value.priceUnit,active:value.active,catalogSource:value.catalogSource,odmSubtype:value.catalogSource==='ODM'?value.odmSubtype??null:null,odmCustomerSourceName:value.odmCustomerSourceName??null,baseSkuId:value.baseSkuId??null,odmDescription:value.odmDescription??null,...(advanced ? {updatedAt:advanced} : {})}});
+        if(advanced)claimedSkus.set(skuId,advanced);
       }
       createdSkus.set(skuKey,skuId);
       if (item.source && value.odmCustomerAccountId || value.catalogSource==='ODM' && value.odmCustomerAccountId) {

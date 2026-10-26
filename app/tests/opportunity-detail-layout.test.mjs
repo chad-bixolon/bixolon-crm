@@ -104,7 +104,7 @@ test('supporting cards keep compact states, grid breakpoints, and Demo link acti
   assert.match(empty, /Demos \(0\).*No demos linked\./);
   assert.match(empty, /data-compact="true"/);
   assert.match(empty, /Opportunity Contacts \(0\).*Demos \(0\).*id="documents".*tasks.*activities.*notes/);
-  demos = [{ id: 2, demoNumber: 'DEMO-2', requestedById: 1, project: null }];
+  demos = [{ id: 2, demoNumber: 'DEMO-2', requestedById: 1, project: null, updatedAt: new Date('2026-10-01T00:00:00Z') }];
   demoOptions = [{ id: 3, demoNumber: 'DEMO-3', account: { name: 'Customer' } }];
   const linked = await render();
   assert.match(linked, /Unlink DEMO-2 from Opportunity/);

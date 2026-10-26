@@ -21,7 +21,7 @@ const attribution = { campaignStatuses: ['PLANNED', 'ACTIVE', 'COMPLETED'], canM
 const tradeShows = { tradeShowLeadReadWhere: actor => actor.role === 'SALES' ? { assignedSalesRepUserId: actor.id } : {} };
 let effectiveRole = 'ADMIN';
 const actor = () => ({ id: 7, role: effectiveRole, active: true, archivedAt: null });
-const campaign = { id: 5, name: 'FSTEC 2026', status: 'ACTIVE', year: 2026, category: 'Trade Show', startDate: new Date('2026-10-03'), endDate: null, description: 'A regional event', archivedAt: null, tradeShow: { id: 3, name: 'FSTEC' } };
+const campaign = { id: 5, name: 'FSTEC 2026', status: 'ACTIVE', year: 2026, category: 'Trade Show', startDate: new Date('2026-10-03'), endDate: null, description: 'A regional event', archivedAt: null, updatedAt: new Date('2026-10-04T00:00:00.000Z'), tradeShow: { id: 3, name: 'FSTEC' } };
 const touch = { id: 10, occurredAt: new Date('2026-10-03T14:00:00Z'), sourceContext: 'TRADE_SHOW_IMPORT', tradeShowLead: { id: 11, tradeShowId: 3, firstName: 'Ada', lastName: 'Lovelace' }, contact: null, opportunity: null, capturedBy: { firstName: 'Mia', lastName: 'Chen' }, voidedAt: null };
 let queryLog = [];
 let rows = [touch];
