@@ -1,10 +1,16 @@
 import type { PrismaClient } from '@prisma/client';
+import { cache } from 'react';
+import { prisma } from './prisma';
 
 export const defaultBranding = { companyName: 'BIXOLON America, Inc.', productName: 'SalesHub', logoStorageKey: null, logoMimeType: null } as const;
 export type Branding = { companyName: string; productName: string; logoStorageKey: string | null; logoMimeType: string | null; updatedAt?: Date };
 
+const readDefaultBranding = cache(async (): Promise<Branding> =>
+  await prisma.deploymentBranding.findUnique({ where: { id: 1 } }) ?? defaultBranding);
+
 export async function getBranding(client: Pick<PrismaClient, 'deploymentBranding'>): Promise<Branding> {
-  return await client.deploymentBranding.findUnique({ where: { id: 1 } }) ?? defaultBranding;
+  // Transaction clients read directly; only the application singleton is shared within a render.
+  return client === prisma ? readDefaultBranding() : await client.deploymentBranding.findUnique({ where: { id: 1 } }) ?? defaultBranding;
 }
 
 export function parseBrandName(raw: string, label: string) {

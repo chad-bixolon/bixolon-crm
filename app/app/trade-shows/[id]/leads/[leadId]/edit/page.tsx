@@ -1,4 +1,4 @@
-import { eligibleUserWhere } from '@/lib/assignment-eligibility';
+import { listEligibleUserOptions } from '@/lib/assignment-eligibility';
 import { NAV_CATEGORIES } from '../../../../../../lib/navigation-categories';
 import { notFound, redirect } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
@@ -20,7 +20,7 @@ export default async function EditTradeShowLeadPage({ params }: { params: Promis
   if (!canEditTradeShowLead(actor, lead)) redirect('/access-denied');
   const canAssign = can(actor, 'trade-shows.assign') && !lead.convertedOpportunityId, canResolve = can(actor, 'trade-shows.resolve') && !lead.convertedOpportunityId, canRoute = canRouteTradeShowLead(actor,lead);
   const [reps, accounts, contacts, competitors, partnerAccounts] = await Promise.all([
-    canAssign ? prisma.user.findMany({ where: { ...eligibleUserWhere('trade-show-sales') }, select: { id: true, firstName: true, lastName: true }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }) : Promise.resolve([]),
+    canAssign ? listEligibleUserOptions(prisma, 'trade-show-sales') : Promise.resolve([]),
     canResolve && lead.accountId ? prisma.account.findMany({ where: { id: lead.accountId }, select: { id: true, name: true } }) : Promise.resolve([]),
     canResolve && lead.contactId ? prisma.contact.findMany({ where: { id: lead.contactId }, select: { id: true, firstName: true, lastName: true, email: true, accountId: true, account: { select: { name: true } } } }) : Promise.resolve([]),
     prisma.competitorOption.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),

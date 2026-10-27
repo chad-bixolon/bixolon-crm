@@ -2,18 +2,18 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
+import { cache } from 'react';
 import { DEV_IMPERSONATION_COOKIE, resolveUserContext } from './dev-impersonation';
 import { can, type Actor, type Permission } from './authorization';
 
-export async function userContext() {
+export const userContext = cache(async () => {
   const session = await auth();
   const rawId = (await cookies()).get(DEV_IMPERSONATION_COOKIE)?.value;
   return { ...await resolveUserContext(session?.crmUser, rawId, prisma), hasSession: !!session };
-}
+});
 
 export async function getRealAuthenticatedUser() {
-  const session = await auth();
-  return session?.crmUser ?? null;
+  return (await userContext()).real;
 }
 
 export async function currentUser(): Promise<Actor & { name: string; email: string }> {

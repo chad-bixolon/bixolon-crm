@@ -33,7 +33,7 @@ export default async function Page({searchParams}:{searchParams:Promise<Filters>
   const selectedProject = selectedProjectId ? await prisma.project.findFirst({ where: { AND: [{ id: selectedProjectId }, projectReadWhere(actor)] }, select: { id: true, name: true } }) : null;
   const [rows,owners,stages,territories]=await Promise.all([
     prisma.opportunity.findMany({where:{AND:[operationalOpportunityWhere,pipelineScope(actor,f.ownerId)],stage:{isClosed:false},...(/^[A-Z]{3}$/.test(f.currencyCode??'')?{currencyCode:f.currencyCode}:{}),...(stageId?{stageId}:{}),...pipelineProjectFilter(f.projectId),...(f.territory?{participants:{some:{account:{territory:f.territory}}}}:{}),...(from||to?{expectedCloseDate:{...(from?{gte:from}:{}),...(to?{lt:new Date(to.getTime()+86400000)}:{})}}:{})},include:{stage:true,products:{where:{archivedAt:null}}}}),
-    prisma.user.findMany({where:actor.role==='SALES'?activeSalesRepWhere():{active:true,archivedAt:null},orderBy:{lastName:'asc'}}),
+    prisma.user.findMany({where:actor.role==='SALES'?activeSalesRepWhere():{active:true,archivedAt:null},select:{id:true,firstName:true,lastName:true},orderBy:{lastName:'asc'}}),
     prisma.salesStage.findMany({orderBy:{sortOrder:'asc'}}),
     prisma.territory.findMany({orderBy:{name:'asc'}}),
   ]);

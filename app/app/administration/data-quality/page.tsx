@@ -1,5 +1,5 @@
 import { BulkSelection, BulkCheckbox, BulkPageCheckbox } from '@/components/bulk-selection';
-import { eligibleUserWhere } from '@/lib/assignment-eligibility';
+import { listEligibleUserOptions } from '@/lib/assignment-eligibility';
 import { HelpLink } from '@/components/help-link';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -35,7 +35,7 @@ export default async function DataQualityPage({ searchParams }: { searchParams: 
   const pages = initialResult ? Math.max(1, Math.ceil(initialResult.count / pageSize)) : 1;
   const page = Math.min(requestedPage, pages);
   const result = selected && initialResult && page !== requestedPage ? await qualityRows(prisma, selected.key, q, page, availability) : initialResult;
-  const owners = bulk ? await prisma.user.findMany({ where: eligibleUserWhere(selected?.key === 'opportunity-owner' ? 'opportunity-owner' : 'account-owner'), orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }], select: { id: true, firstName: true, lastName: true } }) : [];
+  const owners = bulk ? await listEligibleUserOptions(prisma, selected?.key === 'opportunity-owner' ? 'opportunity-owner' : 'account-owner') : [];
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.administration} title="Data Quality" description="Review records that may need attention. A record may appear in more than one group." action={<Link className="btn-secondary" href="/administration">Administration</Link>}/><div className="mb-3"><HelpLink topic="data-quality">Help with Data Quality</HelpLink></div>

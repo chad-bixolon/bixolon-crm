@@ -65,7 +65,7 @@ export default async function HomePage({searchParams}:{searchParams:Promise<{cur
   const myDay=keys.has('MY_DAY')&&real?await getMyDaySummary(prisma,real.id,myDayToday(now,myDayUser?.timeZone??DEFAULT_USER_TIME_ZONE),myDayUser?.timeZone??DEFAULT_USER_TIME_ZONE,now):null;
   const currencies=salesData||keys.has('FORECAST_ATTENTION')||keys.has('FORECAST_MOVEMENT')||keys.has('SALES_PLAN_STATUS')?await reportingCurrencies():[];
   const currency=currencies.some(value=>value.code===params.currency)?params.currency!:currencyConfig.defaultCurrency;
-  const reps=salesData||keys.has('OVERDUE_TASKS')&&['ADMIN','SALES_MANAGER'].includes(actor.role)||keys.has('RECENT_ACTIVITY')?(actor.role==='SALES'?[{id:actor.id,firstName:'Me',lastName:'',role:actor.role}]:await prisma.user.findMany({where:{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true,firstName:true,lastName:true,role:true},orderBy:[{lastName:'asc'},{firstName:'asc'}]})):[];
+  const reps=salesData||keys.has('FORECAST_MOVEMENT')||keys.has('SALES_PLAN_STATUS')||keys.has('OVERDUE_TASKS')&&['ADMIN','SALES_MANAGER'].includes(actor.role)||keys.has('RECENT_ACTIVITY')?(actor.role==='SALES'?[{id:actor.id,firstName:'Me',lastName:'',role:actor.role}]:await prisma.user.findMany({where:{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true,firstName:true,lastName:true,role:true},orderBy:[{lastName:'asc'},{firstName:'asc'}]})):[];
   const ids=reps.map(rep=>rep.id);
   const forecast=salesData?(actor.role==='SALES'?await forecastForRep(prisma,actor,{userId:actor.id,...period,currencyCode:currency}):await forecastForTeam(prisma,actor,{users:reps,...period,currencyCode:currency})):null;
   const config=defaultReportConfiguration('PIPELINE');config.filters=[{field:'status',operator:'eq',value:'OPEN'},{field:'closeDate',operator:'preset',value:'THIS_QUARTER'},{field:'currency',operator:'eq',value:currency},{field:'forecastCategory',operator:'eq',value:'IN_FORECAST'}];if(actor.role!=='SALES')config.filters.push({field:'activeSalesRep',operator:'eq',value:true});
@@ -76,8 +76,8 @@ export default async function HomePage({searchParams}:{searchParams:Promise<{cur
   const planYears=keys.has('SALES_PLAN_STATUS')?await prisma.salesPlan.findMany({where:{status:'ACTIVE',owner:{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},...(actor.role==='SALES'?{ownerId:actor.id}:{})},select:{planYear:true},distinct:['planYear'],orderBy:{planYear:'desc'}}):[];
   const planYear=planYears.some(row=>row.planYear===period.year)?period.year:planYears[0]?.planYear??period.year;
   const [movement,planStatus,marketingActivity]=await Promise.all([
-    keys.has('FORECAST_MOVEMENT')?dashboardForecastMovement(prisma,actor,{...period,currencyCode:currency}):null,
-    keys.has('SALES_PLAN_STATUS')?dashboardSalesPlanStatus(prisma,actor,{year:planYear,currencyCode:currency}):null,
+    keys.has('FORECAST_MOVEMENT')?dashboardForecastMovement(prisma,actor,{...period,currencyCode:currency,repIds:ids}):null,
+    keys.has('SALES_PLAN_STATUS')?dashboardSalesPlanStatus(prisma,actor,{year:planYear,currencyCode:currency,repIds:ids}):null,
     keys.has('MARKETING_ACTIVITY')?dashboardMarketingActivity(prisma,actor,now,availability.effective.has('TRADE_SHOWS'),availability.effective.has('OPPORTUNITIES')):null,
   ]);
   const expiringCounts=keys.has('EXPIRING_PRICE_EXCEPTIONS')?await expiringDashboardCounts(prisma,actor,now):null;

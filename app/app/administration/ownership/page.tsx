@@ -6,7 +6,7 @@ import { Content, PageHeader } from '@/components/shell';
 import { BulkSelection, BulkCheckbox, BulkPageCheckbox } from '@/components/bulk-selection';
 import { requirePermission } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
-import { eligibleUserWhere } from '@/lib/assignment-eligibility';
+import { listEligibleUserOptions } from '@/lib/assignment-eligibility';
 import { adminPage, adminPageSize, ownershipCounts, ownershipRows, ownershipType, ownershipTypes, ownershipModule } from '@/lib/admin-ownership';
 import { getModuleAvailability, moduleDefinitions } from '@/lib/module-availability';
 import { recoverableOwnershipTypes, recoveryPolicy, type RecoverableOwnershipType } from '@/lib/unavailable-reassignment';
@@ -26,8 +26,8 @@ export default async function OwnershipPage({ searchParams }: { searchParams: Pr
   const [rows, users, assignees, replacements] = await Promise.all([
     ownershipRows(prisma, actor, type, owner, page, availability, now),
     prisma.user.findMany({ orderBy: [{ lastName: 'asc' }, { id: 'asc' }], select: { id: true, firstName: true, lastName: true } }),
-    type === 'Task' || type === 'Support Case' ? prisma.user.findMany({ where: eligibleUserWhere(type === 'Support Case' ? 'support-case' : 'support-task'), select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }) : Promise.resolve([]),
-    recoverable ? prisma.user.findMany({ where: eligibleUserWhere(recoveryPolicy(type as RecoverableOwnershipType)), select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }) : Promise.resolve([]),
+    type === 'Task' || type === 'Support Case' ? listEligibleUserOptions(prisma, type === 'Support Case' ? 'support-case' : 'support-task', 'last') : Promise.resolve([]),
+    recoverable ? listEligibleUserOptions(prisma, recoveryPolicy(type as RecoverableOwnershipType), 'last') : Promise.resolve([]),
   ]);
   const href = (entity: string, p = 1) => `/administration/ownership?${new URLSearchParams({ entity, ...(owner ? { owner: String(owner) } : {}), page: String(p) })}`;
   const bulk = type === 'Task' || type === 'Support Case';

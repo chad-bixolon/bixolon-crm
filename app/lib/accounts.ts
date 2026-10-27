@@ -4,7 +4,7 @@ import { AccountBusinessRoleCode, AccountStatus, Prisma, type PrismaClient, type
 import type { AccountFields } from "./account-validation";
 import { parseAccountForm } from "./account-validation";
 import { assertPermission, type Actor } from "./authorization";
-import { eligibleUserWhere, selectedSalesRepWhere } from './assignment-eligibility';
+import { eligibleUserWhere, listEligibleUserOptions, selectedSalesRepWhere } from './assignment-eligibility';
 
 export const PAGE_SIZE = 20;
 const retiredSpecialAccountTerritories = new Set(['strategic_sales', 'strategic', 'strategic / national accounts', 'strategic / national account', 'strategic/national account', 'national account']);
@@ -90,7 +90,7 @@ export async function accountOptions(client: PrismaClient) {
   const [industries, territories, owners] = await Promise.all([
     client.industry.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     client.territory.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }).then(items => items.filter(item => !isRetiredSpecialAccountTerritory(item))),
-    client.user.findMany({ where: eligibleUserWhere('account-owner'), orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
+    listEligibleUserOptions(client, 'account-owner'),
   ]);
   return { industries, territories, owners };
 }

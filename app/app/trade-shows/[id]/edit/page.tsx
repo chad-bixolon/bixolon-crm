@@ -1,4 +1,4 @@
-import { eligibleUserWhere } from '@/lib/assignment-eligibility';
+import { listEligibleUserOptions } from '@/lib/assignment-eligibility';
 import { NAV_CATEGORIES } from '../../../../lib/navigation-categories';
 import { notFound } from 'next/navigation';
 import { Content, PageHeader } from '@/components/shell';
@@ -13,7 +13,7 @@ export default async function EditTradeShowPage({ params }: { params: Promise<{ 
   if (!Number.isSafeInteger(id) || id < 1) notFound();
   const [show, owners] = await Promise.all([
     prisma.tradeShow.findUnique({ where: { id }, include: { marketingOwner: { select: { firstName: true, lastName: true } }, resourceLinks: { orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] } } }),
-    prisma.user.findMany({ where: { ...eligibleUserWhere('marketing-owner') }, select: { id: true, firstName: true, lastName: true }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
+    listEligibleUserOptions(prisma, 'marketing-owner'),
   ]);
   if (!show) notFound();
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.marketing} title={`Edit ${show.name}`}/>{show.archivedAt ? <div className="panel p-6">Reactivate this Trade Show before editing it.</div> : <TradeShowForm id={id} initial={show} owners={owners} currentOwner={show.marketingOwner}/>}</Content>;

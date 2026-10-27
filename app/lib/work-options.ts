@@ -1,5 +1,5 @@
 import { prisma } from './prisma';
-import { eligibleUserWhere, taskAssigneePolicy } from './assignment-eligibility';
+import { listEligibleUserOptions, taskAssigneePolicy } from './assignment-eligibility';
 import { getModuleAvailability } from './module-availability';
 export async function workOptions(current?: { accountId?: number | null; opportunityId?: number | null; projectId?: number | null; userId?: number | null; contactIds?: number[]; supportCaseId?: number | null }) {
   const availability = await getModuleAvailability();
@@ -7,7 +7,7 @@ export async function workOptions(current?: { accountId?: number | null; opportu
   const [accounts, opportunities, users, activityTypes, projects, contacts] = await Promise.all([
     prisma.account.findMany({ where: { id: { in: current?.accountId ? [current.accountId] : [] } }, select: { id: true, name: true } }),
     optionalModules.opportunities?prisma.opportunity.findMany({ where: { id: { in: current?.opportunityId ? [current.opportunityId] : [] } }, select: { id: true, name: true, participants: { select: { accountId: true } }, projects: { select: { projectId: true } } } }):[],
-    prisma.user.findMany({ where: eligibleUserWhere(taskAssigneePolicy(current ?? {})), select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }),
+    listEligibleUserOptions(prisma, taskAssigneePolicy(current ?? {}), 'last'),
     prisma.activityType.findMany({ where: { active: true }, select: { code: true, name: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
     optionalModules.projects?prisma.project.findMany({ where: { id: { in: current?.projectId ? [current.projectId] : [] } }, select: { id: true, name: true, primaryAccountId: true, participants: { select: { accountId: true } }, opportunities: { select: { opportunityId: true } } } }):[],
     prisma.contact.findMany({ where: { id: { in: current?.contactIds ?? [] } }, select: { id: true, accountId: true, account: { select: { name: true } }, firstName: true, lastName: true, email: true, active: true, archivedAt: true } }),

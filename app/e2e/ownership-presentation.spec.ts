@@ -73,8 +73,8 @@ test('Ownership copy, filter submission, clear and Help preserve their scope', a
   await page.goto('/administration/ownership');
   const main = page.getByRole('main');
   await expect(main).toContainText('Review records assigned to inactive or unavailable users and reassign them when needed.');
-  await expect(main).toContainText('Unassigned records are reviewed in Data Quality. Contacts use their Account’s owner.');
-  await expect(main).toContainText('Tasks and Support Cases can be reassigned here. Other records can be updated from their normal edit pages.');
+  await expect(main).toContainText('Demos and Price Exception follow-up also show unassigned current responsibility. Historical attribution stays with the record. Contacts use their Account’s owner.');
+  await expect(main).toContainText('Tasks, Support Cases, and the listed recovery groups can be reassigned here. Other records use their normal edit pages.');
   const admin = await db.user.findUniqueOrThrow({ where: { email: emails.admin } });
   const form = page.locator('form.responsive-filter-form');
   await form.getByLabel('Record type').selectOption('Task');
@@ -91,7 +91,7 @@ test('Ownership copy, filter submission, clear and Help preserve their scope', a
   await expect(form.getByLabel('Current owner or assignee')).toHaveValue('');
   await main.getByRole('link', { name: 'Help with Ownership & Reassignment' }).click();
   await expect(page).toHaveURL('/help/ownership-reassignment');
-  await expect(page.getByRole('article')).toContainText('Review your selection and confirm the new assignee');
+  await expect(page.getByRole('article')).toContainText('Tasks and Support Cases offer confirmed bulk reassignment for up to 20 selected records on the current page.');
   await expect(page.getByRole('article')).toContainText('Completed work is excluded.');
-  await expect(page.getByRole('article')).toContainText('Support Cases are checked separately');
+  await expect(page.getByRole('article')).toContainText('Support Cases must be unresolved.');
 });

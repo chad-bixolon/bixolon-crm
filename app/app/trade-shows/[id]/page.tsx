@@ -1,4 +1,4 @@
-import { eligibleUserWhere } from '@/lib/assignment-eligibility';
+import { listEligibleUserOptions } from '@/lib/assignment-eligibility';
 import { importTemplateLabels } from '@/lib/trade-show-import-labels';
 import { TradeShowBulkRoutingForm } from '@/components/trade-show-bulk-routing-form';
 import { TradeShowFollowUpTask } from '@/components/trade-show-follow-up-task';
@@ -57,7 +57,7 @@ export default async function TradeShowPage({ params, searchParams }: { params: 
       leads: { where: leadFilter, select: { id: true, updatedAt: true, accountId: true, contactId: true,  firstName: true, lastName: true, title: true, sourceCompany: true, email: true, phone: true, followUpAt: true, assignedSalesRepUserId: true, status: true,routing:true,routedPartnerAccount:{select:{name:true}}, assignedSalesRep: { select: { firstName: true, lastName: true } }, account:{select:{name:true}},contact:{select:{firstName:true,lastName:true}},convertedOpportunity:{select:{id:true}} }, orderBy: { id: 'desc' }, skip: (page - 1) * 20, take: 20 },
       imports: { where: viewImportHistory ? {} : { id: -1 }, select: { id: true, format:true, mappingName:true, sourceFileName: true, sourceSheet: true, fileSha256:true, uploadedAt: true, rowCount: true, createdCount: true, existingCount: true, skippedCount: true,uploadedBy:{select:{firstName:true,lastName:true}} }, orderBy: { uploadedAt: 'desc' }, take: 20 },
     },
-  }),prisma.user.findMany({where:{...eligibleUserWhere('trade-show-sales')},select:{id:true,firstName:true,lastName:true},orderBy:{firstName:'asc'}})]);
+  }),listEligibleUserOptions(prisma, 'trade-show-sales', 'first')]);
   if (!showRecord) notFound();
   const availability = await getModuleAvailability();
   const tasks = await currentFollowUpTasks(prisma, showRecord.leads.map(lead => lead.id));

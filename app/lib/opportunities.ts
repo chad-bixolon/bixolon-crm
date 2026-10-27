@@ -14,7 +14,7 @@ import { getSettings } from './configuration';
 import { canViewPriceException } from "./price-exception-visibility";
 import { odmCustomerSnapshot } from './opportunity-odm-pricing';
 import { priceExceptionMatchesParticipants, unrelatedPriceExceptionMessage } from './price-exception-account-match';
-import { eligibleUser, eligibleUserWhere } from './assignment-eligibility';
+import { eligibleUser, listEligibleUserOptions } from './assignment-eligibility';
 import { closePeriodBounds } from './close-period';
 export type Participant = { accountId: number; roles: OpportunityPartyRole[] };
 export type OpportunityContactInput = { contactId: number; isPrimary: boolean };
@@ -111,7 +111,7 @@ export function opportunityTotal(lines: { quantity: number; estimatedUnitPrice: 
 export function weightedValue(total: Prisma.Decimal, probability: number) { return total.mul(probability).div(100); }
 export async function opportunityOptions(client: PrismaClient, { historicalOutcomeReasons = false } = {}) {
   const [owners, stages, currencyConfig, productCount, productCategories, competitors, outcomeReasons] = await Promise.all([
-    client.user.findMany({ where: eligibleUserWhere('opportunity-owner'), orderBy: [{ lastName: "asc" }, { firstName: "asc" }], select: { id: true, firstName: true, lastName: true } }),
+    listEligibleUserOptions(client, 'opportunity-owner'),
     client.salesStage.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { id: true, name: true, probability: true, isClosed: true, isWon: true } }),
     getCurrencyConfiguration(client),
     client.product.count({ where: { active: true, archivedAt: null } }),

@@ -13,7 +13,7 @@ import { demoDatedBy, demoDisplayDate, demoDuration, demoStatusLabel } from '@/l
 import { dateOnly, demoSummary, opportunityResult } from '@/lib/demo-operations';
 import { assignDemoOperationalOwner, deployDemoUnits, recordDemoReturn, updateDemoContext, updateDemoExpectedReturn, updateDemoNotes } from '../actions';
 import { getModuleAvailability } from '@/lib/module-availability';
-import { eligibleUserWhere } from '@/lib/assignment-eligibility';
+import { listEligibleUserOptions } from '@/lib/assignment-eligibility';
 
 export default async function DemoPage({ params }: { params: Promise<{ id: string }> }) {
   const actor = await requirePermission('sales.read'), { id } = await params;
@@ -46,7 +46,7 @@ export default async function DemoPage({ params }: { params: Promise<{ id: strin
   const editable = canEditDemo(actor, request);
   const result = request.opportunity ? opportunityResult(request.opportunity) : null;
   const activeResponsibility = ['PENDING', 'APPROVED'].includes(request.status) || summary.outstanding > 0;
-  const ownerChoices = can(actor, 'demos.assign') && activeResponsibility ? await prisma.user.findMany({ where: eligibleUserWhere('demo-owner'), select: { id: true, firstName: true, lastName: true }, orderBy: [{ lastName: 'asc' }, { id: 'asc' }] }) : [];
+  const ownerChoices = can(actor, 'demos.assign') && activeResponsibility ? await listEligibleUserOptions(prisma, 'demo-owner', 'last-id') : [];
 
   return <Content>
     <PageHeader eyebrow={NAV_CATEGORIES.sales} title={demoLabel(request)} action={<Link href={`/accounts/${request.accountId}?tab=demos`} className="btn-secondary">Account Demos</Link>}/>

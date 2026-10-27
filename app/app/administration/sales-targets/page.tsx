@@ -10,6 +10,7 @@ import { formatCurrency } from '@/lib/display-format';
 import { quarters } from '@/lib/forecast';
 import { archiveTargetAction, saveTargetAction } from './actions';
 import { RecoverableActionForm } from '@/components/recoverable-action-form';
+import { listSalesReps } from '@/lib/assignment-eligibility';
 export const dynamic = 'force-dynamic';
 type Filters = { userId?: string; year?: string; quarter?: string; currencyCode?: string; status?: string; error?: string; edit?: string };
 export default async function SalesTargetsPage({ searchParams }: { searchParams: Promise<Filters> }) {
@@ -17,9 +18,9 @@ export default async function SalesTargetsPage({ searchParams }: { searchParams:
   if (actor.role !== 'ADMIN') return <Content><PageHeader title="Sales Targets" eyebrow={NAV_CATEGORIES.administration}/><p>Access denied.</p></Content>;
   const f = await searchParams;
   const [users, currencies, targets] = await Promise.all([
-    prisma.user.findMany({ where: { active: true, archivedAt: null, role: { in: ['SALES', 'SALES_MANAGER'] } }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
+    listSalesReps(prisma),
     reportingCurrencies(),
-    prisma.salesTarget.findMany({ where: { ...(Number(f.userId) > 0 ? { userId: Number(f.userId) } : {}), ...(Number(f.year) >= 2000 ? { year: Number(f.year) } : {}), ...(quarters.includes(f.quarter as never) ? { quarter: f.quarter as 'Q1'|'Q2'|'Q3'|'Q4' } : {}), ...(f.currencyCode && /^[A-Z]{3}$/.test(f.currencyCode) ? { currencyCode: f.currencyCode } : {}), ...(f.status === 'archived' ? { archivedAt: { not: null } } : f.status === 'all' ? {} : { archivedAt: null }) }, include: { user: true }, orderBy: [{ year: 'desc' }, { quarter: 'desc' }, { user: { lastName: 'asc' } }, { currencyCode: 'asc' }] }),
+    prisma.salesTarget.findMany({ where: { ...(Number(f.userId) > 0 ? { userId: Number(f.userId) } : {}), ...(Number(f.year) >= 2000 ? { year: Number(f.year) } : {}), ...(quarters.includes(f.quarter as never) ? { quarter: f.quarter as 'Q1'|'Q2'|'Q3'|'Q4' } : {}), ...(f.currencyCode && /^[A-Z]{3}$/.test(f.currencyCode) ? { currencyCode: f.currencyCode } : {}), ...(f.status === 'archived' ? { archivedAt: { not: null } } : f.status === 'all' ? {} : { archivedAt: null }) }, include: { user: { select: { firstName: true, lastName: true } } }, orderBy: [{ year: 'desc' }, { quarter: 'desc' }, { user: { lastName: 'asc' } }, { currencyCode: 'asc' }] }),
   ]);
   const edit = targets.find(row => row.id === Number(f.edit) && !row.archivedAt);
   const year = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric' }).format(new Date());

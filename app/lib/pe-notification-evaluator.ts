@@ -2,7 +2,8 @@ import { Prisma, type PrismaClient, type PriceExceptionFollowUpStatus } from '@p
 import { businessToday, daysUntilExpiration } from './price-exception-expiration';
 import { followUpOverdue } from './price-exception-follow-up';
 import { notificationEnabled } from './notification-preferences';
-import { eligibleUser } from './assignment-eligibility';
+import { eligibleUser, eligibleUserWhere } from './assignment-eligibility';
+import { reconcileNotificationBatch } from './notification-batch';
 import type { UserRole } from '@prisma/client';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -47,12 +48,22 @@ async function evaluateOne(db: Db, pe: Pe, users: Map<number, { role: string }>,
 /** Safe to rerun; source keys are unique and obsolete active notifications are resolved. */
 export async function evaluatePeNotifications(db: PrismaClient, now = new Date()) {
   const today = businessToday(now);
-  const users = new Map((await db.user.findMany({ where: { active: true, archivedAt: null }, select: { id: true, role: true } })).map(user => [user.id, { role: user.role }]));
+  const users = new Map((await db.user.findMany({ where: eligibleUserWhere('pe-follow-up'), select: { id: true, role: true } })).map(user => [user.id, { role: user.role }]));
   let cursor = 0, evaluated = 0, created = 0, resolved = 0;
   while (true) {
     const rows = await db.priceException.findMany({ where: { id: { gt: cursor } }, orderBy: { id: 'asc' }, take: 200, select: { id: true, peCode: true, status: true, archivedAt: true, expirationDate: true, assignedSalesRepUserId: true, followUp: { select: { ownerId: true, status: true, nextFollowUpAt: true } } } });
     if (!rows.length) break;
-    for (const row of rows) { const result = await evaluateOne(db, row, users, today); evaluated++; created += result.created; resolved += result.resolved; }
+    if (typeof Reflect.get(db.notificationPreference ?? {}, 'findMany') === 'function') {
+      const entries = rows.map(row => { const recipient = peNotificationRecipient(row, users); return { entityId: row.id, userId: recipient, candidates: recipient ? peNotificationCandidates(row, recipient, today) : [] }; });
+      const result = await reconcileNotificationBatch(db, 'PRICE_EXCEPTION', ['PE_EXPIRING_60', 'PE_EXPIRING_30', 'PE_EXPIRED', 'PE_FOLLOW_UP_OVERDUE'], entries, now);
+      created += result.created; resolved += result.resolved; evaluated += rows.length;
+      // The expired text changes when follow-up begins, even when its source key is unchanged.
+      for (const entry of entries) for (const candidate of entry.candidates) if (candidate.type === 'PE_EXPIRED' && result.allowedSourceKeys.has(candidate.sourceKey))
+        await db.notification.updateMany({ where: { sourceKey: candidate.sourceKey, resolvedAt: null }, data: { message: candidate.message } });
+    } else {
+      // Lightweight legacy test doubles provide only the single-record preference API.
+      for (const row of rows) { const result = await evaluateOne(db, row, users, today); evaluated++; created += result.created; resolved += result.resolved; }
+    }
     cursor = rows.at(-1)!.id;
   }
   return { evaluated, created, resolved };

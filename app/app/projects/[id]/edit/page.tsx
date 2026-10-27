@@ -5,14 +5,14 @@ import { ProjectForm } from '@/components/project-form';
 import { prisma } from '@/lib/prisma';
 import { currentUser } from '@/lib/current-user';
 import { canEditProject } from '@/lib/projects';
-import { eligibleUserWhere } from '@/lib/assignment-eligibility';
+import { listEligibleUserOptions } from '@/lib/assignment-eligibility';
 export const dynamic = 'force-dynamic';
 export default async function EditProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const actor = await currentUser(), id = Number((await params).id);
   if (!Number.isSafeInteger(id) || id < 1) notFound();
   const [project, owners] = await Promise.all([
     prisma.project.findUnique({ where: { id }, include: { owner: { select: { firstName: true, lastName: true } }, primaryAccount: { select: { ownerId: true } }, participants: { include: { roles: true } } } }),
-    prisma.user.findMany({ where: eligibleUserWhere('project-owner'), select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }),
+    listEligibleUserOptions(prisma, 'project-owner', 'last'),
   ]);
   if (!project) notFound();
   if (!canEditProject(actor, project)) redirect('/access-denied');

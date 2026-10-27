@@ -9,9 +9,9 @@ import { targetSyncStatus } from './sales-target-sync';
 import { audienceListWhere } from './marketing-audiences';
 
 const zero = new Prisma.Decimal(0);
-export async function dashboardForecastMovement(client:PrismaClient,actor:Actor,input:{year:number;quarter:SalesQuarter;currencyCode:string}) {
+export async function dashboardForecastMovement(client:PrismaClient,actor:Actor,input:{year:number;quarter:SalesQuarter;currencyCode:string;repIds?:number[]}) {
   if (!can(actor,'sales.read')) throw new Error('Access denied');
-  const repIds=actor.role==='SALES'?[actor.id]:(await client.user.findMany({where:activeSalesRepWhere(),select:{id:true}})).map(row=>row.id);
+  const repIds=actor.role==='SALES'?[actor.id]:input.repIds??(await client.user.findMany({where:activeSalesRepWhere(),select:{id:true}})).map(row=>row.id);
   if (!repIds.length) return null;
   const where={...input,repId:{in:repIds}};
   const weeks=await client.$queryRaw<{snapshotWeek:Date}[]>(Prisma.sql`
@@ -37,10 +37,9 @@ export async function dashboardForecastMovement(client:PrismaClient,actor:Actor,
     commit:snapshotChange(rows,previousWeek,currentWeek,'commit').change,slipped:Number(slips?.count??0)};
 }
 
-export async function dashboardSalesPlanStatus(client:PrismaClient,actor:Actor,input:{year:number;currencyCode:string}) {
+export async function dashboardSalesPlanStatus(client:PrismaClient,actor:Actor,input:{year:number;currencyCode:string;repIds?:number[]}) {
   if (!can(actor,'sales-plan.read')) throw new Error('Access denied');
-  const reps=actor.role==='SALES'?[{id:actor.id}]:await client.user.findMany({where:activeSalesRepWhere(),select:{id:true}});
-  const repIds=reps.map(row=>row.id);
+  const repIds=actor.role==='SALES'?[actor.id]:input.repIds??(await client.user.findMany({where:activeSalesRepWhere(),select:{id:true}})).map(row=>row.id);
   const plans=await client.salesPlan.findMany({where:{planYear:input.year,currencyCode:input.currencyCode,status:'ACTIVE',ownerId:{in:repIds},owner:activeSalesRepWhere()},select:{ownerId:true}});
   const population=salesPlanPopulation(repIds,plans.map(row=>row.ownerId),actor.role==='SALES'?actor.id:null);
   const ownerIds=population.ownerIds;

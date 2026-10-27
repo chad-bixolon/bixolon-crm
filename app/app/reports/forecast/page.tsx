@@ -24,7 +24,7 @@ export default async function ForecastPage({ searchParams }: { searchParams: Pro
   if (!can(actor, 'forecast.read')) notFound();
   const f = await searchParams;
   const [users, currencies] = await Promise.all([
-    prisma.user.findMany({ where: { ...activeSalesRepWhere(), ...(actor.role === 'SALES' ? { id: actor.id } : {}) }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
+    prisma.user.findMany({ where: { ...activeSalesRepWhere(), ...(actor.role === 'SALES' ? { id: actor.id } : {}) }, select: { id: true, firstName: true, lastName: true, role: true, active: true, archivedAt: true }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] }),
     reportingCurrencies(),
   ]);
   const today = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: 'numeric' }).formatToParts(new Date());

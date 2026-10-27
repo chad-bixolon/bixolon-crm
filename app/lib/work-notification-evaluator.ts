@@ -5,6 +5,7 @@ import { getSettings } from './configuration';
 import { operationalOpportunityWhere, operationalTaskWhere } from './operational-where';
 import { eligibleUserWhere, taskAssigneePolicy } from './assignment-eligibility';
 import { notificationEnabled } from './notification-preferences';
+import { reconcileNotificationBatch, type NoticeEntry } from './notification-batch';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Candidate = { type: string; title: string; message: string; sourceKey: string };
@@ -73,6 +74,7 @@ export async function notifyOpportunityAssignment(db: Db, opportunityId: number,
 }
 
 export async function evaluateWorkNotifications(db: PrismaClient, now = new Date()) {
+  if (typeof Reflect.get(db.notificationPreference ?? {}, 'findMany') === 'function') return evaluateWorkNotificationsBatched(db, now);
   const days = (await getSettings(db)).COMMIT_FOLLOW_UP_DAYS;
   const result = { evaluated: { tasks: 0, opportunities: 0 }, created: { tasks: 0, opportunities: 0 }, resolved: { tasks: 0, opportunities: 0 } };
   let cursor = 0;
@@ -87,6 +89,55 @@ export async function evaluateWorkNotifications(db: PrismaClient, now = new Date
     const rows = await db.opportunity.findMany({ where: { id: { gt: cursor } }, orderBy: { id: 'asc' }, take: 200, select: { id: true } });
     if (!rows.length) break;
     for (const row of rows) { const count = await syncOpportunityNotifications(db, row.id, days, now); result.evaluated.opportunities++; result.created.opportunities += count.created; result.resolved.opportunities += count.resolved; }
+    cursor = rows.at(-1)!.id;
+  }
+  return result;
+}
+
+async function evaluateWorkNotificationsBatched(db: PrismaClient, now: Date) {
+  const days = (await getSettings(db)).COMMIT_FOLLOW_UP_DAYS;
+  const result = { evaluated: { tasks: 0, opportunities: 0 }, created: { tasks: 0, opportunities: 0 }, resolved: { tasks: 0, opportunities: 0 } };
+  let cursor = 0;
+  while (true) {
+    const rows = await db.task.findMany({ where: { id: { gt: cursor } }, orderBy: { id: 'asc' }, take: 200,
+      select: { id: true, subject: true, assignedToId: true, supportCaseId: true, dueDate: true, status: true, archivedAt: true } });
+    if (!rows.length) break;
+    const ids = rows.map(row => row.id);
+    const [operational, generalUsers, supportUsers] = await Promise.all([
+      db.task.findMany({ where: { id: { in: ids }, AND: [operationalTaskWhere] }, select: { id: true } }),
+      db.user.findMany({ where: { id: { in: rows.filter(row => !row.supportCaseId).map(row => row.assignedToId).filter((id): id is number => id !== null) }, ...eligibleUserWhere('general-task') }, select: { id: true } }),
+      db.user.findMany({ where: { id: { in: rows.filter(row => !!row.supportCaseId).map(row => row.assignedToId).filter((id): id is number => id !== null) }, ...eligibleUserWhere('support-task') }, select: { id: true } }),
+    ]);
+    const activeIds = new Set(operational.map(row => row.id));
+    const generalIds = new Set(generalUsers.map(row => row.id)), supportIds = new Set(supportUsers.map(row => row.id));
+    const entries: NoticeEntry[] = rows.map(row => {
+      const eligible = row.assignedToId !== null && (row.supportCaseId ? supportIds : generalIds).has(row.assignedToId);
+      return { entityId: row.id, userId: eligible ? row.assignedToId : null, candidates: eligible && activeIds.has(row.id) ? taskNotificationCandidates(row, businessToday(now)).map(candidate => ({ ...candidate, severity: 'WARNING' as const })) : [] };
+    });
+    const counts = await reconcileNotificationBatch(db, 'TASK', taskTypes, entries, now);
+    result.evaluated.tasks += rows.length; result.created.tasks += counts.created; result.resolved.tasks += counts.resolved;
+    cursor = rows.at(-1)!.id;
+  }
+  cursor = 0;
+  while (true) {
+    const rows = await db.opportunity.findMany({ where: { id: { gt: cursor } }, orderBy: { id: 'asc' }, take: 200,
+      select: { id: true, name: true, ownerId: true, expectedCloseDate: true, forecastCategory: true, archivedAt: true,
+        stage: { select: { isClosed: true } }, activities: { where: { archivedAt: null }, orderBy: [{ activityDate: 'desc' }, { id: 'desc' }], take: 1, select: { id: true, activityDate: true } },
+        historyEvents: { where: { newCategory: 'COMMIT', eventType: { in: ['BASELINE', 'FORECAST_CATEGORY'] } }, orderBy: { id: 'desc' }, take: 1, select: { id: true } } } });
+    if (!rows.length) break;
+    const ids = rows.map(row => row.id);
+    const [operational, stale, eligibleUsers] = await Promise.all([
+      db.opportunity.findMany({ where: { id: { in: ids }, AND: [operationalOpportunityWhere] }, select: { id: true } }),
+      db.opportunity.findMany({ where: { id: { in: ids }, AND: [attentionPredicates(now, days).STALE_COMMIT] }, select: { id: true } }),
+      db.user.findMany({ where: { id: { in: rows.map(row => row.ownerId).filter((id): id is number => id !== null) }, ...eligibleUserWhere('opportunity-owner') }, select: { id: true } }),
+    ]);
+    const activeIds = new Set(operational.map(row => row.id)), staleIds = new Set(stale.map(row => row.id)), users = new Set(eligibleUsers.map(row => row.id));
+    const entries: NoticeEntry[] = rows.map(row => {
+      const eligible = row.ownerId !== null && users.has(row.ownerId);
+      return { entityId: row.id, userId: eligible ? row.ownerId : null, candidates: eligible && activeIds.has(row.id) ? opportunityNotificationCandidates(row, businessToday(now), staleIds.has(row.id)).map(candidate => ({ ...candidate, severity: 'WARNING' as const })) : [] };
+    });
+    const counts = await reconcileNotificationBatch(db, 'OPPORTUNITY', opportunityTypes, entries, now);
+    result.evaluated.opportunities += rows.length; result.created.opportunities += counts.created; result.resolved.opportunities += counts.resolved;
     cursor = rows.at(-1)!.id;
   }
   return result;

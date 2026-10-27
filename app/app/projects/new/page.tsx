@@ -4,12 +4,12 @@ import { ProjectForm } from '@/components/project-form';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/current-user';
 import { positiveId } from '@/lib/crm-validation';
-import { defaultEligibleUserId, eligibleUserWhere } from '@/lib/assignment-eligibility';
+import { defaultEligibleUserId, listEligibleUserOptions } from '@/lib/assignment-eligibility';
 export const dynamic = 'force-dynamic';
 export default async function NewProjectPage({ searchParams }: { searchParams: Promise<{ primaryAccountId?: string }> }) {
   const actor = await requirePermission('projects.write');
   const [owners, params] = await Promise.all([
-    prisma.user.findMany({ where: eligibleUserWhere('project-owner'), select: { id: true, firstName: true, lastName: true }, orderBy: { lastName: 'asc' } }), searchParams,
+    listEligibleUserOptions(prisma, 'project-owner', 'last'), searchParams,
   ]);
   const candidate = positiveId(params.primaryAccountId ?? '');
   const accounts = candidate ? await prisma.account.findMany({ where: { id: candidate, status: 'ACTIVE', archivedAt: null }, select: { id: true, name: true } }) : [];
