@@ -201,6 +201,19 @@ export function dashboardAccountWhere(actor: Actor): Prisma.AccountWhereInput {
   return engagementAccountWhere(actor);
 }
 
+export function staleDashboardAccountWhere(actor: Actor, days: number, now: Date): Prisma.AccountWhereInput {
+  return { AND: [dashboardAccountWhere(actor), { activities: { none: { AND: [operationalActivityWhere, { activityDate: { gt: new Date(now.getTime() - days * 86400000) } }] } } }] };
+}
+
+export async function staleDashboardAccounts(db: PrismaClient, actor: Actor, days: number, now: Date) {
+  const where = staleDashboardAccountWhere(actor, days, now);
+  const [count, rows] = await db.$transaction([
+    db.account.count({ where }),
+    db.account.findMany({ where, select: { id: true, name: true }, orderBy: { name: 'asc' }, take: 5 }),
+  ], { isolationLevel: 'RepeatableRead' });
+  return { count, rows };
+}
+
 export function dashboardTaskWhere(actor: Actor, today: Date, repIds: number[]): Prisma.TaskWhereInput {
   if (!can(actor, 'tasks.read')) throw new Error('Access denied');
   return { ...dashboardOpenTaskWhere(), dueDate: { lt: new Date(today.getTime()+8*86400000) }, ...taskScope(actor), ...(actor.role === 'SALES' || actor.role === 'MARKETING_MANAGER' ? { assignedToId: actor.id } : { assignedToId: { in: repIds } }) };

@@ -396,10 +396,22 @@ function sortRows(rows: PipelineDbRow[], sort: ReportSort[]) {
 }
 
 export async function executePipelineReport(client: PrismaClient, actor: Actor, rawConfig: unknown, now = new Date()): Promise<PipelineReportResult> {
+  if (!canRunReportType(actor,'PIPELINE')) throw new Error('Access denied');
+  return (await executePipelineReportGroups(client, actor, rawConfig, [validateReportConfiguration('PIPELINE', rawConfig).groupBy], now))[0];
+}
+
+/** Dashboard groupings share one scoped Opportunity population for identical filters. */
+export async function executePipelineReportGroups(client: PrismaClient, actor: Actor, rawConfig: unknown, groupBys: (string | null)[], now = new Date()): Promise<PipelineReportResult[]> {
+  if (!groupBys.length) return [];
   const availability=await assertReportModule(client,'PIPELINE');
   if (!canRunReportType(actor,'PIPELINE')) throw new Error('Access denied');
-  const config=visibleReportConfiguration('PIPELINE',validateReportConfiguration('PIPELINE',rawConfig),availability);
-  const rows=sortRows(await client.opportunity.findMany({ where:pipelineWhere(config,actor,now), include:{ stage:true, competitor:true, owner:true, participants:{include:{account:{include:{owner:true,industryCategory:true,territoryCategory:true}},roles:true}}, products:{where:{archivedAt:null},include:{product:{include:{category:true}},sku:true}}, projects:{include:{project:{include:{owner:true}}}} } }),config.sort);
+  const base=validateReportConfiguration('PIPELINE',rawConfig);
+  const configs=groupBys.map(groupBy=>visibleReportConfiguration('PIPELINE',validateReportConfiguration('PIPELINE',{...base,groupBy}),availability));
+  const rows=sortRows(await client.opportunity.findMany({ where:pipelineWhere(configs[0],actor,now), include:{ stage:true, competitor:true, owner:true, participants:{include:{account:{include:{owner:true,industryCategory:true,territoryCategory:true}},roles:true}}, products:{where:{archivedAt:null},include:{product:{include:{category:true}},sku:true}}, projects:{include:{project:{include:{owner:true}}}} } }),configs[0].sort);
+  return configs.map(config=>pipelineResultFromRows(rows,config));
+}
+
+function pipelineResultFromRows(rows: PipelineDbRow[], config: ReportConfiguration): PipelineReportResult {
   const groups=new Map<string,{key:string;label:string;rows:PipelineDbRow[]}>();
   for(const row of rows) for(const group of groupValues(row,config.groupBy)){ const existing=groups.get(group.key)??{...group,rows:[]}; if(!existing.rows.some(item=>item.id===row.id))existing.rows.push(row); groups.set(group.key,existing); }
   return { reportType:'PIPELINE', summary:metrics(rows), groups:[...groups.values()].sort((a,b)=>a.label.localeCompare(b.label)).map(group=>({key:group.key,label:group.label,metrics:metrics(group.rows),opportunityIds:group.rows.map(row=>row.id)})), rows:rows.map(row=>{const value=opportunityTotal(row.products),probability=row.probability??row.stage.probability; return {id:row.id,opportunity:row.name,accounts:row.participants.map(x=>x.account.name).sort().join(', ')||'—',owner:row.owner?`${row.owner.firstName} ${row.owner.lastName}`:'Unassigned',stage:row.stage.name,forecastCategory:row.forecastCategory,closeDate:row.expectedCloseDate?.toISOString().slice(0,10)??null,value:value.toFixed(2),weightedValue:weightedValue(value,probability).toFixed(2),probability,currency:row.currencyCode,groupKeys:groupValues(row,config.groupBy).map(x=>x.key)};}), currencies:[...new Set(rows.map(row=>row.currencyCode))].sort(), filterCount:config.filters.length, semanticNote:pipelineDefinition.semanticNote };

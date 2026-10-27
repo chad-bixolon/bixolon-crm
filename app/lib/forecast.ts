@@ -72,9 +72,12 @@ export async function forecastForRep(client: PrismaClient, actor: Actor, input: 
 export async function forecastForTeam(client: PrismaClient, actor: Actor, input: { users: TeamUser[]; year: number; quarter: SalesQuarter; currencyCode: string }) {
   if (!can(actor, 'sales.read') || actor.role === 'SALES') throw new Error('Access denied');
   const users = [...new Map(input.users.filter(user=>user.active!==false&&!user.archivedAt&&['SALES','SALES_MANAGER'].includes(user.role)).map(user => [user.id, user])).values()];
-  const participants = await getQuotaParticipants(client, users, { year: input.year, quarter: input.quarter, currencyCode: input.currencyCode });
+  if (!/^[A-Z]{3}$/.test(input.currencyCode)) throw new Error('Choose a currency.');
   const { start, endExclusive } = quarterBounds(input.year, input.quarter);
-  const rows = users.length ? await client.opportunity.findMany({ where: { AND: [operationalOpportunityWhere, opportunityScope(actor), { ownerId: { in: users.map(user => user.id) }, stage: { isClosed: false }, forecastCategory: { in: [ForecastCategory.PIPELINE, ForecastCategory.BEST_CASE, ForecastCategory.COMMIT] }, currencyCode: input.currencyCode, expectedCloseDate: { gte: start, lt: endExclusive } }] }, select: { ownerId: true, forecastCategory: true, probability: true, stage: { select: { probability: true } }, products: { where: { archivedAt: null }, select: { quantity: true, estimatedUnitPrice: true } } } }) : [];
+  const [participants, rows] = await Promise.all([
+    getQuotaParticipants(client, users, { year: input.year, quarter: input.quarter, currencyCode: input.currencyCode }),
+    users.length ? client.opportunity.findMany({ where: { AND: [operationalOpportunityWhere, opportunityScope(actor), { ownerId: { in: users.map(user => user.id) }, stage: { isClosed: false }, forecastCategory: { in: [ForecastCategory.PIPELINE, ForecastCategory.BEST_CASE, ForecastCategory.COMMIT] }, currencyCode: input.currencyCode, expectedCloseDate: { gte: start, lt: endExclusive } }] }, select: { ownerId: true, forecastCategory: true, probability: true, stage: { select: { probability: true } }, products: { where: { archivedAt: null }, select: { quantity: true, estimatedUnitPrice: true } } } }) : Promise.resolve([]),
+  ]);
   const byOwner = new Map<number, typeof rows>();
   for (const row of rows) { const owned = byOwner.get(row.ownerId!) ?? []; owned.push(row); byOwner.set(row.ownerId!, owned); }
   const quota = new Map(participants.map(user => [user.id, user]));

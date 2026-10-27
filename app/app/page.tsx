@@ -2,7 +2,6 @@ import { can } from '@/lib/authorization';
 import { CurrencyControl } from '@/components/currency-control';
 import { companyCurrency } from '@/lib/company-currency';
 import { reportingCurrencies } from '@/lib/company-currency';
-import { operationalActivityWhere } from '@/lib/operational-where';
 import Link from 'next/link';
 import { Content,PageHeader } from '@/components/shell';
 import { DashboardEditor } from '@/components/dashboard-editor';
@@ -11,11 +10,10 @@ import { currentUser, getRealAuthenticatedUser } from '@/lib/current-user';
 import { durationLabel, getMyDaySummary, myDayToday } from '@/lib/my-day';
 import { DEFAULT_USER_TIME_ZONE } from '@/lib/user-time-zone';
 import { prisma } from '@/lib/prisma';
-import { availableDashboardWidgets,dashboardAccountWhere,dashboardActivityWhere,composeDashboardSections,dashboardRoleDescriptions,dashboardPeriod,dashboardPresentationSectionTitles,dashboardTaskWhere,dashboardWidgetRegistry,getEffectiveDashboardLayout,pipelineReportHref,type DashboardLayoutItem,type SavedReportWidgetStyle } from '@/lib/dashboard';
+import { availableDashboardWidgets,staleDashboardAccounts,dashboardActivityWhere,composeDashboardSections,dashboardRoleDescriptions,dashboardPeriod,dashboardPresentationSectionTitles,dashboardTaskWhere,dashboardWidgetRegistry,getEffectiveDashboardLayout,pipelineReportHref,type DashboardLayoutItem,type SavedReportWidgetStyle } from '@/lib/dashboard';
 import { forecastForRep,forecastForTeam } from '@/lib/forecast';
 import { attentionIssues,attentionLabels,getForecastAttention } from '@/lib/forecast-attention';
-import { defaultReportConfiguration,executePipelineReport,executeReport,reportRegistry,savedReportWhere,validateReportConfiguration,visibleReportConfiguration,type PipelineReportResult,type ReportConfiguration } from '@/lib/reporting';
-import { hasNoActivityInDays,latestAccountActivityOrder } from '@/lib/engagement';
+import { defaultReportConfiguration,executePipelineReportGroups,executeReport,reportRegistry,savedReportWhere,validateReportConfiguration,visibleReportConfiguration,type PipelineReportResult,type ReportConfiguration } from '@/lib/reporting';
 import { dayBounds } from '@/lib/work';
 import { getSettings } from '@/lib/configuration';
 import { formatCoveragePercent, formatCurrency } from '@/lib/display-format';
@@ -61,37 +59,45 @@ export default async function HomePage({searchParams}:{searchParams:Promise<{cur
   const keys=new Set(dashboardItems.filter((item):item is Extract<DashboardLayoutItem,{kind:'BUILTIN'}>=>item.kind==='BUILTIN').map(item=>item.key));
   const salesData=['FORECAST_SUMMARY','PIPELINE_BY_REP','PIPELINE_BY_STAGE','PIPELINE_BY_PRODUCT_CATEGORY','CLOSING_OPPORTUNITIES'].some(key=>keys.has(key as never));
   const now=new Date(),period=dashboardPeriod(now);
-  const myDayUser=keys.has('MY_DAY')&&real?await prisma.user.findUnique({where:{id:real.id},select:{timeZone:true}}):null;
+  const [myDayUser,currencies,reps]=await Promise.all([
+    keys.has('MY_DAY')&&real?prisma.user.findUnique({where:{id:real.id},select:{timeZone:true}}):null,
+    salesData||keys.has('FORECAST_ATTENTION')||keys.has('FORECAST_MOVEMENT')||keys.has('SALES_PLAN_STATUS')?reportingCurrencies():[],
+    salesData||keys.has('FORECAST_MOVEMENT')||keys.has('SALES_PLAN_STATUS')||keys.has('OVERDUE_TASKS')&&['ADMIN','SALES_MANAGER'].includes(actor.role)||keys.has('RECENT_ACTIVITY')?(actor.role==='SALES'?[{id:actor.id,firstName:'Me',lastName:'',role:actor.role}]:prisma.user.findMany({where:{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true,firstName:true,lastName:true,role:true},orderBy:[{lastName:'asc'},{firstName:'asc'}]})):[],
+  ]);
   const myDay=keys.has('MY_DAY')&&real?await getMyDaySummary(prisma,real.id,myDayToday(now,myDayUser?.timeZone??DEFAULT_USER_TIME_ZONE),myDayUser?.timeZone??DEFAULT_USER_TIME_ZONE,now):null;
-  const currencies=salesData||keys.has('FORECAST_ATTENTION')||keys.has('FORECAST_MOVEMENT')||keys.has('SALES_PLAN_STATUS')?await reportingCurrencies():[];
   const currency=currencies.some(value=>value.code===params.currency)?params.currency!:currencyConfig.defaultCurrency;
-  const reps=salesData||keys.has('FORECAST_MOVEMENT')||keys.has('SALES_PLAN_STATUS')||keys.has('OVERDUE_TASKS')&&['ADMIN','SALES_MANAGER'].includes(actor.role)||keys.has('RECENT_ACTIVITY')?(actor.role==='SALES'?[{id:actor.id,firstName:'Me',lastName:'',role:actor.role}]:await prisma.user.findMany({where:{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true,firstName:true,lastName:true,role:true},orderBy:[{lastName:'asc'},{firstName:'asc'}]})):[];
   const ids=reps.map(rep=>rep.id);
-  const forecast=salesData?(actor.role==='SALES'?await forecastForRep(prisma,actor,{userId:actor.id,...period,currencyCode:currency}):await forecastForTeam(prisma,actor,{users:reps,...period,currencyCode:currency})):null;
   const config=defaultReportConfiguration('PIPELINE');config.filters=[{field:'status',operator:'eq',value:'OPEN'},{field:'closeDate',operator:'preset',value:'THIS_QUARTER'},{field:'currency',operator:'eq',value:currency},{field:'forecastCategory',operator:'eq',value:'IN_FORECAST'}];if(actor.role!=='SALES')config.filters.push({field:'activeSalesRep',operator:'eq',value:true});
-  const report=(groupBy:'stage'|'owner'|'productCategory')=>executePipelineReport(prisma,actor,{...config,groupBy},now);
-  const [stage,categories]=salesData?await Promise.all([keys.has('PIPELINE_BY_STAGE')||keys.has('CLOSING_OPPORTUNITIES')?report('stage'):null,keys.has('PIPELINE_BY_PRODUCT_CATEGORY')?report('productCategory'):null]):[null,null];
-  const settings=keys.has('STALE_ACCOUNTS')||keys.has('FORECAST_ATTENTION')?await getSettings(prisma):null;
-  const attention=keys.has('FORECAST_ATTENTION')&&settings?await getForecastAttention(prisma,actor,{now,days:settings.COMMIT_FOLLOW_UP_DAYS,filters:{currencyCode:currency},mode:'DASHBOARD'}):null;
-  const planYears=keys.has('SALES_PLAN_STATUS')?await prisma.salesPlan.findMany({where:{status:'ACTIVE',owner:{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},...(actor.role==='SALES'?{ownerId:actor.id}:{})},select:{planYear:true},distinct:['planYear'],orderBy:{planYear:'desc'}}):[];
+  const groupBys: ('stage'|'productCategory')[]=[];
+  if(salesData&&(keys.has('PIPELINE_BY_STAGE')||keys.has('CLOSING_OPPORTUNITIES')))groupBys.push('stage');
+  if(salesData&&keys.has('PIPELINE_BY_PRODUCT_CATEGORY'))groupBys.push('productCategory');
+  const [forecast,pipelineGroups,settings,planYears]=await Promise.all([
+    salesData?(actor.role==='SALES'?forecastForRep(prisma,actor,{userId:actor.id,...period,currencyCode:currency}):forecastForTeam(prisma,actor,{users:reps,...period,currencyCode:currency})):null,
+    groupBys.length?executePipelineReportGroups(prisma,actor,config,groupBys,now):[],
+    keys.has('STALE_ACCOUNTS')||keys.has('FORECAST_ATTENTION')?getSettings(prisma):null,
+    keys.has('SALES_PLAN_STATUS')?prisma.salesPlan.findMany({where:{status:'ACTIVE',owner:{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},...(actor.role==='SALES'?{ownerId:actor.id}:{})},select:{planYear:true},distinct:['planYear'],orderBy:{planYear:'desc'}}):[],
+  ]);
+  const stage=pipelineGroups[groupBys.indexOf('stage')]??null,categories=pipelineGroups[groupBys.indexOf('productCategory')]??null;
   const planYear=planYears.some(row=>row.planYear===period.year)?period.year:planYears[0]?.planYear??period.year;
-  const [movement,planStatus,marketingActivity]=await Promise.all([
+  const [attention,movement,planStatus,marketingActivity,expiringCounts,support,quality,jobs]=await Promise.all([
+    keys.has('FORECAST_ATTENTION')&&settings?getForecastAttention(prisma,actor,{now,days:settings.COMMIT_FOLLOW_UP_DAYS,filters:{currencyCode:currency},mode:'DASHBOARD'}):null,
     keys.has('FORECAST_MOVEMENT')?dashboardForecastMovement(prisma,actor,{...period,currencyCode:currency,repIds:ids}):null,
     keys.has('SALES_PLAN_STATUS')?dashboardSalesPlanStatus(prisma,actor,{year:planYear,currencyCode:currency,repIds:ids}):null,
     keys.has('MARKETING_ACTIVITY')?dashboardMarketingActivity(prisma,actor,now,availability.effective.has('TRADE_SHOWS'),availability.effective.has('OPPORTUNITIES')):null,
+    keys.has('EXPIRING_PRICE_EXCEPTIONS')?expiringDashboardCounts(prisma,actor,now):null,
+    Array.from(keys).some(key=>key.startsWith('SUPPORT_'))?supportDashboard(prisma,actor,now,{intake:keys.has('SUPPORT_INTAKE'),tasks:keys.has('SUPPORT_TASKS'),activity:keys.has('SUPPORT_ACTIVITY')}):null,
+    keys.has('ADMIN_DATA_QUALITY')?qualityCounts(prisma,availability):null,
+    keys.has('ADMIN_HEALTH')?scheduledJobHealth(prisma,now):null,
   ]);
-  const expiringCounts=keys.has('EXPIRING_PRICE_EXCEPTIONS')?await expiringDashboardCounts(prisma,actor,now):null;
-  const support=Array.from(keys).some(key=>key.startsWith('SUPPORT_'))?await supportDashboard(prisma,actor,now,{intake:keys.has('SUPPORT_INTAKE'),tasks:keys.has('SUPPORT_TASKS'),activity:keys.has('SUPPORT_ACTIVITY')}):null;
-  const [quality,jobs]=await Promise.all([keys.has('ADMIN_DATA_QUALITY')?qualityCounts(prisma,availability):null,keys.has('ADMIN_HEALTH')?scheduledJobHealth(prisma,now):null]);
-  const [accounts,tasks,activities,myTradeShowLeads,marketingCounts,executedReports]=await Promise.all([
-    keys.has('STALE_ACCOUNTS')?prisma.account.findMany({where:dashboardAccountWhere(actor),select:{id:true,name:true,activities:{where:operationalActivityWhere,orderBy:latestAccountActivityOrder(),take:1,select:{activityDate:true}}},orderBy:{name:'asc'}}):[],
+  const [staleSummary,tasks,activities,myTradeShowLeads,marketingCounts,executedReports]=await Promise.all([
+    keys.has('STALE_ACCOUNTS')&&settings?staleDashboardAccounts(prisma,actor,settings.STALE_ACCOUNT_WARNING_DAYS,now):{count:0,rows:[] as {id:number;name:string}[]},
     keys.has('OVERDUE_TASKS')?prisma.task.findMany({where:dashboardTaskWhere(actor,dayBounds(now).start,ids.length?ids:[actor.id]),select:{id:true,subject:true,dueDate:true},orderBy:[{dueDate:'asc'},{id:'asc'}],take:6}):[],
     keys.has('RECENT_ACTIVITY')?prisma.activity.findMany({where:dashboardActivityWhere(actor,ids),select:{id:true,subject:true,activityDate:true,account:{select:{name:true}}},orderBy:[{activityDate:'desc'},{id:'desc'}],take:6}):[],
     keys.has('MY_TRADE_SHOW_LEADS')?Promise.all([prisma.tradeShowLead.count({where:salesLeadQueueWhere(actor)}),prisma.tradeShowLead.count({where:salesLeadQueueWhere(actor,{status:'NEW'})}),prisma.tradeShowLead.findMany({where:salesLeadQueueWhere(actor),select:{id:true,tradeShowId:true,firstName:true,lastName:true,sourceCompany:true,status:true,tradeShow:{select:{name:true}}},orderBy:[{followUpAt:'asc'},{updatedAt:'desc'}],take:5})]):null,
     keys.has('MARKETING_SUMMARY')?Promise.all([prisma.account.count({where:{archivedAt:null,status:'ACTIVE'}}),prisma.tradeShowLead.count({where:{tradeShow:{archivedAt:null}}}),prisma.tradeShowLead.count({where:{tradeShow:{archivedAt:null},routing:'MARKETING_FOLLOW_UP'}}),prisma.tradeShowLead.count({where:{tradeShow:{archivedAt:null},routing:'REFERRED_TO_PARTNER'}})]):null,
     Promise.allSettled(reportItems.map(async item=>{const definition=savedReports.find(report=>report.id===item.reportId);if(!definition)throw new Error('Unavailable');const validated=visibleReportConfiguration(definition.reportType,validateReportConfiguration(definition.reportType,definition.configuration),availability);return {item,definition,config:validated,result:await executeReport(prisma,actor,definition.reportType,validated,now)};})),
   ]);
-  const stale=settings?accounts.filter(account=>hasNoActivityInDays(account.activities[0]?.activityDate??null,settings.STALE_ACCOUNT_WARNING_DAYS,now)):[];
+  const {count:staleCount,rows:stale}=staleSummary;
   const drill=(groupBy?:'owner'|'stage'|'productCategory',commit=false)=>pipelineReportHref({currency,groupBy,commit,team:actor.role!=='SALES'}).replace('/reports/new?',actor.role==='READ_ONLY'?'/reports/pipeline-view?':'/reports/new?');
   const reportResults=new Map(executedReports.map((result,index)=>[reportItems[index].reportId,result]));
   const render=(item:DashboardLayoutItem)=>{
@@ -119,7 +125,7 @@ export default async function HomePage({searchParams}:{searchParams:Promise<{cur
     if(item.key==='PIPELINE_BY_STAGE'&&stage)return <SummaryTable title={title} result={stage} currency={currency} href={drill('stage')}/>;
     if(item.key==='PIPELINE_BY_PRODUCT_CATEGORY'&&categories)return <SummaryTable title={title} result={categories} currency={currency} href={drill('productCategory')}/>;
     if(item.key==='CLOSING_OPPORTUNITIES'&&stage)return <section className="panel overflow-hidden"><div className="flex items-center justify-between border-b px-4 py-3"><h2 className="font-semibold">{title}</h2><Link className="text-sm text-orange-800 underline" href={drill()}>View report</Link></div><div className="overflow-auto"><table className="w-full min-w-[700px] text-sm"><thead className="bg-slate-50"><tr>{['Opportunity','Account','Owner','Stage','Value','Close date'].map(value=><th className="px-4 py-2 text-left" key={value}>{value}</th>)}</tr></thead><tbody>{stage.rows.slice(0,8).map(row=><tr className="border-t" key={row.id}><td className="px-4 py-2"><Link className="text-orange-800 underline" href={`/opportunities/${row.id}`}>{row.opportunity}</Link></td><td className="px-4 py-2">{row.accounts}</td><td className="px-4 py-2">{row.owner}</td><td className="px-4 py-2">{row.stage}</td><td className="px-4 py-2">{money(row.value,currency)}</td><td className="px-4 py-2">{row.closeDate??'—'}</td></tr>)}</tbody></table>{!stage.rows.length&&<p className="p-4 text-sm text-slate-500">No Opportunities closing this quarter.</p>}</div></section>;
-    if(item.key==='STALE_ACCOUNTS')return <section className="panel p-4"><h2 className="font-semibold">{title}</h2><p className="mt-1 text-sm text-slate-600">{stale.length} active Accounts</p><ul className="mt-3 divide-y text-sm">{stale.slice(0,5).map(account=><li className="py-2" key={account.id}><Link className="text-orange-800 underline" href={`/accounts/${account.id}`}>{account.name}</Link></li>)}</ul><Link className="mt-3 inline-block text-sm text-orange-800 underline" href={`/reports/new?reportType=ACCOUNT_ACTIVITY&configured=1&minDays=${settings?.STALE_ACCOUNT_WARNING_DAYS}`}>View Account engagement</Link></section>;
+    if(item.key==='STALE_ACCOUNTS')return <section className="panel p-4"><h2 className="font-semibold">{title}</h2><p className="mt-1 text-sm text-slate-600">{staleCount} active Accounts</p><ul className="mt-3 divide-y text-sm">{stale.map(account=><li className="py-2" key={account.id}><Link className="text-orange-800 underline" href={`/accounts/${account.id}`}>{account.name}</Link></li>)}</ul><Link className="mt-3 inline-block text-sm text-orange-800 underline" href={`/reports/new?reportType=ACCOUNT_ACTIVITY&configured=1&minDays=${settings?.STALE_ACCOUNT_WARNING_DAYS}`}>View Account engagement</Link></section>;
     if(item.key==='OVERDUE_TASKS')return <section className="panel p-4"><h2 className="font-semibold">{actor.role==='SALES_MANAGER'?'Team ':''}{title}</h2><p className="mt-2 text-xs text-slate-600">Overdue and next 7 days</p><ul className="mt-3 divide-y text-sm">{tasks.map(task=><li className="py-2" key={task.id}><Link className="text-orange-800 underline" href={`/tasks/${task.id}`}>{task.subject}</Link><span className="ml-2 text-slate-500">{task.dueDate?.toISOString().slice(0,10)}{task.dueDate&&task.dueDate<dayBounds(now).start?' · Overdue':''}</span></li>)}</ul>{!tasks.length&&<p className="mt-3 text-sm text-slate-500">No overdue Tasks or Tasks due in the next 7 days.</p>}<Link className="mt-3 inline-block text-sm text-orange-800 underline" href={actor.role==='SALES'||actor.role==='MARKETING_MANAGER'?`/tasks?assignedToId=${actor.id}`:'/tasks'}>View Tasks</Link></section>;
     if(item.key==='RECENT_ACTIVITY')return <section className="panel p-4"><h2 className="font-semibold">{title}</h2><ul className="mt-3 divide-y text-sm">{activities.map(activity=><li className="py-2" key={activity.id}><span className="font-medium">{activity.subject}</span><span className="ml-2 text-slate-500">{activity.account?.name} · {activity.activityDate.toISOString().slice(0,10)}</span></li>)}</ul>{!activities.length&&<p className="mt-3 text-sm text-slate-500">No recent Activities.</p>}</section>;
     if(item.key==='MY_TRADE_SHOW_LEADS'&&myTradeShowLeads){const [total,newCount,leads]=myTradeShowLeads;return <section className="panel p-4"><div className="flex items-center justify-between gap-3"><h2 className="font-semibold">{title}</h2><Link className="text-sm text-orange-800 underline" href="/trade-shows/my-leads">Open queue</Link></div><div className="mt-3 flex gap-5 text-sm"><span><strong className="text-xl tabular-nums">{total}</strong> active</span><span><strong className="text-xl tabular-nums">{newCount}</strong> not yet contacted</span></div><ul className="mt-3 divide-y text-sm">{leads.map(lead=><li className="py-2" key={lead.id}><Link className="font-medium text-orange-800 underline" href={`/trade-shows/${lead.tradeShowId}/leads/${lead.id}`}>{lead.firstName} {lead.lastName}</Link><span className="ml-2 text-slate-500">{lead.sourceCompany??lead.tradeShow.name} · {lead.status}</span></li>)}</ul>{!leads.length&&<p className="mt-3 text-sm text-slate-500">No actionable Trade Show leads assigned.</p>}</section>}

@@ -42,6 +42,36 @@ test('dashboard Account, Task, and Activity queries preserve personal scope', ()
   assert.deepEqual(dashboard.dashboardActivityWhere(actor('SALES_MANAGER'), [7,8]).userId, { in: [7,8] });
 });
 
+test('stale Account query keeps Sales scope and the exact recent-activity cutoff', () => {
+  const now = new Date('2026-10-26T16:00:00Z');
+  const where = dashboard.staleDashboardAccountWhere(actor('SALES'), 30, now);
+  assert.equal(where.AND[0].ownerId, 7);
+  assert.equal(where.AND[0].archivedAt, null);
+  const recent = where.AND[1].activities.none.AND;
+  assert.ok(recent[0].archivedAt === null);
+  assert.equal(recent[1].activityDate.gt.toISOString(), '2026-09-26T16:00:00.000Z');
+  assert.throws(() => dashboard.staleDashboardAccountWhere(actor('READ_ONLY'), 30, now), /Access denied/);
+});
+
+test('stale Account count and five-name preview share a repeatable-read snapshot', async () => {
+  const requests = [];
+  const db = {
+    account: {
+      count: where => { requests.push(['count', where]); return Promise.resolve(12); },
+      findMany: query => { requests.push(['preview', query]); return Promise.resolve([{ id: 2, name: 'Alpha' }]); },
+    },
+    $transaction: async (queries, options) => {
+      assert.deepEqual(options, { isolationLevel: 'RepeatableRead' });
+      return Promise.all(queries);
+    },
+  };
+  const result = await dashboard.staleDashboardAccounts(db, actor('SALES'), 30, new Date('2026-10-26T16:00:00Z'));
+  assert.deepEqual(result, { count: 12, rows: [{ id: 2, name: 'Alpha' }] });
+  assert.deepEqual(requests[0][1].where, requests[1][1].where);
+  assert.deepEqual(requests[1][1].select, { id: true, name: true });
+  assert.equal(requests[1][1].take, 5);
+});
+
 test('team forecast sums rep values and target before calculating coverage, by currency', async () => {
   const observed = [];
   const rows = {

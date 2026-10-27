@@ -13,7 +13,7 @@ export async function dashboardForecastMovement(client:PrismaClient,actor:Actor,
   if (!can(actor,'sales.read')) throw new Error('Access denied');
   const repIds=actor.role==='SALES'?[actor.id]:input.repIds??(await client.user.findMany({where:activeSalesRepWhere(),select:{id:true}})).map(row=>row.id);
   if (!repIds.length) return null;
-  const where={...input,repId:{in:repIds}};
+  const where={year:input.year,quarter:input.quarter,currencyCode:input.currencyCode,repId:{in:repIds}};
   const weeks=await client.$queryRaw<{snapshotWeek:Date}[]>(Prisma.sql`
     SELECT DISTINCT "snapshotWeek" FROM "ForecastSnapshot"
     WHERE year=${input.year} AND quarter=${input.quarter}::"SalesQuarter"
