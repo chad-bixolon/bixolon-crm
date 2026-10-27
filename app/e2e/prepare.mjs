@@ -7,7 +7,18 @@ function run(command, args, env = process.env) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
-run('docker', ['compose', '-f', '../compose.e2e.yml', '-p', 'saleshub-e2e', 'up', '-d', '--wait']);
+// Hosted CI provides the same fixed, localhost-only test database as a service.
+// Keep Compose as the default for developers and fail closed on an accidental override.
+if (process.env.SALESHUB_E2E_EXTERNAL_POSTGRES === 'true') {
+  if (process.env.CI !== 'true') throw new Error('External E2E PostgreSQL is only supported in CI.');
+  const service = new PrismaClient({ datasources: { db: { url: baseDatabaseUrl } } });
+  try {
+    const rows = await service.$queryRaw`SELECT current_database() AS name`;
+    if (rows[0]?.name !== 'saleshub_e2e') throw new Error('Unexpected E2E PostgreSQL database.');
+  } finally { await service.$disconnect(); }
+} else {
+  run('docker', ['compose', '-f', '../compose.e2e.yml', '-p', 'saleshub-e2e', 'up', '-d', '--wait']);
+}
 if (databaseUrl !== baseDatabaseUrl) {
   const bootstrap = new PrismaClient({datasources:{db:{url:baseDatabaseUrl}}});
   try {

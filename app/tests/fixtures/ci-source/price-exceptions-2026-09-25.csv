@@ -1,0 +1,23 @@
+PE Number,Status,Requested At,Reviewed At,Requested By,Reviewed By,Customer,VAR,End User,Expiration Date,SKU,Quantity,Original Price,Approved Price,Currency,Description
+CI-PE-001,approved,2026-09-01T10:00:00.000Z,2026-09-01T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,100,193.60,180.00,USD,Synthetic commercial request 1
+SPAZ09032026-2,approved,2026-09-02T10:00:00.000Z,2026-09-02T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,101,193.60,180.00,USD,Synthetic commercial request 2
+SPAZ09032026-2,approved,2026-09-03T10:00:00.000Z,2026-09-03T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,102,193.60,180.00,USD,Synthetic commercial request 3
+SPAZ09032026,approved,2026-09-04T10:00:00.000Z,2026-09-04T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,103,193.60,180.00,USD,Synthetic commercial request 4
+SPAZ09032026,approved,2026-09-05T10:00:00.000Z,2026-09-05T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,104,193.60,180.00,USD,Synthetic commercial request 5
+SPR09022026-2,approved,2026-09-06T10:00:00.000Z,2026-09-06T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,105,193.60,180.00,USD,Synthetic commercial request 6
+SPR09022026-2,approved,2026-09-07T10:00:00.000Z,2026-09-07T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,106,193.60,180.00,USD,Synthetic commercial request 7
+SPAZ09042026LA,approved,2026-09-08T10:00:00.000Z,2026-09-08T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,3027-06-30,SRP-350PlusVK,107,193.60,180.00,USD,Synthetic commercial request 8
+SPAZ08262026-2,approved,2026-09-09T10:00:00.000Z,2026-09-09T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,3027-06-30,SRP-350PlusVK,108,193.60,180.00,USD,Synthetic commercial request 9
+CI-PE-002,approved,2026-09-10T10:00:00.000Z,2026-09-10T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,109,193.60,180.00,USD,Synthetic commercial request 10
+CI-PE-003,approved,2026-09-11T10:00:00.000Z,2026-09-11T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,110,193.60,180.00,USD,Synthetic commercial request 11
+CI-PE-004,approved,2026-09-12T10:00:00.000Z,2026-09-12T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,111,193.60,180.00,USD,Synthetic commercial request 12
+CI-PE-005,approved,2026-09-13T10:00:00.000Z,2026-09-13T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,112,193.60,180.00,USD,Synthetic commercial request 13
+CI-PE-006,approved,2026-09-14T10:00:00.000Z,2026-09-14T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,113,193.60,180.00,USD,Synthetic commercial request 14
+CI-PE-007,approved,2026-09-15T10:00:00.000Z,2026-09-15T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,114,193.60,180.00,USD,Synthetic commercial request 15
+CI-PE-008,approved,2026-09-16T10:00:00.000Z,2026-09-16T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,115,193.60,180.00,USD,Synthetic commercial request 16
+CI-PE-009,approved,2026-09-17T10:00:00.000Z,2026-09-17T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,116,193.60,180.00,USD,Synthetic commercial request 17
+CI-PE-010,approved,2026-09-18T10:00:00.000Z,2026-09-18T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,117,193.60,180.00,USD,Synthetic commercial request 18
+CI-PE-011,approved,2026-09-19T10:00:00.000Z,2026-09-19T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,118,193.60,180.00,USD,Synthetic commercial request 19
+CI-PE-012,approved,2026-09-20T10:00:00.000Z,2026-09-20T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,119,193.60,180.00,USD,Synthetic commercial request 20
+CI-PE-013,approved,2026-09-21T10:00:00.000Z,2026-09-21T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,120,193.60,180.00,USD,Synthetic commercial request 21
+CI-PE-014,approved,2026-09-22T10:00:00.000Z,2026-09-22T11:00:00.000Z,Amber,Gary,Bluestar,Sonda in Chile,Falabella Stores,2027-06-30,SRP-350PlusVK,121,193.60,180.00,USD,Synthetic commercial request 22

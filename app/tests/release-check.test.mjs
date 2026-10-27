@@ -18,7 +18,7 @@ function fixture(t, { dirty = false, paths = [], fail, output, version = 'v22.23
     if (fail && key.includes(fail)) return { code: 1, output: output ?? 'deliberate stage failure' };
     if (args[0] === '--version') return { code: 0, output: '10.9.8\n' };
     if (args[0] === 'test') return { code: 0, output: '# tests 12\n# pass 11\n# fail 0\n# skipped 1\n' };
-    if (args.includes('release-smoke.spec.ts')) return { code: 0, output: '3 passed (10s)\n' };
+    if (args.includes('test:e2e:release-smoke')) return { code: 0, output: '3 passed (10s)\n' };
     return { code: 0, output: '' };
   };
   return { calls, environments, directory, execute: () => runReleaseCheck({ base: 'HEAD^', allowDirty, focus }, { directory, nodeVersion: version, run, repository: async () => ({ ...repo, commit: mutate && inspections++ ? 'newcommit' : 'abc123' }), verifyClient: () => ({ schemaSha256: 'schema-hash', generatedClientVersion: '6.19.3' }), clean: value => redact(value, ['dummy-private-value']) }) };
@@ -41,7 +41,7 @@ test('successful orchestration emits READY JSON/text with identity, counts, dura
   assert.match(text, /External deployment\/provider state is NOT VERIFIED/);
   assert.ok(json.cleanup.length);
   assert.equal(existsSync(resolve(f.directory, 'temporary')), false);
-  assert.deepEqual(f.calls.filter(([, args]) => args.includes('build')), [['npm', ['run', 'build', '--', '--webpack']]]);
+  assert.ok(f.calls.some(([, args]) => args.join(' ') === 'run build:release'));
   assert.ok(f.calls.some(([, args]) => args.join(' ') === 'run lint'));
   assert.ok(f.calls.some(([, args]) => args.join(' ') === 'run typecheck'));
   assert.ok(f.calls.some(([, args]) => args.join(' ') === 'test'));
@@ -49,7 +49,7 @@ test('successful orchestration emits READY JSON/text with identity, counts, dura
   assert.equal(json.stages.find(stage => stage.name === 'Migrations').detail, 'Migration validation not required for this candidate');
 });
 
-for (const [failure, name] of [['run lint', 'Lint'], ['npm test', 'Unit'], ['run build', 'Production build'], ['release-smoke.spec.ts', 'Browser smoke']]) test(`${name} failure emits NOT READY and stops downstream work`, async t => {
+for (const [failure, name] of [['run lint', 'Lint'], ['npm test', 'Unit'], ['run build:release', 'Production build'], ['test:e2e:release-smoke', 'Browser smoke']]) test(`${name} failure emits NOT READY and stops downstream work`, async t => {
   const f = fixture(t, { fail: failure });
   const result = await f.execute();
   assert.equal(result.result, 'NOT READY');
@@ -71,13 +71,12 @@ test('dirty tracked/untracked work fails before running checks; explicit develop
 });
 
 test('schema and migration edits invoke current test-image build and existing replay/preservation/parity script', async t => {
-  for (const path of ['app/prisma/schema.prisma', 'app/prisma/migrations/new/migration.sql', 'app/prisma.config.ts']) {
+  for (const path of ['app/prisma/schema.prisma', 'app/prisma/migrations/new/migration.sql', 'app/prisma.config.ts', 'app/prisma/tests/integrity.sql', 'app/scripts/test-migrations.py']) {
     const f = fixture(t, { paths: [path] });
     const result = await f.execute();
     assert.equal(result.result, 'READY');
     assert.equal(result.stages.find(stage => stage.name === 'Migrations').status, 'PASS');
-    assert.ok(f.calls.some(([command, args]) => command === 'docker' && args.includes('bixolon-crm-foundation-test:local')));
-    assert.ok(f.calls.some(([command, args]) => command === 'python3' && args[0] === 'scripts/test-migrations.py'));
+    assert.ok(f.calls.some(([, args]) => args.join(' ') === 'run test:migrations'));
   }
   assert.equal(migrationChanged(['app/lib/work.ts']), false);
 });
@@ -155,6 +154,6 @@ test('the release browser database override is confined to browser commands', as
   const f = fixture(t, { focus: 'support' });
   await f.execute();
   for (const { args, overrides } of f.environments) {
-    assert.equal(overrides?.E2E_DATABASE_NAME, args.includes('test:e2e') ? 'saleshub_e2e_release' : undefined);
+    assert.equal(overrides?.E2E_DATABASE_NAME, args.some(arg => arg.startsWith('test:e2e')) ? 'saleshub_e2e_release' : undefined);
   }
 });

@@ -1,0 +1,187 @@
+name: SalesHub CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: saleshub-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  standard:
+    name: Standard CI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+      CHECKPOINT_DISABLE: '1'
+      DATABASE_URL: postgresql://validation:validation@127.0.0.1:1/validation
+      AUTH_URL: http://127.0.0.1:3100
+      AUTH_SECRET: saleshub-ci-only-auth-secret
+      AUTH_GOOGLE_ID: unused-ci-google-id
+      AUTH_GOOGLE_SECRET: unused-ci-google-secret
+      GOOGLE_WORKSPACE_DOMAIN: example.test
+      SUPPORT_GMAIL_ENABLED: 'false'
+      SUPPORT_GMAIL_MOCK: 'true'
+      SUPPORT_GMAIL_TEST_FIXTURE: 'false'
+      E2E_AUTH_ENABLED: 'false'
+      ENABLE_DEV_IMPERSONATION: 'false'
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/app/.playwright-browsers
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: saleshub_e2e
+          POSTGRES_USER: saleshub_e2e
+          POSTGRES_PASSWORD: saleshub_e2e_local_only
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U saleshub_e2e -d saleshub_e2e"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select pinned Node and cache npm downloads
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: app/.nvmrc
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Repository and runtime preflight
+        run: npm run ci:preflight
+        working-directory: app
+      - name: Install locked dependencies
+        run: npm ci
+        working-directory: app
+      - name: Prisma generation and alignment
+        run: npm run prisma:generate && npm run ci:prisma-alignment
+        working-directory: app
+      - name: Lint
+        run: npm run lint
+        working-directory: app
+      - name: TypeScript
+        run: npm run typecheck
+        working-directory: app
+      - name: Unit tests
+        run: npm test
+        working-directory: app
+        env:
+          SALESHUB_TEST_USE_CI_FIXTURES: 'true'
+      - name: Install Chromium and Linux libraries
+        run: npx playwright install --with-deps chromium
+        working-directory: app
+      - name: Browser smoke
+        run: npm run test:e2e:release-smoke
+        working-directory: app
+        env:
+          E2E_DATABASE_NAME: saleshub_e2e_release
+          SALESHUB_E2E_EXTERNAL_POSTGRES: 'true'
+      - name: Production Webpack build
+        run: npm run build:release
+        working-directory: app
+      - name: Diff whitespace
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          git diff --check
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            git diff --check "$PR_BASE_SHA" HEAD
+          elif git cat-file -e "${PUSH_BEFORE_SHA}^{commit}"; then
+            git diff --check "$PUSH_BEFORE_SHA" HEAD
+          else
+            git diff --check HEAD^ HEAD
+          fi
+      - name: Upload failed browser evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: standard-ci-failure-${{ github.run_id }}
+          path: |
+            app/test-results/
+            app/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  migration:
+    name: Migration validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout candidate and PR base
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Decide migration scope
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [[ "$EVENT_NAME" == push ]]; then
+            required=true
+          else
+            changed="$(git diff --name-only "$PR_BASE_SHA" HEAD -- app/prisma/schema.prisma app/prisma.config.ts app/prisma/migrations/ app/prisma/tests/ app/scripts/test-migrations.py app/scripts/prisma-generate.mjs app/Dockerfile app/.dockerignore app/package.json app/package-lock.json .github/workflows/ci.yml)"
+            if [[ -n "$changed" ]]; then required=true; else required=false; fi
+          fi
+          echo "required=$required" >> "$GITHUB_OUTPUT"
+          echo "Migration validation required: $required"
+      - name: Select pinned Node
+        if: steps.scope.outputs.required == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: app/.nvmrc
+          package-manager-cache: false
+      - name: Migration validation
+        if: steps.scope.outputs.required == 'true'
+        run: |
+          set -o pipefail
+          mkdir -p reports/ci
+          npm run test:migrations 2>&1 | tee reports/ci/migration.log
+        working-directory: app
+      - name: Upload failed migration log
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: migration-failure-${{ github.run_id }}
+          path: app/reports/ci/migration.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  docker:
+    name: Production Docker build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build production Docker image
+        run: docker build --target production -t saleshub-ci-production:local ./app
+      - name: Verify image Node and Prisma versions
+        run: |
+          docker run --rm --entrypoint node saleshub-ci-production:local -e '
+            const assert = require("node:assert/strict");
+            assert.equal(process.version, "v22.23.4");
+            assert.equal(require("prisma/package.json").version, "6.19.3");
+            assert.equal(require("@prisma/client/package.json").version, "6.19.3");
+            assert.equal(require("@prisma/client").Prisma.prismaVersion.client, "6.19.3");
+            console.log("Production image: Node 22.23.4, Prisma 6.19.3");
+          '

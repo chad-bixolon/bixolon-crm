@@ -5,12 +5,13 @@ import Module from 'node:module';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import ts from 'typescript';
+import {referenceFixturePath} from './reference-fixtures.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 Module._extensions['.ts']=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,filename);
 const require=Module.createRequire(fileURLToPath(import.meta.url));
 const {createPeReviewAccount,likelyAccountMatches}=require(path.join(root,'lib/price-exception-account-create.ts'));
 const {parseRosaCsv,planRosaPriceExceptions}=require(path.join(root,'lib/rosa-price-exception-import.ts'));
-const csv=fs.readFileSync(path.join(root,'../reference-data/price-exceptions-2026-09-25.csv'),'utf8');
+const csv=fs.readFileSync(referenceFixturePath('price-exceptions-2026-09-25.csv'),'utf8');
 const first=parseRosaCsv(csv).rows[0];
 const actor={id:91,role:'ADMIN',active:true};
 function form(name,role){const data=new FormData();data.set('name',name);data.set('status','ACTIVE');data.append('roles',role);return data}

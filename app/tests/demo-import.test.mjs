@@ -5,6 +5,7 @@ import Module from 'node:module';
 import path from 'node:path';
 import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
+import { referenceFixturePath } from './reference-fixtures.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 Module._extensions['.ts']=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,filename);
@@ -13,7 +14,7 @@ const {demoHeaders,parseDemoCsv,planDemoImport,applyDemoImport,mapDemoSourceAcco
 const {can,permissionForPath,routeAccess}=require(path.join(root,'lib/authorization.ts'));
 const {assertDemoContext,demoLabel,demoReadWhere}=require(path.join(root,'lib/demos.ts'));
 const {demoPreviewDate,demoPreviewFieldLabel,demoPreviewIssue,demoPreviewItemSummary,demoPreviewShipping}=require(path.join(root,'lib/demo-preview-display.ts'));
-const fixture=fs.readFileSync(path.join(root,'../reference-data/demo-requests-2026-09-28.csv'),'utf8');
+const fixture=fs.readFileSync(referenceFixturePath('demo-requests-2026-09-28.csv'),'utf8');
 const parsed=parseDemoCsv(fixture);
 const row=(source,changes={},line=source.line)=>({line,values:{...source.values,...changes}});
 const input=(...rows)=>({rows,errors:[]});

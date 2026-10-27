@@ -5,6 +5,7 @@ import Module from 'node:module';
 import path from 'node:path';
 import ts from 'typescript';
 import {fileURLToPath} from 'node:url';
+import {referenceFixturePath} from './reference-fixtures.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 Module._extensions['.ts']=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,filename);
 const require=Module.createRequire(fileURLToPath(import.meta.url));
@@ -12,10 +13,10 @@ const {parseImportXlsx}=require(path.join(root,'lib/import-xlsx.ts'));
 const {parseImportCsv}=require(path.join(root,'lib/import-csv.ts'));
 const {planProductImport,applyProductImport,productImportHeaders}=require(path.join(root,'lib/product-import.ts'));
 const {mapProductWorkbookSheet}=require(path.join(root,'lib/product-workbook.ts'));
-const workbookPath=path.resolve(root,'../reference-data/BIXOLON_Price_List.xlsx');
+const workbookPath=referenceFixturePath('BIXOLON_Price_List.xlsx');
 const emptyDb={product:{findMany:async()=>[]},account:{findMany:async()=>[]},productCategory:{findMany:async()=>['POS','LABEL','MOBILE','LASER','RIBBON','ACCESSORIES','PAPER','WARRANTY'].map(code=>({code,active:true}))}};
 
-test('real workbook maps STANDARD, MSRP, and channel tiers separately', {skip:!fs.existsSync(workbookPath)}, async()=>{
+test('source workbook maps STANDARD, MSRP, and channel tiers separately', async()=>{
   const file=fs.readFileSync(workbookPath);
   const adapter=(sheet,rows)=>mapProductWorkbookSheet(sheet,rows,'USD');
   const first=await parseImportXlsx(file);
@@ -59,7 +60,7 @@ test('real workbook maps STANDARD, MSRP, and channel tiers separately', {skip:!f
     assert.equal(first.catalog_source,'PRICE_LIST');
   }
 });
-test('Mobile printers keeps only the later Bluetooth 4.1 + BLE SKU row', {skip:!fs.existsSync(workbookPath)}, async()=>{
+test('Mobile printers keeps only the later Bluetooth 4.1 + BLE SKU row', async()=>{
   const file=fs.readFileSync(workbookPath);
   const mobile=await parseImportXlsx(file,'Mobile printers',(sheet,rows)=>mapProductWorkbookSheet(sheet,rows,'USD'));
   const parsed=parseImportCsv(mobile.csv,productImportHeaders);
@@ -129,7 +130,7 @@ test('explicit mobile families override every printer worksheet, with bounded mo
   assert.equal(accessories.rows[1][10],'ACCESSORIES');
 });
 
-test('real Label worksheet assigns all 27 mobile variants and retains other worksheet defaults', {skip:!fs.existsSync(workbookPath)},async()=>{
+test('source Label worksheet assigns all 27 mobile variants and retains other worksheet defaults',async()=>{
   const result=await parseImportXlsx(fs.readFileSync(workbookPath),'Label printers',(sheet,rows)=>mapProductWorkbookSheet(sheet,rows,'USD'));
   assert.equal(result.error,undefined);
   const plan=await planProductImport(emptyDb,result.csv);

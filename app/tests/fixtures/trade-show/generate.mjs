@@ -11,7 +11,7 @@ export const fixtureDefinitions = {
     sheet: 'ExportExtensionsFlatFile1',
     rows: [
       ['Captured Date', 'FirstName', 'LastName', 'Company', 'Email', 'Phone', 'Address', 'Address2', 'City', 'StateCode', 'ZipCode', 'CountryCode', 'Title', 'Company Website', 'Notes', 'Badge Id', 'Lead Origin', 'Primary job function', 'Survey: Purchase timing'],
-      ['5/19/26 9:15 AM', 'Alice', 'Example', 'Example Retail', 'ALICE@example.test', 4045550100, '1 Trade Way', 'Suite 2', 'Atlanta', 'GA', 1234, 'US', 'Buyer', 'www.example.test', 'Asked for follow-up', 'NRA-001', 'Booth scan', 'Purchasing', '0-3 months'],
+      ['5/19/26 9:15 AM', 'Alice', 'Example', 'Example Retail', 'ALICE@example.test', 4045550100, '1 Trade Way', 'Suite 2', 'Atlanta', 'GA', '01234', 'US', 'Buyer', 'www.example.test', 'Asked for follow-up', 'NRA-001', 'Booth scan', 'Purchasing', '0-3 months'],
       ['5/19/26 10:45 AM', 'Alex', 'Sample', 'Example Retail', 'alice@example.test', '(not provided)', '2 Market St', '', 'Boston', 'MA', '02110', 'US', '(not provided)', 'https://example.test', 'Second scan with shared email', 'NRA-002', 'Mobile scan', 'Operations', '3-6 months'],
     ],
     numericFormats: { F2: '0000000000', K2: '00000' },

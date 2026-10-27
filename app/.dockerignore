@@ -12,3 +12,6 @@ npm-debug.log
 
 # Local release/validation evidence is never part of an application image.
 /reports
+
+# Test-only synthetic source documents never enter the production image.
+/tests/fixtures/ci-source

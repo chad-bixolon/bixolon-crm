@@ -55,7 +55,7 @@ export function parseUnitCounts(output) {
 }
 
 export function migrationChanged(paths) {
-  return paths.some(path => path === 'app/prisma/schema.prisma' || path === 'app/prisma.config.ts' || path.startsWith('app/prisma/migrations/'));
+  return paths.some(path => path === 'app/prisma/schema.prisma' || path === 'app/prisma.config.ts' || path.startsWith('app/prisma/migrations/') || path.startsWith('app/prisma/tests/') || ['app/scripts/test-migrations.py', 'app/scripts/prisma-generate.mjs', 'app/Dockerfile', 'app/.dockerignore', 'app/package.json', 'app/package-lock.json', '.github/workflows/ci.yml'].includes(path));
 }
 
 function safeEnvironment(temp) {
@@ -201,9 +201,8 @@ export async function runReleaseCheck(options, dependencies = {}) {
     });
     await stage('Migrations', async () => {
       if (!migrationChanged(evidence.repository.changedPaths)) return { status: 'SKIP', detail: 'Migration validation not required for this candidate' };
-      // Existing runner mounts current schema/migrations; image carries current client and preservation fixtures.
-      await checked('Migration image', 'docker', ['build', '--target', 'development', '-t', 'bixolon-crm-foundation-test:local', '.']);
-      await checked('Migrations', 'python3', ['scripts/test-migrations.py']);
+      // Share the image build and existing migration harness with hosted CI.
+      await checked('Migrations', npm, ['run', 'test:migrations']);
       return { detail: 'Existing replay, populated preservation, integrity, rollback and schema-parity suite passed' };
     });
     await stage('Focused tests', async () => {
@@ -212,14 +211,14 @@ export async function runReleaseCheck(options, dependencies = {}) {
       await checked('Focused browser', npm, ['run', 'test:e2e', '--', ...files, '--project=desktop-chromium', '--workers=1', '--retries=0', '--reporter=list', `--output=${resolve(directory, 'focused-browser')}`], { E2E_DATABASE_NAME: 'saleshub_e2e_release' });
     });
     await stage('Browser smoke', async () => {
-      const output = await checked('Browser smoke', npm, ['run', 'test:e2e', '--', 'release-smoke.spec.ts', '--project=desktop-chromium', '--workers=1', '--retries=0', '--reporter=list', '--trace=retain-on-failure', `--output=${resolve(directory, 'browser')}`], { E2E_DATABASE_NAME: 'saleshub_e2e_release' });
+      const output = await checked('Browser smoke', npm, ['run', 'test:e2e:release-smoke', '--', `--output=${resolve(directory, 'browser')}`], { E2E_DATABASE_NAME: 'saleshub_e2e_release' });
       const passed = Number(/(\d+) passed/.exec(output)?.[1] ?? 0);
       if (!passed || /\d+ (?:failed|skipped)/.test(output)) throw new Error('Browser smoke did not complete all checks; see browser-smoke.log.');
       return { counts: { passed }, detail: `${passed} passed; isolated local E2E database, one worker` };
     });
     await stage('Production build', async () => {
       snapshot = new Map(generated.map(name => [name, existsSync(resolve(app, name)) ? readFileSync(resolve(app, name)) : null]));
-      await checked('Production build', npm, ['run', 'build', '--', '--webpack']);
+      await checked('Production build', npm, ['run', 'build:release']);
       return { detail: 'Webpack (avoids host Turbopack worker-port restrictions)' };
     });
   } catch { /* A failing stage already contains the safe error and log path. */ }

@@ -6,6 +6,7 @@ import path from 'node:path';
 import ts from 'typescript';
 import {fileURLToPath} from 'node:url';
 import {zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
+import {referenceFixturePath} from './reference-fixtures.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 Module._extensions['.ts']=(mod,filename)=>mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,filename);
 const require=Module.createRequire(fileURLToPath(import.meta.url));
@@ -13,7 +14,7 @@ const {Prisma}=require('@prisma/client');
 const {parseProductWorkbookXlsx,routeProductWorkbookSheet,odmHeaderIndex,mapOdmProductWorkbookSheet}=require(path.join(root,'lib/odm-product-workbook.ts'));
 const {planProductImport,applyProductImport,createProductImportAccounts,createProductImportCatalog,productImportHeaders,odmSourceHeaders}=require(path.join(root,'lib/product-import.ts'));
 const {parseImportCsv}=require(path.join(root,'lib/import-csv.ts'));
-const realPath=path.resolve(root,'../reference-data/ODM customer pricing_Sep 2026.xlsx');
+const realPath=referenceFixturePath('ODM customer pricing_Sep 2026.xlsx');
 const real=fs.readFileSync(realPath);
 const headers=[...productImportHeaders,...odmSourceHeaders];
 const parsed=async buffer=>{const result=await parseProductWorkbookXlsx(buffer,undefined,'USD');return {result,rows:result.csv?parseImportCsv(result.csv,headers).rows:[]};};
@@ -107,7 +108,7 @@ test('multi-sheet upload selects one ODM sheet and reports unrelated sheets',asy
   assert.equal(duplicate.csv,undefined);
 });
 test('standard price-list routing and worksheet validation remain intact',async()=>{
-  const file=fs.readFileSync(path.resolve(root,'../reference-data/BIXOLON_Price_List.xlsx'));
+  const file=fs.readFileSync(referenceFixturePath('BIXOLON_Price_List.xlsx'));
   const pos=await parseProductWorkbookXlsx(file,'POS printers','USD');
   assert.equal(pos.error,undefined);
   const rows=parseImportCsv(pos.csv,productImportHeaders).rows;

@@ -26,7 +26,7 @@ npm run test:e2e
 
 The Playwright config adds that cache to Chromium's library path when present. On other Linux distributions, prefer `npx playwright install-deps chromium` or an official Playwright CI image. Browser downloads, local libraries, screenshots, traces, HTML reports, and `.next-e2e` are ignored by Git.
 
-Run a single workflow with `npm run test:e2e -- e2e/support.spec.ts`. Run a visible browser with `npm run test:e2e:headed`; run the Playwright UI with `npm run test:e2e:ui`. The E2E runner restores Next.js generated config changes after Playwright exits. Use `npx playwright show-report` after a run to inspect the HTML report. Locally there are no retries and one worker. CI gets one retry, a trace on that retry, and a screenshot on failure.
+Run a single workflow with `npm run test:e2e -- e2e/support.spec.ts`. Run a visible browser with `npm run test:e2e:headed`; run the Playwright UI with `npm run test:e2e:ui`. The E2E runner restores Next.js generated config changes after Playwright exits. Use `npx playwright show-report` after a run to inspect the HTML report. Locally there are no retries and one worker. The generic Playwright config allows one retry in CI, but the hosted release smoke explicitly uses zero retries, one worker, a retained trace on failure and a screenshot on failure.
 
 ## Data and authentication
 
@@ -57,4 +57,4 @@ Codex and developers should run the relevant focused Playwright spec for any mea
 - If port 3100 or 55432 is occupied, stop the conflicting local process; the E2E runner intentionally refuses to attach to an arbitrary existing app.
 - If Chromium reports a missing `.so` library, use `npx playwright install-deps chromium` or the restricted Debian cache instructions above. Check `ldd .playwright-browsers/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell` for remaining missing libraries.
 - If the database is unreachable, ensure Docker is available and run `npm run test:e2e:prepare`. Database setup fails closed if it cannot use the dedicated URL.
-- CI needs the Node 22 version in `app/.nvmrc`, Docker with Compose, Chromium plus Linux libraries (or the Playwright image), and permission to start the dedicated E2E Postgres service. No CI pipeline was added here.
+- Hosted CI uses the same guarded localhost E2E URL with a PostgreSQL 17 GitHub service on port 55432. `SALESHUB_E2E_EXTERNAL_POSTGRES=true` is CI-only and skips local Compose startup; `e2e/prepare.mjs` still verifies the service, migrates the isolated test database and seeds the same fixtures. See [Hosted CI v1](hosted-ci.md). Local runs continue to use Compose.
