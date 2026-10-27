@@ -34,8 +34,10 @@ export default async function ForecastPage({ searchParams }: { searchParams: Pro
   const currencyCode = currencies.some(c => c.code === f.currencyCode) ? f.currencyCode! : currencyConfig.defaultCurrency;
   const userId = actor.role === 'SALES' ? actor.id : f.userId==='team'||!f.userId ? null : users.some(user => user.id === Number(f.userId)) ? Number(f.userId) : null;
   const rep = users.find(user => user.id === userId);
-  const metrics = userId ? await forecastForRep(prisma, actor, { userId, year, quarter, currencyCode }) : actor.role!=='SALES' ? await forecastForTeam(prisma,actor,{users,year,quarter,currencyCode}) : null;
-  const settings=await getSettings(prisma);
+  const [metrics, settings] = await Promise.all([
+    userId ? forecastForRep(prisma, actor, { userId, year, quarter, currencyCode }) : actor.role!=='SALES' ? forecastForTeam(prisma,actor,{users,year,quarter,currencyCode}) : null,
+    getSettings(prisma),
+  ]);
   const issue=attentionIssues.includes(f.issue as AttentionIssue)?f.issue as AttentionIssue:undefined;
   const allAttention=f.attention==='1'&&!f.year&&!f.quarter;
   const attention=await getForecastAttention(prisma,actor,{days:settings.COMMIT_FOLLOW_UP_DAYS,filters:{currencyCode,...(allAttention?{}:{year,quarter}),ownerId:userId??undefined,issue,page:Number(f.attentionPage)||1},mode:'DETAIL'});

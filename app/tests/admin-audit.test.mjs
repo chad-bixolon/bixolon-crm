@@ -10,7 +10,7 @@ Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(f
 const require = Module.createRequire(import.meta.url);
 const { adminAudit, auditDate, auditValue, auditConditions, normalizeAuditFilters } = require(path.join(root, 'lib/admin-audit.ts'));
 const { resolveModules } = require(path.join(root, 'lib/module-policy.ts'));
-const { ownershipWhere, ownershipCounts, ownershipRows } = require(path.join(root, 'lib/admin-ownership.ts'));
+const { ownershipWhere, ownershipCounts, ownershipRows, ownershipTypes } = require(path.join(root, 'lib/admin-ownership.ts'));
 const { calendarConnectionHealth, databaseHealth } = require(path.join(root, 'lib/system-health.ts'));
 const { recordMaintenance } = require(path.join(root, 'lib/admin-maintenance.ts'));
 const admin = { id: 1, role: 'ADMIN', active: true };
@@ -73,6 +73,20 @@ test('Ownership counts and direct rows retain disabled optional records for Admi
   const counts = await ownershipCounts(db, admin, undefined, availability);
   assert.deepEqual([counts.Account, counts.Contact, counts.Task, counts.Opportunity, counts.Project, counts['Support Case']], [1, 2, 3, 4, 5, 6]);
   assert.deepEqual(await ownershipRows(db, admin, 'Opportunity', undefined, 1, availability), []);
+});
+test('every Ownership count uses the same scoped predicate as its paginated rows', async () => {
+  const models = ['account','contact','opportunity','project','task','supportCase','tradeShowLead','tradeShow','demoRequest','priceException','marketingAudience','reportDefinition'];
+  const requests = new Map();
+  const db = Object.fromEntries(models.map(model => [model, {
+    count: async ({ where }) => { requests.set(`${model}:count`, where); return 0; },
+    findMany: async ({ where, take, skip }) => { requests.set(`${model}:rows`, where); assert.equal(take, 25); assert.equal(skip, 25); return []; },
+  }]));
+  const now = new Date('2026-10-26T16:00:00Z');
+  const counts = await ownershipCounts(db, admin, 42, undefined, now);
+  for (const type of ownershipTypes) await ownershipRows(db, admin, type, 42, 2, undefined, now);
+  assert.equal(requests.size, 24);
+  assert.equal(Object.values(counts).length, 12);
+  for (const model of models) assert.deepEqual(requests.get(`${model}:count`), requests.get(`${model}:rows`), model);
 });
 test('health statuses never return provider secrets or exceptions', async () => {
   const now = new Date(), base = { connectionStatus: 'CONNECTED', lastSuccessfulSyncAt: now, lastSyncStartedAt: now, lastSyncCompletedAt: now, lastError: null };

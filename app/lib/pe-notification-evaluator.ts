@@ -57,9 +57,14 @@ export async function evaluatePeNotifications(db: PrismaClient, now = new Date()
       const entries = rows.map(row => { const recipient = peNotificationRecipient(row, users); return { entityId: row.id, userId: recipient, candidates: recipient ? peNotificationCandidates(row, recipient, today) : [] }; });
       const result = await reconcileNotificationBatch(db, 'PRICE_EXCEPTION', ['PE_EXPIRING_60', 'PE_EXPIRING_30', 'PE_EXPIRED', 'PE_FOLLOW_UP_OVERDUE'], entries, now);
       created += result.created; resolved += result.resolved; evaluated += rows.length;
-      // The expired text changes when follow-up begins, even when its source key is unchanged.
-      for (const entry of entries) for (const candidate of entry.candidates) if (candidate.type === 'PE_EXPIRED' && result.allowedSourceKeys.has(candidate.sourceKey))
-        await db.notification.updateMany({ where: { sourceKey: candidate.sourceKey, resolvedAt: null }, data: { message: candidate.message } });
+      // Each message is record-specific. Update the active notices in one parameterized
+      // statement per page while retaining each notice's stable source key.
+      const expired = entries.flatMap(entry => entry.candidates.filter(candidate => candidate.type === 'PE_EXPIRED' && result.allowedSourceKeys.has(candidate.sourceKey)));
+      if (expired.length) await db.$executeRaw(Prisma.sql`
+        UPDATE "Notification" AS notice SET "message" = text.message
+        FROM (VALUES ${Prisma.join(expired.map(candidate => Prisma.sql`(${candidate.sourceKey}, ${candidate.message})`))}) AS text("sourceKey", message)
+        WHERE notice."sourceKey" = text."sourceKey" AND notice."resolvedAt" IS NULL
+      `);
     } else {
       // Lightweight legacy test doubles provide only the single-record preference API.
       for (const row of rows) { const result = await evaluateOne(db, row, users, today); evaluated++; created += result.created; resolved += result.resolved; }

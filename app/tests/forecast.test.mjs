@@ -10,7 +10,7 @@ Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(f
 const require = Module.createRequire(fileURLToPath(import.meta.url));
 const { Prisma, ForecastCategory: C } = require('@prisma/client');
 const { categoryForStage } = require(path.join(root, 'lib/opportunities.ts'));
-const { quarterBounds, forecastForRep, coverage } = require(path.join(root, 'lib/forecast.ts'));
+const { quarterBounds, forecastForRep, forecastForTeam, coverage } = require(path.join(root, 'lib/forecast.ts'));
 const { parseSalesTarget, saveSalesTarget, archiveSalesTarget } = require(path.join(root, 'lib/sales-targets.ts'));
 const actor = (role, id = 7) => ({ id, role, active: true, archivedAt: null });
 const form = fields => { const value = new FormData(); for (const [key, item] of Object.entries(fields)) value.set(key, String(item)); return value; };
@@ -49,6 +49,32 @@ test('forecast totals use explicit categories, active products, override and sta
   await assert.rejects(forecastForRep(client, actor('MARKETING_MANAGER'), { userId: 7, year: 2026, quarter: 'Q4', currencyCode: 'USD' }), /Access denied/);
   await forecastForRep(client, actor('SALES_MANAGER'), { userId: 7, year: 2026, quarter: 'Q4', currencyCode: 'USD' });
   await forecastForRep(client, actor('ADMIN'), { userId: 7, year: 2026, quarter: 'Q4', currencyCode: 'USD' });
+});
+
+test('team forecast starts quarter target and scoped 1,000-Opportunity reads together', async () => {
+  const users = Array.from({ length: 100 }, (_, i) => ({ id: i + 1, role: 'SALES', active: true, archivedAt: null }));
+  const started = [], releases = {};
+  const waitFor = name => new Promise(resolve => { started.push(name); releases[name] = resolve; });
+  const db = {
+    salesTarget: { findMany: async ({ where }) => { assert.equal(where.currencyCode, 'USD'); assert.equal(where.userId.in.length, 100); return waitFor('targets'); } },
+    opportunity: { findMany: async ({ where }) => { assert.equal(where.AND[2].ownerId.in.length, 100); assert.equal(where.AND[2].currencyCode, 'USD'); return waitFor('opportunities'); } },
+  };
+  const pending = forecastForTeam(db, actor('SALES_MANAGER'), { users, year: 2026, quarter: 'Q4', currencyCode: 'USD' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(started, ['targets', 'opportunities']);
+  releases.targets([]);
+  releases.opportunities(Array.from({ length: 1000 }, (_, i) => ({ ownerId: i % 100 + 1, forecastCategory: C.COMMIT, probability: 100, stage: { probability: 50 }, products: [{ quantity: 1, estimatedUnitPrice: new Prisma.Decimal('10') }] })));
+  const result = await pending;
+  assert.equal(result.pipeline, '10000.00');
+  assert.equal(result.commit, '10000.00');
+  assert.equal(result.reps.length, 100);
+});
+
+test('team forecast rejects invalid currency before starting either concurrent read', async () => {
+  let reads = 0;
+  const db = { salesTarget: { findMany: async () => { reads++; return []; } }, opportunity: { findMany: async () => { reads++; return []; } } };
+  await assert.rejects(forecastForTeam(db, actor('SALES_MANAGER'), { users: [{ id: 7, role: 'SALES', active: true }], year: 2026, quarter: 'Q4', currencyCode: 'usd' }), /Choose a currency/);
+  assert.equal(reads, 0);
 });
 
 test('missing and zero targets leave coverage unavailable; precision stays decimal', () => {

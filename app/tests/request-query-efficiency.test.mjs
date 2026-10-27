@@ -79,3 +79,23 @@ test('scheduled Task, Support and PE evaluation reads 200 records in bounded bat
   assert.equal(counts.preferences, 3);
   assert.equal(counts.creates, 3);
 });
+
+test('200 expired Price Exceptions synchronize distinct active messages in one statement', async () => {
+  const now = new Date('2026-10-26T16:00:00Z');
+  const pes = Array.from({ length: 200 }, (_, i) => ({ id: i + 1, peCode: `PE-${i + 1}`, status: 'ACTIVE', archivedAt: null, expirationDate: new Date('2026-10-01T00:00:00Z'), assignedSalesRepUserId: 7, followUp: { ownerId: 7, status: i % 2 ? 'IN_PROGRESS' : 'NOT_STARTED', nextFollowUpAt: null } }));
+  let writes = 0, raw;
+  const db = {
+    user: { findMany: async () => [{ id: 7, role: 'SALES' }] },
+    priceException: { findMany: async ({ where }) => where.id.gt === 0 ? pes : [] },
+    notification: { findMany: async () => [], createMany: async ({ data }) => ({ count: data.length }), updateMany: async () => { throw Error('Unexpected per-notice update'); } },
+    notificationPreference: { findMany: async () => [] },
+    $executeRaw: async query => { writes++; raw = query; return 200; },
+  };
+  const result = await evaluatePeNotifications(db, now);
+  assert.equal(result.evaluated, 200);
+  assert.equal(writes, 1);
+  assert.match(raw.strings.join(' '), /UPDATE "Notification".*"resolvedAt" IS NULL/s);
+  assert.ok(raw.values.includes('PE:1:7:EXPIRED'));
+  assert.ok(raw.values.includes('PE-1 has expired and follow-up has not started.'));
+  assert.ok(raw.values.includes('PE-2 has expired.'));
+});

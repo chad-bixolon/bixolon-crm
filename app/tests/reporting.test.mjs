@@ -81,6 +81,19 @@ test('Product Category grouping repeats membership but never multiplies Opportun
  assert.equal(result.summary[0].pipeline,'120.00');assert.equal(result.summary[0].opportunityCount,1);assert.equal(result.groups.length,2);
 });
 
+test('Dashboard Pipeline groupings share one scoped 1,000-Opportunity read and retain distinct metrics',async()=>{
+ const deals=Array.from({length:1000},(_,i)=>row(i+1,i%2?'USD':'EUR'));
+ let reads=0,where;
+ const db={opportunity:{findMany:async args=>{reads++;where=args.where;return deals;}}};
+ const [stages,categories]=await reporting.executePipelineReportGroups(db,actor('SALES',7),base(),['stage','productCategory']);
+ assert.equal(reads,1);
+ assert.ok(where.AND.some(clause=>clause.ownerId===7));
+ assert.deepEqual(stages.summary,categories.summary);
+ assert.deepEqual(stages.summary.map(item=>[item.currency,item.opportunityCount]),[['EUR',500],['USD',500]]);
+ assert.equal(stages.groups[0].label,'Qualified');
+ assert.equal(categories.groups[0].label,'POS');
+});
+
 test('Sales scope is always applied even when a shared report requests another owner',async()=>{
  assert.equal(reporting.canViewReportDefinition(actor('SALES',7),{ownerId:99,visibility:'SHARED',reportType:'PIPELINE',archivedAt:null}),true);
  let where;const config={...base(),filters:[...base().filters,{field:'ownerId',operator:'eq',value:99}]};await reporting.executePipelineReport({opportunity:{findMany:async args=>{where=args.where;return[];}}},actor('SALES',7),config);
