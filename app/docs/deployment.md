@@ -2,6 +2,11 @@
 
 Start each candidate review with the [maintainer release checklist](release-checklist.md) and `npm run release:check` from `app/`.
 
+See [Backup / restore / rollback readiness v1](backup-restore-rollback-v1.md) for
+managed-production backups, isolated restore drills, Git-based deployment rollback,
+and forward-only migration recovery. Its dedicated operations image/job is separate
+from the web image; cloud setup remains an explicit operator task.
+
 GitHub-hosted [CI validation](hosted-ci.md) runs on PRs targeting `main` and on main pushes. Require its **Standard CI** and **Migration validation** status checks before merge where branch protection is available. DigitalOcean continues to auto-deploy main independently; GitHub Actions neither deploys nor changes production database or hosting settings. After deployment, an Admin verifies **Administration → System Health → Deployment Status**. Thus the three layers are local `release:check`, clean-environment GitHub CI, and production System Health verification.
 
 ## Local development

@@ -4,6 +4,11 @@ Run these commands from the repository root (`/opt/bixolon-crm`).
 
 ## Database backup
 
+For managed SalesHub production, use the separate job and recovery procedures in
+[Backup / restore / rollback readiness v1](backup-restore-rollback-v1.md). The legacy
+Compose helper below is local pre-migration tooling; it does not establish managed
+production backup coverage or upload to Spaces.
+
 Create and validate a protected PostgreSQL custom-format backup before a migration:
 
 ```sh
