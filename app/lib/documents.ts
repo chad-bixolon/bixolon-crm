@@ -5,6 +5,7 @@ import type { DocumentStorage } from './document-storage';
 import type { ValidatedDocumentFile } from './document-validation';
 import { getModuleAvailability, readModules } from './module-availability';
 import { prisma } from './prisma';
+import { logUnexpectedOnce } from './observability';
 
 export type DocumentParentType = 'account' | 'project' | 'opportunity';
 export const documentTypeLabels: Record<DocumentType, string> = {
@@ -73,7 +74,7 @@ export async function uploadDocument(
     } });
   } catch (error) {
     try { await storage.deleteDocumentObject(storageKey); } catch (cleanupError) {
-      console.error('Document storage compensation failed.', { operation: 'upload-compensation', parentType: parent.type, parentId: parent.id, errorClass: cleanupError instanceof Error ? cleanupError.name : 'UnknownError' });
+      logUnexpectedOnce('integration.failed', cleanupError, { integration: 'document-storage', operation: 'upload-compensation', entityType: parent.type, entityId: parent.id });
     }
     throw error;
   }

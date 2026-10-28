@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { documentStorage } from '@/lib/document-storage';
 import { assertDocumentParentAccess, parseDocumentMetadata, parseDocumentParent, uploadDocument } from '@/lib/documents';
 import { MAX_DOCUMENT_BYTES, validateDocumentFile } from '@/lib/document-validation';
+import { captureRouteError } from '../../../lib/request-observability';
 
 export const runtime = 'nodejs';
 
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     actor = await currentUser();
     // Parent and write authorization are checked before parsing the multipart body.
     await assertDocumentParentAccess(prisma, actor, parent, 'write');
-  } catch (error) { return responseError(error); }
+  } catch (error) { const incident = captureRouteError(request, error, 'document.authorize'); return incident ? NextResponse.json({ error: incident }, { status: 500 }) : responseError(error); }
   const contentLength = Number(request.headers.get('content-length') ?? '0');
   if (Number.isFinite(contentLength) && contentLength > MAX_DOCUMENT_BYTES + 1024 * 1024) return responseError(new Error('Documents must be 25 MB or smaller.'), 413);
   try {
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
     const document = await uploadDocument(prisma, documentStorage, actor, parent, file, metadata);
     return NextResponse.json({ id: document.id }, { status: 201 });
   } catch (error) {
-    console.error('Document upload failed.', { operation: 'upload', parentType: parent.type, parentId: parent.id, errorClass: error instanceof Error ? error.name : 'UnknownError' });
-    return responseError(error, error instanceof Error && error.message.includes('25 MB') ? 413 : 400);
+    const incident = captureRouteError(request, error, 'document.upload', { entityType: parent.type, entityId: parent.id, userId: actor.id });
+    return incident ? NextResponse.json({ error: incident }, { status: 500 }) : responseError(error, error instanceof Error && error.message.includes('25 MB') ? 413 : 400);
   }
 }

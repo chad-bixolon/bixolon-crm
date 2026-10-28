@@ -19,7 +19,7 @@ Module._load = function(request, parent, isMain) {
   if (request === 'next/navigation') return { redirect: () => { throw new Error('Unexpected redirect'); } };
   if (request === '@/lib/current-user') return { requireMutation: async () => ({ id: 2, role: 'SUPPORT' }) };
   if (request === '@/lib/prisma') return { prisma };
-  if (request === '@/lib/support-cases') return { createSupportCase: async (_db, _actor, input) => { calls.push({ mode: 'create', input }); throw new Error(input.status === 'RESOLVED' && !input.resolutionSummary ? 'Resolution Summary is required when resolving or closing a Support Case.' : 'Unrelated validation error.'); }, updateSupportCase: async (_db, _actor, id, patch) => { calls.push({ mode: 'edit', id, input: patch }); throw new Error('Unrelated validation error.'); } };
+  if (request === '@/lib/support-cases') return { createSupportCase: async (_db, _actor, input) => { calls.push({ mode: 'create', input }); throw new Error(input.status === 'RESOLVED' && !input.resolutionSummary ? 'Resolution Summary is required when resolving or closing a Support Case.' : 'Choose an active category.'); }, updateSupportCase: async (_db, _actor, id, patch) => { calls.push({ mode: 'edit', id, input: patch }); throw new Error('Choose an active category.'); } };
   if (request === '@/lib/support-email') return { createCaseFromSupportEmail: async () => { throw new Error('Unexpected email intake'); } };
   if (request === '@/lib/support-email-source') return { validateEmailSource: () => { throw new Error('Invalid or expired Support email source.'); }, resolveEmailSource: async () => { throw new Error('Invalid or expired Support email source.'); } };
   if (request === '@/lib/document-storage') return { documentStorage: {} };
@@ -36,7 +36,7 @@ test('unrelated save error retains selected Support case values for create and e
   for (const id of [null, 9]) {
     const data = form(id ? { productSkuId: '15', productSkuIdLabel: 'SKU-15', contactId: '18', assignedToId: '3', purchasedFromAccountId: '22' } : {});
     const result = await saveSupportCase(id, {}, data);
-    assert.equal(result.message, 'Unrelated validation error.');
+    assert.equal(result.message, 'Choose an active category.');
     const submitted = calls.at(-1);
     assert.equal(submitted.mode, id ? 'edit' : 'create');
     assert.equal(submitted.input.productSkuId, id ? 15 : 14);

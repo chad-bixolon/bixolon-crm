@@ -7,6 +7,7 @@ import { parseTradeShow, saveTradeShow, setTradeShowArchived, tradeShowFailureSt
 import { friendlyError } from '@/lib/crm-validation';
 import { saveFeedbackPath } from '@/lib/save-feedback';
 import { requireEditToken, isRecordChanged, recordChangedMessage } from '@/lib/stale-edit';
+import { captureActionError } from '../../lib/request-observability';
 
 export type TradeShowFormState = { errors: Record<string, string>; message?: string; redirectTo?: string; values?: Record<string, string>; recordChanged?: boolean };
 
@@ -21,7 +22,10 @@ export async function submitTradeShow(id: number | null, _old: TradeShowFormStat
     return { errors: {}, redirectTo: saveFeedbackPath(`/trade-shows/${showId}`, id ? 'updated' : 'created') };
   } catch (error) {
     if (isRecordChanged(error)) return { ...tradeShowFailureState(form, {}, recordChangedMessage), recordChanged: true };
-    return tradeShowFailureState(form, {}, friendlyError(error, 'Trade Show could not be saved.'));
+    const fallback = 'Trade Show could not be saved.';
+    const business = friendlyError(error, fallback);
+    const incident = business === fallback ? await captureActionError(error, 'trade-show.save', { userId: actor.id, entityType: 'TradeShow', entityId: id }) : undefined;
+    return tradeShowFailureState(form, {}, incident ?? business);
   }
 }
 
@@ -30,7 +34,7 @@ export async function changeTradeShowArchive(id: number, archive: boolean, _old:
   void _old;
   const actor = await requireMutation('trade-shows.manage');
   try { await setTradeShowArchived(prisma, id, archive, actor); }
-  catch (error) { return { errors: {}, message: friendlyError(error, 'Trade Show status could not be changed.') }; }
+  catch (error) { const fallback = 'Trade Show status could not be changed.'; const business = friendlyError(error, fallback); const incident = business === fallback ? await captureActionError(error, 'trade-show.archive', { userId: actor.id, entityType: 'TradeShow', entityId: id }) : undefined; return { errors: {}, message: incident ?? business }; }
   revalidatePath('/trade-shows'); revalidatePath(`/trade-shows/${id}`);
   return { errors: {}, message: archive ? 'Trade Show archived.' : 'Trade Show reactivated.' };
 }

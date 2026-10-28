@@ -11,6 +11,7 @@ import { eligibleUserWhere } from '@/lib/assignment-eligibility';
 import { activeDemoWhere } from '@/lib/unavailable-work';
 import { assertEditToken, nextUpdatedAt, requireEditToken, isRecordChanged, recordChangedMessage } from '@/lib/stale-edit';
 import { Prisma } from '@prisma/client';
+import { captureActionError } from '../../lib/request-observability';
 
 export async function assignDemoOperationalOwner(id: number, form: FormData) {
   await assertModuleEnabled('DEMOS');
@@ -33,7 +34,7 @@ export async function assignDemoOperationalOwner(id: number, form: FormData) {
     if (row.operationalOwnerId === ownerId) return;
     await tx.demoRequest.update({ where: { id, updatedAt: row.updatedAt }, data: { operationalOwnerId: ownerId, updatedAt: nextUpdatedAt(row.updatedAt) } });
     await tx.adminMaintenanceEvent.create({ data: { actorId: actor.id, entityType: 'Demo', action: 'Reassign', recordIds: [id], recordCount: 1, oldValue: row.operationalOwnerId ? `User #${row.operationalOwnerId}` : 'Unassigned', newOwnerId: ownerId, newOwnerName: `${owner.firstName} ${owner.lastName}` } });
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; throw error; }
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; await captureActionError(error, 'demo.assign-owner', { userId: actor.id, entityType: 'DemoRequest', entityId: id }); throw error; }
   revalidatePath(`/demos/${id}`);
   revalidatePath('/administration/ownership');
   return { success: 'Demo follow-up owner saved.' };
@@ -61,7 +62,7 @@ export async function updateDemoContext(id: number, form: FormData) {
     await assertDemoContext(tx, actor, request.accountId, projectId === request.projectId ? null : projectId, opportunityId === request.opportunityId ? null : opportunityId);
     const token = requireEditToken(form);
     await tx.demoRequest.update({ where: { id, updatedAt: new Date(token) }, data: { projectId, opportunityId, updatedAt: nextUpdatedAt(new Date(token)) } });
-  }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; throw error; }
+  }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; await captureActionError(error, 'demo.update-context', { userId: actor.id, entityType: 'DemoRequest', entityId: id }); throw error; }
   revalidatePath(`/demos/${id}`);
   revalidatePath(`/accounts/${request.accountId}`);
   for (const project of [request.projectId, projectId]) if (project) revalidatePath(`/projects/${project}`);
@@ -111,7 +112,7 @@ export async function updateDemoNotes(id: number, form: FormData) {
   if (!canEditDemo(actor, request)) throw new Error('You can only edit your own Demo Requests.');
   const notes = String(form.get('notes') ?? '').trim();
   if (notes.length > 10000) throw new Error('Notes are too long.');
-  try { const token=requireEditToken(form); await prisma.demoRequest.update({ where: { id, updatedAt: new Date(token) }, data: { notes: notes || null, updatedAt: nextUpdatedAt(new Date(token)) } }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; throw error; }
+  try { const token=requireEditToken(form); await prisma.demoRequest.update({ where: { id, updatedAt: new Date(token) }, data: { notes: notes || null, updatedAt: nextUpdatedAt(new Date(token)) } }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; await captureActionError(error, 'demo.update-notes', { userId: actor.id, entityType: 'DemoRequest', entityId: id }); throw error; }
   revalidatePath(`/demos/${id}`);
 }
 
@@ -134,7 +135,7 @@ export async function recordDemoReturn(id: number, form: FormData) {
       await tx.demoUnit.update({ where: { id: unit.id }, data: { status: 'RETURNED', returnedAt } });
       await tx.demoReturnEvent.create({ data: { demoUnitId: unit.id, returnedAt, trackingNumber: trackingNumber || null, note: note || null, recordedById: actor.id } });
     }
-  }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; throw error; }
+  }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; await captureActionError(error, 'demo.record-return', { userId: actor.id, entityType: 'DemoRequest', entityId: id }); throw error; }
   revalidatePath(`/demos/${id}`);
   revalidatePath('/reports/demo-inventory');
 }
@@ -148,7 +149,7 @@ export async function updateDemoExpectedReturn(id: number, form: FormData) {
   if (!parsed || Number.isNaN(parsed.valueOf()) || dateOnly(parsed) !== value || reason.length > 2000) throw new Error('Enter a valid expected return date.');
   const request = await prisma.demoRequest.findFirst({ where: { id, AND: [demoReadWhere(actor)] }, select: { requestedById: true, operationalOwnerId: true, updatedAt: true } });
   if (!request || !canEditDemo(actor, request)) throw new Error('Access denied');
-  try { const token=requireEditToken(form); await prisma.demoRequest.update({ where: { id, updatedAt:new Date(token) }, data: { expectedReturnOverrideAt: parsed, expectedReturnOverrideById: actor.id, expectedReturnOverrideRecordedAt: new Date(), expectedReturnOverrideReason: reason || null, updatedAt:nextUpdatedAt(new Date(token)) } }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; throw error; }
+  try { const token=requireEditToken(form); await prisma.demoRequest.update({ where: { id, updatedAt:new Date(token) }, data: { expectedReturnOverrideAt: parsed, expectedReturnOverrideById: actor.id, expectedReturnOverrideRecordedAt: new Date(), expectedReturnOverrideReason: reason || null, updatedAt:nextUpdatedAt(new Date(token)) } }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; await captureActionError(error, 'demo.expected-return', { userId: actor.id, entityType: 'DemoRequest', entityId: id }); throw error; }
   revalidatePath(`/demos/${id}`);
   revalidatePath('/reports/demo-inventory');
 }
@@ -167,7 +168,7 @@ export async function deployDemoUnits(id: number, form: FormData) {
     const token=requireEditToken(form);
     await tx.demoRequest.update({where:{id,updatedAt:new Date(token)},data:{updatedAt:nextUpdatedAt(new Date(token))}});
     for (const unit of units) await tx.demoUnit.update({ where: { id: unit.id }, data: { status: 'DEPLOYED', deployedAt } });
-  }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; throw error; }
+  }); } catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; await captureActionError(error, 'demo.deploy-units', { userId: actor.id, entityType: 'DemoRequest', entityId: id }); throw error; }
   revalidatePath(`/demos/${id}`);
   revalidatePath('/reports/demo-inventory');
 }

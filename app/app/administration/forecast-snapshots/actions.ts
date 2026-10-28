@@ -6,6 +6,7 @@ import { requireMutation } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { captureForecastSnapshot, previewForecastSnapshot, summarizeForecastRows } from '@/lib/forecast-snapshots';
 import { signForecastPreview, verifyForecastPreview } from '@/lib/forecast-snapshot-preview';
+import { captureActionError } from '../../../lib/request-observability';
 function safeMessage(error: unknown) {
   const message = error instanceof Error ? error.message : '';
   return /^(Choose |This Opportunity Snapshot|Source snapshot|Explicit confirmation|Preview expired|Invalid forecast preview)/.test(message)
@@ -23,7 +24,7 @@ export async function previewForecastAction(input: { sourceRunId: number; year: 
       totals: currencies.map(currencyCode => ({ currencyCode, ...Object.fromEntries(Object.entries(summarizeForecastRows(result.rows.filter(row => row.currencyCode === currencyCode))).map(([key, value]) => [key, value.toFixed(2)])) })) as { currencyCode: string; pipeline: string; bestCase: string; commit: string; closedWon: string; opportunityCount: string }[],
       token: signForecastPreview(result.preview, actor.id, process.env.AUTH_SECRET ?? ''),
     } };
-  } catch (error) { return { error: safeMessage(error) }; }
+  } catch (error) { const message = safeMessage(error); const incident = message.startsWith('Could not capture') ? await captureActionError(error, 'forecast-snapshot.preview', { userId: actor.id }) : undefined; return { error: incident ?? message }; }
 }
 export async function confirmForecastAction(token: string, confirmed: boolean) {
   await assertModuleEnabled('FORECASTING');
@@ -32,5 +33,5 @@ export async function confirmForecastAction(token: string, confirmed: boolean) {
     const run = await captureForecastSnapshot(prisma, actor, verifyForecastPreview(token, actor.id, process.env.AUTH_SECRET ?? ''), confirmed);
     revalidatePath('/administration/forecast-snapshots'); revalidatePath('/reports/forecast-snapshots');
     return { success: `Created Forecast Snapshot #${run.id} using Opportunity Snapshot #${run.sourceRunId}: ${run.opportunityCount} Opportunities for ${run.year} ${run.quarter}.`, runId: run.id };
-  } catch (error) { return { error: safeMessage(error) }; }
+  } catch (error) { const message = safeMessage(error); const incident = message.startsWith('Could not capture') ? await captureActionError(error, 'forecast-snapshot.confirm', { userId: actor.id }) : undefined; return { error: incident ?? message }; }
 }

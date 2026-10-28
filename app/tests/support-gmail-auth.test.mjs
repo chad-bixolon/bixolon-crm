@@ -76,7 +76,14 @@ function diagnosticFixture() {
   return {request,token,secrets:[...secrets,url,cookies,'private-diagnostic-provider-response'],error};
 }
 function assertDiagnostic(logs,stage,secrets) {
-  assert.deepEqual(logs,[{method:'error',args:[`[Support Gmail] OAuth callback failed at stage: ${stage}`]}]);
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].method, 'log');
+  const event = JSON.parse(logs[0].args[0]);
+  assert.equal(event.event, 'integration.failed');
+  assert.equal(event.integration, 'support-gmail');
+  assert.equal(event.operation, 'oauth-callback');
+  assert.equal(event.stage, stage);
+  assert.match(event.requestId, /^[0-9a-f-]{36}$/);
   const output=JSON.stringify(logs);
   for(const secret of secrets)assert.equal(output.includes(secret),false);
 }

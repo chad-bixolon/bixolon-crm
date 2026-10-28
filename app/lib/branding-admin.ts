@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { assertPermission, type Actor } from './authorization';
 import { getBranding, parseBrandName } from './deployment-branding';
 import type { DocumentStorage } from './document-storage';
+import { logUnexpectedOnce } from './observability';
 
 export async function saveBrandingNames(client: PrismaClient, actor: Actor, companyRaw: string, productRaw: string) {
   assertPermission(actor, 'deployment.manage');
@@ -38,7 +39,7 @@ export async function setBrandingLogo(client: PrismaClient, storage: DocumentSto
     if (storageKey) await storage.deleteDocumentObject(storageKey).catch(() => {});
     throw error;
   }
-  if (oldKey && oldKey !== storageKey) await storage.deleteDocumentObject(oldKey).catch(error => console.error('Could not retire previous branding logo.', error));
+  if (oldKey && oldKey !== storageKey) await storage.deleteDocumentObject(oldKey).catch(error => logUnexpectedOnce('integration.failed', error, { integration: 'document-storage', operation: 'branding-logo-retire' }));
 }
 
 export function fallbackLogo() { return { src: '/brand/bixolon-logo.png', alt: 'BIXOLON' }; }

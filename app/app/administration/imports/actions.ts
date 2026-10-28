@@ -4,6 +4,7 @@ import { requireMutation } from '@/lib/current-user';
 import { applyImport, planImport } from '@/lib/import-plan';
 import { parseImportXlsx, maxXlsxBytes, type XlsxTransform } from '@/lib/import-xlsx';
 import { revalidatePath } from 'next/cache';
+import { captureActionError } from '../../../lib/request-observability';
 
 export async function readUpload(form: FormData, transform?:XlsxTransform) {
   const upload = form.get('file');
@@ -23,11 +24,11 @@ export async function readUpload(form: FormData, transform?:XlsxTransform) {
 }
 
 export async function previewUpload(form:FormData) {
-  await requireMutation('configuration.manage');
+  const actor = await requireMutation('configuration.manage');
   const upload = await readUpload(form);
   if (!upload.csv) return {error:upload.error ?? 'Upload could not be read.',sheets:'sheets' in upload ? upload.sheets : []};
   try { return {plan:await planImport(prisma,upload.csv),sheets:'sheets' in upload ? upload.sheets : [],selectedSheet:'selectedSheet' in upload ? upload.selectedSheet : undefined}; }
-  catch { return {error:'Could not prepare the import preview. Check the file and try again.',sheets:[]}; }
+  catch (error) { const incident = await captureActionError(error, 'import.preview', { userId: actor.id }); return {error:incident ?? 'Could not prepare the import preview. Check the file and try again.',sheets:[]}; }
 }
 export async function confirmUpload(form:FormData,digest:string) {
   const actor = await requireMutation('configuration.manage');
@@ -38,6 +39,7 @@ export async function confirmUpload(form:FormData,digest:string) {
     revalidatePath('/accounts'); revalidatePath('/contacts');
     return {ok:true as const,counts};
   } catch(error) {
-    return {ok:false as const,message:error instanceof Error && error.message.startsWith('Preview changed') ? error.message : 'Import failed. No rows were applied. Preview again and check for changed records or constraints.'};
+    const incident = await captureActionError(error, 'import.confirm', { userId: actor.id });
+    return {ok:false as const,message:incident ?? (error instanceof Error && error.message.startsWith('Preview changed') ? error.message : 'Import failed. No rows were applied. Preview again and check for changed records or constraints.')};
   }
 }

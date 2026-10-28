@@ -8,6 +8,7 @@ import { UserImpactRequired, recordUserHistory } from "@/lib/user-lifecycle";
 import { assertPermission } from "@/lib/authorization";
 import { assertUserAdministrationTarget } from "@/lib/users";
 import { unlinkGoogleIdentity } from "@/lib/identity";
+import { captureActionError } from '../../../lib/request-observability';
 export type FormState = { errors: Record<string, string>; message?: string; success?: boolean; values?: Record<string, string>; impact?: { area: string; count: number }[]; confirmation?: string };
 const submittedValues = (form: FormData) => Object.fromEntries(["firstName", "lastName", "email", "role", "active", "timeZone", "delegatedUserAdministrationEnabled"].map(key => [key, String(form.get(key) ?? "")]));
 export async function submitUser(id: number | null, _state: FormState, form: FormData): Promise<FormState> {
@@ -16,7 +17,7 @@ export async function submitUser(id: number | null, _state: FormState, form: For
   if (!parsed.value) return { errors: parsed.errors, message: "Please correct the highlighted fields.", values: submittedValues(form) };
   let userId: number;
   try { userId = await saveUser(prisma, actor, parsed.value, id ?? undefined, String(form.get("impactConfirmation") ?? "")); }
-  catch (error) { if (error instanceof UserImpactRequired) return { errors: {}, message: error.message, impact: error.impact, confirmation: error.confirmation, values: submittedValues(form) }; return { errors: {}, message: error instanceof Error && /already in use|not found|Keep at least one active|Only an Administrator|User Administration Access requires/.test(error.message) ? error.message : "User could not be saved.", values: submittedValues(form) }; }
+  catch (error) { if (error instanceof UserImpactRequired) return { errors: {}, message: error.message, impact: error.impact, confirmation: error.confirmation, values: submittedValues(form) }; const incident = await captureActionError(error, 'user.save', { userId: actor.id, entityType: 'User', entityId: id }); return { errors: {}, message: incident ?? (error instanceof Error && /already in use|not found|Keep at least one active|Only an Administrator|User Administration Access requires/.test(error.message) ? error.message : "User could not be saved."), values: submittedValues(form) }; }
   revalidatePath("/administration/users"); revalidatePath("/accounts"); revalidatePath("/opportunities");
   if (id) return { errors: {}, message: "User updated successfully.", success: true, values: submittedValues(form) };
   redirect(`/administration/users/${userId}/edit?saved=created`);
@@ -50,12 +51,13 @@ export async function resetGoogleIdentity(
       await recordUserHistory(tx, actor.id, userId, 'Identity reset');
     });
   } catch (error) {
+    const incident = await captureActionError(error, 'user.google-identity-reset', { userId: actor.id, entityType: 'User', entityId: userId });
     return {
       errors: {},
       message:
-        error instanceof Error
+        incident ?? (error instanceof Error
           ? error.message
-          : "The Google sign-in link could not be reset.",
+          : "The Google sign-in link could not be reset."),
     };
   }
 

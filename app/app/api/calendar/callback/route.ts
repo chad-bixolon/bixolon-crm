@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getRealAuthenticatedUser } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { CALENDAR_STATE_COOKIE, calendarGoogleIdentity, exchangeCalendarCode, storeCalendarConnection, validateCalendarState } from '@/lib/google-calendar-oauth';
+import { captureRouteError } from '../../../../lib/request-observability';
 
 export async function GET(request: NextRequest) {
   const destination = new URL('/my-integrations', process.env.AUTH_URL || request.url);
@@ -21,7 +22,8 @@ export async function GET(request: NextRequest) {
         const token = await exchangeCalendarCode(code);
         const identity = await calendarGoogleIdentity(token.access_token!);
         await storeCalendarConnection(prisma, real.id, identity, token);
-      } catch {
+      } catch (error) {
+        captureRouteError(request, error, 'calendar-oauth.callback', { integration: 'google-calendar', userId: real.id });
         result = 'failed';
       }
     }

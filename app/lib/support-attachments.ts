@@ -3,6 +3,7 @@ import { assertPermission, type Actor } from './authorization';
 import { supportCaseReadWhere } from './support-cases';
 import type { DocumentStorage } from './document-storage';
 import type { ValidatedSupportAttachment } from './support-attachment-validation';
+import { logUnexpectedOnce } from './observability';
 
 export async function assertSupportAttachmentAccess(db: PrismaClient | Prisma.TransactionClient, actor: Actor, caseId: number, write = false) {
   if (write) assertPermission(actor, 'support-cases.write');
@@ -23,7 +24,7 @@ export async function uploadSupportAttachment(db: PrismaClient | Prisma.Transact
     } });
   } catch (error) {
     try { await storage.deleteDocumentObject(storageKey); }
-    catch (cleanupError) { console.error('Support attachment cleanup failed.', { caseId, error: cleanupError }); }
+    catch (cleanupError) { logUnexpectedOnce('integration.failed', cleanupError, { integration: 'document-storage', operation: 'attachment-compensation', entityType: 'SupportCase', entityId: caseId }); }
     throw error;
   }
 }
@@ -39,8 +40,8 @@ export async function removeSupportAttachment(db: PrismaClient | Prisma.Transact
   if (attachment.deletedAt) return;
   try { await storage.deleteDocumentObject(attachment.storageKey); }
   catch (error) {
-    console.error('Support attachment object deletion failed.', { id, caseId: attachment.supportCaseId, storageKey: attachment.storageKey, error });
-    throw new Error('Attachment could not be removed. Please try again.');
+    // The route owns this failure and returns its existing fixed user message.
+    throw new Error('Attachment could not be removed. Please try again.', { cause: error });
   }
   // A single conditional update records actor and time atomically. A retry can reconcile
   // an object deleted by a prior request whose database update failed.
@@ -51,7 +52,7 @@ export async function removeSupportAttachment(db: PrismaClient | Prisma.Transact
       if (!current?.deletedAt) throw new Error('Attachment metadata disappeared after object deletion.');
     }
   } catch (error) {
-    console.error('Support attachment object deleted but metadata update failed; retry removal to reconcile.', { id, caseId: attachment.supportCaseId, storageKey: attachment.storageKey, actorId: actor.id, error });
+    logUnexpectedOnce('request.failed', error, { operation: 'attachment-metadata-delete', entityType: 'SupportCase', entityId: attachment.supportCaseId, userId: actor.id });
     throw new SupportAttachmentMetadataError();
   }
 }
