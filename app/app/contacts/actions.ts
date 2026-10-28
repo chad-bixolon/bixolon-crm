@@ -8,6 +8,7 @@ import { requireMutation } from "@/lib/current-user";
 import { saveFeedbackPath } from "@/lib/save-feedback";
 import { contactSaveReview, type ContactDuplicateMatch } from "@/lib/contact-duplicates";
 import { assertEditToken, requireEditToken, isRecordChanged, recordChangedMessage } from '../../lib/stale-edit';
+import { captureActionError } from '../../lib/request-observability';
 export type FormState = { errors: Record<string, string>; message?: string; values?: Record<string, string>; recordChanged?: boolean; matches?: ContactDuplicateMatch[]; reviewToken?: string };
 function retainedValues(form: FormData) { const values=Object.fromEntries([...form.entries()].filter((entry): entry is [string,string] => typeof entry[1] === "string")); values.isPrimary=form.has("isPrimary")?"true":"false"; return values; }
 export async function submitContact(id: number | null, originatingAccountId: number | null, _state: FormState, form: FormData): Promise<FormState> {
@@ -26,7 +27,7 @@ export async function submitContact(id: number | null, originatingAccountId: num
   const review = await contactSaveReview(prisma, parsed.value, form, id ?? undefined, previous);
   if (review) return { errors: {}, values, ...review };
   try { contactId = await saveContact(prisma, parsed.value, id ?? undefined, actor, editToken); }
-  catch (error) { if (isRecordChanged(error)) return { errors: {}, message: recordChangedMessage, recordChanged: true, values }; return { errors: {}, message: friendlyError(error, "Contact could not be saved. Check whether another contact is primary for this account."), values }; }
+  catch (error) { if (isRecordChanged(error)) return { errors: {}, message: recordChangedMessage, recordChanged: true, values }; const fallback = "Contact could not be saved. Check whether another contact is primary for this account."; const business = friendlyError(error, fallback); const incident = business === fallback ? await captureActionError(error, 'contact.save', { userId: actor.id, entityType: 'Contact', entityId: id }) : undefined; return { errors: {}, message: incident ?? business, values }; }
   revalidatePath("/contacts");
   for (const accountId of new Set([previous?.accountId, parsed.value.accountId])) if (accountId) revalidatePath(`/accounts/${accountId}`);
   if (id) revalidatePath(`/contacts/${id}`);
@@ -36,7 +37,7 @@ export async function changeContactState(id: number, state: "active" | "inactive
   void _old;
   const actor = await requireMutation("contacts.write");
   try { await setContactState(prisma, id, state, actor.id); }
-  catch (error) { return { errors: {}, message: friendlyError(error, "Contact status could not be changed.") }; }
+  catch (error) { const fallback = "Contact status could not be changed."; const business = friendlyError(error, fallback); const incident = business === fallback ? await captureActionError(error, 'contact.state', { userId: actor.id, entityType: 'Contact', entityId: id }) : undefined; return { errors: {}, message: incident ?? business }; }
   revalidatePath("/contacts"); revalidatePath(`/contacts/${id}`); revalidatePath("/accounts");
   return { errors: {}, message: `Contact ${state === "active" ? "activated" : state === "inactive" ? "deactivated" : "archived"}.` };
 }

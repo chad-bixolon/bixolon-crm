@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { resolveGoogleIdentity, resolveLinkedSession } from '@/lib/identity';
 import { e2eAuthEnabled } from '@/lib/e2e-auth';
 import { activeTrustedDomains, emailDomain, trustedGoogleDomain } from '@/lib/trusted-domains';
+import { warnSecurityDenial } from '@/lib/observability';
+import { currentRequestId } from '@/lib/request-observability';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
@@ -22,7 +24,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (account?.provider === 'e2e') return e2eAuthEnabled();
       if (account?.provider !== 'google') return false;
       const result = await resolveGoogleIdentity(prisma, profile ?? {}, await activeTrustedDomains(prisma));
-      if (!('user' in result)) return `/access-denied?reason=${result.reason}`;
+      if (!('user' in result)) {
+        if (result.reason === 'workspace') warnSecurityDenial('google-sign-in', 'untrusted-domain', await currentRequestId());
+        return `/access-denied?reason=${result.reason}`;
+      }
       return true;
     },
     async jwt({ token, account, profile }) {

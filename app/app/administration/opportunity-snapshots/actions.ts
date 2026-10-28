@@ -5,6 +5,7 @@ import { requireMutation } from '@/lib/current-user';
 import { prisma } from '@/lib/prisma';
 import { assertSnapshotAdmin, captureOpportunitySnapshot, previewOpportunitySnapshot } from '@/lib/opportunity-snapshots';
 import { signSnapshotPreview, verifySnapshotPreview } from '@/lib/opportunity-snapshot-preview';
+import { captureActionError } from '../../../lib/request-observability';
 
 function safeMessage(error: unknown) {
   const message = error instanceof Error ? error.message : '';
@@ -18,7 +19,7 @@ export async function previewSnapshotAction(forecastReady = false) {
   try {
     const preview = await previewOpportunitySnapshot(prisma, actor, forecastReady);
     return { preview: { preparedAt: preview.preparedAt, week: preview.week, count: preview.count, forecastReady: preview.forecastReady, token: signSnapshotPreview(preview, actor.id, process.env.AUTH_SECRET ?? '') } };
-  } catch (error) { return { error: safeMessage(error) }; }
+  } catch (error) { const message = safeMessage(error); const incident = message.startsWith('Could not capture') ? await captureActionError(error, 'opportunity-snapshot.preview', { userId: actor.id }) : undefined; return { error: incident ?? message }; }
 }
 export async function confirmSnapshotAction(token: string, confirmed: boolean) {
   await assertModuleEnabled('FORECASTING');
@@ -30,5 +31,5 @@ export async function confirmSnapshotAction(token: string, confirmed: boolean) {
     revalidatePath('/administration/opportunity-snapshots');
     revalidatePath('/reports/opportunity-snapshots');
     return { success: `Captured ${run.opportunityCount} Opportunities at ${run.snapshotAt.toISOString()} in snapshot #${run.id}.`, runId: run.id };
-  } catch (error) { return { error: safeMessage(error) }; }
+  } catch (error) { const message = safeMessage(error); const incident = message.startsWith('Could not capture') ? await captureActionError(error, 'opportunity-snapshot.confirm', { userId: actor.id }) : undefined; return { error: incident ?? message }; }
 }

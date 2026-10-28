@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
+import { logUnexpectedOnce } from './observability';
 
 export const failureMessages = {
   AUTHENTICATION: 'Authentication required. Reconnect the integration and retry.',
@@ -50,7 +51,7 @@ export async function beginIntegrationAttempt(db: Db, context: AttemptContext) {
 export async function finishIntegrationAttempt(db: Db, id: number, failure?: OperationalFailure, supportCaseId?: number) {
   try {
     await db.scheduledJobRun.update({ where: { id }, data: { status: failure ? 'FAILED' : 'SUCCEEDED', completedAt: new Date(), failureCategory: failure ?? null, errorSummary: failure ? failureMessages[failure] : null, resultSummary: failure ? null : 'Operation completed.', ...(supportCaseId ? { supportCaseId } : {}) } });
-  } catch { console.error('[Integration history] Completion could not be recorded.'); }
+  } catch (error) { logUnexpectedOnce('integration.failed', error, { integration: 'integration-history', operation: 'completion', runId: id }); }
 }
 export async function trackIntegrationAttempt<T>(db: Db, context: AttemptContext, run: () => Promise<T>, classify = gmailFailure): Promise<T> {
   const attempt = await beginIntegrationAttempt(db, context);

@@ -8,6 +8,7 @@ import { friendlyError } from "@/lib/crm-validation";
 import { requireMutation } from '@/lib/current-user';
 import { saveFeedbackPath } from '@/lib/save-feedback';
 import { opportunitySaveReview, type DuplicateMatch, type MissingForecastField } from '@/lib/sales-readiness';
+import { captureActionError } from '../../lib/request-observability';
 export type FormState = { errors: Record<string, string>; message?: string; redirectTo?: string; matches?: DuplicateMatch[]; missing?: MissingForecastField[]; reviewToken?: string; recordChanged?: boolean };
 export async function submitOpportunity(id: number | null, _state: FormState, form: FormData): Promise<FormState> {
   await assertModuleEnabled('OPPORTUNITIES');
@@ -27,7 +28,7 @@ export async function submitOpportunity(id: number | null, _state: FormState, fo
   const review = await opportunitySaveReview(prisma, parsed.value, form, !id, actor.role === 'SALES' ? actor.id : undefined); if (review) return { errors: {}, ...review };
   let opportunityId: number;
   try { opportunityId = await saveOpportunity(prisma, parsed.value, id ?? undefined, actor, id ? requireEditToken(form) : undefined, { products: !productsEnabled, projects: !projectsEnabled }); }
-  catch (error) { if (isRecordChanged(error)) return { errors: {}, recordChanged: true, message: recordChangedMessage }; return { errors: {}, message: friendlyError(error, "Opportunity could not be saved. Check participant and product references.") }; }
+  catch (error) { if (isRecordChanged(error)) return { errors: {}, recordChanged: true, message: recordChangedMessage }; const fallback = "Opportunity could not be saved. Check participant and product references."; const business = friendlyError(error, fallback); const incident = business === fallback ? await captureActionError(error, 'opportunity.save', { userId: actor.id, entityType: 'Opportunity', entityId: id }) : undefined; return { errors: {}, message: incident ?? business }; }
   revalidatePath("/opportunities"); revalidatePath("/accounts"); if (id) revalidatePath(`/opportunities/${id}`);
   return { errors: {}, redirectTo: saveFeedbackPath(`/opportunities/${opportunityId}`, id ? 'updated' : 'created') };
 }
@@ -36,7 +37,7 @@ export async function changeOpportunityArchive(id: number, archive: boolean, _ol
   const actor = await requireMutation('sales.write');
   void _old;
   try { await setOpportunityArchived(prisma, id, archive, actor); }
-  catch (error) { if (isRecordChanged(error)) return { errors: {}, recordChanged: true, message: recordChangedMessage }; return { errors: {}, message: friendlyError(error, "Opportunity status could not be changed.") }; }
+  catch (error) { if (isRecordChanged(error)) return { errors: {}, recordChanged: true, message: recordChangedMessage }; const fallback = "Opportunity status could not be changed."; const business = friendlyError(error, fallback); const incident = business === fallback ? await captureActionError(error, 'opportunity.archive', { userId: actor.id, entityType: 'Opportunity', entityId: id }) : undefined; return { errors: {}, message: incident ?? business }; }
   revalidatePath("/opportunities"); revalidatePath(`/opportunities/${id}`); revalidatePath("/accounts");
   return { errors: {}, message: archive ? "Opportunity archived." : "Opportunity reactivated." };
 }

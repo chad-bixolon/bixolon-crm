@@ -10,6 +10,7 @@ import { supportMailbox, type GmailSupportMailbox, type SupportMailMessage, type
 import type { SupportMailFile } from './support-gmail-files';
 import { assertSupportAttachmentAccess, uploadSupportAttachment } from './support-attachments';
 import { validateSupportAttachmentEnvelope } from './support-attachment-rules';
+import { logUnexpectedOnce } from './observability';
 import { validateSupportAttachment } from './support-attachment-validation';
 
 const INVALID = 'Invalid email file selection. Return to the email form and select files again.';
@@ -87,7 +88,7 @@ async function importEmailFiles(db: PrismaClient, storage: DocumentStorage, acto
           const committed = await db.supportCaseAttachment.findFirst({ where: { storageKey: uploadedKey }, select: { id: true } });
           if (committed) { result.imported++; await finishIntegrationAttempt(db, attempt.id); continue; }
           await storage.deleteDocumentObject(uploadedKey);
-        } catch { console.error('Support email file object cleanup could not be confirmed.'); }
+        } catch (cleanupError) { logUnexpectedOnce('integration.failed', cleanupError, { integration: 'document-storage', operation: 'support-email-file-cleanup' }); }
       }
       let name = grant.file.fileName;
       try { name = validateSupportAttachmentEnvelope(name, grant.file.mimeType, grant.file.size).originalFileName; } catch {}

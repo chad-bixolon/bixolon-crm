@@ -1,4 +1,6 @@
 export type SupportGmailReadStage = 'token-refresh' | 'profile' | 'read';
+import { logger } from './observability';
+import { currentRequestId } from './request-observability';
 export type FailureCategory = 'invalid-token' | 'invalid-grant' | 'oauth-client' | 'insufficient-scope' | 'rate-limit' | 'quota' | 'domain-policy' | 'forbidden' | 'not-found' | 'transient' | 'request-failed' | 'network' | 'timeout';
 
 export class SupportGmailHttpError extends Error {
@@ -16,9 +18,9 @@ export function retryAfterMilliseconds(value: string | null, now = Date.now()): 
   return Number.isFinite(date) ? Math.max(0, date - now) : undefined;
 }
 
-export function logSupportGmailReadFailure(stage: SupportGmailReadStage, status: number | 'none', category: FailureCategory) {
+export async function logSupportGmailReadFailure(stage: SupportGmailReadStage, status: number | 'none', category: FailureCategory) {
   // Never log URLs, headers, payloads, provider messages or caught exceptions.
-  console.error(`[Support Gmail] stage=${stage} status=${status} category=${category}`);
+  logger.warn('integration.failed', { integration: 'support-gmail', operation: stage, status: status === 'none' ? undefined : status, category, requestId: await currentRequestId() });
 }
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' ? value as Record<string, unknown> : {};
 
@@ -55,6 +57,6 @@ export async function throwSupportGmailHttpError(response: Response, stage: Supp
   } else if (status >= 500) {
     category = 'transient'; message = 'Support Gmail is temporarily unavailable. Try again later.';
   }
-  logSupportGmailReadFailure(stage, status, category);
+  await logSupportGmailReadFailure(stage, status, category);
   throw new SupportGmailHttpError(message, category, retryAfterMilliseconds(response.headers.get('Retry-After')));
 }

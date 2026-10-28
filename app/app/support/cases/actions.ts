@@ -14,6 +14,7 @@ import { beginIntegrationAttempt, finishIntegrationAttempt, gmailContext, gmailF
 import { documentStorage } from '@/lib/document-storage';
 import { selectedEmailFiles, importSelectedEmailFiles, recordEmailFileImport } from '@/lib/support-email-file-import';
 import { DEFAULT_USER_TIME_ZONE } from '@/lib/user-time-zone';
+import { captureActionError } from '../../../lib/request-observability';
 
 export type SupportFormState = { recordChanged?: boolean; message?: string; field?: string; savedCaseId?: number; fileFailures?: { name: string; reason: string }[] };
 function optionalId(form: FormData, key: string) { const value = String(form.get(key) ?? ''); if (!value) return null; const number = Number(value); if (!Number.isSafeInteger(number) || number < 1) throw new Error(`Choose a valid ${key}.`); return number; }
@@ -71,7 +72,7 @@ export async function saveSupportCase(id: number | null, _state: SupportFormStat
     }
     else { const row = await createSupportCase(prisma, actor, input as SupportCaseInput); caseId = row.id; }
     if (attemptId) await finishIntegrationAttempt(prisma, attemptId, undefined, caseId);
-  } catch (error) { if (isRecordChanged(error)) return { message: recordChangedMessage, recordChanged: true }; if (attemptId) await finishIntegrationAttempt(prisma, attemptId, gmailFailure(error)); const databaseError = error instanceof Prisma.PrismaClientKnownRequestError || error instanceof Prisma.PrismaClientUnknownRequestError; const message = form.get('emailSource') && databaseError ? 'Could not create and link the Case. No Case was saved. Please retry from this form.' : error instanceof Error ? error.message : 'Could not save Support Case.'; return { message, field: message.includes('Resolution Summary') ? 'resolutionSummary' : message.includes('customer/end user') ? 'customerNameText' : message.includes('product') || message.includes('Product') ? 'productSkuId' : message.includes('Support Rep') || message.includes('assignee') ? 'assignedToId' : message.includes('Contact') ? 'contactId' : message.includes('Purchased From Account') ? 'purchasedFromAccountId' : message.includes('Account') ? 'accountId' : message.includes('source') ? 'source' : message.includes('follow-up') ? 'nextFollowUpAt' : undefined }; }
+  } catch (error) { if (isRecordChanged(error)) return { message: recordChangedMessage, recordChanged: true }; if (attemptId) await finishIntegrationAttempt(prisma, attemptId, gmailFailure(error)); const incident = await captureActionError(error, 'support-case.save', { userId: actor.id, entityType: 'SupportCase', entityId: id }); const databaseError = error instanceof Prisma.PrismaClientKnownRequestError || error instanceof Prisma.PrismaClientUnknownRequestError; const message = incident ?? (form.get('emailSource') && databaseError ? 'Could not create and link the Case. No Case was saved. Please retry from this form.' : error instanceof Error ? error.message : 'Could not save Support Case.'); return { message, field: incident ? undefined : message.includes('Resolution Summary') ? 'resolutionSummary' : message.includes('customer/end user') ? 'customerNameText' : message.includes('product') || message.includes('Product') ? 'productSkuId' : message.includes('Support Rep') || message.includes('assignee') ? 'assignedToId' : message.includes('Contact') ? 'contactId' : message.includes('Purchased From Account') ? 'purchasedFromAccountId' : message.includes('Account') ? 'accountId' : message.includes('source') ? 'source' : message.includes('follow-up') ? 'nextFollowUpAt' : undefined }; }
   // Case and email link are committed. Optional file failures must not report
   // that the Case rolled back, and retries must never create a second Case.
   if (fileTokens.length) {
@@ -79,8 +80,8 @@ export async function saveSupportCase(id: number | null, _state: SupportFormStat
       const result = await importSelectedEmailFiles(prisma, documentStorage, actor, caseId, emailSource, fileTokens);
       fileStatus = result.failures.length ? 'partial' : 'complete';
       try { await recordEmailFileImport(prisma, actor, caseId, result); }
-      catch { return { message: 'Case saved and email linked. The file import report could not be saved; review the Case attachments before retrying.', savedCaseId: caseId, fileFailures: result.failures }; }
-    } catch { return { message: 'Case saved and email linked, but selected files could not be imported. Open the saved Case to review and retry.', savedCaseId: caseId }; }
+      catch (error) { await captureActionError(error, 'support-case.file-import-report', { userId: actor.id, entityType: 'SupportCase', entityId: caseId }); return { message: 'Case saved and email linked. The file import report could not be saved; review the Case attachments before retrying.', savedCaseId: caseId, fileFailures: result.failures }; }
+    } catch (error) { await captureActionError(error, 'support-case.file-import', { userId: actor.id, entityType: 'SupportCase', entityId: caseId }); return { message: 'Case saved and email linked, but selected files could not be imported. Open the saved Case to review and retry.', savedCaseId: caseId }; }
   }
   revalidatePath('/support/cases');
   revalidatePath(`/support/cases/${caseId}`);
@@ -95,7 +96,7 @@ export async function changeSupportArchive(id: number, archive: boolean, _state:
   void _state;
   const actor = await requireMutation('support-oversight.manage');
   try { if (archive) await archiveSupportCase(prisma, actor, id); else await restoreSupportCase(prisma, actor, id); }
-  catch (error) { return { message: error instanceof Error ? error.message : 'Could not update archive state.' }; }
+  catch (error) { const incident = await captureActionError(error, 'support-case.archive', { userId: actor.id, entityType: 'SupportCase', entityId: id }); return { message: incident ?? (error instanceof Error ? error.message : 'Could not update archive state.') }; }
   revalidatePath('/support/cases');
   revalidatePath(`/support/cases/${id}`);
   return { message: archive ? 'Case archived.' : 'Case restored.' };

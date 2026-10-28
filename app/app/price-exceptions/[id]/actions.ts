@@ -8,6 +8,7 @@ import { parseAssignedSalesRepUserId, parsePriceExceptionAccountPatch, PriceExce
 import { parseFollowUpForm, updatePriceExceptionFollowUp } from '@/lib/price-exception-follow-up';
 import { currentUser } from '@/lib/current-user';
 import { markPriceExceptionExpired } from '@/lib/price-exception-lifecycle';
+import { captureActionError } from '../../../lib/request-observability';
 
 export async function markExpiredPriceException(id:number) {
   await assertModuleEnabled('PRICE_EXCEPTIONS');
@@ -17,7 +18,7 @@ export async function markExpiredPriceException(id:number) {
     revalidatePath('/price-exceptions');revalidatePath(`/price-exceptions/${id}`);
     revalidatePath('/administration/price-exceptions');revalidatePath('/reports/price-exceptions-expiring');revalidatePath('/');
     return {ok:true as const};
-  } catch(error) {return {ok:false as const,message:error instanceof Error?error.message:'Status could not be updated.'};}
+  } catch(error) {const incident = await captureActionError(error, 'price-exception.expire', { userId: actor.id, entityType: 'PriceException', entityId: id });return {ok:false as const,message:incident ?? (error instanceof Error?error.message:'Status could not be updated.')};}
 }
 
 export type ResolvePriceExceptionState = { errors: Record<string, string>; values?: PriceExceptionAccountValues; saved?: boolean };
@@ -30,7 +31,7 @@ export async function savePriceExceptionFollowUp(id:number,_state:{error?:string
     const result=await updatePriceExceptionFollowUp(prisma,id,actor,patch);
     if(result.changed){revalidatePath(`/price-exceptions/${id}`);revalidatePath('/reports/price-exceptions-expiring');revalidatePath('/');}
     return {saved:true};
-  } catch(error) {return {error:error instanceof Error?error.message:'Follow-up could not be saved.'};}
+  } catch(error) {const incident = await captureActionError(error, 'price-exception.follow-up', { userId: actor.id, entityType: 'PriceException', entityId: id });return {error:incident ?? (error instanceof Error?error.message:'Follow-up could not be saved.')};}
 }
 
 export async function assignPriceExceptionSalesRep(id:number,_state:AssignPriceExceptionSalesRepState,form:FormData):Promise<AssignPriceExceptionSalesRepState>{
@@ -44,7 +45,8 @@ export async function assignPriceExceptionSalesRep(id:number,_state:AssignPriceE
     return {saved:true,value:parsed.value};
   }catch(error){
     if(error instanceof PriceExceptionAccountValidationError)return {error:error.errors.assignedSalesRepUserId??error.errors.form,value:parsed.value};
-    return {error:'BIXOLON Sales Rep could not be saved. Please try again.',value:parsed.value};
+    const incident = await captureActionError(error, 'price-exception.assign-rep', { userId: actor.id, entityType: 'PriceException', entityId: id });
+    return {error:incident ?? 'BIXOLON Sales Rep could not be saved. Please try again.',value:parsed.value};
   }
 }
 
@@ -63,7 +65,8 @@ export async function resolvePriceExceptionAccounts(id:number,_state:ResolvePric
     return {errors:{},values:parsed.values,saved:true};
   }catch(error){
     if(error instanceof PriceExceptionAccountValidationError)return {errors:error.errors,values:parsed.values};
-    return {errors:{form:'Account links could not be saved. Please try again.'},values:parsed.values};
+    const incident = await captureActionError(error, 'price-exception.resolve-accounts', { userId: actor.id, entityType: 'PriceException', entityId: id });
+    return {errors:{form:incident ?? 'Account links could not be saved. Please try again.'},values:parsed.values};
   }
 }
 

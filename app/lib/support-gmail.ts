@@ -138,7 +138,7 @@ async function gmailFetch(url: string, options: RequestInit, fetcher: typeof fet
   try { return await fetcher(url, { ...options, signal: AbortSignal.timeout(10000) }); }
   catch (error) {
     const timeout = error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name);
-    logSupportGmailReadFailure(stage, 'none', timeout ? 'timeout' : 'network');
+    await logSupportGmailReadFailure(stage, 'none', timeout ? 'timeout' : 'network');
     throw new Error(timeout ? 'Support Gmail request timed out. Try again.' : 'Support Gmail connection failed. Try again.');
   }
 }

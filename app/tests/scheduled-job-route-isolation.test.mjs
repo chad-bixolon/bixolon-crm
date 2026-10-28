@@ -35,6 +35,10 @@ for (const [name, post, secretName, url] of [
   ['Calendar Sync', calendarPost, 'CALENDAR_SYNC_SECRET', 'calendar/sync'],
 ]) {
   test(`${name} business outcome is independent of monitoring create and update`, async () => {
+    const events = [];
+    const originalLog = console.log, originalError = console.error;
+    console.log = line => { events.push(JSON.parse(line)); };
+    console.error = line => { events.push(JSON.parse(line)); };
     const prior = process.env[secretName];
     process.env[secretName] = 's'.repeat(32);
     const request = () => new NextRequest(`https://crm.example/api/internal/${url}`, { method: 'POST', headers: { authorization: `Bearer ${process.env[secretName]}` } });
@@ -62,8 +66,12 @@ for (const [name, post, secretName, url] of [
       update = async () => { throw new Error('monitoring update failed'); };
       const failed = await post(request());
       assert.equal(failed.status, 500);
+      assert.ok(events.some(event => event.event === 'job.started' && event.jobName));
+      assert.ok(events.some(event => event.event === 'job.completed' && event.durationMs >= 0));
+      assert.ok(events.some(event => event.event === 'job.failed' && event.durationMs >= 0));
     } finally {
       if (prior === undefined) delete process.env[secretName]; else process.env[secretName] = prior;
+      console.log = originalLog; console.error = originalError;
     }
   });
 }

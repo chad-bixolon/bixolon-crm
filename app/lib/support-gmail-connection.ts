@@ -3,6 +3,8 @@ import type { PrismaClient } from '@prisma/client';
 import { decryptSupportGmailToken, encryptSupportGmailToken, supportGmailEncryptionKey as encryptionKey } from './support-gmail-crypto';
 import { can, type Actor } from './authorization';
 import { SUPPORT_GMAIL_SCOPE, supportGmailCallback, assertLiveSupportGmailEnvironment, supportGmailMockMode, supportGmailTestFixtureMode } from './support-gmail-config';
+import { logger } from './observability';
+import { currentRequestId } from './request-observability';
 
 export const SUPPORT_GMAIL_STATE_COOKIE = 'saleshub-support-gmail-oauth-state';
 export const SUPPORT_GMAIL_VERIFIER_COOKIE = 'saleshub-support-gmail-oauth-verifier';
@@ -154,10 +156,10 @@ export async function recordSupportGmailFetch(at: Date, db?: ConnectionDb) {
 type OAuthInput = { actor: Actor | null; state: string | null; cookie?: string; verifier?: string; code: string | null; error: string | null };
 export type SupportGmailConnectionResult = 'connected' | 'invalid-state' | 'declined' | 'failed';
 type SupportGmailAuthorizationStage = 'environment/config validation' | 'OAuth state/PKCE validation' | 'token exchange' | 'Gmail profile lookup' | 'expected mailbox validation' | 'encrypted credential save';
-function logSupportGmailAuthorizationFailure(stage: SupportGmailAuthorizationStage) {
+async function logSupportGmailAuthorizationFailure(stage: SupportGmailAuthorizationStage) {
   // Only fixed stage labels belong here. Errors, provider payloads and callback
   // input may contain OAuth secrets, cookies or complete request URLs.
-  console.error(`[Support Gmail] OAuth callback failed at stage: ${stage}`);
+  logger.warn('integration.failed', { integration: 'support-gmail', operation: 'oauth-callback', stage, category: stage === 'OAuth state/PKCE validation' ? 'authentication' : 'unknown', requestId: await currentRequestId() });
 }
 export async function completeSupportGmailAuthorization(input: OAuthInput, dependencies = { exchange: exchangeSupportGmailCode, profile: lookupSupportGmailProfile, save: saveSupportGmailConnection }): Promise<SupportGmailConnectionResult> {
   let stage: SupportGmailAuthorizationStage = 'environment/config validation';
@@ -171,7 +173,7 @@ export async function completeSupportGmailAuthorization(input: OAuthInput, depen
     assertExpectedMailbox(process.env.SUPPORT_GMAIL_MAILBOX || '');
     stage = 'OAuth state/PKCE validation';
     if (!can(input.actor, 'support-mailbox.manage') || !consumeSupportGmailState(input.state, input.cookie, input.actor!.id, input.verifier)) {
-      logSupportGmailAuthorizationFailure(stage);
+      await logSupportGmailAuthorizationFailure(stage);
       return 'invalid-state';
     }
     if (input.error) return 'declined';
@@ -180,7 +182,7 @@ export async function completeSupportGmailAuthorization(input: OAuthInput, depen
     history = { db, id: attempt.id };
     stage = 'token exchange';
     if (!input.code) {
-      logSupportGmailAuthorizationFailure(stage);
+      await logSupportGmailAuthorizationFailure(stage);
       await finishIntegrationAttempt(db, attempt.id, 'AUTHENTICATION');
       return 'failed';
     }
@@ -194,7 +196,7 @@ export async function completeSupportGmailAuthorization(input: OAuthInput, depen
     await finishIntegrationAttempt(db, attempt.id);
     return 'connected';
   } catch (error) {
-    logSupportGmailAuthorizationFailure(stage);
+    await logSupportGmailAuthorizationFailure(stage);
     if (history) await finishIntegrationAttempt(history.db, history.id, gmailFailure(error));
     return 'failed';
   }

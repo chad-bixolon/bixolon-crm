@@ -58,7 +58,7 @@ let original, logs;
 test.beforeEach(t => {
   const env = productionEnv(); original = Object.fromEntries(Object.keys(env).map(key => [key, process.env[key]]));
   Object.assign(process.env, env); credentials.reset(); dismissed.clear(); resetGmailRuntime(supportGmailRuntime); logs = [];
-  t.mock.method(console, 'error', (...args) => logs.push(args));
+  t.mock.method(console, 'log', line => { logs.push(JSON.parse(line)); });
 });
 test.afterEach(() => { for (const [key, value] of Object.entries(original)) if (value === undefined) delete process.env[key]; else process.env[key] = value; });
 
@@ -109,7 +109,8 @@ test('403 reason mapping is consistent at profile, list, full message, get and a
       if (status === 404 && operation === 'get') { assert.equal(await mailbox.get('one'), null); continue; }
       await assert.rejects(mailbox[operation]('one', '0'), expected);
       // recent() fetches several messages concurrently, each with safe diagnostics.
-      assert.ok(logs.at(-1)[0].endsWith(`status=${status} category=${category}`));
+      assert.equal(logs.at(-1).status, status);
+      assert.equal(logs.at(-1).category, category);
     }
   }
   assert.doesNotMatch(JSON.stringify(logs), /private-provider-message|private-unknown-reason/);
@@ -164,7 +165,9 @@ test('network and timeout diagnostics contain only fixed stages/status/categorie
   for (const failStage of ['token-refresh', 'profile', 'message']) for (const [name, expected, category] of [['Error', /connection failed/, 'network'], ['TimeoutError', /timed out/, 'timeout']]) {
     const failure = () => { throw Object.assign(new Error('private-access-token private-client-secret private-encryption-key private-authorization-code'), {name}); };
     await assert.rejects(new gmail.GoogleGmailSupportMailbox(provider({failStage, failure}).fetcher, newRuntime()).get('one'), expected);
-    assert.deepEqual(logs.at(-1), [`[Support Gmail] stage=${failStage === 'message' ? 'read' : failStage} status=none category=${category}`]);
+    assert.equal(logs.at(-1).operation, failStage === 'message' ? 'read' : failStage);
+    assert.equal(logs.at(-1).category, category);
+    assert.equal(logs.at(-1).status, undefined);
   }
   assert.doesNotMatch(JSON.stringify(logs), /private-|https:|Bearer|refresh_token/);
 });

@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { currentUser } from '@/lib/current-user';
 import { campaignStatuses, canManageAttribution, correctLeadSource } from '@/lib/marketing-attribution';
 import { requireEditToken, isRecordChanged, nextUpdatedAt, recordChangedMessage } from '@/lib/stale-edit';
+import { captureActionError } from '../../../lib/request-observability';
 
 const id = (value: FormDataEntryValue | null) => { const n = Number(value); return Number.isSafeInteger(n) && n > 0 ? n : null; };
 const value = (form: FormData, key: string, max: number) => { const text = String(form.get(key) ?? '').trim(); if (text.length > max) throw new Error(`${key} is too long.`); return text; };
@@ -13,14 +14,14 @@ async function manager() { const actor = await currentUser(); if (!canManageAttr
 
 export async function saveLeadSource(form: FormData) {
   await assertModuleEnabled('MARKETING');
-  await manager();
+  const actor = await manager();
   try {
     const sourceId = id(form.get('id')), name = value(form, 'name', 120); if (!name) return { error: 'Enter a Lead Source name.' };
     const active = form.get('active') === 'on'; const sortOrder = Number(form.get('sortOrder'));
     if (!Number.isSafeInteger(sortOrder) || sortOrder < 0 || sortOrder > 100000) return { error: 'Choose a valid sort order.' };
     if (sourceId) await prisma.leadSourceOption.update({ where: { id: sourceId }, data: { name, active, sortOrder } });
     else await prisma.leadSourceOption.create({ data: { name, active, sortOrder } });
-  } catch (error) { return { error: error instanceof Error && /too long/.test(error.message) ? error.message : 'Lead Source could not be saved. Check the name and try again.' }; }
+  } catch (error) { const incident = await captureActionError(error, 'marketing.lead-source-save', { userId: actor.id }); return { error: incident ?? (error instanceof Error && /too long/.test(error.message) ? error.message : 'Lead Source could not be saved. Check the name and try again.') }; }
   revalidatePath('/marketing/lead-sources'); redirect('/marketing/lead-sources');
 }
 
@@ -41,7 +42,7 @@ export async function saveCampaign(form: FormData) {
     const token = campaignId ? requireEditToken(form) : null;
     const campaign = campaignId && token ? await prisma.marketingCampaign.update({ where: { id: campaignId, updatedAt: new Date(token), archivedAt: null }, data: { ...data, updatedAt: nextUpdatedAt(new Date(token)) } }) : await prisma.marketingCampaign.create({ data: { ...data, createdById: actor.id } });
     savedId = campaign.id;
-  } catch (error) { return { error: isRecordChanged(error) ? recordChangedMessage : error instanceof Error && (/too long|Choose a valid date/.test(error.message)) ? error.message : 'Campaign could not be saved. Check the fields and try again.' }; }
+  } catch (error) { if (isRecordChanged(error)) return { error: recordChangedMessage }; const incident = await captureActionError(error, 'marketing.campaign-save', { userId: actor.id, entityType: 'MarketingCampaign' }); return { error: incident ?? (error instanceof Error && (/too long|Choose a valid date/.test(error.message)) ? error.message : 'Campaign could not be saved. Check the fields and try again.') }; }
   revalidatePath('/marketing/campaigns'); redirect(`/marketing/campaigns/${savedId}`);
 }
 
@@ -50,7 +51,7 @@ export async function setCampaignArchive(form: FormData) {
   const actor = await manager(), campaignId = id(form.get('id')); if (!campaignId) throw new Error('Invalid Campaign.');
   if ((await prisma.marketingCampaign.findUnique({ where: { id: campaignId }, select: { tradeShowId: true } }))?.tradeShowId) await assertModuleEnabled('TRADE_SHOWS');
   try { const token = requireEditToken(form); await prisma.marketingCampaign.update({ where: { id: campaignId, updatedAt: new Date(token) }, data: { archivedAt: form.get('archive') === 'true' ? new Date() : null, updatedById: actor.id, updatedAt: nextUpdatedAt(new Date(token)) } }); }
-  catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; throw error; }
+  catch(error) { if(isRecordChanged(error)) return {error:recordChangedMessage}; await captureActionError(error, 'marketing.campaign-archive', { userId: actor.id, entityType: 'MarketingCampaign', entityId: campaignId }); throw error; }
   revalidatePath('/marketing/campaigns'); redirect(`/marketing/campaigns/${campaignId}`);
 }
 

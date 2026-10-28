@@ -41,8 +41,7 @@ test.beforeEach(async t => {
   t.mock.method(shared, 'now', () => now);
   t.mock.method(shared, 'sleep', async ms => {now += ms;});
   t.mock.method(shared, 'random', () => 0);
-  t.mock.method(console, 'info', (...args) => logs.push(args.join(' ')));
-  t.mock.method(console, 'error', (...args) => logs.push(args.join(' ')));
+  t.mock.method(console, 'log', line => { logs.push(line); });
   await connection.saveSupportGmailConnection('support@example.test', 'private-refresh', { ...actor, role: 'ADMIN' });
 });
 test.afterEach(() => {for (const [key, value] of Object.entries(original)) if (value === undefined) delete process.env[key]; else process.env[key] = value;});
@@ -91,7 +90,7 @@ test('Ignore and repeated Ignore use three targeted requests plus zero on a warm
   assert.equal(google.calls.filter(c => c.url.includes('format=full')).length, 3);
   assert.equal(google.calls.filter(c => c.url.includes('messages?')).length, 0);
   assert.deepEqual([...dismissed], ['m0', 'm1']);
-  assert.ok(logs.some(line => line.includes('workflow=ignore event=request')));
+  assert.ok(logs.every(line => !line.includes('integration.activity')));
 });
 
 test('stale inbox cache cannot authorize missing, moved, wrong-thread or outside-window messages', async t => {
@@ -127,7 +126,7 @@ test('two users coalesce the same live source validation; distinct actions stay 
   assert.equal(google.calls.length, 6);
   await Promise.all(['m1','m2','m3'].map(id => source.resolveInboxSource(actor, form(id).get('emailSource'), id)));
   assert.equal(google.calls.length, 15);
-  assert.ok(logs.some(line => line.includes('event=coalesced')));
+  assert.ok(logs.every(line => !line.includes('integration.activity')));
 });
 
 test('duplicate cold inbox requests coalesce across fresh adapters and failures are never cached', async () => {
@@ -159,7 +158,7 @@ test('local operation/concurrency/request budgets return the local retry message
   const check = response => throwSupportGmailHttpError(response, 'read');
   for (let i=0;i<300;i++) await runtime.request('other',true,async()=>json({}),check);
   await assert.rejects(runtime.request('other',true,async()=>json({}),check), {message: GMAIL_BUSY});
-  assert.ok(logs.some(line => line.includes('local-throttle')));
+  assert.ok(logs.every(line => !line.includes('integration.activity')));
 });
 
 test('Google 429 and rate-limit 403 retry once with jitter/Retry-After and retain provider classification', async () => {
@@ -177,7 +176,7 @@ test('Google 429 and rate-limit 403 retry once with jitter/Retry-After and retai
   assert.equal(attempts,2);
   await assert.rejects(runtime.request('mailbox',true,async()=>{attempts++;return json({});},check), /rate limited/);
   assert.equal(attempts,2);
-  assert.ok(logs.some(line=>line.includes('provider-rate-limit')));
+  assert.ok(logs.some(line=>line.includes('integration.failed')));
   assert.equal(retryAfterMilliseconds('Fri, 16 Oct 2026 15:00:10 GMT', Date.parse('2026-10-16T15:00:00Z')),10000);
   assert.equal(retryAfterMilliseconds('garbage'),undefined);
 });

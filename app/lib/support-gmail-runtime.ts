@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { isSupportGmailRateLimit } from './support-gmail-errors';
+import { logger } from './observability';
 
 type Workflow = 'inbox' | 'ignore' | 'restore' | 'link' | 'create-review' | 'create-save' | 'file-review' | 'file-import';
 const workflow = new AsyncLocalStorage<Workflow>();
@@ -28,7 +29,7 @@ export class SupportGmailRuntime {
   }
   private event(event: string, requests = 0) {
     // Fixed labels and counts only: never mailbox IDs, URLs, errors or payloads.
-    console.info(`[Support Gmail] workflow=${workflow.getStore() ?? 'inbox'} event=${event} requests=${requests}`);
+    logger.debug('integration.activity', { integration: 'support-gmail', operation: event, module: workflow.getStore() ?? 'inbox', processed: requests });
   }
   async run<T>(mailbox: string, connection: string, operation: string, expensive: boolean, ttl: number, read: () => Promise<T>): Promise<T> {
     const now = this.now();

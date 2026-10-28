@@ -3,6 +3,7 @@ import { currentUser } from '@/lib/current-user';
 import { createDocumentDownloadUrl } from '@/lib/documents';
 import { documentStorage } from '@/lib/document-storage';
 import { prisma } from '@/lib/prisma';
+import { captureRouteError } from '../../../../../lib/request-observability';
 
 export const runtime = 'nodejs';
 
@@ -17,6 +18,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return response;
   } catch (error) {
     const denied = error instanceof Error && error.message === 'Access denied';
-    return NextResponse.json({ error: denied ? 'Access denied' : 'The document is not available.' }, { status: denied ? 403 : 404 });
+    const incident = denied ? undefined : captureRouteError(request, error, 'document.download', { entityType: 'Document', entityId: id });
+    return NextResponse.json({ error: incident ?? (denied ? 'Access denied' : 'The document is not available.') }, { status: incident ? 500 : denied ? 403 : 404 });
   }
 }
