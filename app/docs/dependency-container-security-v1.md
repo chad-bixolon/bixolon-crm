@@ -2,6 +2,8 @@
 
 SalesHub monitors dependencies and final Docker images in GitHub Actions. Nothing scans the running CRM, connects to its database, runs a backup/restore, or changes a deployment. Database migrations: **none**. The implementation is on `security/dependency-container-scanning-v1`; activation requires normal review and merge, plus the manual settings below.
 
+The [gosu remediation validation](#gosu-rebuild-remediation-2026-10-29) supersedes the operations failure in the historical baseline below: the rebuilt operations image now passes the unchanged security policy.
+
 ## Architecture and release integration
 
 | Surface | PR to main | Main | Weekly / manual |
@@ -185,6 +187,47 @@ There is no verified drop-in fixed binary in the current base. Trivy's fixed ver
 The smallest behavior-preserving remediation is to replace only `/usr/local/bin/gosu` with the same reviewed gosu source rebuilt using a pinned, currently supported Go release containing the TLS fix. Pin source/compiler inputs and verify the resulting binary; keep the compiler in a build stage. Preserve the PostgreSQL base, privilege-drop interface, Node runtime and recovery scripts. Rebuild/scan the final operations image, assert the binary's version and user-switch behavior, and run backup/restore regressions plus the disposable restore drill before accepting it. A verified upstream patched binary could replace a local rebuild when one becomes available. Removing `gosu` instead requires redesigning and validating the drill's startup/privilege-drop path; a client-only base change is broader still. This review does not implement those runtime changes.
 
 The [gosu security policy](https://github.com/tianon/gosu/blob/1.20/SECURITY.md) cautions that Go compiler-version findings can involve interfaces the executable does not use. That is supporting reachability context, not a waiver: no exception, VEX, ignore entry or gate weakening was added. The existing finding remains visible and blocking.
+
+## gosu rebuild remediation (2026-10-29)
+
+`Dockerfile.operations` now replaces only `/usr/local/bin/gosu` in the final operations runtime. A separate build stage compiles the unchanged [gosu 1.19 source](https://github.com/tianon/gosu/tree/6456aaa0f3c854d199d0f037f068eb97515b7513), commit **6456aaa0f3c854d199d0f037f068eb97515b7513**, using **Go 1.26.10**. This is a supported release containing the [TLS fix](https://pkg.go.dev/vuln/GO-2026-4337) and subsequent [Go security fixes](https://go.dev/doc/devel/release#go1.26.10). No PostgreSQL startup, restore-drill, dependency manifest, lockfile, production Dockerfile or vulnerability-policy change is included.
+
+Build inputs and provenance:
+
+- Builder: `golang:1.26.10-bookworm@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb` (multi-platform index). The stage uses Docker's target platform by default; validated here on **linux/amd64**. Other architectures were not executed locally.
+- Source module: `github.com/tianon/gosu@v0.0.0-20250923190938-6456aaa0f3c8`, the canonical Go module version of tag `1.19`'s exact commit. The upstream tag lacks Go's `vX.Y.Z` spelling; the pseudo-version preserves a truthful version/commit in executable metadata and the SBOM while `gosu --version` still reports **1.19**.
+- Source checksum: `h1:HIpXk5mGBQGfOqcaBbRT4Vnss8NPICnMGlD5xTlPBdQ=`. Go authenticates modules through `sum.golang.org`; the build additionally asserts this pinned checksum before compilation. Dependencies remain the upstream pinned `github.com/moby/sys/user@v0.1.0` and `golang.org/x/sys@v0.1.0`. No prebuilt gosu binary is downloaded.
+- `GOTOOLCHAIN=local` prevents compiler substitution, `CGO_ENABLED=0` produces a static executable, and `-trimpath` removes build-directory variation. The upstream `-ldflags='-d -w'` convention retains symbols for vulnerability analysis. Only `/out/gosu` is copied into the final image, at mode **0755**, after the existing runtime layers.
+- Final binary: `1.19 (go1.26.10 on linux/amd64; gc)`, SHA-256 **9808d660017e4cf5edcac898bfd83a922e0b65db945fabb6d868e060493ef6af**. An independent offline compilation with an empty compiler cache produced identical bytes. Runtime checks confirmed no Go compiler, Go module cache, source tree or GCC executable.
+
+The final runtime retains **Node 22.23.4**, **Prisma CLI/client 6.19.3**, and **PostgreSQL tools 17.11**. Inventory outside the gosu executable is unchanged. Named-user switching, numeric `12345:23456` UID/GID switching, and postgres supplementary groups passed. A disposable, network-isolated container started through `docker-entrypoint.sh postgres` as root reached a PostgreSQL PID 1 with all UID/GID fields **999**, explicitly proving the inherited gosu privilege-drop path.
+
+The existing, unchanged disposable restore drill passed against the final executable. Its fixed local image tag was temporarily pointed at the rebuilt image and restored in a `finally` block. Verified TLS, read-only source-role enforcement, actual `pg_dump`/archive parsing, fresh restore, nonempty-target refusal, confirmed clean restore, Prisma table counts/relationships/sequences/migration status and temp cleanup passed. The fixture uses synthetic data and in-memory object storage; it does not establish live Spaces access or production RTO. Both disposable validation containers were removed.
+
+Trivy **0.76.1**, using the same **2026-10-29** database and all severities, produced this comparison of final operations images:
+
+| Finding occurrences | Before | After |
+| --- | ---: | ---: |
+| Critical | 4 | 3 |
+| Fixed Critical / blockers | 1 | **0** |
+| High | 104 | 79 |
+| Medium | 197 | 167 |
+| Low | 172 | 169 |
+| Unknown | 5 | 5 |
+| Go stdlib findings | 59 | **0** |
+| Total | 482 | 423 |
+
+**CVE-2025-68121 is absent; the operations gate passes.** There are **59 removed findings and zero new findings**, comparing advisory/package/version/location identities with the image-name portion of the OS target normalized. All remaining findings are retained; no exception, ignore entry, VEX statement, severity filter or policy weakening was added. The three remaining unfixed Criticals are the same `libsqlite3-0` CVE-2025-7458, `libxml2` CVE-2026-6653 and `zlib1g` CVE-2023-45853 described above.
+
+The gosu inventory still reports two **pre-existing dependency findings**: CVE-2026-61801 in `github.com/moby/sys/user@v0.1.0` (Medium; fix 0.4.1), and CVE-2026-39824 in `golang.org/x/sys@v0.1.0` (Unknown; fix 0.44.0, Windows-specific advisory). Neither is a new finding or a Go stdlib finding. They remain visible for separate triage; dependencies were not broadened into this compiler-only remediation.
+
+The final scan generated CycloneDX **1.7** with **412 components / 659 dependency edges**, and SARIF **2.1.0**. Validation checked document structure, versioned package components including gosu's exact source module and stdlib, unique component references and resolvable dependency edges. Trivy also emits an unversioned application grouping for the executable path; its gosu and stdlib package children carry their versions. All **25 backup/restore safety tests + 10 security CI contracts** passed against the final Dockerfile. Full lint, typecheck and `git diff --check` passed. The initial sandbox test attempt could not spawn required children (`EPERM`); the unrestricted rerun passed without test changes.
+
+Production inputs were unchanged, and before/after scans of the retained `bixolon-crm-dependency-security-v1:local` image have identical findings and a passing policy result (zero fixed Criticals/blockers). **Limitation:** that retained image predates the exact reviewed baseline image, which is no longer available locally. An additional fresh production-target build failed Debian APT signature verification. Therefore this validation proves unchanged findings for the retained production image and unchanged production inputs; it does not claim a successful fresh production rebuild or a rescan of the removed baseline image.
+
+The [remediation snapshot](../security/gosu-remediation-2026-10-29.json) records exact source/compiler/image identities and results. Full local build, runtime, reproducibility, drill, JSON/SARIF/SBOM, policy and test evidence is under ignored `app/reports/gosu-remediation/`. The earlier baseline remains a historical record. No commit, push, merge, deployment, DigitalOcean change or production-data operation was performed.
+
+Suggested remediation commit: `fix(security): rebuild operations gosu with pinned Go 1.26.10`.
 
 ## Implementation files and validation
 
