@@ -1,0 +1,145 @@
+name: SalesHub Security
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 8 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: saleshub-security-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  dependency:
+    name: Dependency Security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Decide dependency scope
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node app/scripts/security/scope.mjs
+      - uses: actions/setup-node@v7
+        if: steps.scope.outputs.dependency == 'true'
+        with:
+          node-version-file: app/.nvmrc
+          package-manager-cache: false
+      - name: Audit both lockfiles and apply reviewed dependency policy
+        if: steps.scope.outputs.dependency == 'true'
+        run: node app/scripts/security/dependency-audit.mjs
+      - name: Retain dependency evidence on success and failure
+        if: ${{ always() && steps.scope.outputs.dependency == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-dependency-${{ github.run_id }}
+          path: |
+            app/reports/security/dependency/*.json
+            app/reports/security/dependency/summary.md
+          if-no-files-found: warn
+          retention-days: 14
+
+  operations:
+    name: Operations Container Security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Decide operations scope
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node app/scripts/security/scope.mjs
+      - name: Build isolated operations image
+        if: steps.scope.outputs.operations == 'true'
+        run: |
+          mkdir -p app/reports/security/operations
+          started=$SECONDS
+          docker build --pull -f app/Dockerfile.operations -t saleshub-security-operations:local ./app
+          printf '{"buildSeconds":%s}\n' "$(( SECONDS - started ))" > app/reports/security/operations/build-timing.json
+      - name: Scan operations image
+        if: steps.scope.outputs.operations == 'true'
+        uses: ./.github/actions/scan-image
+        with:
+          image: saleshub-security-operations:local
+          scope: operations
+
+  scheduled-production:
+    name: Scheduled Production Container Security
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build isolated final production image
+        run: |
+          mkdir -p app/reports/security/production
+          started=$SECONDS
+          docker build --pull --target production -t saleshub-ci-production:local ./app
+          printf '{"buildSeconds":%s}\n' "$(( SECONDS - started ))" > app/reports/security/production/build-timing.json
+      - name: Scan final production image
+        uses: ./.github/actions/scan-image
+        with:
+          image: saleshub-ci-production:local
+          scope: production
+
+  dependency-review:
+    name: Optional GitHub Dependency Review
+    if: github.event_name == 'pull_request' && vars.SECURITY_DEPENDENCY_REVIEW_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Report dependency changes when the repository supports review
+        continue-on-error: true
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          warn-only: true
+          comment-summary-in-pr: never
+      - name: Dependency review fallback
+        if: ${{ always() }}
+        run: echo 'Dependency Review is advisory. If unavailable, use Dependabot, lockfile review, Dependency Security and required CI.' >> "$GITHUB_STEP_SUMMARY"
+
+  sarif-operations:
+    if: ${{ always() && vars.SECURITY_SARIF_ENABLED == 'true' && github.event_name != 'pull_request' && (needs.operations.result == 'failure' || needs.operations.result == 'success') }}
+    needs: operations
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    uses: ./.github/workflows/security-sarif.yml
+    with:
+      artifact: security-operations-${{ github.run_id }}
+      category: saleshub-operations
+
+  sarif-production:
+    if: ${{ always() && vars.SECURITY_SARIF_ENABLED == 'true' && github.event_name != 'pull_request' && (needs.scheduled-production.result == 'success' || needs.scheduled-production.result == 'failure') }}
+    needs: scheduled-production
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    uses: ./.github/workflows/security-sarif.yml
+    with:
+      artifact: security-production-${{ github.run_id }}
+      category: saleshub-production

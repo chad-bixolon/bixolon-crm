@@ -165,17 +165,29 @@ jobs:
 
   docker:
     name: Production Docker build
-    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - name: Checkout candidate
         uses: actions/checkout@v7
         with:
+          fetch-depth: 0
           persist-credentials: false
+      - name: Decide production image scope
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node app/scripts/security/scope.mjs
       - name: Build production Docker image
-        run: docker build --target production -t saleshub-ci-production:local ./app
+        if: steps.scope.outputs.production == 'true'
+        run: |
+          mkdir -p app/reports/security/production
+          started=$SECONDS
+          docker build --pull --target production -t saleshub-ci-production:local ./app
+          printf '{"buildSeconds":%s}\n' "$(( SECONDS - started ))" > app/reports/security/production/build-timing.json
       - name: Verify image Node and Prisma versions
+        if: steps.scope.outputs.production == 'true'
         run: |
           docker run --rm --entrypoint node saleshub-ci-production:local -e '
             const assert = require("node:assert/strict");
@@ -185,3 +197,21 @@ jobs:
             assert.equal(require("@prisma/client").Prisma.prismaVersion.client, "6.19.3");
             console.log("Production image: Node 22.23.4, Prisma 6.19.3");
           '
+      - name: Container Security
+        if: steps.scope.outputs.production == 'true'
+        uses: ./.github/actions/scan-image
+        with:
+          image: saleshub-ci-production:local
+          scope: production
+
+  sarif-production:
+    if: ${{ always() && vars.SECURITY_SARIF_ENABLED == 'true' && github.event_name == 'push' && (needs.docker.result == 'success' || needs.docker.result == 'failure') }}
+    needs: docker
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    uses: ./.github/workflows/security-sarif.yml
+    with:
+      artifact: security-production-${{ github.run_id }}
+      category: saleshub-production

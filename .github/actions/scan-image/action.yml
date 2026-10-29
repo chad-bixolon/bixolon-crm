@@ -1,0 +1,70 @@
+name: Scan final SalesHub image
+description: One vulnerability scan; JSON, SARIF and CycloneDX evidence; reviewed policy gate.
+inputs:
+  image:
+    description: Local final image tag built by this job
+    required: true
+  scope:
+    description: production or operations
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Prepare scan evidence and timing
+      shell: bash
+      env:
+        SCAN_SCOPE: ${{ inputs.scope }}
+      run: |
+        mkdir -p "app/reports/security/$SCAN_SCOPE"
+        date +%s > "app/reports/security/$SCAN_SCOPE/scan-start.txt"
+    - name: Trivy final image inventory and vulnerabilities
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      env:
+        TRIVY_IMAGE_SRC: docker
+        TRIVY_LIST_ALL_PKGS: 'true'
+        TRIVY_IGNOREFILE: /dev/null
+      with:
+        version: v0.76.1
+        scan-type: image
+        image-ref: ${{ inputs.image }}
+        scanners: vuln
+        vuln-type: os,library
+        severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+        ignore-unfixed: 'false'
+        list-all-pkgs: 'true'
+        exit-code: '0'
+        format: json
+        output: app/reports/security/${{ inputs.scope }}/trivy.json
+        cache: 'false'
+    - name: Generate SARIF and CycloneDX from the same image inventory
+      shell: bash
+      env:
+        SCAN_SCOPE: ${{ inputs.scope }}
+        TRIVY_IGNOREFILE: /dev/null
+      run: |
+        output="app/reports/security/$SCAN_SCOPE"
+        scan_seconds=$(( $(date +%s) - $(cat "$output/scan-start.txt") ))
+        started=$SECONDS
+        trivy convert --format sarif --output "$output/trivy.sarif" "$output/trivy.json"
+        sarif_seconds=$(( SECONDS - started ))
+        started=$SECONDS
+        trivy convert --format cyclonedx --output "$output/sbom.cdx.json" "$output/trivy.json"
+        sbom_seconds=$(( SECONDS - started ))
+        printf '{"trivySeconds":%s,"sarifSeconds":%s,"sbomSeconds":%s}\n' "$scan_seconds" "$sarif_seconds" "$sbom_seconds" > "$output/timings.json"
+        printf '\nImage scan: %ss; SARIF: %ss; SBOM: %ss. See build step for image build timing.\n' "$scan_seconds" "$sarif_seconds" "$sbom_seconds" >> "$GITHUB_STEP_SUMMARY"
+    - name: Apply container release policy
+      shell: bash
+      env:
+        SCAN_SCOPE: ${{ inputs.scope }}
+      run: node app/scripts/security/policy.mjs "app/reports/security/$SCAN_SCOPE/trivy.json" "$SCAN_SCOPE" "app/reports/security/$SCAN_SCOPE"
+    - name: Retain security evidence even when the gate fails
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: security-${{ inputs.scope }}-${{ github.run_id }}
+        path: |
+          app/reports/security/${{ inputs.scope }}/*.json
+          app/reports/security/${{ inputs.scope }}/*.sarif
+          app/reports/security/${{ inputs.scope }}/summary.md
+        if-no-files-found: warn
+        retention-days: 14

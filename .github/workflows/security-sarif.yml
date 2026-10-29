@@ -1,0 +1,47 @@
+name: Optional Security SARIF publication
+on:
+  workflow_call:
+    inputs:
+      artifact:
+        required: true
+        type: string
+      category:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  publish:
+    name: Optional GitHub Security publication
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    steps:
+      - name: Download only scan evidence
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.artifact }}
+          path: scan-evidence
+      - name: Publish SARIF if Code Scanning is available
+        id: upload
+        if: steps.download.outcome == 'success'
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        with:
+          sarif_file: scan-evidence/trivy.sarif
+          category: ${{ inputs.category }}
+      - name: Publication status
+        if: ${{ always() }}
+        env:
+          UPLOAD_OUTCOME: ${{ steps.upload.outcome }}
+        run: |
+          if [[ "$UPLOAD_OUTCOME" == success ]]; then
+            echo 'SARIF published to GitHub Security.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'SARIF unavailable or upload rejected. Scan summary and 14-day JSON/SARIF/SBOM artifacts remain authoritative; verify Code Security entitlement/settings.' >> "$GITHUB_STEP_SUMMARY"
+          fi

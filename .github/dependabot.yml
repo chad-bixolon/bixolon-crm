@@ -1,0 +1,53 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /app
+    schedule:
+      interval: weekly
+      day: monday
+      time: '10:00'
+      timezone: America/New_York
+    open-pull-requests-limit: 3
+    groups:
+      production-routine:
+        applies-to: version-updates
+        dependency-type: production
+        update-types: [minor, patch]
+        exclude-patterns: [next, eslint-config-next, prisma, '@prisma/*', react, react-dom, next-auth]
+      development-routine:
+        applies-to: version-updates
+        dependency-type: development
+        update-types: [minor, patch]
+        exclude-patterns: [eslint-config-next]
+      next-framework:
+        applies-to: version-updates
+        patterns: [next, eslint-config-next]
+        update-types: [minor, patch]
+      prisma-runtime:
+        applies-to: version-updates
+        patterns: [prisma, '@prisma/*']
+        update-types: [minor, patch]
+      react-runtime:
+        applies-to: version-updates
+        patterns: [react, react-dom]
+        update-types: [minor, patch]
+  - package-ecosystem: npm
+    directory: /app/scripts/operations/recovery-runtime
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 1
+    groups:
+      operations-routine:
+        applies-to: version-updates
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    groups:
+      actions-routine:
+        applies-to: version-updates
+        update-types: [minor, patch]
