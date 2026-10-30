@@ -199,11 +199,12 @@ test('browser Trade Show → Partner Handoffs → Partner → Export & Complete 
   await page.goto(`/trade-shows/${f.show.id}`);
   await page.getByRole('link',{name:'Partner Handoffs',exact:true}).click();
   await expect(page.getByText('Overdue Handoffs', {exact:true})).toBeVisible();
+  await expect(page.getByRole('columnheader',{name:'Current Follow-up Owner',exact:true})).toBeVisible();
   const partnerRow = page.getByRole('row').filter({has:page.getByRole('link',{name:f.partner.name,exact:true})});
   await expect(partnerRow).toContainText(`${selectedOwner.firstName} ${selectedOwner.lastName}`);
   await expect(page.getByText(/if eligible|performing user|internal batch owner/i)).toHaveCount(0);
   await page.getByRole('link',{name:f.partner.name,exact:true}).click();
-  await expect(page.getByText(`2 leads are ready to send to ${f.partner.name}.`, {exact:false})).toBeVisible();
+  await expect(page.getByText(`2 leads are awaiting handoff to ${f.partner.name}.`, {exact:false})).toBeVisible();
   await page.getByRole('button',{name:'Export & Complete Handoff',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'Confirm Partner Handoff'});
   await expect(dialog).toContainText(f.partner.name);await expect(dialog).toContainText(`This will export 2 leads for ${f.partner.name}`);await expect(dialog).toContainText('one internal follow-up Task due in 2 business days');await expect(dialog).toContainText('SalesHub will not email the partner automatically.');
@@ -220,6 +221,8 @@ test('browser Trade Show → Partner Handoffs → Partner → Export & Complete 
   await page.getByRole('button',{name:'Re-export Handoff',exact:true}).click();
   const historical=page.waitForEvent('download');await page.getByRole('dialog',{name:'Confirm Handoff Re-export'}).getByRole('button',{name:'Re-export Handoff',exact:true}).click();expect((await historical).suggestedFilename()).toMatch(/^Historical_/);
   await page.getByRole('link',{name:'Partner Handoffs',exact:true}).click();await expect(page.getByRole('heading',{name:'Handoff History',exact:true})).toBeVisible();
+  await expect(page.getByText(`All 2 current ${f.partner.name} leads have been sent to the partner.`,{exact:false})).toBeVisible();
+  await expect(page.getByRole('region',{name:'Partner handoff history table',exact:true}).getByRole('columnheader',{name:'Follow-up Owner',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Export & Complete Handoff',exact:true})).toHaveCount(0);
   expect(await counts(f)).toEqual({batches:1,tasks:1});
 });
