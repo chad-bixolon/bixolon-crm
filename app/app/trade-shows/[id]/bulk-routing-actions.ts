@@ -4,7 +4,7 @@ import {revalidatePath} from 'next/cache';
 import {TradeShowLeadRouting} from '@prisma/client';
 import {requireMutation} from '@/lib/current-user';
 import {prisma} from '@/lib/prisma';
-import {bulkRouteTradeShowLeads,TRADE_SHOW_ROUTINGS,type TradeShowRoutingScope} from '@/lib/trade-show-routing';
+import {previewPartnerRouting,bulkRouteTradeShowLeads,TRADE_SHOW_ROUTINGS,type TradeShowRoutingScope} from '@/lib/trade-show-routing';
 
 import type { BulkRecord } from '@/lib/bulk-action-contract';
 
@@ -19,9 +19,11 @@ export async function bulkRouteTradeShowAction(tradeShowId:number,pageRecords:Bu
     if(leadIds.some(id=>!pageRecords.some(row=>row.id===id)))throw new Error('Refresh the page and select again.');
     const request={records:leadIds.map(id=>pageRecords.find(row=>row.id===id)!),action:'route',value:'',confirmed:form.get('confirmed')==='true'};
     const notes=String(form.get('bulkReferralNotes')??'').trim();if(notes.length>20000)throw new Error('Referral notes must be 20,000 characters or fewer.');
-    const count=await bulkRouteTradeShowLeads(prisma,tradeShowId,request,routing,id('bulkRepId'),id('bulkPartnerAccountId'),notes||null,actor,scope);
+    if(form.get('preview')==='true' && routing==='REFERRED_TO_PARTNER') return {preview:await previewPartnerRouting(prisma,tradeShowId,request,id('bulkRepId'),id('bulkPartnerAccountId'),id('bulkFollowUpOwnerId'),notes||null,actor)};
+    const count=await bulkRouteTradeShowLeads(prisma,tradeShowId,request,routing,id('bulkRepId'),id('bulkPartnerAccountId'),notes||null,actor,scope,id('bulkFollowUpOwnerId'),String(form.get('routingIntentToken')??''));
     for(const path of ['/trade-shows/my-leads','/tasks','/','/administration/maintenance-history','/administration/audit-history'])revalidatePath(path);
     revalidatePath(`/trade-shows/${tradeShowId}`);
+    revalidatePath(`/trade-shows/${tradeShowId}/partner-handoffs`);
     for(const id of leadIds)revalidatePath(`/trade-shows/${tradeShowId}/leads/${id}`);
     return {success:`${count} lead${count===1?'':'s'} routed successfully.`};
   }catch(error){return {error:error instanceof Error&&!('code' in error)?error.message:'No records changed. Refresh the list and try again.'};}

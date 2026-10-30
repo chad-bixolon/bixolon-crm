@@ -1,3 +1,4 @@
+process.env.AUTH_SECRET = 'unit-partner-routing-only';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -80,24 +81,25 @@ test('Lead edit preserves a historical rep during ordinary edits and rejects new
 
 test('individual partner referral records actor/time and later rerouting preserves referral audit fields',async()=>{
   let stored={updatedAt:new Date('2026-10-19T12:00:00Z'),id:2,tradeShowId:1,routing:'UNREVIEWED',routedPartnerAccountId:null,referredAt:null,referredByUserId:null,referralNotes:null,assignedSalesRepUserId:null,convertedOpportunityId:null,accountId:null,contactId:null,competitorId:null,tradeShow:{archivedAt:null}};
-  const tx={tradeShowLead:{findFirst:async()=>stored,update:async({data})=>(stored={...stored,...data})},user:{findFirst:async()=>null},account:{findFirst:async({where})=>where.id===20?{id:20}:null},contact:{findFirst:async()=>null},competitorOption:{findFirst:async()=>null}};
+  const tx={tradeShowLead:{findFirst:async()=>stored,update:async({data})=>(stored={...stored,...data})},user:{findFirst:async()=>({id:9}),findUnique:async()=>actor('ADMIN')},$queryRaw:async()=>[],account:{findFirst:async({where})=>where.id===20?{id:20}:null},contact:{findFirst:async()=>null},competitorOption:{findFirst:async()=>null}};
   const client={$transaction:async callback=>callback(tx)};
-  await leads.saveTradeShowLeadUpdate(client,1,2,editForm(stored,[['status','NEW'],['routing','REFERRED_TO_PARTNER'],['routedPartnerAccountId','20'],['referralNotes','Warm handoff']]),actor('MARKETING_MANAGER'));
+  await leads.saveTradeShowLeadUpdate(client,1,2,editForm(stored,[['status','NEW'],['routing','REFERRED_TO_PARTNER'],['routedPartnerAccountId','20'],['partnerFollowUpOwnerId','9'],['referralNotes','Warm handoff']]),actor('MARKETING_MANAGER'));
   assert.equal(stored.routing,'REFERRED_TO_PARTNER');assert.equal(stored.routedPartnerAccountId,20);assert.equal(stored.referredByUserId,7);assert.ok(stored.referredAt instanceof Date);assert.equal(stored.referralNotes,'Warm handoff');
   const audit={partner:stored.routedPartnerAccountId,at:stored.referredAt,by:stored.referredByUserId,notes:stored.referralNotes};
   await leads.saveTradeShowLeadUpdate(client,1,2,editForm(stored,[['status','NEW'],['routing','MARKETING_FOLLOW_UP'],['routedPartnerAccountId',''],['referralNotes','']]),actor('MARKETING_MANAGER'));
   assert.equal(stored.routing,'MARKETING_FOLLOW_UP');assert.deepEqual({partner:stored.routedPartnerAccountId,at:stored.referredAt,by:stored.referredByUserId,notes:stored.referralNotes},audit);
-  await leads.saveTradeShowLeadUpdate(client,1,2,editForm(stored,[['status','NEW'],['routing','REFERRED_TO_PARTNER'],['routedPartnerAccountId','20'],['referralNotes','Replacement text']]),actor('ADMIN',99));
+  await leads.saveTradeShowLeadUpdate(client,1,2,editForm(stored,[['status','NEW'],['routing','REFERRED_TO_PARTNER'],['routedPartnerAccountId','20'],['partnerFollowUpOwnerId','9'],['referralNotes','Replacement text']]),actor('ADMIN',99));
   assert.deepEqual({partner:stored.routedPartnerAccountId,at:stored.referredAt,by:stored.referredByUserId,notes:stored.referralNotes},audit);
 });
 
 test('bulk routing validates once, updates every selected lead, and enforces manager-level access',async()=>{
   const rows=[{id:1,routing:'UNREVIEWED',updatedAt:new Date('2026-10-19T12:00:00Z')},{id:2,routing:'UNREVIEWED',updatedAt:new Date('2026-10-19T12:00:00Z')}],updates=[];
   const req=ids=>({records:rows.filter(row=>ids.includes(row.id)).map(row=>({id:row.id,updatedAt:row.updatedAt.toISOString()})),confirmed:true,action:'route',value:''});
-  const tx={$queryRaw:async()=>[],adminMaintenanceEvent:{create:async()=>({})},tradeShow:{findUnique:async()=>({archivedAt:null})},tradeShowLead:{count:async()=>2,findMany:async()=>rows.map(row=>({...row,referredAt:null})),update:async({where,data})=>updates.push({id:where.id,...data})},user:{findUnique:async()=>actor('SALES_MANAGER'),findFirst:async({where})=>where.id===9?{id:9}:null},account:{findFirst:async({where})=>where.id===20?{id:20}:null}};
+  const tx={$queryRaw:async()=>[],adminMaintenanceEvent:{create:async()=>({})},tradeShow:{findUnique:async()=>({archivedAt:null})},tradeShowLead:{count:async()=>2,findMany:async()=>rows.map(row=>({...row,referredAt:null})),update:async({where,data})=>updates.push({id:where.id,...data})},user:{findUnique:async()=>actor('SALES_MANAGER'),findFirst:async({where})=>where.id===9?{id:9}:null},account:{findFirst:async({where})=>where.id===20?{id:20}:null,findUniqueOrThrow:async()=>({id:20,name:'Bluestar',updatedAt:new Date('2026-10-19T12:00:00Z')})}};
   const client={$transaction:async callback=>callback(tx)};
-  assert.equal(await routing.bulkRouteTradeShowLeads(client,1,req([1,2]),'REFERRED_TO_PARTNER',null,20,'BlueStar',actor('SALES_MANAGER'),{where:{},page:1}),2);
-  assert.equal(updates.length,2);assert.ok(updates.every(item=>item.routing==='REFERRED_TO_PARTNER'&&item.routedPartnerAccountId===20&&item.referredByUserId===7));
+  const preview=await routing.previewPartnerRouting(client,1,req([1,2]),null,20,9,'BlueStar',actor('SALES_MANAGER'));
+  assert.equal(await routing.bulkRouteTradeShowLeads(client,1,req([1,2]),'REFERRED_TO_PARTNER',null,20,'BlueStar',actor('SALES_MANAGER'),{where:{},page:1},9,preview.token),2);
+  assert.equal(updates.length,2);assert.ok(updates.every(item=>item.routing==='REFERRED_TO_PARTNER'&&item.routedPartnerAccountId===20&&item.partnerFollowUpOwnerId===9&&item.referredByUserId===7));
   await assert.rejects(routing.bulkRouteTradeShowLeads(client,1,req([1]),'UNREVIEWED',null,null,null,actor('SALES'),{where:{},page:1}),/Access denied/);
   await assert.rejects(routing.bulkRouteTradeShowLeads(client,1,req([1]),'UNREVIEWED',null,null,null,actor('READ_ONLY'),{where:{},page:1}),/Access denied/);
 });
@@ -109,4 +111,12 @@ test('migration defaults existing leads to Unreviewed and enforces required curr
   assert.match(schema,/routing\s+TradeShowLeadRouting @default\(UNREVIEWED\)/);
   assert.match(migration,/NOT NULL DEFAULT 'UNREVIEWED'/);
   assert.match(migration,/TradeShowLead_routing_requirements_check/);
+});
+
+
+test('Follow-up Owner uses normal Task eligibility and requires an explicit eligible user',async()=>{
+  const client={user:{findFirst:async({where})=>where.id===9?{id:9}:null}};
+  await assert.rejects(routing.validatePartnerFollowUpOwner(client,null),/Select a Follow-up Owner/);
+  await assert.rejects(routing.validatePartnerFollowUpOwner(client,10),/active Follow-up Owner/);
+  assert.equal((await routing.validatePartnerFollowUpOwner(client,9)).id,9);
 });

@@ -4,7 +4,7 @@ import { can, taskScope, type Actor } from './authorization';
 import { canRunReportType, canViewBuiltInReport, canViewReportDefinition, validateReportConfiguration } from './reporting';
 import { engagementAccountWhere } from './engagement';
 import { dashboardOpenTaskWhere } from './work';
-import { canViewSalesLeadQueue } from './trade-show-leads';
+import { canViewSalesLeadQueue } from './trade-show-lead-policy';
 import { businessQuarter } from './business-quarter';
 
 export type DashboardSection = 'forecast' | 'reps' | 'closing' | 'stage' | 'category' | 'stale' | 'tasks' | 'activities' | 'tradeShowLeads' | 'priceExceptions' | 'admin' | 'marketing' | 'support';

@@ -379,6 +379,7 @@ model User {
   tradeShowImports        TradeShowImport[]  @relation("TradeShowImportUploader")
   createdTradeShowImportMappings TradeShowImportMapping[] @relation("TradeShowImportMappingCreator")
   updatedTradeShowImportMappings TradeShowImportMapping[] @relation("TradeShowImportMappingUpdater")
+  partnerFollowUpLeads TradeShowLead[] @relation("TradeShowPartnerFollowUpOwner")
   assignedTradeShowLeads  TradeShowLead[]    @relation("TradeShowLeadSalesRep")
   originalTradeShowTasks  Task[] @relation("TaskOriginalAssignee")
   referredTradeShowLeads  TradeShowLead[]    @relation("TradeShowLeadReferrer")
@@ -2460,12 +2461,14 @@ model TradeShowLead {
   leadSourceChanges LeadSourceChange[]
   campaignInfluences CampaignInfluence[]
   id                      Int                 @id @default(autoincrement())
+  partnerFollowUpOwnerId Int?
+  partnerFollowUpOwner User? @relation("TradeShowPartnerFollowUpOwner", fields: [partnerFollowUpOwnerId], references: [id], onDelete: Restrict)
   partnerHandoffItems TradeShowPartnerHandoffLead[]
   partnerHandoffStatus PartnerHandoffStatus?
   partnerAssignmentVersion Int @default(0)
   partnerAwaitingAt DateTime?
   partnerSentAt DateTime?
-  /// Only this dedicated notes field is approved for partner export.
+  /// Partner-facing referral notes, shared alongside approved source lead context.
   partnerHandoffNotes String? @db.Text
   followUpTasks           Task[]
   tradeShowId             Int
@@ -2530,6 +2533,7 @@ model TradeShowLead {
 
   @@unique([tradeShowId, sourceKey])
   @@index([tradeShowId, status])
+  @@index([partnerFollowUpOwnerId])
   @@index([tradeShowId, routedPartnerAccountId, partnerHandoffStatus])
   @@index([tradeShowId, routing])
   @@index([assignedSalesRepUserId, status])
@@ -2689,7 +2693,7 @@ model TradeShowPartnerHandoffLead {
   leadId Int
   lead TradeShowLead @relation(fields: [leadId], references: [id], onDelete: Restrict)
   assignmentVersion Int
-  /// Version 1 external whitelist only; enables exact historical re-export.
+  /// Approved external fields only; row width preserves the original export format for re-export.
   exportRow Json
   @@id([batchId, leadId])
   @@unique([leadId, assignmentVersion])

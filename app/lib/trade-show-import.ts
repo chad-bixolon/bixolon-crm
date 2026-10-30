@@ -1,3 +1,4 @@
+import { eligibleUserWhere, listEligibleUserOptions } from './assignment-eligibility';
 import { auditPartnerAssignment } from './trade-show-partner-state';
 import { Prisma, TradeShowLeadRouting, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
@@ -9,7 +10,7 @@ import { tradeShowFollowUpBusinessDays } from './configuration';
 import { attachTradeShowInfluence, ensureTradeShowCampaign, eventsLeadSource } from './marketing-attribution';
 
 export type ReviewedRow = { originalSourceKey:string; reviewedOverrides:ReviewedOverrides };
-export type ImportChoice = ReviewedRow & { sourceKey: string; routing:TradeShowLeadRouting|null; repId: number | null; partnerAccountId:number|null; accountId: number | null; contactId: number | null; refresh: boolean };
+export type ImportChoice = ReviewedRow & { sourceKey: string; routing:TradeShowLeadRouting|null; repId: number | null; partnerAccountId:number|null; partnerFollowUpOwnerId?:number|null; accountId: number | null; contactId: number | null; refresh: boolean };
 export type CustomMappingSelection = { definition: MappingDefinition; id: number | null; name: string | null };
 const clean = (value: string | null | undefined) => (value??'').trim().replace(/\s+/g,' ').toLowerCase();
 function stableJson(value:unknown):string{return JSON.stringify(value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.entries(value as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b)).map(([key,item])=>[key,item&&typeof item==='object'?JSON.parse(stableJson(item)):item])):value);}
@@ -27,12 +28,13 @@ const storedOverrides=(value:unknown):ReviewedOverrides=>value&&typeof value==='
 async function previewParsedTradeShowImport(client:PrismaClient,showId:number,filename:string,parsed:ParsedWorkbook,mapping:CustomMappingSelection|null,reviews:ReviewedRow[]|null){
   const originalKeys=parsed.rows.map(row=>row.sourceKey);
   if(reviews&&(reviews.length!==parsed.rows.length||reviews.some((review,index)=>review.originalSourceKey!==originalKeys[index])))throw new Error('Reviewed corrections changed. Preview again.');
-  const [originalExisting,accounts,contacts,reps,prior]=await Promise.all([
+  const [originalExisting,accounts,contacts,reps,prior,followUpOwners]=await Promise.all([
     client.tradeShowLead.findMany({where:{tradeShowId:showId,OR:[{sourceKey:{in:originalKeys}},{sourceOriginalKey:{in:originalKeys}}]},select:{sourceKey:true,sourceOriginalKey:true,rawSourceData:true,reviewedOverrides:true}}),
     client.account.findMany({where:{status:'ACTIVE',archivedAt:null},select:{id:true,name:true,website:true,businessRoles:{select:{role:true}}},take:10000}),
     client.contact.findMany({where:{active:true,archivedAt:null},select:{id:true,firstName:true,lastName:true,email:true,accountId:true,account:{select:{name:true}}},take:10000}),
     client.user.findMany({where:{active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true,firstName:true,lastName:true},orderBy:[{firstName:'asc'},{lastName:'asc'}]}),
     client.tradeShowImport.count({where:{tradeShowId:showId,fileSha256:parsed.sha256}}),
+    listEligibleUserOptions(client, 'general-task'),
   ]);
   const originalByKey=new Map<string,ExistingLead>();for(const lead of originalExisting as ExistingLead[]){originalByKey.set(lead.sourceKey,lead);if(lead.sourceOriginalKey)originalByKey.set(lead.sourceOriginalKey,lead);}
   const effectiveRows=parsed.rows.map((row,index)=>{const old=originalByKey.get(row.sourceKey),reviewedOverrides={...storedOverrides(old?.reviewedOverrides),...storedOverrides(reviews?.[index]?.reviewedOverrides)};return {...applyReviewedOverrides(showId,parsed.format,row,reviewedOverrides),originalSourceKey:row.sourceKey,reviewedOverrides};});
@@ -56,7 +58,7 @@ async function previewParsedTradeShowImport(client:PrismaClient,showId:number,fi
   });
   const summary={total:rows.length,new:rows.filter(r=>r.state==='NEW').length,alreadyImported:rows.filter(r=>r.state==='ALREADY_IMPORTED').length,changedSource:rows.filter(r=>r.state==='SOURCE_CHANGED').length,invalid:rows.filter(r=>r.state==='INVALID').length,needsReview:rows.filter(r=>r.warnings.length||r.matches.contactMatches.length>1||r.matches.exactAccounts.length>1).length,usableEmail:rows.filter(r=>r.email).length,duplicateEmailGroups:[...emailCount.values()].filter(n=>n>1).length,fallbackIdentityRows:rows.filter(r=>r.identityStrategy==='ATTENDEE_FIELDS').length,fallbackCollisionGroups:[...fallbackKeyCount.values()].filter(n=>n>1).length,unresolvedAccounts:rows.filter(r=>r.sourceCompany&&!r.matches.accountSuggestion).length,unresolvedContacts:rows.filter(r=>r.email&&!r.matches.contactSuggestion).length,placeholderRows:rows.filter(r=>r.warnings.some(w=>w.includes('placeholder'))).length};
   const partnerAccounts=accounts.filter(account=>account.businessRoles?.some(item=>PARTNER_ACCOUNT_ROLES.includes(item.role)));
-  return {parsed:{...parsed,rows:effectiveRows},filename,rows,summary,reps,accounts,partnerAccounts,contacts,priorExactFile:prior>0,mapping};
+  return {parsed:{...parsed,rows:effectiveRows},filename,rows,summary,reps,followUpOwners,accounts,partnerAccounts,contacts,priorExactFile:prior>0,mapping};
 }
 
 export async function previewTradeShowImport(client:PrismaClient,showId:number,buffer:Buffer,filename:string,actor:Actor,mapping:CustomMappingSelection|null=null,reviews:ReviewedRow[]|null=null){
@@ -92,7 +94,7 @@ export async function previewMappedTradeShowImport(client:PrismaClient,showId:nu
   return plan;
 }
 
-export async function confirmTradeShowImport(client:PrismaClient,showId:number,buffer:Buffer,filename:string,actor:Actor,sha256:string,defaultRoutingOrRep:TradeShowLeadRouting|number,defaultRepOrChoices:number|null|ImportChoice[],defaultPartnerOrMapping:number|null|CustomMappingSelection,choicesArg?:ImportChoice[],mappingArg:CustomMappingSelection|null=null){
+export async function confirmTradeShowImport(client:PrismaClient,showId:number,buffer:Buffer,filename:string,actor:Actor,sha256:string,defaultRoutingOrRep:TradeShowLeadRouting|number,defaultRepOrChoices:number|null|ImportChoice[],defaultPartnerOrMapping:number|null|CustomMappingSelection,choicesArg?:ImportChoice[],mappingArg:CustomMappingSelection|null=null,defaultFollowUpOwnerId:number|null=null){
   const legacy=typeof defaultRoutingOrRep==='number';
   const defaultRouting:TradeShowLeadRouting=legacy?'BIXOLON_SALES':defaultRoutingOrRep;
   const defaultRepId=legacy?defaultRoutingOrRep:defaultRepOrChoices as number|null;
@@ -111,7 +113,18 @@ export async function confirmTradeShowImport(client:PrismaClient,showId:number,b
   const businessDays=await tradeShowFollowUpBusinessDays(client);
   return client.$transaction(async tx=>{
     if(mapping?.id){const saved=await tx.tradeShowImportMapping.findFirst({where:{id:mapping.id,archivedAt:null},select:{name:true,mappings:true}});if(!saved||stableJson(saved.mappings)!==stableJson(mapping.definition))throw new Error('Saved mapping changed. Preview again.');mapping.name=saved.name;}
-    const effective=choices.map(choice=>({routing:choice.routing??defaultRouting,repId:choice.repId??defaultRepId,partnerAccountId:choice.partnerAccountId??defaultPartnerAccountId}));
+    const effective=choices.map(choice=>({routing:choice.routing??defaultRouting,repId:choice.repId??defaultRepId,partnerAccountId:choice.partnerAccountId??defaultPartnerAccountId,partnerFollowUpOwnerId:choice.partnerFollowUpOwnerId??defaultFollowUpOwnerId}));
+    const ownerIds = [...new Set(effective.filter(item=>item.routing==='REFERRED_TO_PARTNER').map(item=>item.partnerFollowUpOwnerId).filter((id):id is number=>id!==null))].sort((a,b)=>a-b);
+    if (ownerIds.some(id=>!Number.isSafeInteger(id)||id<1)) throw new Error('Choose a valid Follow-up Owner.');
+    if (effective.some(item=>item.routing==='REFERRED_TO_PARTNER')) {
+      const lockedUsers = [...new Set([actor.id,...ownerIds])].sort((a,b)=>a-b);
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id IN (${Prisma.join(lockedUsers)}) ORDER BY id FOR SHARE`);
+      const current = await tx.user.findUnique({where:{id:actor.id}});
+      if (!current || !can(current,'trade-shows.manage') || !can(current,'trade-shows.route')) throw new Error('Access denied');
+    }
+    const owners = ownerIds.length ? await tx.user.findMany({where:{id:{in:ownerIds},...eligibleUserWhere('general-task')},select:{id:true}}) : [];
+    const validOwners = new Set(owners.map(owner=>owner.id));
+    if (ownerIds.some(id=>!validOwners.has(id))) throw new Error('Choose an active Follow-up Owner who can receive Tasks.');
     const repIds=[...new Set(effective.map(item=>item.repId).filter((id):id is number=>id!==null))];
     const reps=repIds.length?await tx.user.findMany({where:{id:{in:repIds},active:true,archivedAt:null,role:{in:['SALES','SALES_MANAGER']}},select:{id:true}}):[];
     const validReps=new Set(reps.map(r=>r.id));
@@ -146,7 +159,8 @@ export async function confirmTradeShowImport(client:PrismaClient,showId:number,b
       if(old){existing++;if(correctionsChanged||choice.refresh&&stableJson(old.rawSourceData)!==stableJson(rawRow.rawSourceData))await tx.tradeShowLead.update({where:{id:old.id},data:source});continue;}
       if (!campaign) { campaign = await ensureTradeShowCampaign(tx, showId, actor.id); eventSource = await eventsLeadSource(tx); }
       const route=effective[i];
-      const createdLead=await tx.tradeShowLead.create({data:{tradeShowId:showId,firstImportId:record.id,sourceFileName:filename,sourceSheet:parsed.sheet,sourceRow:row.sourceRow,...source,routing:route.routing,assignedSalesRepUserId:route.repId,routedPartnerAccountId:route.partnerAccountId,referralNotes:null,...(route.routing==='REFERRED_TO_PARTNER'?{referredAt:new Date(),referredByUserId:actor.id}:{}),accountId:choice.accountId,contactId:choice.contactId,status:'NEW',...(route.routing==='REFERRED_TO_PARTNER'?{partnerHandoffStatus:'AWAITING_PARTNER_HANDOFF',partnerAssignmentVersion:1,partnerAwaitingAt:new Date()}: {})}});created++;
+      if (route.routing==='REFERRED_TO_PARTNER'&&!route.partnerFollowUpOwnerId) throw new Error('Select a Follow-up Owner before importing partner leads.');
+      const createdLead=await tx.tradeShowLead.create({data:{tradeShowId:showId,firstImportId:record.id,sourceFileName:filename,sourceSheet:parsed.sheet,sourceRow:row.sourceRow,...source,routing:route.routing,assignedSalesRepUserId:route.repId,routedPartnerAccountId:route.partnerAccountId,referralNotes:null,...(route.routing==='REFERRED_TO_PARTNER'?{referredAt:new Date(),referredByUserId:actor.id}:{}),accountId:choice.accountId,contactId:choice.contactId,status:'NEW',...(route.routing==='REFERRED_TO_PARTNER'?{partnerHandoffStatus:'AWAITING_PARTNER_HANDOFF',partnerAssignmentVersion:1,partnerAwaitingAt:new Date(),partnerFollowUpOwnerId:route.partnerFollowUpOwnerId}: {})}});created++;
       if(route.routing==='REFERRED_TO_PARTNER')await auditPartnerAssignment(tx,{routing:'UNREVIEWED',routedPartnerAccountId:null},createdLead,actor.id);
       await attachTradeShowInfluence(tx, createdLead, campaign!.id, eventSource!.id, actor.id);
       if(route.routing==='BIXOLON_SALES')await syncTradeShowFollowUp(tx,null,createdLead,actor.id,new Date(),businessDays);

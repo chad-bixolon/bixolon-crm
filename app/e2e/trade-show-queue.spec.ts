@@ -76,7 +76,7 @@ test('server queue filters, latest Task selection, relative reload, pagination c
   expect(canEditTradeShowLead(context.effective!, { assignedSalesRepUserId: manager.id })).toBe(false);
   expect(can(context.effective!, 'trade-shows.assign')).toBe(false);
   const summary = await tradeShowEventSummary(db, sales, fixture.show.id);
-  expect(summary.total).toBe(26); expect(summary.assigned).toBe(26); expect(summary.routing.BIXOLON_SALES).toBe(26);
+  expect(summary.total).toBe(26); expect(summary.routed).toBe(26); expect(summary.routing.BIXOLON_SALES).toBe(26);
 });
 
 test('bulk routing rejects stale, invalid assignee, foreign page, revoked permission and unconfirmed requests; writes rollback atomically', async () => {

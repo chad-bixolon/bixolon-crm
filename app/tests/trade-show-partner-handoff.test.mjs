@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 Module._extensions['.ts'] = (mod, filename) => mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, filename);
 const require = Module.createRequire(import.meta.url);
 const { partnerAssignmentData } = require(path.join(root,'lib/trade-show-partner-state.ts'));
-const { partnerExportRow, partnerWorkbook, partnerExportHeaders, partnerExportFilename, awaitingPartnerWhere } = require(path.join(root,'lib/trade-show-partner-handoff.ts'));
+const { partnerExportRow, partnerWorkbook, partnerExportHeaders, legacyPartnerExportHeaders, partnerExportFilename, awaitingPartnerWhere } = require(path.join(root,'lib/trade-show-partner-handoff.ts'));
 const { can } = require(path.join(root,'lib/authorization.ts'));
 const base = { routing:'REFERRED_TO_PARTNER', routedPartnerAccountId:20, status:'NEW', convertedOpportunityId:null, partnerHandoffStatus:'AWAITING_PARTNER_HANDOFF', partnerAssignmentVersion:1 };
 const now = new Date('2026-10-30T12:00:00Z');
@@ -37,16 +37,16 @@ test('closure/conversion removes awaiting work, keeps sent history, reopening st
   assert.equal(partnerAssignmentData({...base,status:'DISQUALIFIED',partnerHandoffStatus:null},base,now).partnerAssignmentVersion,2);
 });
 test('export uses an explicit external whitelist and no internal notes, identifiers or auth data', () => {
-  const lead={firstName:'Ada',lastName:'Lovelace',sourceCompany:'Company',title:'Engineer',email:'ada@example.test',phone:'123',city:'City',stateProvince:'State',country:'Country',productInterest:'Printers',status:'QUALIFIED',partnerHandoffNotes:'Approved for partner',salesNotes:'SECRET SALES',referralNotes:'SECRET REFERRAL',sourceNotes:'SECRET SOURCE',rawSourceData:{secret:'RAW'},id:123,password:'SECRET AUTH'};
+  const lead={firstName:'Ada',lastName:'Lovelace',sourceCompany:'Company',title:'Engineer',email:'ada@example.test',phone:'123',city:'City',stateProvince:'State',country:'Country',productInterest:'Printers',status:'QUALIFIED',partnerHandoffNotes:'Approved for partner',salesNotes:'SECRET SALES',referralNotes:'SECRET REFERRAL',activityNotes:'SECRET ACTIVITY',opportunityNotes:'SECRET OPPORTUNITY',auditComments:'SECRET AUDIT',historyComments:'SECRET HISTORY',pricing:'SECRET PRICING',internalStrategy:'SECRET STRATEGY',crmNotes:'SECRET CRM',sourceNotes:'Source request\nPlease discuss barcode labels',competitorSourceText:'Existing competitor',currentProductBeingUsed:'Desktop printer',customerPainPoints:'Slow label output',rawSourceData:{secret:'RAW'},id:123,password:'SECRET AUTH'};
   const row=partnerExportRow(lead,{name:'MODEX',startDate:now},'Partner','Internal Owner');
-  assert.equal(row.length,16);assert.equal(row[13],'Approved for partner'); assert.equal(row[12],'2026-10-30');
+  assert.equal(row.length,20);assert.equal(row[16],'Source request\nPlease discuss barcode labels');assert.deepEqual(row.slice(17),['Existing competitor','Desktop printer','Slow label output']);assert.equal(row[13],'Approved for partner'); assert.equal(row[12],'2026-10-30');
   assert.doesNotMatch(JSON.stringify(row),/SECRET|RAW|password/);
   const book=XLSX.read(partnerWorkbook([row]),{type:'buffer'});
   assert.deepEqual(XLSX.utils.sheet_to_json(book.Sheets['Partner Leads'],{header:1}),[partnerExportHeaders,row]);
 });
 test('all spreadsheet cells stay text and escape formula prefixes including whitespace/control characters', () => {
   const values=['=1+1','+SUM(A1)','-1+1','@evil',' \t=2','\n=3','\rhidden','\ttext'];
-  const row=Array(16).fill('ordinary'); values.forEach((v,i)=>row[i]=v);
+  const row=Array(partnerExportHeaders.length).fill('ordinary'); values.forEach((v,i)=>row[i]=v);
   const sheet=XLSX.read(partnerWorkbook([row]),{type:'buffer',cellFormula:true}).Sheets['Partner Leads'];
   values.forEach((v,i)=>{ const cell=sheet[XLSX.utils.encode_cell({r:1,c:i})];assert.equal(cell.t,'s');assert.equal(cell.f,undefined);assert.equal(cell.v,"'"+v); });
   assert.throws(()=>partnerWorkbook([['too few']]),/Invalid/);
@@ -65,4 +65,34 @@ test('external filenames contain safe business labels and no internal identifier
   const filename=partnerExportFilename('Event / "unsafe"', '../Partner\r\n', now);
   assert.match(filename,/^SalesHub_Event_unsafe_Partner_Leads_20261030120000000_[a-f0-9]{8}\.xlsx$/);
   assert.ok(partnerExportFilename('x'.repeat(1000),'y'.repeat(1000),now).length<180);
+});
+
+
+test('partner-shareable notes preserve multiline text, escape formula injection, and leave blank cells well formed', () => {
+  const source={firstName:'Ada',lastName:'Lovelace',sourceNotes:'First line\nSecond line',partnerHandoffNotes:'Partner referral\r\nPlease call',productInterest:'Label printers',status:'QUALIFIED',competitorSourceText:null,currentProductBeingUsed:null,customerPainPoints:null};
+  const row=partnerExportRow(source,{name:'Show',startDate:null},'Partner','Owner');
+  const read=values=>XLSX.utils.sheet_to_json(XLSX.read(partnerWorkbook([values]),{type:'buffer'}).Sheets['Partner Leads'],{header:1,defval:''});
+  assert.equal(read(row)[1][16],source.sourceNotes);assert.equal(row[13],source.partnerHandoffNotes);
+  // Excel XML readers normalize Windows line endings while retaining the line break.
+  assert.equal(read(row)[1][13],source.partnerHandoffNotes.replace(/\r\n/g,'\n'));
+  for(const value of ['=HYPERLINK("https://example.test")','+SUM(A1:A2)','-2+1','@command',' \t=1','\n=2']) {
+    for(const field of ['sourceNotes','partnerHandoffNotes','productInterest','customerPainPoints','competitorSourceText','currentProductBeingUsed']) {
+      const values=partnerExportRow({...source,[field]:value},{name:'Show',startDate:null},'Partner','Owner');
+      const sheet=XLSX.read(partnerWorkbook([values]),{type:'buffer',cellFormula:true}).Sheets['Partner Leads'];
+      const index={sourceNotes:16,partnerHandoffNotes:13,productInterest:9,competitorSourceText:17,currentProductBeingUsed:18,customerPainPoints:19}[field];
+      const cell=sheet[XLSX.utils.encode_cell({r:1,c:index})];
+      assert.equal(cell.v,"'"+value);assert.equal(cell.t,'s');assert.equal(cell.f,undefined);
+    }
+  }
+  const blank=partnerExportRow({...source,sourceNotes:null,partnerHandoffNotes:'',productInterest:null,customerPainPoints:null},{name:'Show',startDate:null},'Partner','Owner');
+  const exported=read(blank);assert.equal(exported[0].length,20);assert.equal(exported[1].length,20);assert.equal(exported[1][16],'');assert.equal(exported[1][13],'');
+});
+
+test('historical export retains original columns and rejects mixed or unsupported snapshot widths', () => {
+  const row=Array(16).fill('Original shared value');
+  const sheet=XLSX.read(partnerWorkbook([row]),{type:'buffer'}).Sheets['Partner Leads'];
+  assert.deepEqual(XLSX.utils.sheet_to_json(sheet,{header:1}),[legacyPartnerExportHeaders,row]);
+  assert.ok(!legacyPartnerExportHeaders.includes('Source Notes'));
+  assert.throws(()=>partnerWorkbook([row,Array(20).fill('New context')]),/Invalid partner export snapshot/);
+  assert.throws(()=>partnerWorkbook([Array(17).fill('Invalid')]),/Invalid partner export snapshot/);
 });
