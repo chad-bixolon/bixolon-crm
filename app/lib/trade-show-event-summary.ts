@@ -1,7 +1,8 @@
+import { routedTradeShowCount } from './trade-show-routing-counts';
 import { Prisma, type PrismaClient, type TradeShowLeadRouting } from '@prisma/client';
 import { can, type Actor } from './authorization';
 
-type LeadCounts = { total: number; assigned: number; contacted: number; qualified: number; converted: number; contactsResolved: number };
+type LeadCounts = { total: number; contacted: number; qualified: number; converted: number; contactsResolved: number };
 type Amount = { currency: string; opportunityCount: number; pipeline: Prisma.Decimal; weightedPipeline: Prisma.Decimal; closedWonValue: Prisma.Decimal };
 // Aggregate on the server so opening one lead page never loads all event leads
 // or the full attribution report into application memory.
@@ -9,7 +10,6 @@ export async function tradeShowEventSummary(db: PrismaClient, actor: Actor, id: 
   const scope = can(actor, 'trade-shows.read') ? actor.role === 'SALES' ? Prisma.sql`l."assignedSalesRepUserId" = ${actor.id}` : Prisma.sql`TRUE` : Prisma.sql`FALSE`;
   const [counts, routes, amounts] = await Promise.all([
     db.$queryRaw<LeadCounts[]>(Prisma.sql`SELECT count(*)::int AS total,
-      count(*) FILTER (WHERE "assignedSalesRepUserId" IS NOT NULL)::int AS assigned,
       count(*) FILTER (WHERE status IN ('CONTACTED','QUALIFIED','CONVERTED'))::int AS contacted,
       count(*) FILTER (WHERE status IN ('QUALIFIED','CONVERTED'))::int AS qualified,
       count(*) FILTER (WHERE status = 'CONVERTED')::int AS converted,
@@ -32,5 +32,5 @@ export async function tradeShowEventSummary(db: PrismaClient, actor: Actor, id: 
   ]);
   const routing: Record<TradeShowLeadRouting, number> = { UNREVIEWED: 0, BIXOLON_SALES: 0, REFERRED_TO_PARTNER: 0, MARKETING_FOLLOW_UP: 0 };
   routes.forEach(row => { routing[row.routing] = row._count; });
-  return { ...counts[0], routing, amounts };
+  return { ...counts[0], routed: routedTradeShowCount(routing), routing, amounts };
 }

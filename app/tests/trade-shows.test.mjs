@@ -216,14 +216,14 @@ test('Trade Show create/edit validates eligible owner and archive stays reversib
 });
 
 test('KPI counts are zero for empty shows and cumulative through conversion', () => {
-  assert.deepEqual(shows.tradeShowKpis([]), { total: 0, assigned: 0, contacted: 0, qualified: 0, converted: 0, routing:{UNREVIEWED:0,BIXOLON_SALES:0,REFERRED_TO_PARTNER:0,MARKETING_FOLLOW_UP:0} });
+  assert.deepEqual(shows.tradeShowKpis([]), { total: 0, routed: 0, contacted: 0, qualified: 0, converted: 0, routing:{UNREVIEWED:0,BIXOLON_SALES:0,REFERRED_TO_PARTNER:0,MARKETING_FOLLOW_UP:0} });
   assert.deepEqual(shows.tradeShowKpis([
     { assignedSalesRepUserId: null, status: 'NEW' },
     { assignedSalesRepUserId: 7, status: 'CONTACTED' },
     { assignedSalesRepUserId: 7, status: 'QUALIFIED' },
     { assignedSalesRepUserId: 8, status: 'CONVERTED' },
     { assignedSalesRepUserId: null, status: 'DISQUALIFIED' },
-  ]), { total: 5, assigned: 3, contacted: 3, qualified: 2, converted: 1, routing:{UNREVIEWED:5,BIXOLON_SALES:0,REFERRED_TO_PARTNER:0,MARKETING_FOLLOW_UP:0} });
+  ]), { total: 5, routed: 0, contacted: 3, qualified: 2, converted: 1, routing:{UNREVIEWED:5,BIXOLON_SALES:0,REFERRED_TO_PARTNER:0,MARKETING_FOLLOW_UP:0} });
 });
 
 test('schema reserves source ID but keeps Badge ID only in raw provenance', () => {
@@ -256,4 +256,11 @@ test('lead update enforces assigned Sales scope and does not invent conversion',
   await assert.rejects(leads.saveTradeShowLeadUpdate(client, 1, 2, contacted, actor('READ_ONLY')), /Access denied/);
   await assert.rejects(leads.saveTradeShowLeadUpdate(client, 1, 2, form([['editToken',stored.updatedAt.toISOString()],['status','CONVERTED']]), actor('SALES')), /Only Opportunity conversion/);
   await assert.rejects(leads.saveTradeShowLeadUpdate(client, 1, 2, form([['editToken',stored.updatedAt.toISOString()],['status','CONTACTED'],['assignedSalesRepUserId','8']]), actor('SALES')), /Access denied to rep assignment/);
+});
+
+
+test('Routed counts Sales, Partner awaiting/sent and Marketing; excludes Unreviewed even with a rep', () => {
+  const rows = ['BIXOLON_SALES','REFERRED_TO_PARTNER','REFERRED_TO_PARTNER','MARKETING_FOLLOW_UP','UNREVIEWED'].map((routing,index)=>({routing,status:'NEW',assignedSalesRepUserId:index===4?7:null,partnerHandoffStatus:index===1?'AWAITING_PARTNER_HANDOFF':index===2?'SENT_TO_PARTNER':null}));
+  assert.equal(shows.tradeShowKpis(rows).routed,4);
+  assert.deepEqual(shows.tradeShowKpis(rows).routing,{UNREVIEWED:1,BIXOLON_SALES:1,REFERRED_TO_PARTNER:2,MARKETING_FOLLOW_UP:1});
 });

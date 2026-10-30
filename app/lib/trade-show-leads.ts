@@ -1,11 +1,13 @@
+import { canViewSalesLeadQueue } from './trade-show-lead-policy';
+export { canViewSalesLeadQueue } from './trade-show-lead-policy';
 import { partnerAssignmentData, auditPartnerAssignment } from './trade-show-partner-state';
 import { assertEditToken, nextUpdatedAt, requireEditToken } from './stale-edit';
-import { TradeShowLeadRouting, TradeShowLeadStatus, type Prisma, type PrismaClient } from '@prisma/client';
+import { TradeShowLeadRouting, TradeShowLeadStatus, Prisma, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { field, optional, positiveId, type Errors } from './crm-validation';
 import { dateField } from './work';
 import { canEditTradeShowLead } from './trade-shows';
-import { canRouteTradeShowLead, referralData, TRADE_SHOW_ROUTINGS, validateTradeShowRouting } from './trade-show-routing';
+import { assertPartnerOwnerChange, validatePartnerFollowUpOwner, canRouteTradeShowLead, referralData, TRADE_SHOW_ROUTINGS, validateTradeShowRouting } from './trade-show-routing';
 import { syncTradeShowFollowUp } from './trade-show-follow-up';
 import { tradeShowFollowUpBusinessDays } from './configuration';
 import { linkLeadAttributionToContact } from './marketing-attribution';
@@ -14,9 +16,6 @@ import { eligibleUserWhere } from './assignment-eligibility';
 const statuses = Object.values(TradeShowLeadStatus);
 export const actionableTradeShowLeadStatuses: TradeShowLeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED'];
 export type SalesLeadQueueFilters = { view?: string; status?: string; tradeShowId?: string };
-export function canViewSalesLeadQueue(actor: Actor) {
-  return can(actor, 'trade-shows.read') && ['SALES', 'SALES_MANAGER', 'ADMIN'].includes(actor.role);
-}
 export function salesLeadQueueWhere(actor: Actor, filters: SalesLeadQueueFilters = {}): Prisma.TradeShowLeadWhereInput {
   if (!canViewSalesLeadQueue(actor)) return { id: -1 };
   const allAssigned = filters.view === 'all' && actor.role !== 'SALES';
@@ -48,6 +47,7 @@ export function parseTradeShowLeadUpdate(form: FormData) {
     if (!id && field(form, `${key}Query`)) errors[key] = 'Select a result from the suggestions.';
     return id;
   };
+  const partnerFollowUpOwnerId = reference('partnerFollowUpOwnerId');
   const assignedSalesRepUserId = reference('assignedSalesRepUserId');
   const routingRaw = field(form,'routing');
   const routing = TRADE_SHOW_ROUTINGS.includes(routingRaw as TradeShowLeadRouting) ? routingRaw as TradeShowLeadRouting : null;
@@ -61,7 +61,7 @@ export function parseTradeShowLeadUpdate(form: FormData) {
   return { errors, value: Object.keys(errors).length ? undefined : {
     status: status!, followUpAt, lastContactedAt, salesNotes, productInterest,
     competitorSourceText, competitorId, currentProductBeingUsed, customerPainPoints,
-    assignedSalesRepUserId, routing, routedPartnerAccountId, referralNotes, partnerHandoffNotes, accountId, contactId,
+    assignedSalesRepUserId, routing, routedPartnerAccountId, partnerFollowUpOwnerId, referralNotes, partnerHandoffNotes, accountId, contactId,
   } };
 }
 
@@ -94,6 +94,21 @@ export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId:
     if (form.has('routing') && !canRouteTradeShowLead(actor,lead)) throw new Error('Access denied to lead routing.');
     const requestedPartnerAccountId = form.has('routedPartnerAccountId') ? input.routedPartnerAccountId : lead.routedPartnerAccountId;
     const partnerAccountId = routing==='REFERRED_TO_PARTNER' ? requestedPartnerAccountId : lead.routedPartnerAccountId;
+    const routingSubmitted = ['routing', 'routedPartnerAccountId', 'partnerFollowUpOwnerId'].some(key => form.has(key));
+    if (routingSubmitted && !canRouteTradeShowLead(actor, lead)) throw new Error('Access denied to lead routing.');
+    const samePartner = lead.routing === routing && lead.routedPartnerAccountId === partnerAccountId;
+    const ownerId = routing === 'REFERRED_TO_PARTNER' ? (form.has('partnerFollowUpOwnerId') ? input.partnerFollowUpOwnerId : samePartner ? lead.partnerFollowUpOwnerId : null) : null;
+    assertPartnerOwnerChange(lead, routing, partnerAccountId, ownerId ?? null);
+    if (routing === 'REFERRED_TO_PARTNER' && (routingSubmitted || !samePartner) && !(samePartner && lead.partnerHandoffStatus === 'SENT_TO_PARTNER')) {
+      // Legacy unchanged assignments may remain ownerless until explicitly reviewed.
+      if (ownerId || !samePartner || form.has('partnerFollowUpOwnerId')) {
+        const userIds = [...new Set([actor.id, ...(ownerId ? [ownerId] : [])])].sort((a,b) => a-b);
+        await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id IN (${Prisma.join(userIds)}) ORDER BY id FOR SHARE`);
+        const currentActor = await tx.user.findUnique({ where: { id: actor.id } });
+        if (!currentActor || !canEditTradeShowLead(currentActor, lead) || !canRouteTradeShowLead(currentActor, lead)) throw new Error('Access denied to lead routing.');
+        await validatePartnerFollowUpOwner(tx, ownerId);
+      }
+    }
     const notes = routing==='REFERRED_TO_PARTNER'&&form.has('referralNotes') ? input.referralNotes : lead.referralNotes;
     if (form.has('routing') || form.has('routedPartnerAccountId')) await validateTradeShowRouting(tx,routing,repId,partnerAccountId,repId===lead.assignedSalesRepUserId&&(routing===lead.routing||routing!=='BIXOLON_SALES')?repId:null);
     if (!can(actor, 'trade-shows.resolve') && (form.has('accountId') || form.has('contactId'))) throw new Error('Access denied to CRM resolution.');
@@ -120,6 +135,7 @@ export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId:
       competitorSourceText: input.competitorSourceText, competitorId: input.competitorId,
       currentProductBeingUsed: input.currentProductBeingUsed, customerPainPoints: input.customerPainPoints,
       assignedSalesRepUserId: repId, routing, routedPartnerAccountId:partnerAccountId,
+      partnerFollowUpOwnerId: ownerId ?? null,
       ...partnerAssignmentData(lead, { ...lead, routing, routedPartnerAccountId: partnerAccountId, status: input.status }),
       ...(form.has('partnerHandoffNotes') ? { partnerHandoffNotes: input.partnerHandoffNotes } : {}),
       ...referralData(routing,lead.routing,actor.id,notes,lead.referredAt), accountId, contactId,

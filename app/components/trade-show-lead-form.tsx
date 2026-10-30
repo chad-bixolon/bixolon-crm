@@ -12,6 +12,7 @@ import { EntityPicker, type PickerResult } from './entity-picker';
 type Option = { id: number; name: string };
 type Lead = {
   updatedAt: Date;
+  partnerFollowUpOwnerId?: number | null; partnerHandoffStatus?: string | null;
   status: TradeShowLeadStatus; followUpAt: Date | null; lastContactedAt: Date | null; salesNotes: string | null;
   productInterest: string | null; competitorSourceText: string | null; competitorId: number | null;
   currentProductBeingUsed: string | null; customerPainPoints: string | null;
@@ -27,7 +28,8 @@ const statusLabels: Record<TradeShowLeadStatus, string> = {
   DISQUALIFIED: 'Disqualified',
 };
 const tradeShowRoutingLabels:Record<TradeShowLeadRouting,string>={UNREVIEWED:'Unreviewed',BIXOLON_SALES:'BIXOLON Sales',REFERRED_TO_PARTNER:'Referred to Partner',MARKETING_FOLLOW_UP:'Marketing Follow-Up'};
-export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, currentRep, partnerAccounts, accounts, contacts, competitors, canAssign, canResolve, canRoute }: {
+export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, currentRep, followUpOwners, currentFollowUpOwner, partnerAccounts, accounts, contacts, competitors, canAssign, canResolve, canRoute }: {
+  followUpOwners: Option[]; currentFollowUpOwner?: string | null;
   tradeShowId: number; leadId: number; initial: Lead; reps: Option[]; currentRep?: string|null; partnerAccounts:Option[]; accounts: Option[]; contacts: (Option & { accountId: number | null; context: string })[]; competitors: Option[]; canAssign: boolean; canResolve: boolean; canRoute:boolean;
 }) {
   const router = useRouter();
@@ -59,8 +61,9 @@ export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, currentR
       <div><label className="label" htmlFor="routing">Routing</label><select className="field" id="routing" name="routing" value={routing} onChange={event=>setRouting(event.target.value as TradeShowLeadRouting)}>{(Object.keys(tradeShowRoutingLabels) as TradeShowLeadRouting[]).map(value=><option value={value} key={value}>{tradeShowRoutingLabels[value]}</option>)}</select>{error('routing')}</div>
       {canAssign&&select('assignedSalesRepUserId',routing==='BIXOLON_SALES'?'Assigned Sales Rep (required)':'Assigned Sales Rep (optional)',initial.assignedSalesRepUserId,reps,'Unassigned',`${currentRep ?? 'User'} (no longer eligible)`)}
       <div className="min-w-0"><EntityPicker type="account" label={`Partner Account ${routing==='REFERRED_TO_PARTNER'?'(required)':'(historical / optional)'}`} name="routedPartnerAccountId" value={partner} onChange={setPartner} filters={{ partnerOnly: true }} error={state.errors.routedPartnerAccountId}/></div>
+      {routing === 'REFERRED_TO_PARTNER' && partner && <div><label className="label" htmlFor="partnerFollowUpOwnerId">Follow-up Owner</label>{initial.partnerHandoffStatus === 'SENT_TO_PARTNER' && partner.id === initial.routedPartnerAccountId ? <p>{currentFollowUpOwner ?? '—'}</p> : <select className="field" id="partnerFollowUpOwnerId" name="partnerFollowUpOwnerId" required defaultValue={val('partnerFollowUpOwnerId', initial.partnerFollowUpOwnerId?.toString() ?? '')}><option value="">Select Follow-up Owner</option>{initial.partnerFollowUpOwnerId && !followUpOwners.some(owner=>owner.id===initial.partnerFollowUpOwnerId) && <option value={initial.partnerFollowUpOwnerId}>{currentFollowUpOwner ?? 'Current owner'}</option>}{followUpOwners.map(owner=><option key={owner.id} value={owner.id}>{owner.name}</option>)}</select>}{error('partnerFollowUpOwnerId')}<p className="mt-1 text-xs text-slate-600">Receives the internal follow-up Task after the handoff is completed.</p></div>}
       <div className="min-w-0">{textarea('referralNotes','Referral Notes (internal)',initial.referralNotes,20000,3)}</div>
-      <div className="min-w-0 sm:col-span-2">{textarea('partnerHandoffNotes','Partner Handoff Notes (shared externally)',initial.partnerHandoffNotes ?? null,20000,3)}<p className="mt-1 text-xs text-slate-600">Only these notes are included in partner exports. Review before sharing.</p></div>
+      <div className="min-w-0 sm:col-span-2">{textarea('partnerHandoffNotes','Partner Handoff Notes (shared externally)',initial.partnerHandoffNotes ?? null,20000,3)}<p className="mt-1 text-xs text-slate-600">Partner exports include these notes, Source Notes, Product Interest, Qualification, Competitor Mentioned, Current Product Being Used and Customer Pain Points. Review this context before sharing; Sales Notes and internal Referral Notes stay private.</p></div>
     </div></section>}
     <section><h2 className="mb-3 text-lg font-semibold">Customer Context</h2><div className="grid min-w-0 gap-5 sm:grid-cols-2">
       <div className="min-w-0 sm:col-span-2">{textarea('productInterest', 'Product Interest', initial.productInterest, 5000)}</div>

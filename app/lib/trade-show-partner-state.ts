@@ -3,6 +3,7 @@ import type { Prisma, PartnerHandoffStatus, TradeShowLeadRouting, TradeShowLeadS
 type Assignment = {
   routing: TradeShowLeadRouting; routedPartnerAccountId: number | null;
   status?: TradeShowLeadStatus; convertedOpportunityId?: number | null;
+  partnerFollowUpOwnerId?: number | null;
   partnerHandoffStatus?: PartnerHandoffStatus | null; partnerAssignmentVersion?: number;
 };
 export const actionablePartnerStatuses: TradeShowLeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED'];
@@ -20,12 +21,13 @@ export function partnerAssignmentData(before: Assignment | null, after: Assignme
 }
 
 export async function auditPartnerAssignment(tx: Prisma.TransactionClient, before: Assignment, after: Assignment & { id: number }, actorId: number) {
-  if (before.routing === after.routing && before.routedPartnerAccountId === after.routedPartnerAccountId) return;
+  if (before.routing === after.routing && before.routedPartnerAccountId === after.routedPartnerAccountId && before.partnerFollowUpOwnerId === after.partnerFollowUpOwnerId) return;
   if (before.routing !== 'REFERRED_TO_PARTNER' && after.routing !== 'REFERRED_TO_PARTNER') return;
   if (!tx.adminMaintenanceEvent) return; // Older isolated routing test clients.
   const label = async (a: Assignment) => {
     const partner = a.routedPartnerAccountId ? await tx.account.findUnique({ where: { id: a.routedPartnerAccountId }, select: { name: true } }) : null;
-    return `${a.routing}; partner ${a.routedPartnerAccountId ?? 'none'}${partner ? ` (${partner.name.slice(0, 200)})` : ''}`;
+    const owner = a.partnerFollowUpOwnerId ? await tx.user.findUnique({ where: { id: a.partnerFollowUpOwnerId }, select: { firstName: true, lastName: true } }) : null;
+    return `${a.routing}; follow-up owner ${a.partnerFollowUpOwnerId ?? 'none'}${owner ? ` (${owner.firstName} ${owner.lastName})` : ''}; partner ${a.routedPartnerAccountId ?? 'none'}${partner ? ` (${partner.name.slice(0, 200)})` : ''}`;
   };
   await tx.adminMaintenanceEvent.create({ data: { actorId, entityType: 'Trade Show Lead', action: 'Partner assignment', recordIds: [after.id], recordCount: 1, oldValue: await label(before), newValue: await label(after) } });
 }

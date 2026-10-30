@@ -76,12 +76,14 @@ export function TradeShowImportWorkflow({ showId, timezone, effectiveUserId }: {
   const [result, setResult] = useState<Awaited<ReturnType<typeof confirmTradeShowAction>>['result']>(null);
   const [defaultRep, setDefaultRep] = useState<number | null>(null);
   const [defaultRouting,setDefaultRouting]=useState<TradeShowLeadRouting>('UNREVIEWED');
+  const [defaultFollowUpOwner,setDefaultFollowUpOwner]=useState<number|null>(null);
   const [defaultPartner,setDefaultPartner]=useState<number|null>(null);
   const [choices, setChoices] = useState<ImportChoice[]>([]);
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [repOverrideRow, setRepOverrideRow] = useState<number | null>(null);
   const [correctingRow, setCorrectingRow] = useState<number | null>(null);
 
+  const partnerOwnerRequired = !!plan?.rows.some((row,index)=>row.state==='NEW' && (choices[index]?.routing ?? defaultRouting)==='REFERRED_TO_PARTNER' && !choices[index]?.partnerFollowUpOwnerId);
   const fileForm = () => {
     const form = new FormData();
     if (file) form.set('file', file);
@@ -148,7 +150,7 @@ export function TradeShowImportWorkflow({ showId, timezone, effectiveUserId }: {
     setMessage('');
     setConfirmError('');
     try {
-      const response = await confirmTradeShowAction(showId, fileForm(), plan.parsed.sha256, defaultRouting, defaultRep, defaultPartner, choices, plan.mapping);
+      const response = await confirmTradeShowAction(showId, fileForm(), plan.parsed.sha256, defaultRouting, defaultRep, defaultPartner, choices, plan.mapping, defaultFollowUpOwner);
       if (response.error) setConfirmError(response.error);
       else {
         setResult(response.result);
@@ -246,7 +248,7 @@ export function TradeShowImportWorkflow({ showId, timezone, effectiveUserId }: {
             <option value="">No default rep</option>
             {repItems.map(rep => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
           </select>
-        </label><div className="min-w-0"><span className="block text-xs font-semibold text-slate-700">Default Partner Account</span><RemoteImportEntityPicker type="account" filters={{ partnerOnly: true }} label="default Partner Account" value={defaultPartner} onChange={id=>{setDefaultPartner(id);if(!id&&defaultRouting==='REFERRED_TO_PARTNER')setDefaultRouting('UNREVIEWED');setConfirmError('')}} items={partnerItems} emptyLabel="No default partner"/></div></div>
+        </label><div className="min-w-0"><span className="block text-xs font-semibold text-slate-700">Default Partner Account</span><RemoteImportEntityPicker type="account" filters={{ partnerOnly: true }} label="default Partner Account" value={defaultPartner} onChange={id=>{setDefaultPartner(id);if(!id&&defaultRouting==='REFERRED_TO_PARTNER')setDefaultRouting('UNREVIEWED');setConfirmError('')}} items={partnerItems} emptyLabel="No default partner"/></div>{(defaultRouting==='REFERRED_TO_PARTNER'||choices.some(choice=>choice.routing==='REFERRED_TO_PARTNER'))&&<label className="block min-w-0 text-xs font-semibold text-slate-700">Follow-up Owner<select className="field mt-1" value={defaultFollowUpOwner??''} onChange={event=>setDefaultFollowUpOwner(Number(event.target.value)||null)}><option value="">Select Follow-up Owner</option>{plan.followUpOwners.map(owner=><option key={owner.id} value={owner.id}>{owner.firstName} {owner.lastName}</option>)}</select><span className="mt-1 block text-xs font-normal">Receives the internal follow-up Task after the partner handoff is completed.</span></label>}</div>
       </section>
 
       <section className="panel min-w-0 max-w-full">
@@ -301,8 +303,9 @@ export function TradeShowImportWorkflow({ showId, timezone, effectiveUserId }: {
         <p className="mt-1 text-sm text-slate-600">New scans become separate leads. Existing scans stay unchanged unless source refresh is checked. Invalid rows are skipped. Account and Contact records are never edited.</p>
         {defaultRouting==='BIXOLON_SALES'&&!defaultRep && <p id="default-rep-required" className="mt-3 text-sm font-medium text-amber-800">Select a Default Sales Rep before importing these leads.</p>}
         {defaultRouting==='REFERRED_TO_PARTNER'&&!defaultPartner&&<p id="default-partner-required" className="mt-3 text-sm font-medium text-amber-800">Select a Partner Account before importing these leads.</p>}
+        {partnerOwnerRequired && !defaultFollowUpOwner && <p className="mt-3 text-sm font-medium text-amber-800">Select a Follow-up Owner before importing partner leads.</p>}
         {confirmError && <p id="confirm-import-error" role="alert" className="mt-3 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900">{confirmError}</p>}
-        <button className="btn-primary mt-4" type="button" disabled={busy || correctingRow!==null || (defaultRouting==='BIXOLON_SALES'&&!defaultRep) || (defaultRouting==='REFERRED_TO_PARTNER'&&!defaultPartner) || plan.rows.some(row=>row.correctionErrors.length>0)} aria-describedby={defaultRouting==='BIXOLON_SALES'&&!defaultRep?'default-rep-required':defaultRouting==='REFERRED_TO_PARTNER'&&!defaultPartner?'default-partner-required':confirmError?'confirm-import-error':undefined} onClick={() => void confirm()}>Confirm Import</button>
+        <button className="btn-primary mt-4" type="button" disabled={busy || correctingRow!==null || (partnerOwnerRequired&&!defaultFollowUpOwner) || (defaultRouting==='BIXOLON_SALES'&&!defaultRep) || (defaultRouting==='REFERRED_TO_PARTNER'&&!defaultPartner) || plan.rows.some(row=>row.correctionErrors.length>0)} aria-describedby={defaultRouting==='BIXOLON_SALES'&&!defaultRep?'default-rep-required':defaultRouting==='REFERRED_TO_PARTNER'&&!defaultPartner?'default-partner-required':confirmError?'confirm-import-error':undefined} onClick={() => void confirm()}>Confirm Import</button>
       </section>
     </>}
   </div>;

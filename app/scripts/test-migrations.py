@@ -328,6 +328,8 @@ try:
             if directory.name == OPTIONAL_PROJECT_ACCOUNT:
                 optional_before = all_table_fingerprints("backfill")
                 primary_before = sql_values("backfill", '''SELECT id || ':' || "primaryAccountId" FROM "Project" ORDER BY id;''')
+                ownership_before = all_table_fingerprints('backfill') if directory.name == '20261030180000_trade_show_partner_follow_up_owner' else None
+                context_before = all_table_fingerprints('backfill') if directory.name == '20261030190000_trade_show_partner_export_context' else None
                 if directory.name == '20261030120000_trade_show_partner_handoff':
                     sql('backfill', (ROOT / 'prisma/tests/partner-handoff-backfill.sql').read_text())
                 sql("backfill", (directory / "migration.sql").read_text())
@@ -434,6 +436,8 @@ try:
                     lifecycle_keys = foreign_keys('backfill')
                 module_before = all_table_fingerprints('backfill') if directory.name == '20261023140000_optional_module_visibility_v1' else None
                 internal_before = all_table_fingerprints('backfill') if directory.name == '20261023180000_internal_email_domains_v1' else None
+                ownership_before = all_table_fingerprints('backfill') if directory.name == '20261030180000_trade_show_partner_follow_up_owner' else None
+                context_before = all_table_fingerprints('backfill') if directory.name == '20261030190000_trade_show_partner_export_context' else None
                 if directory.name == '20261030120000_trade_show_partner_handoff':
                     sql('backfill', (ROOT / 'prisma/tests/partner-handoff-backfill.sql').read_text())
                 sql("backfill", (directory / "migration.sql").read_text())
@@ -445,6 +449,31 @@ try:
                     assert sql('backfill', '''UPDATE "TradeShowLead" SET "partnerHandoffStatus"=NULL WHERE id=930000;''', check=False).returncode != 0
                     assert sql('backfill', 'TRUNCATE "TradeShowPartnerHandoffLead";', check=False).returncode != 0
                     print('PASS: partner handoff backfill marks only actionable active partner assignments awaiting; no invented sent history; state and append-only guards hold', flush=True)
+
+                if context_before is not None:
+                    assert context_before == all_table_fingerprints('backfill'), 'Export context migration rewrote existing snapshots or CRM data'
+                    for width in (16, 20, 17):
+                        probe = f'''BEGIN;
+                          INSERT INTO "Task" (id,subject,"updatedAt") VALUES (940000,'Export format probe',now());
+                          INSERT INTO "TradeShowPartnerHandoff" (id,"tradeShowId","partnerAccountId","partnerName","tradeShowName","performedById","leadCount",filename,"taskId")
+                            SELECT 940000,930000,930000,'Partner','Show',min(id),1,'probe.xlsx',940000 FROM "User";
+                          INSERT INTO "TradeShowPartnerHandoffLead" ("batchId","leadId","assignmentVersion","exportRow")
+                            VALUES (940000,930000,1,to_jsonb(array_fill('shared'::text,ARRAY[{width}])));
+                          ROLLBACK;'''
+                        assert (sql('backfill', probe, check=False).returncode == 0) == (width in (16,20)), f'Unexpected export width acceptance: {width}'
+                    assert context_before == all_table_fingerprints('backfill'), 'Export format probes changed persisted data'
+                    assert sql('backfill', 'UPDATE "TradeShowPartnerHandoffLead" SET "exportRow"="exportRow" WHERE false;', check=False).returncode != 0
+                    print('PASS: export context migration preserves all data; original 16 and expanded 20 columns accepted, unsupported widths rejected, immutable history retained', flush=True)
+
+                if ownership_before is not None:
+                    ownership_after = all_table_fingerprints('backfill')
+                    ownership_after['TradeShowLead'] = sql_values('backfill', """SELECT count(*) || ':' || md5(COALESCE(jsonb_agg(to_jsonb(t) - 'partnerFollowUpOwnerId' ORDER BY (to_jsonb(t) - 'partnerFollowUpOwnerId')::text)::text, '[]')) FROM "TradeShowLead" t;""")[0]
+                    assert ownership_before == ownership_after, 'Partner owner migration changed preexisting lead or history data'
+                    assert sql_values('backfill', 'SELECT count(*) FROM "TradeShowLead" WHERE "partnerFollowUpOwnerId" IS NOT NULL;') == ['0']
+                    assert sql('backfill', 'UPDATE "TradeShowLead" SET "partnerFollowUpOwnerId"=2147483647 WHERE id=930000;', check=False).returncode != 0
+                    assert sql_values('backfill', "SELECT count(*) FROM pg_indexes WHERE tablename='TradeShowLead' AND indexname='TradeShowLead_partnerFollowUpOwnerId_idx';") == ['1']
+                    sql('backfill', 'BEGIN; UPDATE "TradeShowLead" SET "partnerFollowUpOwnerId"=(SELECT min(id) FROM "User") WHERE id=930000; ROLLBACK;')
+                    print('PASS: nullable partner owner migration preserves every existing value and all handoff history; no invented owners; relational FK and index verified', flush=True)
 
                 if internal_before is not None:
                     internal_after = all_table_fingerprints('backfill')
