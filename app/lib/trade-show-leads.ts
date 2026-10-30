@@ -1,3 +1,4 @@
+import { partnerAssignmentData, auditPartnerAssignment } from './trade-show-partner-state';
 import { assertEditToken, nextUpdatedAt, requireEditToken } from './stale-edit';
 import { TradeShowLeadRouting, TradeShowLeadStatus, type Prisma, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
@@ -53,13 +54,14 @@ export function parseTradeShowLeadUpdate(form: FormData) {
   if (form.has('routing') && !routing) errors.routing = 'Choose a valid lead routing.';
   const routedPartnerAccountId = reference('routedPartnerAccountId');
   const referralNotes = optional(form,'referralNotes',20000,errors);
+  const partnerHandoffNotes = optional(form,'partnerHandoffNotes',20000,errors);
   const accountId = reference('accountId');
   const contactId = reference('contactId');
   const competitorId = reference('competitorId');
   return { errors, value: Object.keys(errors).length ? undefined : {
     status: status!, followUpAt, lastContactedAt, salesNotes, productInterest,
     competitorSourceText, competitorId, currentProductBeingUsed, customerPainPoints,
-    assignedSalesRepUserId, routing, routedPartnerAccountId, referralNotes, accountId, contactId,
+    assignedSalesRepUserId, routing, routedPartnerAccountId, referralNotes, partnerHandoffNotes, accountId, contactId,
   } };
 }
 
@@ -118,8 +120,11 @@ export async function saveTradeShowLeadUpdate(client: PrismaClient, tradeShowId:
       competitorSourceText: input.competitorSourceText, competitorId: input.competitorId,
       currentProductBeingUsed: input.currentProductBeingUsed, customerPainPoints: input.customerPainPoints,
       assignedSalesRepUserId: repId, routing, routedPartnerAccountId:partnerAccountId,
+      ...partnerAssignmentData(lead, { ...lead, routing, routedPartnerAccountId: partnerAccountId, status: input.status }),
+      ...(form.has('partnerHandoffNotes') ? { partnerHandoffNotes: input.partnerHandoffNotes } : {}),
       ...referralData(routing,lead.routing,actor.id,notes,lead.referredAt), accountId, contactId,
     } });
+    await auditPartnerAssignment(tx, lead, updated, actor.id);
     if (contactId && contactId !== lead.contactId) await linkLeadAttributionToContact(tx, leadId, contactId, actor.id);
     await syncTradeShowFollowUp(tx, lead, updated, actor.id, new Date(), businessDays);
     return { errors: {} };

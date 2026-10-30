@@ -16,7 +16,7 @@ type Lead = {
   productInterest: string | null; competitorSourceText: string | null; competitorId: number | null;
   currentProductBeingUsed: string | null; customerPainPoints: string | null;
   assignedSalesRepUserId: number | null; accountId: number | null; contactId: number | null;
-  routing: TradeShowLeadRouting; routedPartnerAccountId: number|null; referralNotes:string|null;
+  routing: TradeShowLeadRouting; routedPartnerAccountId: number|null; referralNotes:string|null; partnerHandoffNotes?:string|null;
 };
 const statuses: TradeShowLeadStatus[] = ['NEW','CONTACTED','QUALIFIED','CONVERTED','DISQUALIFIED'];
 const statusLabels: Record<TradeShowLeadStatus, string> = {
@@ -59,7 +59,8 @@ export function TradeShowLeadForm({ tradeShowId, leadId, initial, reps, currentR
       <div><label className="label" htmlFor="routing">Routing</label><select className="field" id="routing" name="routing" value={routing} onChange={event=>setRouting(event.target.value as TradeShowLeadRouting)}>{(Object.keys(tradeShowRoutingLabels) as TradeShowLeadRouting[]).map(value=><option value={value} key={value}>{tradeShowRoutingLabels[value]}</option>)}</select>{error('routing')}</div>
       {canAssign&&select('assignedSalesRepUserId',routing==='BIXOLON_SALES'?'Assigned Sales Rep (required)':'Assigned Sales Rep (optional)',initial.assignedSalesRepUserId,reps,'Unassigned',`${currentRep ?? 'User'} (no longer eligible)`)}
       <div className="min-w-0"><EntityPicker type="account" label={`Partner Account ${routing==='REFERRED_TO_PARTNER'?'(required)':'(historical / optional)'}`} name="routedPartnerAccountId" value={partner} onChange={setPartner} filters={{ partnerOnly: true }} error={state.errors.routedPartnerAccountId}/></div>
-      <div className="min-w-0">{textarea('referralNotes','Referral Notes',initial.referralNotes,20000,3)}</div>
+      <div className="min-w-0">{textarea('referralNotes','Referral Notes (internal)',initial.referralNotes,20000,3)}</div>
+      <div className="min-w-0 sm:col-span-2">{textarea('partnerHandoffNotes','Partner Handoff Notes (shared externally)',initial.partnerHandoffNotes ?? null,20000,3)}<p className="mt-1 text-xs text-slate-600">Only these notes are included in partner exports. Review before sharing.</p></div>
     </div></section>}
     <section><h2 className="mb-3 text-lg font-semibold">Customer Context</h2><div className="grid min-w-0 gap-5 sm:grid-cols-2">
       <div className="min-w-0 sm:col-span-2">{textarea('productInterest', 'Product Interest', initial.productInterest, 5000)}</div>

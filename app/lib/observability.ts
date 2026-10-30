@@ -15,6 +15,8 @@ function safeErrorClass(value: unknown) { return typeof value === 'string' && er
 
 // Values are code-owned labels, never caller-provided prose. Add labels deliberately.
 const contextLabels = new Set([
+  'partner_handoff.failed',
+  'TRADE_SHOWS',
   'Account',
   'Branding',
   'CLEAN',
