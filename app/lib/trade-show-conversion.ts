@@ -12,7 +12,7 @@ export async function convertTradeShowLead(client: PrismaClient, tradeShowId: nu
   return client.$transaction(async tx => {
     // Serialize conversion attempts for this lead. The unique attribution index is
     // the final database guard; this lock gives the losing request a clear error.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(84721, ${leadId})`;
+    await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(84721, ${leadId}::integer)`;
     const lead = await tx.tradeShowLead.findFirst({ where: { id: leadId, tradeShowId }, include: { tradeShow: { select: { archivedAt: true } }, contact: { select: { accountId: true, active: true, archivedAt: true } } } });
     if (!lead || lead.tradeShow.archivedAt) throw new Error('Trade Show Lead not found or archived.');
     if (!canConvertTradeShowLead(actor, lead)) throw new Error('Access denied');
@@ -25,7 +25,7 @@ export async function convertTradeShowLead(client: PrismaClient, tradeShowId: nu
       if (!input.contacts.some(contact => contact.contactId === lead.contactId)) throw new Error('The resolved Contact must remain linked to the Opportunity.');
     }
     const opportunityId = await saveOpportunity(tx as unknown as PrismaClient, input, undefined, actor);
-    const result = await tx.tradeShowLead.updateMany({ where: { id: leadId, convertedOpportunityId: null }, data: { convertedOpportunityId: opportunityId, status: 'CONVERTED', convertedAt: new Date() } });
+    const result = await tx.tradeShowLead.updateMany({ where: { id: leadId, convertedOpportunityId: null }, data: { convertedOpportunityId: opportunityId, status: 'CONVERTED', convertedAt: new Date(), ...(lead.partnerHandoffStatus === 'AWAITING_PARTNER_HANDOFF' ? { partnerHandoffStatus: null, partnerAwaitingAt: null, partnerSentAt: null } : {}) } });
     if (result.count !== 1) throw new Error('This Trade Show Lead has already been converted.');
     return opportunityId;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });

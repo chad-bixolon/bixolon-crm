@@ -13,3 +13,7 @@ The selected `tradeShowId` on the import and lead supplies the actual event. `fi
 Business Lead Source is separately stored in `TradeShowLead.leadSourceId` (and `Contact.leadSourceId`). Imports use the `TRADE_SHOW_EVENT` system category (Events), preserving existing Contact first touch. Campaigns are linked by the selected `tradeShowId`, with influence context `TRADE_SHOW_IMPORT`. Reports group/filter by the actual event, and Saved Views retain event filters. Routing uses the selected destination and rep; follow-up Tasks use the lead's event name. None uses the template label as attribution. Template format remains relevant to parsing, validation, and duplicate identity handling.
 
 This terminology correction needs no schema or historical data migration and changes no attribution rules.
+
+## Partner routing after import
+
+New leads routed to a Partner Account start **Awaiting Partner Handoff**. They create no per-lead Sales Task. Open the Trade Show’s **Partner Handoffs** view, review each partner’s awaiting leads, and confirm **Export & Mark Sent** to create a single partner batch and one internal follow-up Task. Only the dedicated **Partner Handoff Notes** field is exported; source, Sales and referral notes stay internal. Historical batches survive source refreshes and conversion. See [Partner Handoffs v1](trade-show-partner-handoff-v1.md) for export, reassignment and history details.

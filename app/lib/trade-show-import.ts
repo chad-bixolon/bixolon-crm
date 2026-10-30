@@ -1,3 +1,4 @@
+import { auditPartnerAssignment } from './trade-show-partner-state';
 import { Prisma, TradeShowLeadRouting, type PrismaClient } from '@prisma/client';
 import { can, type Actor } from './authorization';
 import { applyReviewedOverrides, inspectTradeShowWorkbook, mappingCompatibility, parseTradeShowWorkbook, validateMapping, validateReviewedOverrides, type MappingDefinition, type ParsedLead, type ParsedWorkbook } from './trade-show-import-parser';
@@ -145,7 +146,8 @@ export async function confirmTradeShowImport(client:PrismaClient,showId:number,b
       if(old){existing++;if(correctionsChanged||choice.refresh&&stableJson(old.rawSourceData)!==stableJson(rawRow.rawSourceData))await tx.tradeShowLead.update({where:{id:old.id},data:source});continue;}
       if (!campaign) { campaign = await ensureTradeShowCampaign(tx, showId, actor.id); eventSource = await eventsLeadSource(tx); }
       const route=effective[i];
-      const createdLead=await tx.tradeShowLead.create({data:{tradeShowId:showId,firstImportId:record.id,sourceFileName:filename,sourceSheet:parsed.sheet,sourceRow:row.sourceRow,...source,routing:route.routing,assignedSalesRepUserId:route.repId,routedPartnerAccountId:route.partnerAccountId,referralNotes:null,...(route.routing==='REFERRED_TO_PARTNER'?{referredAt:new Date(),referredByUserId:actor.id}:{}),accountId:choice.accountId,contactId:choice.contactId,status:'NEW'}});created++;
+      const createdLead=await tx.tradeShowLead.create({data:{tradeShowId:showId,firstImportId:record.id,sourceFileName:filename,sourceSheet:parsed.sheet,sourceRow:row.sourceRow,...source,routing:route.routing,assignedSalesRepUserId:route.repId,routedPartnerAccountId:route.partnerAccountId,referralNotes:null,...(route.routing==='REFERRED_TO_PARTNER'?{referredAt:new Date(),referredByUserId:actor.id}:{}),accountId:choice.accountId,contactId:choice.contactId,status:'NEW',...(route.routing==='REFERRED_TO_PARTNER'?{partnerHandoffStatus:'AWAITING_PARTNER_HANDOFF',partnerAssignmentVersion:1,partnerAwaitingAt:new Date()}: {})}});created++;
+      if(route.routing==='REFERRED_TO_PARTNER')await auditPartnerAssignment(tx,{routing:'UNREVIEWED',routedPartnerAccountId:null},createdLead,actor.id);
       await attachTradeShowInfluence(tx, createdLead, campaign!.id, eventSource!.id, actor.id);
       if(route.routing==='BIXOLON_SALES')await syncTradeShowFollowUp(tx,null,createdLead,actor.id,new Date(),businessDays);
     }

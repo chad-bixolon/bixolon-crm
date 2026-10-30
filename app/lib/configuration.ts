@@ -36,7 +36,7 @@ export const settingDefinitions = {
   COMMIT_FOLLOW_UP_DAYS: { label: "Commit follow-up threshold", description: "Number of days without a directly linked Opportunity Activity before a Commit Opportunity needs attention.", defaultValue: 14, min: 1, max: 90 },
   HISTORY_RETENTION_YEARS: { label: "Active history retention (years)", description: "History older than the retention period is eligible for archive. Nothing is deleted automatically.", defaultValue: 3, min: 2, max: 10 },
   ACTIVITY_LOOKBACK_DAYS: { label: "Default activity lookback (days)", defaultValue: 30, min: 1, max: 365 },
-  TRADE_SHOW_FOLLOW_UP_BUSINESS_DAYS: { label: "Trade Show lead follow-up due", description: "Number of business days after assignment before the follow-up Task is due.", defaultValue: 2, min: 1, max: 30 },
+  TRADE_SHOW_FOLLOW_UP_BUSINESS_DAYS: { label: "Trade Show lead follow-up due", description: "Number of business days after internal lead assignment or partner batch handoff before the follow-up Task is due.", defaultValue: 2, min: 1, max: 30 },
 } as const;
 export type SettingKey = keyof typeof settingDefinitions;
 export function isSettingKey(value: string): value is SettingKey { return Object.hasOwn(settingDefinitions, value); }

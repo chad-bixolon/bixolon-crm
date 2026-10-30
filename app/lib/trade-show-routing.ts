@@ -1,3 +1,4 @@
+import { partnerAssignmentData, auditPartnerAssignment } from './trade-show-partner-state';
 import { eligibleUserWhere } from './assignment-eligibility';
 import { recordMaintenance } from './admin-maintenance';
 import { validateBulkRequest, type BulkRequest } from './bulk-action-contract';
@@ -87,9 +88,11 @@ export async function bulkRouteTradeShowLeads(client: PrismaClient, tradeShowId:
     for (const lead of leads) {
       const updated = await tx.tradeShowLead.update({ where: { id: lead.id, updatedAt: lead.updatedAt }, data: {
         updatedAt: nextUpdatedAt(lead.updatedAt), routing, assignedSalesRepUserId: repId,
+        ...partnerAssignmentData(lead, { ...lead, routing, routedPartnerAccountId: routing === 'REFERRED_TO_PARTNER' ? partnerAccountId : lead.routedPartnerAccountId }),
         ...(routing === 'REFERRED_TO_PARTNER' ? { routedPartnerAccountId: partnerAccountId } : {}),
         ...referralData(routing, lead.routing, actor.id, notes, lead.referredAt),
       } });
+      await auditPartnerAssignment(tx, lead, updated, actor.id);
       await syncTradeShowFollowUp(tx, lead, updated, actor.id, new Date(), businessDays);
     }
     await recordMaintenance(tx, actor.id, 'Trade Show Lead', 'Bulk routing', ids);

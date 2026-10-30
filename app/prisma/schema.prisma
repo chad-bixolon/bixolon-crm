@@ -256,6 +256,11 @@ enum TradeShowLeadStatus {
   DISQUALIFIED
 }
 
+enum PartnerHandoffStatus {
+  AWAITING_PARTNER_HANDOFF
+  SENT_TO_PARTNER
+}
+
 enum TradeShowLeadRouting {
   UNREVIEWED
   BIXOLON_SALES
@@ -366,6 +371,7 @@ model User {
   createdSalesTargets     SalesTarget[]      @relation("SalesTargetCreatedBy")
   updatedSalesTargets     SalesTarget[]      @relation("SalesTargetUpdatedBy")
   salesTargetSyncs        SalesTargetSync[]  @relation("SalesTargetSyncActor")
+  partnerHandoffs TradeShowPartnerHandoff[]
   marketingTradeShows     TradeShow[]        @relation("TradeShowMarketingOwner")
   createdTradeShows       TradeShow[]        @relation("TradeShowCreatedBy")
   updatedTradeShows       TradeShow[]        @relation("TradeShowUpdatedBy")
@@ -709,6 +715,7 @@ model Account {
   businessRoles              AccountBusinessRole[]
   contacts                   Contact[]
   tradeShowLeads             TradeShowLead[] @relation("TradeShowLeadAccount")
+  partnerHandoffs TradeShowPartnerHandoff[]
   routedTradeShowLeads       TradeShowLead[] @relation("TradeShowLeadRoutedPartner")
   /// Legacy direct opportunity relationships retained for compatibility only.
   opportunities              Opportunity[]         @relation("LegacyOpportunityAccount")
@@ -2085,6 +2092,7 @@ model Task {
   project       Project?            @relation(fields: [projectId], references: [id], onDelete: Restrict)
   createKey     String?             @unique @db.Uuid
   source        String?
+  partnerHandoff TradeShowPartnerHandoff?
   tradeShowLeadId Int?
   tradeShowLead TradeShowLead? @relation(fields: [tradeShowLeadId], references: [id], onDelete: Restrict)
   contactId     Int?
@@ -2378,6 +2386,7 @@ model TradeShow {
   archivedBy       User?             @relation("TradeShowArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
   imports          TradeShowImport[]
   leads            TradeShowLead[]
+  partnerHandoffs TradeShowPartnerHandoff[]
   resourceLinks    TradeShowResourceLink[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -2451,6 +2460,13 @@ model TradeShowLead {
   leadSourceChanges LeadSourceChange[]
   campaignInfluences CampaignInfluence[]
   id                      Int                 @id @default(autoincrement())
+  partnerHandoffItems TradeShowPartnerHandoffLead[]
+  partnerHandoffStatus PartnerHandoffStatus?
+  partnerAssignmentVersion Int @default(0)
+  partnerAwaitingAt DateTime?
+  partnerSentAt DateTime?
+  /// Only this dedicated notes field is approved for partner export.
+  partnerHandoffNotes String? @db.Text
   followUpTasks           Task[]
   tradeShowId             Int
   tradeShow               TradeShow           @relation(fields: [tradeShowId], references: [id], onDelete: Restrict)
@@ -2514,6 +2530,7 @@ model TradeShowLead {
 
   @@unique([tradeShowId, sourceKey])
   @@index([tradeShowId, status])
+  @@index([tradeShowId, routedPartnerAccountId, partnerHandoffStatus])
   @@index([tradeShowId, routing])
   @@index([assignedSalesRepUserId, status])
   @@index([routedPartnerAccountId, routing])
@@ -2643,4 +2660,37 @@ model AdminMaintenanceEvent {
 
   @@index([occurredAt(sort: Desc), id(sort: Desc)])
   @@index([actorId, occurredAt])
+}
+
+/// A committed export is the handoff; no external delivery claim is inferred.
+model TradeShowPartnerHandoff {
+  id Int @id @default(autoincrement())
+  tradeShowId Int
+  tradeShow TradeShow @relation(fields: [tradeShowId], references: [id], onDelete: Restrict)
+  partnerAccountId Int
+  partnerAccount Account @relation(fields: [partnerAccountId], references: [id], onDelete: Restrict)
+  partnerName String
+  tradeShowName String
+  handedOffAt DateTime @default(now())
+  performedById Int
+  performedBy User @relation(fields: [performedById], references: [id], onDelete: Restrict)
+  leadCount Int
+  filename String
+  status PartnerHandoffStatus @default(SENT_TO_PARTNER)
+  taskId Int @unique
+  task Task @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  leads TradeShowPartnerHandoffLead[]
+  @@index([tradeShowId, partnerAccountId, handedOffAt])
+}
+
+model TradeShowPartnerHandoffLead {
+  batchId Int
+  batch TradeShowPartnerHandoff @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  leadId Int
+  lead TradeShowLead @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  assignmentVersion Int
+  /// Version 1 external whitelist only; enables exact historical re-export.
+  exportRow Json
+  @@id([batchId, leadId])
+  @@unique([leadId, assignmentVersion])
 }

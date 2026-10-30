@@ -328,7 +328,18 @@ try:
             if directory.name == OPTIONAL_PROJECT_ACCOUNT:
                 optional_before = all_table_fingerprints("backfill")
                 primary_before = sql_values("backfill", '''SELECT id || ':' || "primaryAccountId" FROM "Project" ORDER BY id;''')
+                if directory.name == '20261030120000_trade_show_partner_handoff':
+                    sql('backfill', (ROOT / 'prisma/tests/partner-handoff-backfill.sql').read_text())
                 sql("backfill", (directory / "migration.sql").read_text())
+                if directory.name == '20261030120000_trade_show_partner_handoff':
+                    states = sql_values('backfill', '''SELECT id || ':' || COALESCE("partnerHandoffStatus"::text,'NULL') || ':' || "partnerAssignmentVersion" FROM "TradeShowLead" WHERE id BETWEEN 930000 AND 930005 ORDER BY id;''')
+                    assert states == ['930000:AWAITING_PARTNER_HANDOFF:1','930001:AWAITING_PARTNER_HANDOFF:1','930002:NULL:0','930003:NULL:0','930004:NULL:0','930005:NULL:0'], states
+                    assert sql_values('backfill', 'SELECT count(*) FROM "TradeShowPartnerHandoff";') == ['0']
+                    assert sql('backfill', '''UPDATE "TradeShowLead" SET "partnerHandoffStatus"='SENT_TO_PARTNER' WHERE id=930000;''', check=False).returncode != 0
+                    assert sql('backfill', '''UPDATE "TradeShowLead" SET "partnerHandoffStatus"=NULL WHERE id=930000;''', check=False).returncode != 0
+                    assert sql('backfill', 'TRUNCATE "TradeShowPartnerHandoffLead";', check=False).returncode != 0
+                    print('PASS: partner handoff backfill marks only actionable active partner assignments awaiting; no invented sent history; state and append-only guards hold', flush=True)
+
                 optional_after = all_table_fingerprints("backfill")
                 primary_after = sql_values("backfill", '''SELECT id || ':' || "primaryAccountId" FROM "Project" ORDER BY id;''')
                 if optional_before != optional_after:
@@ -423,7 +434,18 @@ try:
                     lifecycle_keys = foreign_keys('backfill')
                 module_before = all_table_fingerprints('backfill') if directory.name == '20261023140000_optional_module_visibility_v1' else None
                 internal_before = all_table_fingerprints('backfill') if directory.name == '20261023180000_internal_email_domains_v1' else None
+                if directory.name == '20261030120000_trade_show_partner_handoff':
+                    sql('backfill', (ROOT / 'prisma/tests/partner-handoff-backfill.sql').read_text())
                 sql("backfill", (directory / "migration.sql").read_text())
+                if directory.name == '20261030120000_trade_show_partner_handoff':
+                    states = sql_values('backfill', '''SELECT id || ':' || COALESCE("partnerHandoffStatus"::text,'NULL') || ':' || "partnerAssignmentVersion" FROM "TradeShowLead" WHERE id BETWEEN 930000 AND 930005 ORDER BY id;''')
+                    assert states == ['930000:AWAITING_PARTNER_HANDOFF:1','930001:AWAITING_PARTNER_HANDOFF:1','930002:NULL:0','930003:NULL:0','930004:NULL:0','930005:NULL:0'], states
+                    assert sql_values('backfill', 'SELECT count(*) FROM "TradeShowPartnerHandoff";') == ['0']
+                    assert sql('backfill', '''UPDATE "TradeShowLead" SET "partnerHandoffStatus"='SENT_TO_PARTNER' WHERE id=930000;''', check=False).returncode != 0
+                    assert sql('backfill', '''UPDATE "TradeShowLead" SET "partnerHandoffStatus"=NULL WHERE id=930000;''', check=False).returncode != 0
+                    assert sql('backfill', 'TRUNCATE "TradeShowPartnerHandoffLead";', check=False).returncode != 0
+                    print('PASS: partner handoff backfill marks only actionable active partner assignments awaiting; no invented sent history; state and append-only guards hold', flush=True)
+
                 if internal_before is not None:
                     internal_after = all_table_fingerprints('backfill')
                     for table, fingerprint in internal_before.items():
