@@ -13,6 +13,7 @@ import {filterValue,tradeShowConfigFromParams} from '@/lib/report-builder';
 import {canCreateReport,canShareReport,executeTradeShowReport,reportRegistry,withoutTradeShowOpportunityFields, type ReportConfiguration} from '@/lib/reporting';
 import {getModuleAvailability} from '@/lib/module-availability';
 import {tradeShowReadWhere} from '@/lib/trade-shows';
+import {tradeShowMetricGroups,tradeShowColumnGroups} from '@/lib/trade-show-report-presentation';
 import {saveReportAction} from '../actions';
 
 type Params=Record<string,string|string[]|undefined>;
@@ -32,34 +33,48 @@ export async function TradeShowBuilder({params,actor,saved}:{params:Params;actor
     prisma.competitorOption.findMany({where:{OR:[{active:true},...(Number(filterValue(config,'competitorId'))?[{id:Number(filterValue(config,'competitorId'))}]:[])]},orderBy:[{sortOrder:'asc'},{name:'asc'}]}),
     opportunitiesEnabled?reportingCurrencies():[],
   ]);
+  const advancedFilterCount=config.filters.filter(filter=>['accountLinked','contactLinked','competitorId','showDate','stageId','forecastCategory','converted','currency'].includes(filter.field)).length;
   const selected=(field:string)=>String(filterValue(config,field)??'');
   const select=(name:string,label:string,items:{value:string|number;label:string}[],empty='All')=><label className="label">{label}<select className="field" name={name} defaultValue={selected(name)}><option value="">{empty}</option>{items.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</select></label>;
   const dateFilter=config.filters.find(filter=>filter.field==='showDate'),dateChoice=dateFilter?.operator==='preset'?String(dateFilter.value):dateFilter?.operator==='between'?'CUSTOM':'ANY',dateRange=dateFilter?.operator==='between'?dateFilter.value as {from:string;to:string}:null;
   return <Content><PageHeader eyebrow={NAV_CATEGORIES.reports} title={saved?'Edit Trade Show Performance Report':'Trade Show Performance'} description={definition.description} action={<Link className="btn-secondary" href="/reports">Reports</Link>}/>
-    <form method="get" className="panel report-builder p-3 md:p-4"><input type="hidden" name="configured" value="1"/><input type="hidden" name="reportType" value="TRADE_SHOW"/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}
+    <form method="get" aria-label="Trade Show report options" className="panel report-builder trade-show-report p-3 md:p-4"><input type="hidden" name="configured" value="1"/><input type="hidden" name="reportType" value="TRADE_SHOW"/>{saved&&<input type="hidden" name="reportId" value={saved.id}/>}
       <fieldset className="report-section report-primary-filters"><legend className="report-section-title">Lead filters</legend><div className="report-filter-grid">
         {select('tradeShowId','Trade Show',shows.map(show=>({value:show.id,label:show.name})))}
         <ReportSalesRepFilter actor={actor} reps={reps} selected={selected('ownerId')} label="Assigned Sales Rep"/>
         {select('leadStatus','Lead Status',['NEW','CONTACTED','QUALIFIED','CONVERTED','DISQUALIFIED'].map(value=>({value,label:value.charAt(0)+value.slice(1).toLowerCase()})))}
         {select('routing','Routing',[{value:'UNREVIEWED',label:'Unreviewed'},{value:'BIXOLON_SALES',label:'BIXOLON Sales'},{value:'REFERRED_TO_PARTNER',label:'Referred to Partner'},{value:'MARKETING_FOLLOW_UP',label:'Marketing Follow-Up'}])}
-        <ReportEntityFilter type="account" name="referralPartnerId" label="Referral Partner" selected={selected('referralPartnerId')} actor={actor} filters={{ partnerOnly: true }}/>
-        {select('converted','Conversion',[{value:'true',label:'Converted'},{value:'false',label:'Not Converted'}])}
-        {select('accountLinked','Account Resolution',[{value:'true',label:'Linked'},{value:'false',label:'Unresolved'}])}
-        {select('contactLinked','Contact Resolution',[{value:'true',label:'Linked'},{value:'false',label:'Unresolved'}])}
+        <ReportEntityFilter type="account" name="referralPartnerId" label="Partner" selected={selected('referralPartnerId')} actor={actor} filters={{ partnerOnly: true }}/>
         {select('followUpStatus','Follow-Up',[{value:'OVERDUE',label:'Overdue'},{value:'SCHEDULED',label:'Scheduled'},{value:'MISSING',label:'No follow-up date'},{value:'NEW_NOT_CONTACTED',label:'New, not contacted'},{value:'QUALIFIED_NOT_CONVERTED',label:'Qualified, not converted'}])}
         <label className="label">Search<input className="field" name="search" defaultValue={selected('search')} placeholder="Lead, company, or email"/></label>
         <label className="label">Product Interest<input className="field" name="productInterest" defaultValue={selected('productInterest')} placeholder="Contains text"/></label>
-        {select('competitorId','Resolved Competitor',competitors.map(item=>({value:item.id,label:item.name+(item.active?'':' (Inactive)')})))}
       </div></fieldset>
-      <fieldset className="report-section"><legend className="report-section-title">{opportunitiesEnabled?'Event and Opportunity filters':'Event filters'}</legend><div className="report-filter-grid">
-        <fieldset className="label"><legend>Trade Show Date</legend><select className="field" name="showDatePreset" defaultValue={dateChoice}><option value="ANY">Any date</option><option value="THIS_MONTH">This Month</option><option value="THIS_QUARTER">This Quarter</option><option value="THIS_YEAR">This Year</option><option value="CUSTOM">Custom range</option></select><div className="mt-1 flex gap-1"><input className="field min-w-0" aria-label="Trade Show date from" type="date" name="showDateFrom" defaultValue={dateRange?.from}/><input className="field min-w-0" aria-label="Trade Show date to" type="date" name="showDateTo" defaultValue={dateRange?.to}/></div></fieldset>
+      <details className="report-disclosure"><summary>Advanced Filters{advancedFilterCount>0&&<span className="report-disclosure-count"> ({advancedFilterCount} applied)</span>}</summary>
+      <fieldset className="report-section"><legend className="sr-only">Advanced lead and event filters</legend><div className="report-filter-grid">
+        {select('accountLinked','Account Match',[{value:'true',label:'Linked'},{value:'false',label:'Unresolved'}])}
+        {select('contactLinked','Contact Match',[{value:'true',label:'Linked'},{value:'false',label:'Unresolved'}])}
+        {select('competitorId','Competitor',competitors.map(item=>({value:item.id,label:item.name+(item.active?'':' (Inactive)')})))}
+        <fieldset className="label"><legend>Event Date</legend><select className="field" aria-label="Event Date" name="showDatePreset" defaultValue={dateChoice}><option value="ANY">Any date</option><option value="THIS_MONTH">This Month</option><option value="THIS_QUARTER">This Quarter</option><option value="THIS_YEAR">This Year</option><option value="CUSTOM">Custom range</option></select><div className="mt-1 flex gap-1"><input className="field min-w-0" aria-label="Event date from" type="date" name="showDateFrom" defaultValue={dateRange?.from}/><input className="field min-w-0" aria-label="Event date to" type="date" name="showDateTo" defaultValue={dateRange?.to}/></div></fieldset>
         {opportunitiesEnabled&&select('stageId','Opportunity Stage',stages.map(stage=>({value:stage.id,label:stage.name})))}
         {opportunitiesEnabled&&select('forecastCategory','Forecast Category',['PIPELINE','BEST_CASE','COMMIT','OMITTED','CLOSED'].map(value=>({value,label:value.replaceAll('_',' ')})))}
         {opportunitiesEnabled&&<CurrencyControl name="currency" value={selected('currency')} historicalCodes={currencies.map(row => row.code)}>{select('currency','Currency',currencies.map(item=>({value:item.code,label:item.code})),'All currencies')}</CurrencyControl>}
-      </div></fieldset>
-      <fieldset className="report-section"><legend className="report-section-title">Display options</legend><div className="report-filter-grid"><label className="label">Group By<select className="field" name="groupBy" defaultValue={config.groupBy??''}><option value="">None</option>{available(definition.groupings).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label className="label">Sort<select className="field" name="sortField" defaultValue={config.sort[0]?.field??'capturedDate'}>{available(definition.sorts).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label className="label">Direction<select className="field" name="sortDirection" defaultValue={config.sort[0]?.direction??'desc'}><option value="asc">Ascending</option><option value="desc">Descending</option></select></label></div></fieldset>
-      <fieldset className="report-metrics"><legend className="report-metrics-title">Metrics</legend><div className="report-options">{available(definition.metrics).map(([value,label])=><label key={value} className="text-sm"><input className="mr-2" type="checkbox" name="metrics" value={value} defaultChecked={config.metrics.includes(value)}/>{label}</label>)}</div></fieldset>
-      <fieldset className="report-columns"><legend className="report-columns-title">Detail columns</legend><div className="report-options">{available(definition.columns).map(([value,label])=><label key={value} className="text-sm"><input className="mr-2" type="checkbox" name="columns" value={value} defaultChecked={config.columns.includes(value)}/>{label}</label>)}</div></fieldset>
+        {select('converted','Conversion',[{value:'true',label:'Converted'},{value:'false',label:'Not Converted'}])}
+      </div></fieldset></details>
+      <fieldset className="report-section"><legend className="report-section-title">Display options</legend><div className="report-filter-grid"><label className="label">Group By<select className="field" name="groupBy" defaultValue={config.groupBy??''}><option value="">None</option>{available(definition.groupings).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label className="label">Sort<select className="field" name="sortField" defaultValue={config.sort[0]?.field??'capturedDate'}>{available(definition.sorts).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label className="label">Sort Order<select className="field" name="sortDirection" defaultValue={config.sort[0]?.direction??'desc'}><option value="asc">Ascending</option><option value="desc">Descending</option></select></label></div></fieldset>
+      <details className="report-disclosure"><summary>Customize metrics <span className="report-disclosure-count">({config.metrics.length} selected)</span></summary>
+        <p className="report-customize-help">Choose metrics for grouped results and additional summary cards. The routing overview always shows all destinations.</p>
+        <div className="report-customize-groups">{Object.entries(tradeShowMetricGroups).map(([group,keys])=>{
+          const entries=available(definition.metrics).filter(([key])=>keys.includes(key));
+          return entries.length>0&&<fieldset key={group} className="report-choice-group"><legend>{group}</legend><div className="report-choice-grid">{entries.map(([value,label])=><label key={value}><input type="checkbox" name="metrics" value={value} defaultChecked={config.metrics.includes(value)}/>{label}</label>)}</div></fieldset>;
+        })}</div>
+      </details>
+      <details className="report-disclosure"><summary>Customize columns <span className="report-disclosure-count">({config.columns.length} selected)</span></summary>
+        <p className="report-customize-help">Choose the columns shown in lead details.</p>
+        <div className="report-customize-groups">{Object.entries(tradeShowColumnGroups).map(([group,keys])=>{
+          const entries=available(definition.columns).filter(([key])=>keys.includes(key));
+          return entries.length>0&&<fieldset key={group} className="report-choice-group"><legend>{group}</legend><div className="report-choice-grid">{entries.map(([value,label])=><label key={value}><input type="checkbox" name="columns" value={value} defaultChecked={config.columns.includes(value)}/>{label}</label>)}</div></fieldset>;
+        })}</div>
+      </details>
       <div className="report-preview"><button className="btn-primary">Preview</button></div>
     </form>
     <ReportResults result={result} config={config} groupKey={Array.isArray(params.group)?params.group[0]:params.group}/>

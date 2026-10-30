@@ -11,6 +11,8 @@ const require=Module.createRequire(fileURLToPath(import.meta.url));
 const {Prisma}=require('@prisma/client');
 const reporting=require(path.join(root,'lib/reporting.ts'));
 const builder=require(path.join(root,'lib/report-builder.ts'));
+const presentation=require(path.join(root,'lib/trade-show-report-presentation.ts'));
+const {routedTradeShowCount}=require(path.join(root,'lib/trade-show-routing-counts.ts'));
 const {routeAccess}=require(path.join(root,'lib/authorization.ts'));
 const actor=(role,id=7)=>({id,role,active:true,archivedAt:null});
 const product=(id,amount,archivedAt=null)=>({id,quantity:1,estimatedUnitPrice:new Prisma.Decimal(amount),archivedAt});
@@ -23,7 +25,7 @@ const run=async(rows,cfg=config(),role='ADMIN',now=new Date('2026-09-23T12:00:00
 test('Trade Show lead metrics include every status, cumulative funnel counts, and a safe zero denominator',async()=>{
   const rows=[lead(1),lead(2,'CONTACTED'),lead(3,'QUALIFIED'),lead(4,'CONVERTED',opportunity(1,'100')),lead(5,'DISQUALIFIED',null,{assignedSalesRepUserId:null,assignedSalesRep:null})];
   const {result}=await run(rows);
-  assert.deepEqual(result.summary.leads,{totalLeads:5,assignedLeads:4,unreviewedLeads:5,bixolonSalesLeads:0,partnerReferredLeads:0,marketingFollowUpLeads:0,referralRate:0,newLeads:1,contactedLeads:3,qualifiedLeads:2,convertedLeads:1,disqualifiedLeads:1,conversionRate:20});
+  assert.deepEqual(result.summary.leads,{totalLeads:5,routedLeads:0,assignedLeads:4,unreviewedLeads:5,bixolonSalesLeads:0,partnerReferredLeads:0,marketingFollowUpLeads:0,referralRate:0,newLeads:1,contactedLeads:3,qualifiedLeads:2,convertedLeads:1,disqualifiedLeads:1,conversionRate:20});
   const empty=(await run([])).result.summary.leads;
   assert.equal(empty.totalLeads,0);assert.equal(empty.conversionRate,null);
 });
@@ -114,4 +116,51 @@ test('attributed Trade Show pipeline checks converted Opportunity parent activit
  assert.deepEqual(result.summary.amounts,[]);
  assert.ok(opportunityWhere.AND.some(clause=>clause.AND?.some(part=>part.projects?.none)));
  assert.equal(result.rows[0].opportunityValue,null);
+});
+
+
+test('Routed Leads follows the main Trade Show routing definition independently of sales rep assignment',async()=>{
+  const rows=[
+    lead(1,'NEW',null,{routing:'BIXOLON_SALES'}),
+    lead(2,'NEW',null,{routing:'REFERRED_TO_PARTNER',routedPartnerAccountId:20,assignedSalesRepUserId:null}),
+    lead(3,'NEW',null,{routing:'MARKETING_FOLLOW_UP',assignedSalesRepUserId:null}),
+    lead(4), // A sales rep on an unreviewed lead does not make it routed.
+    lead(5,'NEW',null,{routing:null,assignedSalesRepUserId:null}),
+  ];
+  const {result}=await run(rows,{...config(),groupBy:'routing'});
+  const metrics=result.summary.leads;
+  assert.equal(metrics.routedLeads,routedTradeShowCount({BIXOLON_SALES:1,REFERRED_TO_PARTNER:1,MARKETING_FOLLOW_UP:1,UNREVIEWED:2}));
+  assert.equal(metrics.assignedLeads,2);
+  assert.equal(metrics.unreviewedLeads,2);
+  assert.equal(metrics.totalLeads,metrics.routedLeads+metrics.unreviewedLeads);
+  assert.equal(result.groups.reduce((sum,group)=>sum+group.metrics.leads.routedLeads,0),3);
+  assert.equal((await run([])).result.summary.leads.routedLeads,0);
+});
+
+test('business labels retain field keys, all metrics and columns, and saved rep-assignment metrics',()=>{
+  const definition=reporting.reportRegistry.TRADE_SHOW;
+  assert.equal(definition.metrics.assignedLeads,'Leads with Sales Rep');
+  assert.equal(definition.metrics.routedLeads,'Routed Leads');
+  assert.doesNotMatch(JSON.stringify(definition),/Assigned Leads|Resolved Competitor|Referral Partner|Converted Opportunity|Competitor Source Text/);
+  for(const [key,label] of Object.entries({referralPartnerId:'Partner',competitorId:'Competitor',accountLinked:'Account Match',contactLinked:'Contact Match',showDate:'Event Date'}))assert.equal(definition.filters[key].label,label);
+  for(const [key,label] of Object.entries({opportunity:'Opportunity',opportunityValue:'Pipeline Value',weightedValue:'Weighted Pipeline',competitorSourceText:'Competitor Detail',capturedDate:'Lead Captured Date'}))assert.equal(definition.columns[key],label);
+  assert.equal(definition.sorts.capturedDate,'Lead Captured Date');
+  for(const [name,groups] of [['metrics',presentation.tradeShowMetricGroups],['columns',presentation.tradeShowColumnGroups]]){
+    const keys=Object.values(groups).flat();
+    assert.deepEqual([...keys].sort(),Object.keys(definition[name]).sort());
+    const selected=builder.tradeShowConfigFromParams({configured:'1',[name]:keys});
+    assert.deepEqual([...selected[name]].sort(),keys.sort());
+  }
+  const saved={...config(),metrics:['assignedLeads','commit'],columns:['competitorSourceText','opportunityValue']};
+  assert.deepEqual(builder.tradeShowConfigFromParams({},saved),saved);
+});
+
+test('advanced filter field mappings and attribution remain intact with presentation changes',async()=>{
+  const cfg=builder.tradeShowConfigFromParams({configured:'1',accountLinked:'false',contactLinked:'true',competitorId:'8',showDatePreset:'CUSTOM',showDateFrom:'2026-03-01',showDateTo:'2026-03-31',stageId:'1',forecastCategory:'COMMIT',converted:'true',currency:'CAD'});
+  const {args}=await run([],cfg);
+  const query=JSON.stringify(args.where);
+  for(const term of ['accountId','contactId','competitorId','startDate','stageId','forecastCategory','convertedOpportunityId','currencyCode'])assert.ok(query.includes(term),term);
+  assert.equal(cfg.filters.length,8);
+  assert.match(reporting.reportRegistry.TRADE_SHOW.semanticNote,/Trade Show lead that created them/);
+  assert.match(reporting.reportRegistry.TRADE_SHOW.semanticNote,/counted once and kept separate by currency/);
 });
