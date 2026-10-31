@@ -1,5 +1,7 @@
 # Dependency & Container Security v1
 
+Current runtime packaging supersedes the historical inventory below: [npm 12 Toolchain Upgrade v1](npm-12-toolchain-upgrade-v1.md) removes npm tooling from both final images, starts Next directly with Node, and keeps npm 12.2.1 in development/build/CI. Historical npm-start and bundled-npm findings below describe the earlier images, not current runtime requirements.
+
 SalesHub monitors dependencies and final Docker images in GitHub Actions. Nothing scans the running CRM, connects to its database, runs a backup/restore, or changes a deployment. Database migrations: **none**. The implementation is on `security/dependency-container-scanning-v1`; activation requires normal review and merge, plus the manual settings below.
 
 The [gosu remediation validation](#gosu-rebuild-remediation-2026-10-29) supersedes the operations failure in the historical baseline below: the rebuilt operations image now passes the unchanged security policy.

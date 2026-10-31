@@ -56,12 +56,12 @@ Leave `SUPPORT_GMAIL_MOCK`, `SUPPORT_GMAIL_TEST_FIXTURE`, `E2E_AUTH_ENABLED`, `E
 
    Require canonical HTTPS AUTH_URL and an exact match to any configured `SUPPORT_GMAIL_OAUTH_CALLBACK_URL`. No production domain is hard-coded in the source.
 4. **Prepare the reviewed release** using the existing Dockerfile final production target, source directory `app`, HTTP port 3000 and `/api/health` health check. Keep automatic promotion under control. [Existing deployment instructions](deployment.md) apply.
-5. **Apply migrations before promoting new traffic.** Review the additive `20261013230000_support_email_production` SQL and all other pending main migrations. Configure one App Platform **pre-deploy job** for the release image with run command `npm run db:deploy`, encrypted production `DATABASE_URL`, and database network access. Require successful exit before promotion; do not migrate on every web startup. See [DigitalOcean deployment jobs](https://docs.digitalocean.com/products/app-platform/how-to/manage-jobs/). Equivalent established one-off image commands, from a securely configured operator environment:
+5. **Apply migrations before promoting new traffic.** Review the additive `20261013230000_support_email_production` SQL and all other pending main migrations. Configure one App Platform **pre-deploy job** for the release image with run command `node node_modules/prisma/build/index.js migrate deploy`, encrypted production `DATABASE_URL`, and database network access. Require successful exit before promotion; do not migrate on every web startup. See [DigitalOcean deployment jobs](https://docs.digitalocean.com/products/app-platform/how-to/manage-jobs/). Equivalent established one-off image commands, from a securely configured operator environment:
 
    ```sh
-   docker run --rm --env DATABASE_URL <reviewed-release-image> npm run db:status
-   docker run --rm --env DATABASE_URL <reviewed-release-image> npm run db:deploy
-   docker run --rm --env DATABASE_URL <reviewed-release-image> npm run db:status
+   docker run --rm --env DATABASE_URL <reviewed-release-image> node node_modules/prisma/build/index.js migrate status
+   docker run --rm --env DATABASE_URL <reviewed-release-image> node node_modules/prisma/build/index.js migrate deploy
+   docker run --rm --env DATABASE_URL <reviewed-release-image> node node_modules/prisma/build/index.js migrate status
    ```
 
    Expect no pending migrations after deploy. Never use `db push`, `migrate dev`, `migrate reset`, or edit applied migration SQL in production. The main database must not have POC migration history. If it does, stop and reconcile its schema/history before rollout.

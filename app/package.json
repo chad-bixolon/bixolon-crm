@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=22.23.4 <23"
+    "node": ">=22.23.4 <23",
+    "npm": "12.2.1"
   },
   "scripts": {
     "dev": "next dev",
@@ -64,5 +65,12 @@
     "@prisma/config": {
       "deepmerge-ts": "8.0.2"
     }
+  },
+  "packageManager": "npm@12.2.1",
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "prisma@6.19.3": true,
+    "unrs-resolver@1.12.2": true
   }
 }

@@ -7,7 +7,7 @@ export function securityScope(paths, event) {
   const shared = paths.some(p => /^\.github\/(workflows\/|actions\/scan-image\/)/.test(p)
     || /^app\/(scripts\/security\/|security\/)/.test(p));
   return {
-    dependency: shared || paths.some(p => /^app\/(?:scripts\/operations\/recovery-runtime\/)?package(?:-lock)?\.json$/.test(p)),
+    dependency: shared || paths.some(p => p === 'app/.npmrc' || /^app\/(?:scripts\/operations\/recovery-runtime\/)?package(?:-lock)?\.json$/.test(p)),
     production: shared || paths.some(p => p.startsWith('app/') && !/^app\/(docs\/|tests\/|e2e\/|Dockerfile\.operations$)/.test(p)),
     operations: shared || paths.some(p => /^app\/(Dockerfile\.operations$|\.dockerignore$|prisma\/|prisma\.config\.ts$|scripts\/prisma-generate\.mjs$|scripts\/operations\/)/.test(p)),
   };

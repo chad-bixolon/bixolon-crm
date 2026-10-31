@@ -41,6 +41,12 @@ export function runtimeSupported(version, range) {
   return current[0] < Number(upper) && atLeastMinimum;
 }
 
+export function assertNpmToolchain(pkg, version) {
+  if (pkg.packageManager !== 'npm@12.2.1' || pkg.engines?.npm !== '12.2.1' || version !== '12.2.1') {
+    throw new Error(`npm ${version} does not match the pinned npm 12.2.1 toolchain. Select Node 22.23.4 and install npm@12.2.1 using the documented setup.`);
+  }
+}
+
 export function redact(text, values = []) {
   let result = String(text).replace(/\x1b\[[0-9;]*m/g, '');
   for (const value of [...new Set(values)].filter(value => typeof value === 'string' && value.length >= 4).sort((a, b) => b.length - a.length)) result = result.split(value).join('[REDACTED]');
@@ -55,7 +61,7 @@ export function parseUnitCounts(output) {
 }
 
 export function migrationChanged(paths) {
-  return paths.some(path => path === 'app/prisma/schema.prisma' || path === 'app/prisma.config.ts' || path.startsWith('app/prisma/migrations/') || path.startsWith('app/prisma/tests/') || ['app/scripts/test-migrations.py', 'app/scripts/prisma-generate.mjs', 'app/Dockerfile', 'app/.dockerignore', 'app/package.json', 'app/package-lock.json', '.github/workflows/ci.yml'].includes(path));
+  return paths.some(path => path === 'app/prisma/schema.prisma' || path === 'app/prisma.config.ts' || path.startsWith('app/prisma/migrations/') || path.startsWith('app/prisma/tests/') || ['app/scripts/test-migrations.py', 'app/scripts/prisma-generate.mjs', 'app/Dockerfile', 'app/.dockerignore', 'app/.npmrc', 'app/package.json', 'app/package-lock.json', '.github/workflows/ci.yml'].includes(path));
 }
 
 function safeEnvironment(temp) {
@@ -178,6 +184,7 @@ export async function runReleaseCheck(options, dependencies = {}) {
       evidence.runtime.expectedNode = pkg.engines.node;
       evidence.runtime.pinnedNode = readFileSync(resolve(app, '.nvmrc'), 'utf8').trim();
       evidence.runtime.npm = (await checked('npm version', npm, ['--version'])).trim();
+      assertNpmToolchain(pkg, evidence.runtime.npm);
       evidence.runtime.prismaCli = dependencies.prismaVersion ?? require('prisma/package.json').version;
       evidence.runtime.prismaClient = dependencies.prismaVersion ?? require('@prisma/client/package.json').version;
       if (!runtimeSupported(evidence.runtime.node, pkg.engines.node)) throw new Error(`Node ${evidence.runtime.node} is unsupported; expected ${pkg.engines.node} (.nvmrc ${evidence.runtime.pinnedNode}). Select the supported runtime before rerunning.`);

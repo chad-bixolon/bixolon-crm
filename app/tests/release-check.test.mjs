@@ -3,9 +3,9 @@ import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import test from 'node:test';
-import { assertClientAlignment, commandRunner, migrationChanged, parseOptions, parseUnitCounts, redact, runReleaseCheck, runtimeSupported } from '../scripts/release-check.mjs';
+import { assertClientAlignment, assertNpmToolchain, commandRunner, migrationChanged, parseOptions, parseUnitCounts, redact, runReleaseCheck, runtimeSupported } from '../scripts/release-check.mjs';
 
-function fixture(t, { dirty = false, paths = [], fail, output, version = 'v22.23.4', mutate = false, allowDirty = false, focus = null } = {}) {
+function fixture(t, { dirty = false, paths = [], fail, output, version = 'v22.23.4', npmVersion = '12.2.1', mutate = false, allowDirty = false, focus = null } = {}) {
   const directory = mkdtempSync(resolve(tmpdir(), 'saleshub-release-check-test-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const calls = [], environments = [];
@@ -16,7 +16,7 @@ function fixture(t, { dirty = false, paths = [], fail, output, version = 'v22.23
     calls.push([command, args]);
     const key = [command, ...args].join(' ');
     if (fail && key.includes(fail)) return { code: 1, output: output ?? 'deliberate stage failure' };
-    if (args[0] === '--version') return { code: 0, output: '10.9.8\n' };
+    if (args[0] === '--version') return { code: 0, output: npmVersion + '\n' };
     if (args[0] === 'test') return { code: 0, output: '# tests 12\n# pass 11\n# fail 0\n# skipped 1\n' };
     if (args.includes('test:e2e:release-smoke')) return { code: 0, output: '3 passed (10s)\n' };
     return { code: 0, output: '' };
@@ -33,7 +33,7 @@ test('successful orchestration emits READY JSON/text with identity, counts, dura
   assert.equal(json.formatVersion, 1);
   assert.equal(json.repository.commit, 'abc123');
   assert.equal(json.runtime.node, 'v22.23.4');
-  assert.equal(json.runtime.npm, '10.9.8');
+  assert.equal(json.runtime.npm, '12.2.1');
   assert.ok(json.timestamp && json.durationMs >= 0);
   assert.deepEqual(json.stages.find(stage => stage.name === 'Unit').counts, { passed: 11, failed: 0, skipped: 1, total: 12 });
   assert.match(text, /11 passed \/ 0 failed \/ 1 skipped/);
@@ -156,4 +156,19 @@ test('the release browser database override is confined to browser commands', as
   for (const { args, overrides } of f.environments) {
     assert.equal(overrides?.E2E_DATABASE_NAME, args.some(arg => arg.startsWith('test:e2e')) ? 'saleshub_e2e_release' : undefined);
   }
+});
+
+for (const npmVersion of ['10.9.9', '12.2.0', '12.3.0', '13.0.0']) test(`npm ${npmVersion} fails the runtime gate before generation`, async t => {
+  const f = fixture(t, { npmVersion });
+  const result = await f.execute();
+  assert.equal(result.result, 'NOT READY');
+  assert.equal(result.stages.find(stage => stage.name === 'Runtime').status, 'FAIL');
+  assert.equal(f.calls.some(([, args]) => args.includes('prisma:generate')), false);
+});
+
+test('npm policy fails closed when package manager metadata drifts', () => {
+  const pkg = { packageManager: 'npm@12.2.1', engines: { npm: '12.2.1' } };
+  assert.doesNotThrow(() => assertNpmToolchain(pkg, '12.2.1'));
+  assert.throws(() => assertNpmToolchain({ ...pkg, packageManager: 'npm@10.9.9' }, '12.2.1'));
+  assert.throws(() => assertNpmToolchain({ ...pkg, engines: {} }, '12.2.1'));
 });

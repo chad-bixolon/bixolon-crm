@@ -6,6 +6,8 @@ Playwright runs Chromium against a local SalesHub server on `127.0.0.1:3100`. It
 
 ```bash
 cd /opt/bixolon-crm/app
+nvm use
+npm install --global npm@12.2.1
 npm ci
 PLAYWRIGHT_BROWSERS_PATH="$PWD/.playwright-browsers" npx playwright install chromium
 npx playwright install-deps chromium
