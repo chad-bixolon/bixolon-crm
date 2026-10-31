@@ -20,6 +20,52 @@ const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.m
 const release = readFileSync(new URL('../scripts/release-check.mjs', import.meta.url), 'utf8');
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
+test('npm toolchain stays pinned across manifests, Docker stages and every hosted npm job', () => {
+  for (const path of ['../', '../scripts/operations/recovery-runtime/']) {
+    const manifest = JSON.parse(readFileSync(new URL(`${path}package.json`, import.meta.url)));
+    const lock = JSON.parse(readFileSync(new URL(`${path}package-lock.json`, import.meta.url)));
+    assert.equal(manifest.packageManager, 'npm@12.2.1');
+    assert.equal(manifest.engines.npm, '12.2.1');
+    assert.equal(lock.packages[''].engines.npm, '12.2.1');
+    assert.equal(manifest.engines.node, '>=22.23.4 <23');
+    const scripted = Object.entries(lock.packages).filter(([name, entry]) => name && entry.hasInstallScript);
+    assert.deepEqual(manifest.allowScripts, Object.fromEntries(scripted.map(([name, entry]) => [
+      `${name.split('node_modules/').at(-1)}@${entry.version}`, true,
+    ])), 'Review version-specific install-script approvals when dependencies change');
+  }
+  const docker = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
+  for (const stage of ['development', 'production-base']) {
+    assert.match(docker, new RegExp(`AS ${stage}\\nRUN npm install --global npm@12\\.2\\.1`));
+  }
+  assert.equal((docker.match(/COPY package\*\.json \.npmrc \.[/]/g) || []).length, 3);
+  const operations = readFileSync(new URL('../Dockerfile.operations', import.meta.url), 'utf8');
+  assert.match(operations, /FROM node:22\.23\.4-bookworm-slim AS node-runtime\nRUN npm install --global npm@12\.2\.1/);
+  assert.match(operations, /COPY --from=node-runtime \/usr\/local\/lib\/node_modules\/npm/);
+  assert.match(readFileSync(new URL('../.npmrc', import.meta.url), 'utf8'), /^allow-remote=root$/m);
+  for (const job of [ci.jobs.standard, ci.jobs.migration, security.jobs.dependency]) {
+    const setup = job.steps.findIndex(s => s.uses?.startsWith('actions/setup-node@'));
+    const install = job.steps.findIndex(s => s.run === 'npm install --global npm@12.2.1');
+    const preflight = job.steps.findIndex(s => s.run === 'npm run ci:preflight');
+    assert.ok(setup >= 0 && install > setup && preflight > install);
+    assert.equal(job.steps[install].if, job.steps[setup].if);
+    assert.equal(job.steps[preflight].if, job.steps[setup].if);
+    const commands = job.steps.flatMap((s, i) => /npm (?:ci|test|run|audit)|dependency-audit\.mjs/.test(s.run || '') ? [i] : []);
+    assert.ok(commands.every(i => i > install));
+  }
+  assert.ok(ci.jobs.standard.steps.some(s => s.run === 'git diff --exit-code'));
+  for (const step of [
+    ci.jobs.docker.steps.find(s => s.name === 'Verify image runtime and tooling absence'),
+    security.jobs.operations.steps.find(s => s.name === 'Verify operations image toolchain'),
+  ]) {
+    for (const path of ['/usr/local/lib/node_modules/npm', '/usr/local/bin/npm', '/usr/local/bin/npx', '/app/node_modules/node-gyp', '/app/node_modules/undici']) assert.ok(step.run.includes(path));
+    assert.match(step.run, /fs\.existsSync\(path\), false/);
+    assert.match(step.run, /result\.error\?\.code, "ENOENT"/);
+    assert.match(step.run, /process\.version, "v22\.23\.4"/);
+    assert.match(step.run, /Prisma\.prismaVersion\.client, "6\.19\.3"/);
+  }
+
+});
+
 test('hosted CI keeps the local release gates and pinned runtime', () => {
   for (const command of ['ci:preflight', 'prisma:generate', 'ci:prisma-alignment', 'lint', 'typecheck', 'test:e2e:release-smoke', 'build:release']) {
     assert.ok(pkg.scripts[command], `Missing npm script: ${command}`);
@@ -33,9 +79,9 @@ test('hosted CI keeps the local release gates and pinned runtime', () => {
   assert.match(workflow, /git diff --check "\$PUSH_BEFORE_SHA" HEAD/);
   assert.match(workflow, /permissions:\s+contents: read/);
   assert.match(workflow, /Decide production image scope[\s\S]*?Build production Docker image/);
-  assert.match(workflow, /app\/prisma\/schema\.prisma app\/prisma\.config\.ts app\/prisma\/migrations\/ app\/prisma\/tests\/ app\/scripts\/test-migrations\.py app\/scripts\/prisma-generate\.mjs app\/Dockerfile app\/\.dockerignore app\/package\.json app\/package-lock\.json \.github\/workflows\/ci\.yml/);
+  assert.match(workflow, /app\/prisma\/schema\.prisma app\/prisma\.config\.ts app\/prisma\/migrations\/ app\/prisma\/tests\/ app\/scripts\/test-migrations\.py app\/scripts\/prisma-generate\.mjs app\/Dockerfile app\/\.dockerignore app\/\.npmrc app\/package\.json app\/package-lock\.json \.github\/workflows\/ci\.yml/);
   assert.match(workflow, /npm run test:migrations/);
-  for (const path of ['app/prisma/schema.prisma', 'app/prisma.config.ts', 'app/prisma/migrations/20261027_ci/migration.sql', 'app/prisma/tests/integrity.sql', 'app/scripts/test-migrations.py', 'app/scripts/prisma-generate.mjs', 'app/Dockerfile', 'app/.dockerignore', 'app/package.json', 'app/package-lock.json', '.github/workflows/ci.yml']) {
+  for (const path of ['app/prisma/schema.prisma', 'app/prisma.config.ts', 'app/prisma/migrations/20261027_ci/migration.sql', 'app/prisma/tests/integrity.sql', 'app/scripts/test-migrations.py', 'app/scripts/prisma-generate.mjs', 'app/Dockerfile', 'app/.dockerignore', 'app/.npmrc', 'app/package.json', 'app/package-lock.json', '.github/workflows/ci.yml']) {
     assert.equal(migrationChanged([path]), true, 'Local release check would skip ' + path);
   }
   assert.match(pkg.scripts['build:release'], /--webpack/);
@@ -94,6 +140,7 @@ test('security scans preserve required CI and use safe PR/main/weekly triggers',
 test('PR scan selection covers runtime/dependency changes and skips documentation-only builds', () => {
   assert.deepEqual(securityScope(['app/docs/help.md'], 'pull_request'), { dependency: false, production: false, operations: false });
   assert.equal(securityScope(['app/package-lock.json'], 'pull_request').dependency, true);
+  assert.equal(securityScope(['app/.npmrc'], 'pull_request').dependency, true);
   assert.equal(securityScope(['app/package-lock.json'], 'pull_request').production, true);
   assert.equal(securityScope(['app/lib/uploads.ts'], 'pull_request').production, true);
   for (const file of ['app/Dockerfile.operations', 'app/scripts/operations/recovery-runtime/package-lock.json', 'app/prisma/schema.prisma', 'app/scripts/prisma-generate.mjs']) {
@@ -230,4 +277,24 @@ test('fresh checkout includes every synthetic import source needed by unit tests
     '2025_Label Printer Sales PLan_2025 Development Projects_12242024.xlsx',
     '2027_Sales Plan_BIXNA_Rev1.xlsx',
   ]) assert.ok(existsSync(new URL(`./fixtures/ci-source/${name}`, import.meta.url)), `Missing CI fixture: ${name}`);
+});
+
+
+test('final Docker runtimes exclude npm and execute Node directly', () => {
+  const docker = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
+  const runtime = docker.split('AS production-runtime\n')[1];
+  assert.ok(runtime);
+  assert.match(runtime, /rm -rf \/usr\/local\/lib\/node_modules\/npm \/usr\/local\/bin\/npm \/usr\/local\/bin\/npx/);
+  assert.match(runtime, /FROM production-runtime AS production/);
+  assert.match(runtime, /CMD \["node", "node_modules\/next\/dist\/bin\/next", "start"\]/);
+  assert.match(runtime, /USER node/);
+  assert.doesNotMatch(runtime, /RUN npm|COPY.*node_modules\/npm|CMD \["npm"/);
+  const operations = readFileSync(new URL('../Dockerfile.operations', import.meta.url), 'utf8');
+  const final = operations.split('FROM postgres:17-bookworm AS operations\n')[1];
+  assert.ok(final);
+  assert.match(final, /COPY --from=operations-dependencies \/app \/app/);
+  assert.match(final, /COPY --from=node-runtime \/usr\/local\/bin\/node \/usr\/local\/bin\/node/);
+  assert.match(final, /COPY --from=gosu-builder/);
+  assert.match(final, /USER postgres\nENTRYPOINT \[\]\nCMD \["node", "scripts\/operations\/backup-postgres\.mjs"\]/);
+  assert.doesNotMatch(final, /RUN npm|COPY.*node_modules\/npm|npx/);
 });

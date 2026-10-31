@@ -21,9 +21,9 @@ The optional Adminer service remains available through the `admin` Compose profi
 ## Production image
 
 From the repository root, run `docker build -t bixolon-crm:local ./app`. The final
-`production` target is the default. Its locked dependencies are installed with `npm ci`;
+`production` target is the default. Development and build/install stages explicitly install **npm 12.2.1** while retaining **Node 22.23.4**. Final production and operations images intentionally exclude npm, npx and node-gyp; run their Node/Prisma entrypoints directly. Project install-script approvals and the direct-tarball policy are described in [npm 12 Toolchain Upgrade v1](npm-12-toolchain-upgrade-v1.md). Its locked dependencies are installed with `npm ci`;
 Prisma Client is generated during installation, Next.js is built, and the image starts
-with `npm start` as the non-root `node` user. The image includes migrations and the
+with `node node_modules/next/dist/bin/next start` as the non-root `node` user. The image includes migrations and the
 Prisma CLI so the same image can run the migration command separately. It does not
 require a bind mount or a database connection during the build.
 
@@ -78,7 +78,7 @@ production database. Run migrations **once per release**, from a controlled one-
 or equivalent release step, using the same image and its runtime `DATABASE_URL`:
 
 ```sh
-docker run --rm -e DATABASE_URL="<external-postgresql-url>" bixolon-crm:local npm run db:deploy
+docker run --rm -e DATABASE_URL="<external-postgresql-url>" bixolon-crm:local node node_modules/prisma/build/index.js migrate deploy
 ```
 
 This invokes `prisma migrate deploy`. Run it before directing production traffic to the
@@ -97,7 +97,7 @@ production image; Compose alone selects the development stage. Use HTTP port `30
 unless setting a matching runtime `PORT`, and configure an HTTP health check at
 `/api/health`. Supply `DATABASE_URL` as an encrypted runtime environment variable
 pointing to a PostgreSQL database outside the app container. Do not deploy the Compose
-PostgreSQL service. Leave the service run command unset so Docker's `npm start` command
+PostgreSQL service. Leave the service run command unset so Docker's `node node_modules/next/dist/bin/next start` command
 is used. Arrange the one-off migration step before promoting each release; a normal
 web-service startup is not the migration process. No cloud resources are created by
 these repository files.
@@ -174,7 +174,7 @@ The development app mounts an anonymous `/app/node_modules` volume. Rebuilding i
 ```sh
 docker compose up -d --no-deps --force-recreate --renew-anon-volumes app
 docker compose exec -T app node -p 'require("next/package.json").version'
-docker compose exec -T app npm run db:status
+docker compose exec -T app node node_modules/prisma/build/index.js migrate status
 ```
 
 Verify database health, `/api/health`, and real Google login afterward. Do not use `docker compose down -v` for this repair. The isolated port-3001 POC belongs to its own Compose project and must stay untouched. Main must not enable E2E authentication, Support Inbox mocks, or fixtures; those modes belong to the disposable `saleshub_e2e` database. A locally enabled Inbox route explains that live Gmail requires the configured production environment.

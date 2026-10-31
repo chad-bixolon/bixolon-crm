@@ -13,7 +13,7 @@ Supported uploads are PDF, DOC, DOCX, XLS, XLSX, PPT, and PPTX, up to 25 MB. The
 To safely verify development storage from the running app container:
 
 ```sh
-docker compose exec -T app npm run storage:check
+docker compose exec -T app node scripts/operations/check-document-storage.mjs
 ```
 
 The check refuses any prefix except `dev`, writes a generated tiny object below `dev/documents/`, verifies it, deletes it, and verifies cleanup. It does not print credentials or signed URLs.
@@ -52,7 +52,7 @@ Security and validation:
 
 1. After review, commit and push the change.
 2. Trigger the DigitalOcean App Platform deployment.
-3. Run `npm run db:deploy` once from the DigitalOcean console/release process.
+3. Run `node node_modules/prisma/build/index.js migrate deploy` once from the DigitalOcean console/release process.
 4. Verify all six Spaces environment variable names are configured as encrypted runtime values and `SPACES_PREFIX=prod`.
 5. Smoke test with a harmless PDF on an authorized CRM record.
 6. Confirm the resulting object is below `prod/documents/` and remains private.

@@ -1,8 +1,9 @@
 FROM node:22.23.4-alpine AS development
+RUN npm install --global npm@12.2.1 && test "$(npm --version)" = "12.2.1"
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY package*.json .npmrc ./
 
 COPY prisma/schema.prisma ./prisma/schema.prisma
 COPY prisma.config.ts ./
@@ -23,12 +24,13 @@ CMD ["npm", "run", "dev"]
 # Build and runtime dependencies use the same OS and OpenSSL libraries, so
 # Prisma's native engine matches the runtime environment.
 FROM node:22.23.4-bookworm-slim AS production-base
+RUN npm install --global npm@12.2.1 && test "$(npm --version)" = "12.2.1"
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 FROM production-base AS production-dependencies
 WORKDIR /app
-COPY package*.json ./
+COPY package*.json .npmrc ./
 COPY prisma/schema.prisma ./prisma/schema.prisma
 COPY prisma.config.ts ./
 COPY scripts/prisma-generate.mjs ./scripts/prisma-generate.mjs
@@ -36,7 +38,7 @@ RUN npm ci --omit=dev
 
 FROM production-base AS production-build
 WORKDIR /app
-COPY package*.json ./
+COPY package*.json .npmrc ./
 COPY prisma/schema.prisma ./prisma/schema.prisma
 COPY prisma.config.ts ./
 COPY scripts/prisma-generate.mjs ./scripts/prisma-generate.mjs
@@ -46,7 +48,13 @@ ARG RELEASE_GIT_SHA
 ARG RELEASE_BRANCH
 RUN npm run build && rm -rf .next/cache
 
-FROM production-base AS production
+# Runtime has the same OS/OpenSSL as the install stages, without npm tooling.
+FROM node:22.23.4-bookworm-slim AS production-runtime
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    && apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM production-runtime AS production
 ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     PORT=3000
@@ -66,4 +74,4 @@ COPY --from=production-build --chown=node:node /app/scripts/operations/audit-opp
 COPY --from=production-build --chown=node:node /app/scripts/weekly-snapshots.mjs ./scripts/weekly-snapshots.mjs
 USER node
 EXPOSE 3000
-CMD ["npm", "start"]
+CMD ["node", "node_modules/next/dist/bin/next", "start"]

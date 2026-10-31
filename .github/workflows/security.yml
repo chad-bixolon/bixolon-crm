@@ -37,6 +37,13 @@ jobs:
         with:
           node-version-file: app/.nvmrc
           package-manager-cache: false
+      - name: Install pinned npm
+        if: steps.scope.outputs.dependency == 'true'
+        run: npm install --global npm@12.2.1
+      - name: Repository and runtime preflight
+        if: steps.scope.outputs.dependency == 'true'
+        run: npm run ci:preflight
+        working-directory: app
       - name: Audit both lockfiles and apply reviewed dependency policy
         if: steps.scope.outputs.dependency == 'true'
         run: node app/scripts/security/dependency-audit.mjs
@@ -73,6 +80,23 @@ jobs:
           started=$SECONDS
           docker build --pull -f app/Dockerfile.operations -t saleshub-security-operations:local ./app
           printf '{"buildSeconds":%s}\n' "$(( SECONDS - started ))" > app/reports/security/operations/build-timing.json
+      - name: Verify operations image toolchain
+        if: steps.scope.outputs.operations == 'true'
+        run: |
+          docker run --rm --entrypoint node saleshub-security-operations:local -e '
+            const assert = require("node:assert/strict");
+            assert.equal(process.version, "v22.23.4");
+            const fs = require("node:fs");
+            for (const path of ["/usr/local/lib/node_modules/npm", "/usr/local/bin/npm", "/usr/local/bin/npx", "/app/node_modules/npm", "/app/node_modules/node-gyp", "/app/node_modules/undici"]) {
+              assert.equal(fs.existsSync(path), false, `Unexpected runtime tooling: ${path}`);
+            }
+            for (const command of ["npm", "npx", "node-gyp"]) {
+              const result = require("node:child_process").spawnSync(command, ["--version"]);
+              assert.equal(result.error?.code, "ENOENT", `${command} must be absent from PATH`);
+            }
+            assert.equal(require("prisma/package.json").version, "6.19.3");
+            assert.equal(require("@prisma/client").Prisma.prismaVersion.client, "6.19.3");
+          '
       - name: Scan operations image
         if: steps.scope.outputs.operations == 'true'
         uses: ./.github/actions/scan-image
